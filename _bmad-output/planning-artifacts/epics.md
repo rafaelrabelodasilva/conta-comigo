@@ -715,3 +715,261 @@ So that eles não apareçam como estornos soltos (FR-47).
 **Then** o crédito vira um Lançamento comum, e a mudança pode ser desfeita
 
 **And** o Ajuste continua entrando na Conferência como crédito
+
+## Epic 3: Classificar quase sozinho
+
+Rafael importa o histórico de 2026 (.xlsx) e o app passa a classificar sozinho: aplica Regras, herda parcelas, cria e casa os previstos e sugere Tipos. O que sobra vai para a fila do Revisar, com ações de um toque, em lote, Divisão e Apelido. Também é possível gerenciar as Regras e reimportar um Mês.
+
+### Story 3.1: Regras que aprendem com a classificação
+
+As a Rafael,
+I want que o app lembre como eu classifiquei cada Nome e aplique isso sozinho na próxima fatura,
+So that eu não classifique a mesma conta duas vezes (FR-9, FR-10).
+
+**Acceptance Criteria:**
+
+**Given** a migração que cria `regras` (`chave`, `versao_normalizacao`, `responsavel_id`, `tipo_id`, contagem por Responsável, `ultimo_uso`, dono, RLS, `unique (owner_id, chave)`) e acrescenta suas referências à `substituir_cadastro`
+**When** Rafael classifica um Lançamento (Responsável e Tipo) em qualquer tela
+**Then** `regrasRepo.aprender()` cria ou atualiza a Regra de `chaveDeRegra(nome)` sem pedir confirmação (AD-6)
+**And** nenhuma outra função grava em `regras`
+
+**Given** a função do núcleo `chaveDeRegra`
+**When** os testes rodam
+**Then** "DM*SPOTIFY", "EBN SPOTIFY" e "EBANX SPOTIFY" geram a mesma chave, e a função é diferente de `normalizarNome`
+
+**Given** uma nova importação
+**When** um Lançamento à vista tem Regra
+**Then** ele recebe a classificação da Regra
+**And** se o histórico da Regra tem Responsáveis diferentes (ex.: farmácias), o app só sugere o mais frequente e manda o Lançamento para a fila
+**And** um Nome sem Regra recebe como sugestão o `tipo_sugerido` da extração (FR-11), que também vai para a fila
+
+### Story 3.2: Fila do Revisar
+
+As a Rafael,
+I want uma lista curta com só o que o app não soube classificar,
+So that eu feche a revisão em poucos toques (FR-13).
+
+**Acceptance Criteria:**
+
+**Given** a migração que acrescenta `revisao_motivo`, `revisao_dados` e `revisado_em` em `lancamentos`
+**When** a importação termina
+**Then** ela grava o motivo de cada Lançamento que precisa de revisão (sem classificação, sugestão, sugestão com dúvida)
+**And** classificar o Lançamento limpa o motivo
+**And** a fila e o contador vêm da mesma consulta
+
+**Given** a tela Revisar
+**When** Rafael a abre
+**Then** a fila aparece agrupada por Nome, com a faixa de resumo da importação no topo e "Faltam N" ao lado do título
+**And** cada `review-item` tem 64 pt e colunas fixas 30 / 1fr / 210 / 84 / 104, com as variantes "sugestão" (✓ e "Mudar") e "sem sugestão" ("Mudar") (UX-DR21)
+**And** confirmar uma sugestão leva um toque e também ensina a Regra
+**And** "Mudar" abre os seletores de Responsável e Tipo com os mais usados primeiro
+
+**Given** a fila esvaziada
+**When** o último item é classificado
+**Then** aparece "Tudo revisado. Nada novo neste mês", e o contador do menu some
+
+**And** o menu lateral mostra o contador do Revisar enquanto houver itens
+**And** o passo 3 da importação ganha o botão "Ir para revisão"
+
+### Story 3.3: Classificar em lote
+
+As a Rafael,
+I want selecionar vários lançamentos e classificar todos de uma vez,
+So that as três compras da Shopee do Casal levem um toque só (FR-14).
+
+**Acceptance Criteria:**
+
+**Given** vários itens marcados no Revisar
+**When** Rafael usa "Aplicar sugestões", "Responsável…" ou "Tipo…"
+**Then** todos recebem a classificação numa única gravação, e cada Regra é aprendida
+
+**Given** vários Lançamentos marcados na grade do Painel
+**When** Rafael escolhe Classificar em lote
+**Then** pode atribuir de uma vez Tipo, Responsável, Status e Observação
+**And** a mudança aparece em todos os aparelhos sem recarregar
+**And** a ação pode ser desfeita pelo aviso "Desfazer"
+
+### Story 3.4: Gerenciar Regras aprendidas
+
+As a Rafael,
+I want ver, editar e apagar as Regras,
+So that eu corrija o que o app aprendeu errado (FR-12).
+
+**Acceptance Criteria:**
+
+**Given** Configurações → Regras aprendidas
+**When** Rafael abre a seção
+**Then** vê a lista com chave → Responsável, Tipo, Divisão e última vez usada, com busca (UX-DR25)
+**And** sem Regras aparece "As Regras aparecem conforme você classifica os lançamentos"
+
+**Given** Rafael edita uma Regra
+**When** salva
+**Then** o app pergunta "Reaplicar aos lançamentos de Mmm/AA?" com "Só este" e "Aplicar a todos"
+**And** reaplicar muda só os Lançamentos do Mês aberto que vieram daquela Regra
+
+**And** excluir uma Regra pede confirmação
+
+### Story 3.5: Séries e parcelas previstas
+
+As a Rafael,
+I want que, ao importar uma parcela 05/10, as parcelas 06/10 a 10/10 já apareçam nos meses seguintes,
+So that eu veja o que vem pela frente e não classifique de novo (FR-44).
+
+**Acceptance Criteria:**
+
+**Given** a migração que cria `series` com a chave única `(owner_id, nome_normalizado, parcela_total, valor_parcela_centavos, mes_primeira_parcela, ocorrencia)` e acrescenta `serie_id` e `origem_lancamento_id` em `lancamentos`, com o índice único parcial `(serie_id, parcela_n) where dividido_de_id is null and excluido_em is null` (AD-8)
+**When** a importação grava uma parcela n/N com n < N
+**Then** a Série é encontrada ou criada (com `ocorrencia` separando compras idênticas no mesmo Mês, na ordem da fatura)
+**And** os previstos n+1/N até N/N são criados nos Meses seguintes com `lancado_por = 'sistema'`, mesmo Nome, Apelido, Valor, Tipo, Responsável, Observação e `origem_lancamento_id`, cada um com `mes = somarMeses(mes_origem, k)` (AD-9)
+**And** inserir de novo a mesma parcela não duplica nada
+
+**Given** um previsto
+**When** ele aparece em qualquer tela
+**Then** tem o selo "Previsto" junto do Nome, com o texto um pouco mais claro
+**And** abrir o painel mostra a origem: "criado a partir da parcela 05/10 de MAGALU na Fatura de 06/10/26"
+
+**Given** Rafael reclassifica a parcela atual
+**When** salva
+**Then** o app pergunta se aplica aos previstos ("Só este" / "Aplicar a todos")
+
+**Given** um Mês futuro aberto no Painel
+**When** ele não tem Fatura
+**Then** a grade mostra os previstos
+
+**And** o teste de aceite com duas compras idênticas na mesma fatura cria duas Séries com `ocorrencia` 1 e 2, sem erro
+
+### Story 3.6: Casar os previstos com a fatura real
+
+As a Rafael,
+I want que a parcela prevista vire a parcela real quando a fatura chega,
+So that nunca fiquem duas linhas para a mesma parcela (FR-45).
+
+**Acceptance Criteria:**
+
+**Given** a função do núcleo `casarPrevistos(extraidos, previstos)`
+**When** a importação roda
+**Then** o casamento é 1-para-1 e determinístico por `(nome_normalizado, parcela_n, parcela_total)`, com os reais na ordem da fatura e os previstos por valor igual primeiro e depois `ocorrencia` (AD-8)
+**And** o previsto casado vira o Lançamento real na mesma linha (`lancado_por` passa a `fatura`, ganha `fatura_id`), mantendo o `id`, a classificação e o Apelido
+
+**Given** um casamento com valor diferente
+**When** a importação grava
+**Then** a linha fica com o Valor da fatura, mantém a classificação e entra na fila com a variante "Valor mudou": "Antes R$ 445,89 → agora R$ 449,10", com ✓ "Manter classificação"
+
+**Given** um previsto sem par na fatura
+**When** a importação grava
+**Then** ele continua previsto, fora da Conferência, e entra na fila com a variante "Não veio na fatura", com "Remover previsto" e "Manter"
+
+**Given** uma parcela real sem previsto
+**When** a importação grava
+**Then** ela segue as Regras e a herança normalmente
+
+**And** o teste de aceite com duas compras idênticas casa as duas parcelas seguintes sem estourar a restrição única
+**And** o resumo da importação mostra quantos previstos casaram
+
+### Story 3.7: Herdar parcelas sem previsto
+
+As a Rafael,
+I want que uma parcela que chegou sem previsto herde a classificação da parcela anterior,
+So that a primeira importação e o histórico também classifiquem sozinhos (FR-8).
+
+**Acceptance Criteria:**
+
+**Given** uma parcela n/N (n > 1) sem previsto casado
+**When** existe a parcela n−1/N no Mês anterior com o mesmo `nome_normalizado` e o mesmo Valor
+**Then** a nova parcela entra na mesma Série e herda Apelido, Tipo, Responsável, Divisão e Observação
+**And** não vai para a fila
+
+**Given** mais de uma candidata no Mês anterior
+**When** a herança roda
+**Then** o núcleo escolhe de forma determinística (menor `ocorrencia`) e o teste cobre o caso
+
+### Story 3.8: Dividir um Lançamento
+
+As a Rafael,
+I want dividir uma conta entre pessoas, por valor ou por proporção,
+So that o JIM COM de R$ 466,00 fique 2/3 da Mãe e 1/3 meu (FR-15).
+
+**Acceptance Criteria:**
+
+**Given** a migração que acrescenta `divisao jsonb` e `dividido_de_id` em `lancamentos`, e a RPC `dividir_lancamento`
+**When** Rafael toca em "Dividir" no painel do Lançamento
+**Then** abre a janela com "Por valor / Por proporção", "＋ Parte" com Responsável, valor ou fração e Status por parte (padrão: o do original) (UX-DR15)
+**And** o rodapé mostra "Soma das partes: R$ 466,00 de R$ 466,00 ✓" e só libera "Dividir" quando a soma bate
+
+**Given** Rafael divide
+**When** a RPC grava
+**Then** a linha-mãe guarda a `divisao` em frações e as filhas (`dividido_de_id` = mãe) são criadas a partir dela com `dividirEmPartes`: R$ 310,67 + R$ 155,33
+**And** a mãe dividida não entra em nenhuma soma, e as filhas aparecem na grade com "↳" e recuo
+**And** Conferência e casamento continuam usando a mãe, e o previsto seguinte herda a `divisao`
+**And** a Regra daquele Nome guarda a Divisão em frações
+
+**Given** um Lançamento já dividido
+**When** Rafael abre "Dividir"
+**Then** a janela abre em modo de edição, com "Desfazer divisão", e recria as filhas a partir da nova `divisao`
+**And** se a Divisão veio de uma Regra, aparece "Divisão aplicada pela Regra de NOME"
+
+**And** o teste de aceite garante que a soma das filhas é sempre igual ao Valor da mãe, inclusive com Valor negativo
+
+### Story 3.9: Dar Apelido
+
+As a Rafael,
+I want dar um nome mais claro a uma conta,
+So that "PAG*JOSEDASILVA" apareça como "Celular da mãe" nas telas e na mensagem (FR-52).
+
+**Acceptance Criteria:**
+
+**Given** o painel do Lançamento
+**When** Rafael dá, troca ou remove o Apelido
+**Then** o app pergunta se aplica aos outros Lançamentos com o mesmo `nome_normalizado`, incluindo os previstos ("Só este" / "Aplicar a todos")
+**And** com Apelido, a grade mostra o Apelido em negrito e o Nome em cinza
+**And** o Nome continua visível no detalhe e nunca é alterado
+**And** o Apelido nunca é usado para casar previstos, Regras ou Ajustes (AD-6)
+
+### Story 3.10: Importar o histórico da planilha
+
+As a Rafael,
+I want trazer os meses de 2026 da minha planilha "Cartão",
+So that o app já comece sabendo classificar o que eu classifico há meses (FR-2).
+
+**Acceptance Criteria:**
+
+**Given** Configurações → Importar planilha
+**When** Rafael envia o `.xlsx` baixado do Google Sheets
+**Then** o app lê o arquivo no navegador e mostra as abas, com 01/2026 a 10/2026 marcadas por padrão
+**And** nenhuma integração com a conta Google é usada
+
+**Given** as abas escolhidas
+**When** Rafael importa
+**Then** a função do núcleo mapeia Despesa → Nome, Valor, Parcela, Observação, Tipo, Resposabilidade → Responsável e Status dívida → Status, com `lancado_por = 'historico'`
+**And** cria os Responsáveis, Tipos e Status que ainda não existem, as Regras iniciais, as Séries e as parcelas em andamento, com os previstos dos meses seguintes
+**And** linhas divididas na planilha (ex.: Monjaro) viram uma linha-mãe com Divisão e suas filhas
+**And** cada aba é gravada numa transação, e uma aba com erro mostra "Não foi possível ler a aba 03/2026" e as outras continuam
+**And** a barra de progresso é por aba
+
+**Given** a importação concluída
+**When** o resumo aparece
+**Then** mostra "N lançamentos, N Responsáveis, N Tipos, N Regras criadas" e leva para Regras aprendidas filtrada por "criadas agora"
+**And** o passo "Importar planilha" entra no Primeiro uso
+
+### Story 3.11: Reimportar um Mês
+
+As a Rafael,
+I want importar de novo a fatura de um mês sem perder o que já fiz,
+So that eu possa corrigir uma importação ruim (FR-51).
+
+**Acceptance Criteria:**
+
+**Given** um Mês que já tem Fatura
+**When** Rafael importa uma Fatura do mesmo Mês
+**Then** o app avisa: "Esta fatura já foi importada. Importar de novo apaga os N lançamentos de outubro vindos da fatura (X já estão pagos ou classificados à mão) e importa tudo de novo", com "Importar de novo" (destrutivo) e "Cancelar"
+**And** "Cancelar" não muda nada
+
+**Given** a confirmação
+**When** a RPC `importar_fatura` roda em modo de reimportação
+**Then** as linhas novas são casadas com as antigas pela mesma chave de casamento, e as casadas mantêm o `id`, a classificação, a Divisão e as referências (AD-7.6)
+**And** as linhas antigas sem par e sem referências são apagadas; um previsto que tinha casado volta a ser `sistema`
+**And** as linhas antigas sem par que têm referências ficam, com `revisao_motivo = 'sumiu_na_reimportacao'`, e aparecem no Revisar
+**And** uma Série com parcela em outro Mês nunca é apagada, e os previstos gerados pela fatura anterior só são apagados se ainda são `sistema`
+**And** Regras e heranças são reaplicadas às linhas novas
+**And** os Lançamentos de Contas manuais do Mês não são tocados
+**And** tudo acontece numa única transação
