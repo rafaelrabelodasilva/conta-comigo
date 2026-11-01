@@ -336,6 +336,9 @@ So that eu navegue entre as telas como no UX aprovado.
 **Then** aparece o aviso "O Conta Comigo foi feito para iPad e computador" (UX-DR31)
 
 **And** existem os componentes comuns `toast` (6 s, um substitui o outro, com "Desfazer" opcional) e `skeleton` (UX-DR28)
+**And** existe o estado comum "Não foi possível carregar. Tentar de novo", e cada história implementa os estados vazios e de erro do EXPERIENCE.md das suas telas (UX-DR30)
+**And** existe o mapa único `codigo → mensagem` com os textos no tom do EXPERIENCE.md (termos do Glossário, botões que dizem o que fazem, avisos com o que aconteceu e o que fazer), e as perguntas usam sempre "Só este" / "Aplicar a todos" (UX-DR34)
+**And** no PC, Esc fecha sobreposições e Enter confirma; ações destrutivas pedem confirmação e as reversíveis usam "Desfazer"; o toque longo abre o mesmo menu do ⋯, que fica sempre visível (UX-DR32)
 
 ### Story 1.4: Cadastrar Responsáveis com cor, sincronizados entre aparelhos
 
@@ -598,6 +601,7 @@ So that eu reconheça a planilha "Cartão" dentro do app (FR-21, FR-22).
 **And** o cabeçalho fica fixo, e quando falta largura a grade rola para os lados com a caixa e o Nome fixos, sem esconder colunas
 **And** Lançamentos de R$ 0,00 aparecem normalmente
 **And** a linha nunca é pintada com a cor da pessoa
+**And** o Responsável aparece como `person-tag` (pílula `person-N-bg/fg`; tocar filtra a grade) e o Status como `status-pill` com texto (UX-DR13)
 **And** o VoiceOver lê cada linha como "Nome, Valor, Parcela, Responsável, Status" (UX-DR33)
 
 **Given** o `month-switcher` (UX-DR6)
