@@ -1,0 +1,40 @@
+---
+title: "Addendum: Conta Comigo"
+created: 2026-11-01
+updated: 2026-11-01
+---
+
+# Addendum: material de origem e detalhes para PRD/arquitetura
+
+## Fluxo atual (manual, mensal)
+
+1. Baixa o PDF da fatura do cartão (Santander Elite Mastercard).
+2. Usa um prompt no Gemini para converter o PDF em CSV `nomedespesa;valor;parcela` (separador `;`, vírgula decimal, estornos negativos, parcela no formato `NN/NN` ou `1/1`).
+3. Cola o CSV numa aba nova da planilha Google "Cartão" (uma aba por mês, de 07/2025 a 10/2026).
+4. Preenche observação, tipo (categoria) e responsável para cada linha.
+5. Lê os totais por responsável e manda uma mensagem no WhatsApp para cada pessoa com o valor a pagar.
+
+## Estrutura da fatura (exemplo: vencimento 06/10/2026)
+
+- Uma fatura agrupa vários cartões: titular (final 8175) e adicionais (finais 3967, 8673, 9277, 5061). Cada cartão tem seções "Pagamento e Demais Créditos", "Parcelamentos" e "Despesas".
+- Cada lançamento traz data da compra, descrição, parcela e valor. Alguns têm um número na frente (ex.: 2, 3), que não está explicado no PDF.
+- Resumo: saldo anterior 7.483,11; despesas 8.327,39; pagamentos 7.457,21; créditos 639,62; saldo da fatura 7.713,67.
+- O pagamento da fatura anterior (-7.457,21) aparece como crédito, mas não é despesa, e o CSV do Gemini o exclui corretamente.
+
+## Conferência do CSV do Gemini (outubro/2026)
+
+- 49 linhas, que conferem uma a uma com o PDF.
+- Despesas: 8.327,39. Créditos: -639,62. Soma líquida: 7.687,77.
+- Essa soma **não** fecha com o total a pagar (7.713,67). A diferença de 25,90 é o saldo que sobrou da fatura anterior (7.483,11 - 7.457,21), e não é um lançamento. A regra 4 do prompt ("o somatório deve fechar exatamente com o total a pagar") é, portanto, impossível de cumprir sempre, e o Gemini justificou o valor com uma conta confusa. O app precisa conciliar com o saldo anterior e os pagamentos.
+
+## Estrutura da planilha (aba 10/2026)
+
+Colunas: Despesa | Valor | Parcela | Observação | Tipo | Responsabilidade | Lançado por | Status dívida.
+
+- **Responsáveis:** Rafael, Rangel (namorado), Casal (dividido 50/50 entre Rafael e Rangel), Mãe, Lucas (irmão).
+- **Tipos (categorias):** Steams (assinaturas), Casa, Mãe, Saúde, Presente, Gatos, Socializar, Lucas, Carro, Viagem, Bobiças, Estudo, Mercado, Comida, Lanches, Não sei.
+- **Divisão de um lançamento:** um mesmo lançamento pode ser dividido entre responsáveis (ex.: JIM COM 466,00 virou 310,67 para a Mãe e 155,33 para o Rafael).
+- **Lançamentos fora da fatura:** também entram despesas que não estão no cartão (ex.: Silvia 400,00; William 420,00; TVbox 30,00; "Bombinhas" 3 x 106,00 em 04/06, com observação "Total R$ 636,00").
+- **Créditos e estornos:** ficam sem responsável.
+- **Totais (10/2026):** Rafael 2.290,74; Rangel 0,00; Casal 5.639,35 (metade: 2.819,68); Mãe 1.350,14; Lucas 215,16; total 9.280,23.
+- **Recorrência:** muitos lançamentos se repetem todo mês com o mesmo responsável e a mesma categoria (assinaturas, parcelamentos em andamento).
