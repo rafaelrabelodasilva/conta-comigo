@@ -1,6 +1,6 @@
 ---
 title: "Product Brief: Conta Comigo"
-status: draft
+status: final
 created: 2026-11-01
 updated: 2026-11-01
 ---
@@ -36,9 +36,9 @@ Um app que transforma "fatura em PDF" em "mensagem de cobrança por pessoa", com
 - **Classificação automática.** Parcelas que continuam herdam o responsável, a categoria e a divisão do mês anterior. Estabelecimentos recorrentes seguem regras aprendidas, e o app tolera variações de nome ("DM*SPOTIFY" e "EBN SPOTIFY").
 - **Revisão rápida do que é novo.** As compras novas aparecem numa fila, com sugestão de responsável quando houver histórico. Você confirma ou corrige com poucos toques, e pode dividir um lançamento entre várias pessoas.
 - **Contas fora do cartão.** Cadastro manual de contas com valor, número de parcelas ou recorrência mensal e responsável. Elas entram sozinhas nos meses seguintes.
-- **Totais e cobrança.** Mostra o total do mês por pessoa (com o Casal dividido entre Rafael e Rangel) e gera a mensagem no formato que ele já usa: total, chave Pix e detalhes `Nome | Parcela | Valor`, prontos para enviar pelo WhatsApp.
+- **Totais e cobrança.** Mostra o total do mês por pessoa (com o Casal dividido entre Rafael e Rangel) e gera a mensagem no formato que Rafael já usa: total, chave Pix e detalhes `Nome | Parcela | Valor`, prontos para enviar pelo WhatsApp.
 - **Controle de pagamento.** Marca, por pessoa e por mês, quem já pagou.
-- **Visão do próprio gasto.** Quanto o próprio Rafael gastou no mês, por categoria.
+- **Visão do próprio gasto.** Quanto Rafael gastou no mês, por categoria.
 
 É um web app: abre no navegador do PC e pode ser instalado na tela inicial do iPhone e do iPad, sem passar pela App Store. A usabilidade de referência é a do Listonic: listas simples, itens agrupados por categoria, marcar com um toque e tudo sincronizado entre os aparelhos. A fila de revisão e o controle de pagamento devem passar essa mesma sensação.
 
@@ -56,7 +56,7 @@ O Conta Comigo atende um caso comum no Brasil: **um cartão, várias pessoas, to
 
 - **Usuário principal: o dono do cartão** (Rafael). Só ele opera o app. Ele quer gastar minutos por mês nisso, e não uma tarde.
 - **Quem recebe a cobrança** (Rangel, mãe, Lucas). Não usa o app, só recebe a mensagem no WhatsApp e paga por Pix.
-- **No futuro, um segundo dono de cartão** (Rangel). Pode enviar a própria fatura para que as contas do casal fiquem num painel único (ex.: a internet que está no cartão dele).
+- **No futuro, um segundo dono de cartão** (Rangel), com a própria fatura no painel do casal (ex.: a internet que está no cartão dele). Veja Escopo e Visão.
 
 ## Critérios de sucesso
 
@@ -70,8 +70,8 @@ O Conta Comigo atende um caso comum no Brasil: **um cartão, várias pessoas, to
 
 **Na primeira versão:**
 - App pessoal: um usuário (Rafael), uma fatura por mês, só do Santander e no layout atual do PDF, com as pessoas e categorias que ele já usa.
-- Importação do PDF, conciliação com o resumo, classificação automática com revisão, divisão de lançamentos, contas manuais recorrentes ou parceladas, totais por pessoa, mensagem para o WhatsApp e status de pagamento.
-- Importação do histórico da planilha, só das abas de 2026 (01/2026 a 10/2026), para o app já começar sabendo classificar. As abas de 2025 ficam de fora porque podem ter classificações erradas. Como o histórico pode ter erros, as regras aprendidas devem ser fáceis de ver e corrigir.
+- Tudo o que está em "A solução".
+- Importação do histórico da planilha, só das abas de 2026 (01/2026 a 10/2026), para o app já começar sabendo classificar. As abas de 2025 ficam de fora porque podem ter classificações erradas, e as regras aprendidas devem ser fáceis de ver e corrigir.
 
 **Fora da primeira versão:**
 - Contas para outras pessoas e faturas de outros bancos.
@@ -87,4 +87,4 @@ Primeiro, o Conta Comigo precisa resolver por completo o mês do Rafael. Com iss
 
 - **Uso pessoal no começo.** Custo e privacidade de mandar a fatura para um serviço de IA não bloqueiam a primeira versão, porque os dados são só do Rafael. Esses pontos voltam à mesa se o app abrir para outras pessoas.
 - **Como ler a fatura** (IA, como hoje com o Gemini, ou leitura estruturada do PDF): decisão técnica para a arquitetura. O requisito é acertar 100% dos lançamentos do layout do Santander e conciliar com o resumo da fatura.
-- **Painel do casal:** o Rangel usaria. Fica como a última etapa, depois de todo o resto funcionar.
+- **Painel do casal:** o Rangel usaria, o que confirma o lugar dele como última etapa.
