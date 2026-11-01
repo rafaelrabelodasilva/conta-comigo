@@ -63,22 +63,22 @@ Apps de divisão de contas, como o Splitwise, pedem que cada gasto seja digitado
 ## Escopo
 
 **Na primeira versão:**
-- Um usuário (Rafael), uma fatura por mês (Santander), as pessoas e categorias que ele já usa.
+- App pessoal: um usuário (Rafael), uma fatura por mês, só do Santander e no layout atual do PDF, com as pessoas e categorias que ele já usa.
 - Importação do PDF, conciliação com o resumo, classificação automática com revisão, divisão de lançamentos, contas manuais recorrentes ou parceladas, totais por pessoa, mensagem para o WhatsApp e status de pagamento.
 - Importação do histórico da planilha atual, para o app já começar sabendo classificar. [ASSUMPTION: vale o esforço; sem isso, o primeiro mês é todo manual]
 
 **Fora da primeira versão:**
-- Contas para outras pessoas e outros bancos.
-- Fatura do Rangel e painel do casal.
+- Contas para outras pessoas e faturas de outros bancos.
+- Fatura do Rangel e painel do casal. É um bônus, a última etapa, depois que o fluxo pessoal estiver completo.
 - Envio automático da cobrança e confirmação automática do Pix (o envio continua manual, pelo próprio WhatsApp).
 - Integração direta com o banco (Open Finance).
 
 ## Visão
 
-Se resolver bem o mês do Rafael, o Conta Comigo passa a aceitar a fatura do parceiro e mostra as finanças do casal num só lugar. Depois, abre para qualquer pessoa que divide o cartão com família, parceiro ou amigos, com faturas de outros bancos. A ideia é que fechar o mês seja sempre o mesmo gesto: subir a fatura, confirmar o que é novo e enviar as cobranças.
+Primeiro, o Conta Comigo precisa resolver por completo o mês do Rafael. Com isso pronto, a última etapa planejada é aceitar a fatura do Rangel e mostrar as contas do casal num só lugar. Se a ideia se provar boa no uso pessoal, ele pode abrir para qualquer pessoa que divide o cartão com família, parceiro ou amigos, com faturas de outros bancos. Essa decisão fica para depois, e não guia a primeira versão. A ideia é que fechar o mês seja sempre o mesmo gesto: subir a fatura, confirmar o que é novo e enviar as cobranças.
 
-## Em aberto
+## Decisões e pontos para as próximas etapas
 
-- A forma de extrair a fatura (IA, como hoje com o Gemini, ou leitura estruturada do PDF), e o custo e a privacidade de mandar dados financeiros para um serviço de IA.
-- Se o Rangel usaria o painel do casal o suficiente para justificar a segunda fase.
-- Como lidar com faturas de outros bancos quando o app abrir para outras pessoas.
+- **Uso pessoal no começo.** Custo e privacidade de mandar a fatura para um serviço de IA não bloqueiam a primeira versão, porque os dados são só do Rafael. Esses pontos voltam à mesa se o app abrir para outras pessoas.
+- **Como ler a fatura** (IA, como hoje com o Gemini, ou leitura estruturada do PDF): decisão técnica para a arquitetura. O requisito é acertar 100% dos lançamentos do layout do Santander e conciliar com o resumo da fatura.
+- **Painel do casal:** o Rangel usaria. Fica como a última etapa, depois de todo o resto funcionar.
