@@ -140,7 +140,7 @@ O app extrai todos os Lançamentos da Fatura (despesas, parcelamentos, créditos
 O app confere os Lançamentos extraídos com os totais da própria Fatura: soma das despesas = "Total despesas", e soma dos créditos = "Total de créditos" (em outubro/2026, R$ 8.327,39 e R$ 639,62).
 - Quando tudo confere, mostra "Conferido".
 - Quando algo não confere, o app **avisa, mas não bloqueia**: mostra a diferença num alerta, e Rafael pode seguir classificando e cobrando. Um problema em uma ou duas contas não pode obrigá-lo a lançar tudo à mão.
-- Para ajudar a achar o erro, a Conferência também é feita por cartão: a Fatura traz o "VALOR TOTAL" de cada cartão (ex.: final 8175: R$ 4.360,69). Assim o alerta aponta em qual cartão está a diferença, e não só que existe uma.
+- Para ajudar a achar o erro, a Conferência também é feita por cartão: a Fatura traz o "VALOR TOTAL" de cada cartão (ex.: final 8673: R$ 4.360,69). Em 10/2026, a soma dos cinco cartões dá exatamente o Total despesas, R$ 8.327,39. Assim o alerta aponta em qual cartão está a diferença, e não só que existe uma.
 - Os Lançamentos que o app leu com dúvida, ou que estão no cartão com diferença, recebem uma marca discreta de "verificar", que **não é um Status**. Existe também um filtro "Verificar" na grade. Quando a Conferência volta a bater, as marcas somem sozinhas.
 - O alerta continua visível no Painel daquele Mês até a Conferência bater ou Rafael dispensá-lo.
 - Saldo anterior e pagamentos não entram na Conferência do Mês. Eles aparecem só na área de Meses anteriores (FR-30).
