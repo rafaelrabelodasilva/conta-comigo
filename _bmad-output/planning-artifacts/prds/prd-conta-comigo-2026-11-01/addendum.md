@@ -18,3 +18,11 @@ Base: product brief final em `../../briefs/brief-conta-comigo-2026-11-01/` (incl
 ## Exemplo de dívida com pagamentos diferentes: Bombinhas
 
 Viagem paga à vista no cartão e dividida entre pessoas: R$ 636 em 6 partes de R$ 106 (Mãe e Pai, Rafael e Rangel, Lucas e Miri). A Mãe paga mês a mês; o Lucas vai pagar tudo no final. O app precisa mostrar, por pessoa, quanto já foi pago e quanto falta, para que nenhuma parcela se perca.
+
+## Notas técnicas para a arquitetura (não são requisitos)
+
+- **Leitura do PDF:** o PDF do Santander vem criptografado. A senha é usada só durante a importação para abrir o arquivo. Há duas opções para a extração: um parser do layout do Santander (texto com coordenadas; o layout tem duas colunas e seções por cartão) ou um LLM com saída estruturada, como faz o Gemini hoje. Em qualquer caso, a Conciliação (FR-3) valida o resultado. Custo e privacidade da IA não bloqueiam a v1, porque o app é de uso pessoal.
+- **Forma do app:** web app instalável (PWA) para PC, iPad e iPhone, com sincronização entre aparelhos (precisa de backend com login).
+- **Normalização de descrições:** remover asteriscos, espaços e prefixos de adquirente (DM*, EBN, EBANX, MP, PAG, IFD…) e tolerar pequenas diferenças (AMAZONMETPLC e AMAZONMKTPLC).
+- **Valores:** armazenar em centavos (inteiros). Na Divisão, o resto dos centavos vai para a última parte.
+- **Importação do histórico:** a planilha "Cartão" no Google Sheets, abas 01/2026 a 10/2026. As linhas sem Parcela são lançamentos manuais (Silvia, William, TVbox, Bombinhas) e podem virar Contas manuais.
