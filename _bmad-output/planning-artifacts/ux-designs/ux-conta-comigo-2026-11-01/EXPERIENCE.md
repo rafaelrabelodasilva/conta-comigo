@@ -19,7 +19,7 @@ Este documento define **como o app funciona**: telas, navegação, comportamento
 - **Entrada:** no iPad, **dedo** (principal) e **Apple Pencil**, tratada como o dedo, sem trackpad nem teclado. No PC, mouse e teclado.
 - **Modos:** claro e escuro, seguindo o sistema, com opção de fixar um deles em Configurações.
 - **Usuário:** só o Rafael, com login (FR-34). Não há telas para as pessoas cobradas.
-- **Offline:** o app funciona sem conexão e sincroniza quando ela volta (confirmado por Rafael). A arquitetura define o mecanismo.
+- **Sem internet:** o app só mostra o que já estava carregado, para consulta. Nenhuma alteração é possível sem conexão: qualquer ação que precise gravar ou buscar dados avisa "Sem conexão. Tente de novo quando a internet voltar" (decisão do Rafael na arquitetura).
 - **Biblioteca de componentes:** a ser definida na arquitetura. Estes documentos não dependem dela. [ASSUMPTION]
 
 ## Information Architecture
@@ -206,8 +206,8 @@ Total: R$ 2.819,68
 | Estado | Onde | Como aparece |
 |---|---|---|
 | **Carregando** | Todas as telas | Esqueleto (`{components.skeleton}`) no lugar dos números, Blocos e linhas. Nunca uma tela branca. Recalcular os Blocos não mostra esqueleto: os números mudam no lugar. |
-| **Erro ao carregar** | Todas as telas | "Não foi possível carregar. Tentar de novo". Se houver dados guardados no aparelho, eles aparecem com a faixa "Sem conexão". |
-| **Sessão expirada** | App inteiro | Volta para Entrar com "Sua sessão expirou. Entre de novo". As mudanças ainda não sincronizadas são mantidas no aparelho. |
+| **Erro ao carregar** | Todas as telas | "Não foi possível carregar. Tentar de novo". Se houver dados carregados antes, eles continuam visíveis com a faixa "Sem conexão". |
+| **Sessão expirada** | App inteiro | Volta para Entrar com "Sua sessão expirou. Entre de novo". |
 | **Primeiro uso** | App inteiro | Passo a passo: Responsáveis → Tipos → Status → Importar planilha (2026) → Blocos → Mensagem → Ciclo. Cada passo pode ser pulado. Depois, o Painel vazio mostra "Importe sua primeira fatura". |
 | **Sem Blocos** | Painel | O cartão dos Blocos mostra "Crie seu primeiro Bloco para ver os totais por pessoa", com "＋ Novo bloco". |
 | **Mês sem Fatura** | Painel | O cartão da fatura diz "Fatura ainda não importada". A grade mostra os previstos e as Contas manuais, e os Blocos somam os previstos com a legenda "inclui previstos". Em Gerar mensagem aparece "Incluir previstos". |
@@ -223,10 +223,10 @@ Total: R$ 2.819,68
 | **Previsto** | Grade, Previsão | Selo "Previsto" junto do Nome, com o texto um pouco mais claro. |
 | **Programada** | Grade, Recebimentos | Selo "Programada · 06/04/27". |
 | **Não pago · Pago · Pago parcialmente · Atrasado** | Grade, Recebimentos | Selo de Status. "Pago parcialmente" mostra "falta R$ X" no painel do Lançamento. "Atrasado" é calculado (vencimento + tolerância, padrão 10 dias, FR-49) e substitui "Não pago". |
-| **Salvando / Salvo / Não salvo** | Painel do Lançamento, formulários | Indicador discreto no topo do painel. "Não salvo, tentando de novo" fica âmbar e tenta de novo sozinho. Depois de 3 falhas, mostra "Não foi possível salvar. Suas mudanças estão guardadas neste aparelho". |
-| **Conflito entre aparelhos** | Painel do Lançamento | Vale a última gravação, e o outro aparelho mostra a faixa "Este lançamento foi alterado em outro aparelho às 21:30", com "Ver o que mudou". Nada é perdido em silêncio. [ASSUMPTION: regra "última gravação vence"; confirmar na arquitetura] |
+| **Salvando / Salvo / Não salvo** | Painel do Lançamento, formulários | Indicador discreto no topo do painel. Se a gravação falhar, o campo volta ao valor anterior e aparece "Não foi possível salvar. Tente de novo", com o botão "Tentar de novo". Nada fica pendente no aparelho. |
+| **Conflito entre aparelhos** | Painel do Lançamento | Como só se grava com internet, a última gravação vale, e o outro aparelho recebe a mudança na hora. Se o Lançamento aberto mudar, aparece a faixa "Este lançamento foi alterado em outro aparelho às 21:30". |
 | **Atualização vinda de outro aparelho** | Todas as telas | Os números mudam na hora, sem recarregar (FR-46). |
-| **Sem conexão** | App inteiro | Faixa "Sem conexão. As mudanças serão salvas quando voltar". A importação de fatura fica indisponível ("Importar precisa de conexão"). |
+| **Sem conexão** | App inteiro | Faixa "Sem conexão. Você pode consultar, mas não alterar". Os botões que gravam continuam visíveis e, ao toque, mostram "Sem conexão. Tente de novo quando a internet voltar". A importação de fatura fica indisponível. |
 | **Filtro sem resultado** | Grade | "Nenhum lançamento com esses filtros", com "Limpar filtros". |
 | **Fila vazia** | Revisar | "Tudo revisado. Nada novo neste mês". O contador do menu some. |
 | **Ninguém deve nada** | Recebimentos | Os cartões ficam com "Em dia", e as listas mostram "Nada em aberto" e "Nenhuma dívida programada". |
