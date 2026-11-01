@@ -69,6 +69,7 @@ Rangel, Mãe e Lucas não acessam o app. Eles só recebem a mensagem de cobranç
 - **Painel**: a tela do Mês com os Blocos e a grade de Lançamentos.
 - **Mensagem de cobrança**: o texto gerado a partir de um Bloco, pronto para colar no WhatsApp.
 - **Conferência**: a checagem dos Lançamentos extraídos de uma Fatura contra os totais de despesas e de créditos dessa Fatura.
+- **Ajuste**: um pequeno crédito da Fatura vinculado a uma parcela do mesmo estabelecimento (ex.: MSC CRUZEIROS -R$ 0,08). Veja FR-47.
 - **Lançamento previsto**: um Lançamento que o próprio app criou num Mês futuro porque sabe que ele virá: as parcelas restantes de uma compra parcelada da Fatura ou de uma Conta manual. Fica sempre identificado como "previsto pelo sistema" até ser confirmado pela Fatura daquele Mês.
 - **Previsão**: o conjunto dos Lançamentos previstos dos próximos Meses.
 - **Salário**: a renda mensal que Rafael cadastra (fase 2).
@@ -120,6 +121,14 @@ Rafael configura o dia de fechamento e o dia de vencimento do cartão, e pode al
 - Cada Mês tem um estado: aberto (ainda recebe Lançamentos manuais) ou fechado (Fatura importada e conferida).
 - Lançamentos criados no app (Contas manuais e, na fase 3, parcelas de Objetivos) entram no Mês cujo Ciclo contém a data deles: uma data depois do fechamento vai para o Mês seguinte.
 - A data de fechamento extraída da Fatura importada prevalece sobre a configuração se as duas forem diferentes, e o app avisa. [ASSUMPTION]
+
+#### FR-47: Ajustes de centavos
+Às vezes a Fatura traz, junto de uma parcela, um pequeno crédito com o mesmo estabelecimento. Por exemplo, na Fatura de 06/11/26 vieram "MSC CRUZEIROS 02/12 R$ 1.140,74" e "MSC CRUZEIROS -R$ 0,08". O app reconhece esse crédito como Ajuste da parcela, e não como um estorno solto.
+- Critério: crédito sem Parcela, na mesma Fatura, com a mesma descrição normalizada de um Lançamento parcelado e valor absoluto menor que R$ 1,00. [ASSUMPTION: limite de R$ 1,00]
+- O Ajuste fica vinculado à parcela e herda o Responsável, a Categoria e a Divisão dela. Na grade, os dois aparecem juntos com o líquido: "R$ 1.140,74 − R$ 0,08 = R$ 1.140,66".
+- Na Mensagem de cobrança, o Ajuste aparece como linha própria, logo abaixo da parcela, para a pessoa entender a diferença.
+- O Ajuste não altera o valor das parcelas previstas, e o casamento (FR-45) usa o valor da parcela, não o líquido.
+- Rafael pode desfazer o vínculo e tratar o crédito como um Lançamento comum.
 
 #### FR-7: Corrigir a extração
 Rafael pode editar, incluir e excluir Lançamentos de uma Fatura importada. A Conferência é recalculada na hora.
@@ -274,6 +283,13 @@ Rafael pode ver como os totais por Categoria e por Responsável evoluíram nos �
 #### FR-34: Entrar e sincronizar
 Só Rafael acessa o app, com login próprio. Os dados ficam iguais no PC, no iPad e no iPhone, e uma alteração feita num aparelho aparece nos outros.
 
+#### FR-46: Editar e excluir qualquer coisa, com atualização imediata
+Rafael pode editar e excluir qualquer Lançamento, Conta manual, Cobrança, Pagamento, Regra, Bloco e Responsável.
+- Todos os totais, Blocos, Saldos pendentes, Previsões e a Conferência são recalculados na hora, em todas as telas e aparelhos abertos, sem Rafael precisar recarregar a página.
+- Ao excluir um Lançamento parcelado ou uma Conta manual, o app pergunta se deve excluir também os Lançamentos previstos dos Meses seguintes.
+- Ao editar ou excluir algo que já tem Pagamento registrado, o app avisa e mostra o que muda no Saldo pendente.
+- Excluir um Responsável ou uma Categoria em uso pede para escolher um substituto, ou arquiva em vez de excluir.
+
 #### FR-35: Instalar como app
 O web app pode ser instalado na tela inicial do iPhone e do iPad, sem App Store.
 
@@ -318,7 +334,8 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 - **Precisão:** nenhum valor pode ser perdido ou duplicado na extração, na Divisão ou nos Pagamentos. Valores são tratados em centavos, sem arredondamento acumulado.
 - **Privacidade:** os dados financeiros ficam acessíveis só ao Rafael. Nem o PDF nem a senha são guardados.
 - **Desempenho:** importar e classificar uma Fatura de cerca de 50 Lançamentos leva menos de 1 minuto. [ASSUMPTION]
-- **Formato brasileiro:** moeda em R$ com vírgula decimal, datas dd/mm/aaaa e interface em português.
+- **Formatos (obrigatórios em todas as telas e mensagens):** datas DD/MM/AA (ex.: 06/11/26), horas HH:MM (24 h), valores R$ 0,00, com ponto de milhar e vírgula decimal (ex.: R$ 1.140,74). Valores negativos aparecem como -R$ 0,08. [ASSUMPTION: o formato do negativo] Interface em português.
+- **Atualização em tempo real:** qualquer mudança aparece em todas as telas e aparelhos abertos sem recarregar a página (FR-46).
 
 ## 7. Não objetivos
 
@@ -362,6 +379,8 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 - §5: no celular, a grade aparece como lista, com foco em consultar, copiar e registrar Pagamentos.
 - §6: a importação leva menos de 1 minuto.
 - §4.3 FR-45: previstos de um Mês sem Fatura importada não entram na cobrança, a menos que Rafael escolha.
+- §4.2 FR-47: limite de R$ 1,00 para reconhecer um Ajuste.
+- §6: valores negativos aparecem como -R$ 0,08.
 - §4.2 FR-36: a data de fechamento lida na Fatura prevalece sobre a configurada.
 - §4.11 FR-39: a barra da Sobra muda de cor abaixo de 10% e abaixo de zero.
 - §4.11 FR-40: alertas de Orçamento em 80% e 100%.
