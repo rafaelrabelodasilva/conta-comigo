@@ -12,3 +12,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-1-criar-o-projeto-e-publica-lo-na-vercel.md`
   summary: Acrescentar ao `AGENTS.md` (fora do bloco `nextjs-agent-rules`) as regras do projeto: núcleo puro (AD-1), segredos sem `NEXT_PUBLIC_`, log só por `src/server/log.ts`, schema só por migração e nomes do Glossário.
   evidence: O `AGENTS.md` gerado só tem o bloco do Next.js; agentes das próximas histórias leem esse arquivo primeiro (ou rodar `bmad-project-context`).
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-1-criar-o-projeto-e-publica-lo-na-vercel.md`
+  summary: Trocar a `SUPABASE_SECRET_KEY` antes do primeiro uso real: criar chave secreta nova no Supabase, atualizar na Vercel (Production, sensitive) e apagar a antiga.
+  evidence: A chave atual foi colada no chat com o agente durante a 1.1 e ficou no histórico da conversa.

@@ -63,8 +63,8 @@ context:
 - [x] `supabase/config.toml` -- `supabase init` via CLI do npm -- banco local.
 - [x] `.github/workflows/ci.yml` -- push e PR: Node 22, `npm ci`, lint, typecheck, test; job separado `supabase` com `npx supabase start` (e `stop`) -- CI e prova do banco local.
 - [x] `.env.example` -- nomes das três variáveis, sem valores -- documentação.
-- [ ] Vercel (MCP) -- criar `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` só em Production; pedir ao Rafael que cole `SUPABASE_SECRET_KEY` (Production) e conferir só a existência -- deploy aponta para produção.
-- [ ] `docs/infraestrutura.md`, `README.md` -- registrar variáveis configuradas e comandos (`npm run dev`, `npm test`, Supabase local exige Docker) -- documentação.
+- [x] Vercel (MCP) -- criar `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` só em Production; pedir ao Rafael que cole `SUPABASE_SECRET_KEY` (Production) e conferir só a existência -- deploy aponta para produção.
+- [x] `docs/infraestrutura.md`, `README.md` -- registrar variáveis configuradas e comandos (`npm run dev`, `npm test`, Supabase local exige Docker) -- documentação.
 
 **Acceptance Criteria:**
 - Given o projeto criado, when `npm run lint`, `npm run typecheck` e `npm test` rodam, then todos passam e o Vitest executa o teste do núcleo.
