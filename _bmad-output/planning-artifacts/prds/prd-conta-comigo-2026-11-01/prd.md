@@ -13,19 +13,19 @@ Este PRD detalha a primeira versão do Conta Comigo para quem vai desenhar a exp
 
 ## 1. Visão
 
-O Conta Comigo fecha o mês do cartão de crédito do Rafael. Ele sobe o PDF da fatura do Santander, digita a senha, e o app extrai os lançamentos, confere a soma com o total da fatura e classifica sozinho o que já conhece: parcelas em andamento, assinaturas e contas fixas. Sobra para o Rafael só o que é novo, numa fila rápida de revisão. No painel, blocos de totais montados por ele mostram quanto cada pessoa deve e quanto ele gastou por categoria. Cada bloco tem um botão que copia a mensagem de cobrança pronta para o WhatsApp.
+O Conta Comigo é um app de finanças pessoais construído em torno do cartão de crédito do Rafael, que ele divide com outras pessoas. Ele sobe o PDF da fatura do Santander e digita a senha. O app extrai os lançamentos, confere com os totais da fatura e classifica sozinho o que já conhece, aprendendo com os meses anteriores: parcelas em andamento, assinaturas e contas fixas. Sobra para o Rafael só o que é novo, numa fila rápida de revisão.
 
-O app também acompanha o que foi recebido. Ele mostra o que cada pessoa já pagou, o que ficou pendente de meses anteriores e as dívidas combinadas para o futuro, para que nenhuma parcela se perca. A meta é trocar quase 1h50 de trabalho manual por menos de 10 minutos.
+O Painel mostra o mês atual em Blocos que o próprio Rafael monta: quanto cada pessoa deve, quanto ele gastou e em quê. Tocar num Bloco filtra os lançamentos que formam aquele total, e um botão copia a mensagem de cobrança pronta para o WhatsApp. Fora do Painel, o app acompanha o que foi recebido, o que ficou pendente de meses anteriores e as dívidas combinadas para o futuro, para que nenhuma parcela se perca. A meta é trocar quase 1h50 de trabalho manual por menos de 10 minutos, e ainda dar ao Rafael uma visão clara das próprias finanças.
 
 ## 2. Usuário
 
 ### 2.1 Jobs To Be Done
 
 - **Fechar o mês sem retrabalho:** saber quanto cada pessoa deve sem classificar de novo o que já foi classificado no mês anterior.
-- **Confiar no número:** ter certeza de que a soma confere com a fatura antes de cobrar alguém.
+- **Confiar no número:** ter certeza de que os lançamentos conferem com a fatura antes de cobrar alguém.
 - **Cobrar sem constrangimento:** mandar uma mensagem clara, com total, Pix e detalhes, que a pessoa entende sem perguntar.
 - **Não perder dinheiro:** lembrar do que ficou pendente, do que foi pago pela metade e do que só vai ser pago no futuro.
-- **Entender o próprio gasto:** ver quanto do cartão é dele e em quê (gatos, besteiras, saúde…).
+- **Entender o próprio dinheiro:** ver quanto do cartão é dele, em quais Categorias, e o que já está comprometido nos próximos meses.
 
 ### 2.2 Quem não usa o app (v1)
 
@@ -33,139 +33,156 @@ Rangel, Mãe e Lucas não acessam o app. Eles só recebem a mensagem de cobranç
 
 ### 2.3 Jornadas
 
+- **UJ-0. Rafael configura o app pela primeira vez.**
+  O app começa vazio. Rafael cadastra os Responsáveis (Rafael, Rangel, Casal, Mãe, Lucas) e as Categorias. Depois importa o histórico de 2026 da planilha e monta os Blocos do jeito que quer, por exemplo "Rangel" = Rangel + (Casal ÷ 2). Por fim, configura o modelo da Mensagem de cobrança.
+
 - **UJ-1. Rafael fecha a fatura de novembro no iPad.**
-  No dia 5 a fatura fecha e o PDF chega por e-mail, protegido por senha. Rafael abre o app no iPad e sobe o PDF. Ele digita a senha, e o app mostra o resumo da importação: 47 lançamentos, a conciliação com o total da fatura confere, 30 já classificados e 17 para revisar. Na fila, ele atribui responsável e categoria às compras novas da Shopee e da Amazon, marcando várias de uma vez quando são da mesma pessoa, e divide um remédio entre Mãe e ele. O painel mostra os blocos Mãe, Lucas, Rangel e Gatos. Ele toca em "Copiar" no bloco Mãe e cola a mensagem no WhatsApp dela. **Edge case:** se a conciliação não confere, o app mostra a diferença e de onde ela pode vir (ex.: saldo anterior) antes de liberar a cobrança.
+  No dia 5 a fatura fecha e o PDF chega por e-mail, protegido por senha. Rafael abre o app no iPad, sobe o PDF e digita a senha. O app mostra o resumo da importação: 47 Lançamentos, conferidos com os totais da fatura, 30 já classificados e 17 para revisar. Na fila, ele classifica as compras novas da Shopee e da Amazon, marcando várias de uma vez quando são da mesma pessoa. Ele também divide um remédio entre Mãe e ele, e atribui à Mãe o estorno de uma compra dela. No Painel do mês, toca no Bloco "Mãe": a grade passa a mostrar só os Lançamentos da Mãe, e ele confere. Toca de novo para limpar o filtro. Por fim, aperta "Copiar" no Bloco e cola a mensagem no WhatsApp dela. **Edge case:** se os Lançamentos não conferem com os totais da fatura, o app mostra a diferença antes de liberar a cobrança.
 
 - **UJ-2. Rafael registra o que recebeu.**
-  A Mãe manda o Pix com o total do mês. Rafael abre o bloco dela, seleciona todas as cobranças de novembro e marca como pagas em 08/11. O Lucas paga só R$ 100 de um total de R$ 215. Rafael seleciona as cobranças do Lucas, registra o pagamento parcial de R$ 100, e o restante fica como saldo pendente. Esse saldo aparece na próxima mensagem dele.
+  A Mãe manda o Pix com o total do mês. Na área de Recebimentos, Rafael seleciona as Cobranças de novembro da Mãe e marca como pagas em 08/11. O Lucas paga só R$ 100 de R$ 215. Rafael registra o pagamento parcial, e os R$ 115 que faltam ficam como Saldo pendente do Lucas.
 
 - **UJ-3. Rafael lança uma viagem dividida que não está no cartão.**
-  Ele cadastra uma conta manual, "Bombinhas", de R$ 636, em 6 parcelas mensais, dividida em três partes iguais: Mãe (Mãe e Pai), Casal (Rafael e Rangel) e Lucas (Lucas e Miri). A Mãe vai pagar mês a mês. O Lucas combinou de pagar tudo no final, então a parte dele vira uma dívida programada com vencimento em abril. Até lá, ela aparece no painel "A receber", e não na mensagem de cada mês.
+  Ele cadastra uma Conta manual, "Bombinhas", de R$ 636 em 6 parcelas mensais, dividida em três partes iguais: Mãe (Mãe e Pai), Casal (Rafael e Rangel) e Lucas (Lucas e Miri). A Mãe paga mês a mês. O Lucas combinou de pagar tudo no final, então a parte dele vira uma Dívida programada com vencimento em abril. Até lá, ela fica em "A receber".
 
 - **UJ-4. Em viagem, Rafael confere pelo iPhone quem pagou.**
-  Sem o iPad, ele abre o app no iPhone, vê os saldos pendentes por pessoa e copia a mensagem do Rangel. A revisão linha a linha fica para quando ele tiver uma tela maior.
+  Sem o iPad, ele abre o app no iPhone, vê os Saldos pendentes e copia a mensagem do Rangel. A revisão linha a linha fica para quando ele tiver uma tela maior.
 
 ## 3. Glossário
 
-- **Fatura**: o PDF mensal do cartão Santander, com vencimento, saldo anterior, pagamentos, créditos e total a pagar. Uma fatura por mês.
+- **Fatura**: o PDF mensal do cartão Santander, com vencimento, totais de despesas e de créditos, saldo anterior, pagamentos e total a pagar. Uma Fatura por mês.
+- **Mês**: o mês de vencimento de uma Fatura. O Painel sempre mostra um Mês, por padrão o atual.
 - **Lançamento**: uma linha extraída da Fatura ou gerada por uma Conta manual. Tem descrição, data, valor (negativo se for crédito ou estorno), Parcela e, se veio da Fatura, o final do cartão.
 - **Parcela**: posição "n/N" de um Lançamento parcelado ("05/10"). "1/1" significa à vista.
 - **Responsável**: a quem um Lançamento, ou uma parte dele, é atribuído. Pode ser uma pessoa (Rafael, Rangel, Mãe, Lucas) ou um grupo (Casal). Rafael cadastra, renomeia e arquiva os Responsáveis.
 - **Categoria**: o tipo do gasto (Casa, Saúde, Gatos, Bobiças…). Lista mantida por Rafael.
 - **Divisão**: repartição de um Lançamento entre Responsáveis, por valor ou por proporção.
 - **Regra**: associação aprendida entre um estabelecimento (descrição normalizada) e um Responsável, uma Categoria e uma Divisão. Pode ser vista, editada e apagada.
-- **Conta manual**: uma conta que não passa pelo cartão (ex.: Silvia, Bombinhas). Pode ser recorrente mensal ou parcelada, e gera Lançamentos nos meses correspondentes.
-- **Cobrança**: o valor que um Responsável deve por um Lançamento (ou pela parte dele), num mês. Tem um estado: pendente, paga parcialmente ou paga.
+- **Conta manual**: uma conta que não passa pelo cartão (ex.: Silvia, Bombinhas). Pode ser recorrente mensal ou parcelada, e gera Lançamentos nos Meses correspondentes.
+- **Cobrança**: o valor que um Responsável deve por um Lançamento (ou pela parte dele), num Mês. Pode ser negativo, quando é um estorno. Tem um estado: pendente, paga parcialmente ou paga.
 - **Pagamento**: o registro de que um Responsável pagou, numa data, um valor que quita uma ou mais Cobranças, total ou parcialmente.
-- **Saldo pendente**: a soma das Cobranças não quitadas de um Responsável, de todos os meses.
-- **Dívida programada**: uma Cobrança com vencimento futuro combinado (ex.: Lucas paga Bombinhas no fim). Não entra na mensagem do mês até vencer, mas aparece em "A receber".
-- **Bloco**: um totalizador nomeado do Painel, calculado por uma Fórmula.
-- **Fórmula**: a expressão de um Bloco, montada por seleção (sem digitação livre), com Responsáveis e Categorias como operandos, as operações somar, subtrair, multiplicar e dividir, números e parênteses. Exemplo: "Rangel" = Rangel + (Casal ÷ 2).
-- **Painel**: a tela do mês com os Blocos.
+- **Saldo pendente**: a soma das Cobranças não quitadas de um Responsável, de todos os Meses.
+- **Dívida programada**: uma Cobrança com vencimento futuro combinado (ex.: Lucas paga Bombinhas no fim).
+- **Bloco**: um totalizador nomeado do Painel, calculado por uma Fórmula sobre os Lançamentos do Mês.
+- **Fórmula**: a expressão de um Bloco, montada por seleção (sem digitação livre), com Responsáveis e Categorias como operandos, as operações somar, subtrair, multiplicar e dividir, números e parênteses. Exemplo: Rangel + (Casal ÷ 2).
+- **Painel**: a tela do Mês com os Blocos e a grade de Lançamentos.
 - **Mensagem de cobrança**: o texto gerado a partir de um Bloco, pronto para colar no WhatsApp.
-- **Conciliação**: a conferência entre os Lançamentos extraídos e o resumo da Fatura.
+- **Conferência**: a checagem dos Lançamentos extraídos de uma Fatura contra os totais de despesas e de créditos dessa Fatura.
+- **Previsão**: os Lançamentos que já se sabe que virão nos próximos Meses, como parcelas restantes e Contas manuais.
 
 ## 4. Funcionalidades
 
-### 4.1 Importação da Fatura
-**Descrição:** Rafael sobe o PDF e digita a senha. O app extrai os Lançamentos, separa o pagamento da fatura anterior (que não é despesa), faz a Conciliação e mostra um resumo. Realiza UJ-1.
+### 4.1 Configuração inicial
+**Descrição:** o app começa vazio. Nada vem pré-configurado: Rafael monta tudo do jeito dele ao começar a usar. Realiza UJ-0.
 
-#### FR-1: Importar PDF protegido
+#### FR-1: Começar do zero
+No primeiro uso, o app não tem Responsáveis, Categorias, Blocos nem modelo de mensagem prontos. Um passo a passo guia Rafael pela criação de cada um, e ele pode pular qualquer etapa e voltar depois.
+
+#### FR-2: Importar histórico
+Rafael pode importar as abas 01/2026 a 10/2026 da planilha "Cartão" (colunas Despesa, Valor, Parcela, Observação, Tipo, Responsabilidade). A importação cria os Responsáveis, as Categorias, as Regras iniciais e as parcelas em andamento.
+- Lançamentos divididos em várias linhas na planilha (ex.: Monjaro) viram uma Divisão.
+- Depois da importação, o app mostra as Regras criadas para Rafael revisar.
+
+### 4.2 Importação da Fatura
+**Descrição:** Rafael sobe o PDF e digita a senha. O app extrai os Lançamentos, deixa de fora o pagamento da fatura anterior (que não é despesa), faz a Conferência e guarda o PDF. Realiza UJ-1.
+
+#### FR-3: Importar PDF protegido
 Rafael pode enviar o PDF da Fatura e informar a senha no próprio app.
 - O app abre PDFs protegidos com a senha informada. Se a senha estiver errada, ele avisa e pede de novo.
 - A senha não é guardada depois da importação. [ASSUMPTION: Rafael prefere digitar todo mês a deixar a senha salva]
 - Uma Fatura do mesmo vencimento já importada não é duplicada. O app oferece substituir ou cancelar.
 
-#### FR-2: Extrair Lançamentos
-O app extrai todos os Lançamentos da Fatura: despesas, parcelamentos, créditos e estornos, de todos os cartões (titular e adicionais), com data, descrição, Parcela, valor e final do cartão.
+#### FR-4: Guardar a Fatura original
+O app guarda o PDF original de cada Mês, sem senha, para Rafael consultar e baixar depois.
+
+#### FR-5: Extrair Lançamentos
+O app extrai todos os Lançamentos da Fatura (despesas, parcelamentos, créditos e estornos) de todos os cartões, titular e adicionais, com data, descrição, Parcela, valor e final do cartão.
 - O pagamento da fatura anterior não vira Lançamento.
-- Os créditos e estornos entram com valor negativo. [ASSUMPTION: créditos e cashback ficam com o Rafael, sem Responsável, como na planilha de hoje]
+- Os créditos e estornos entram com valor negativo e são classificados como qualquer Lançamento: podem ser do Rafael, da Mãe ou de qualquer Responsável.
 - Na Fatura de exemplo (outubro/2026), o app extrai exatamente os 49 Lançamentos esperados (ver addendum do brief).
 
-#### FR-3: Conciliar com o resumo
-O app confere: saldo anterior − pagamentos + despesas − créditos = total a pagar.
-- Quando a conta confere, mostra "Conciliado".
-- Quando não confere, mostra a diferença e bloqueia a geração das Mensagens de cobrança até Rafael corrigir ou aceitar a diferença. [ASSUMPTION: bloquear, e não apenas avisar]
-- O resíduo do saldo anterior (ex.: R$ 25,90 em outubro) aparece explicado, e não como erro.
+#### FR-6: Conferir com a Fatura do Mês
+O app confere os Lançamentos extraídos com os totais da própria Fatura: soma das despesas = "Total despesas", e soma dos créditos = "Total de créditos" (em outubro/2026, R$ 8.327,39 e R$ 639,62).
+- Quando tudo confere, mostra "Conferido".
+- Quando algo não confere, mostra a diferença e bloqueia a geração das Mensagens de cobrança até Rafael corrigir. [ASSUMPTION: bloquear, e não apenas avisar]
+- Saldo anterior e pagamentos não entram na Conferência do Mês. Eles aparecem só na área de Meses anteriores (FR-27).
 
-#### FR-4: Corrigir a extração
-Rafael pode editar, incluir e excluir Lançamentos de uma Fatura importada. A Conciliação é recalculada na hora.
+#### FR-7: Corrigir a extração
+Rafael pode editar, incluir e excluir Lançamentos de uma Fatura importada. A Conferência é recalculada na hora.
 
-### 4.2 Classificação automática
-**Descrição:** antes de mostrar a fila, o app atribui Responsável, Categoria e Divisão a tudo o que reconhece. Realiza UJ-1.
+### 4.3 Classificação e aprendizado
+**Descrição:** antes de mostrar a fila, o app atribui Responsável, Categoria e Divisão a tudo o que reconhece, aprendendo com os Meses anteriores. Realiza UJ-1.
 
-#### FR-5: Herdar parcelas em andamento
-Um Lançamento com Parcela n/N (n > 1) que corresponde ao Lançamento n−1/N do mês anterior (mesma descrição normalizada e mesmo valor) recebe o mesmo Responsável, a mesma Categoria, a mesma Divisão e a mesma observação.
+#### FR-8: Herdar parcelas em andamento
+Um Lançamento com Parcela n/N (n > 1) que corresponde ao Lançamento n−1/N do Mês anterior (mesma descrição normalizada e mesmo valor) recebe o mesmo Responsável, a mesma Categoria, a mesma Divisão e a mesma observação.
 
-#### FR-6: Aplicar Regras
+#### FR-9: Aplicar Regras
 Um Lançamento à vista cujo estabelecimento tem Regra recebe a classificação da Regra. A comparação tolera variações de nome ("DM*SPOTIFY", "EBN SPOTIFY", "EBANX SPOTIFY").
 - Se o estabelecimento tem histórico com Responsáveis diferentes (ex.: farmácias), o app **sugere** o mais frequente, mas deixa o Lançamento na fila para confirmação.
 
-#### FR-7: Aprender com a revisão
-Quando Rafael classifica um Lançamento novo, o app cria ou atualiza a Regra daquele estabelecimento. [ASSUMPTION: aprende sozinho; Rafael não precisa confirmar cada Regra]
+#### FR-10: Aprender com a revisão
+Quando Rafael classifica um Lançamento, o app cria ou atualiza a Regra daquele estabelecimento. [ASSUMPTION: aprende sozinho; Rafael não precisa confirmar cada Regra]
 
-#### FR-8: Gerenciar Regras
-Rafael pode ver todas as Regras, editar e apagar. Se ele editar uma Regra, o app pergunta se deve reaplicá-la aos Lançamentos do mês aberto.
+#### FR-11: Sugerir para estabelecimentos novos
+Para um estabelecimento sem histórico, o app pode sugerir a Categoria (e, quando houver pista, o Responsável) a partir da descrição, por exemplo "COBASI" → Gatos. A sugestão sempre passa pela fila.
+- **Nota para a arquitetura:** avaliar se essa sugestão usa IA. É desejável, mas não obrigatória na v1. [NOTE FOR PM]
 
-#### FR-9: Importar histórico
-Rafael pode importar as abas 01/2026 a 10/2026 da planilha "Cartão" (colunas Despesa, Valor, Parcela, Observação, Tipo, Responsabilidade) para criar as Regras iniciais e as parcelas em andamento.
-- Lançamentos divididos em várias linhas na planilha (ex.: Monjaro) viram uma Divisão.
-- Depois da importação, o app mostra as Regras criadas para Rafael revisar.
+#### FR-12: Gerenciar Regras
+Rafael pode ver todas as Regras, editar e apagar. Se ele editar uma Regra, o app pergunta se deve reaplicá-la aos Lançamentos do Mês atual.
 
-### 4.3 Revisão
+### 4.4 Revisão
 **Descrição:** uma fila com o que o app não classificou, ou classificou com dúvida, pensada para poucos toques. Inspirada no Listonic: lista simples, agrupada, com ação de um toque. Realiza UJ-1.
 
-#### FR-10: Fila de revisão
+#### FR-13: Fila de revisão
 O app lista os Lançamentos sem classificação e os sugeridos, agrupados (ex.: por estabelecimento), com a sugestão visível.
 - Confirmar uma sugestão leva um toque.
 - O contador "faltam N" chega a zero quando a fila esvazia.
 
-#### FR-11: Classificar em lote
+#### FR-14: Classificar em lote
 Rafael pode selecionar vários Lançamentos e atribuir de uma vez Responsável, Categoria e observação.
 
-#### FR-12: Dividir um Lançamento
+#### FR-15: Dividir um Lançamento
 Rafael pode dividir um Lançamento entre dois ou mais Responsáveis, por valor ou por proporção (ex.: 2/3 Mãe, 1/3 Rafael).
 - A soma das partes é sempre igual ao valor do Lançamento. O app ajusta os centavos da divisão na última parte.
 
-#### FR-13: Ver a fatura completa
-Rafael pode ver todos os Lançamentos do mês numa grade, filtrar por Responsável, Categoria, cartão e estado da classificação, e editar qualquer linha.
-
-### 4.4 Contas manuais
+### 4.5 Contas manuais
 **Descrição:** contas fora do cartão entram uma vez e se repetem sozinhas. Realiza UJ-3.
 
-#### FR-14: Cadastrar Conta manual
-Rafael pode cadastrar uma Conta manual com nome, valor, Categoria, Responsável ou Divisão, mês inicial e duração: recorrente mensal (até encerrar) ou N parcelas.
+#### FR-16: Cadastrar Conta manual
+Rafael pode cadastrar uma Conta manual com nome, valor, Categoria, Responsável ou Divisão, Mês inicial e duração: recorrente mensal (até encerrar) ou N parcelas.
 
-#### FR-15: Gerar Lançamentos das Contas manuais
-Ao abrir um mês, o app cria os Lançamentos das Contas manuais ativas, com Parcela n/N quando forem parceladas. Eles entram já classificados e não passam pela fila.
+#### FR-17: Gerar Lançamentos das Contas manuais
+Ao abrir um Mês, o app cria os Lançamentos das Contas manuais ativas, com Parcela n/N quando forem parceladas. Eles entram já classificados e não passam pela fila.
 
-#### FR-16: Encerrar ou alterar uma Conta manual
-Rafael pode encerrar ou alterar uma Conta manual. A mudança vale do mês aberto em diante, e os meses anteriores não mudam.
+#### FR-18: Encerrar ou alterar uma Conta manual
+Rafael pode encerrar ou alterar uma Conta manual. A mudança vale do Mês atual em diante, e os Meses anteriores não mudam.
 
-### 4.5 Painel e Blocos
-**Descrição:** o Painel mostra os totais do mês em Blocos que Rafael monta, por pessoa ou por categoria. Realiza UJ-1 e UJ-4.
+### 4.6 Painel do Mês
+**Descrição:** tudo o que o Painel mostra é do Mês selecionado, por padrão o atual. Ele reúne os Blocos de Rafael e a grade de Lançamentos, e um Bloco também funciona como filtro da grade. Realiza UJ-1 e UJ-4.
 
-#### FR-17: Blocos padrão
-Ao configurar o app, cada Responsável ganha um Bloco. O Bloco do Rangel já vem com a Fórmula Rangel + (Casal ÷ 2), e o do Rafael com Rafael + (Casal ÷ 2). [ASSUMPTION: o Casal é dividido 50/50 e não vira cobrança por si só]
-
-#### FR-18: Montar Blocos personalizados
+#### FR-19: Montar Blocos
 Rafael pode criar, renomear, reordenar e apagar Blocos, montando a Fórmula por seleção: escolhe Responsáveis e Categorias, operações (+ − × ÷), números e parênteses.
 - Não existe campo de texto livre para a Fórmula.
 - O app mostra a Fórmula legível, como (Rafael + Rangel) ÷ 2, e o resultado ao vivo.
 - Uma Fórmula incompleta ou inválida (ex.: divisão por zero, parêntese aberto) não pode ser salva.
-- Um Bloco pode filtrar ao mesmo tempo por Responsável e por Categoria (ex.: "Rafael em Bobiças").
+- Um operando pode combinar Responsável e Categoria (ex.: "Rafael em Bobiças").
+- Nenhum Bloco vem pronto (FR-1).
 
-#### FR-19: Ver o detalhe de um Bloco
-Tocar num Bloco mostra os Lançamentos que compõem o total.
+#### FR-20: Filtrar a grade pelo Bloco
+Tocar num Bloco filtra a grade do Painel para mostrar só os Lançamentos que compõem aquele total. Tocar de novo no mesmo Bloco desfaz o filtro, e também existe um botão "Limpar filtros".
+- Com o filtro ativo, o total da grade é igual ao valor do Bloco. Quando a Fórmula divide, como Casal ÷ 2, a grade mostra a fração que entra no Bloco.
 
-#### FR-20: Gasto por Categoria
-O Painel mostra quanto Rafael gastou em cada Categoria no mês (só a parte dele).
+#### FR-21: Grade de Lançamentos
+O Painel mostra todos os Lançamentos do Mês numa grade, com filtros por Responsável, Categoria, cartão e estado da classificação. Rafael pode editar qualquer linha ali mesmo.
 
-### 4.6 Mensagem de cobrança
-**Descrição:** cada Bloco de pessoa gera a mensagem do WhatsApp com um toque. Realiza UJ-1 e UJ-4.
+#### FR-22: Navegar entre Meses
+Rafael pode trocar o Mês exibido no Painel para consultar Meses anteriores. O Mês atual é sempre o padrão ao abrir o app.
 
-#### FR-21: Copiar a Mensagem de cobrança
-O botão "Copiar" de um Bloco coloca na área de transferência o texto no modelo do Rafael:
+### 4.7 Mensagem de cobrança
+**Descrição:** cada Bloco gera a mensagem do WhatsApp com um toque, a partir de um modelo que Rafael define. Realiza UJ-1 e UJ-4.
+
+#### FR-23: Configurar o modelo da mensagem
+Rafael define o modelo da Mensagem de cobrança: saudação, frase do total, chave Pix, rodapé e o formato de cada linha de detalhe, escolhendo os campos (nome, Parcela, valor). O modelo atual dele é:
 ```
 Oi
 Esse mês deu R$ 1.350,14
@@ -174,53 +191,71 @@ Pix rafaelrabelodasilva@outlook.com
 Detalhes:
 Nome da conta | Parcela | Valor
 ```
-- O total e os detalhes são os do Bloco no mês.
-- Se o Responsável tiver Saldo pendente de meses anteriores, a mensagem inclui uma linha "Pendente de meses anteriores: R$ X" e soma esse valor ao total. [ASSUMPTION: o pendente entra no total]
-- As Dívidas programadas ainda não vencidas não entram na mensagem.
 
-#### FR-22: Ajustar o modelo da mensagem
-Rafael pode editar a saudação, a chave Pix e o rodapé do modelo. A estrutura dos detalhes é fixa.
+#### FR-24: Copiar a Mensagem de cobrança
+O botão "Copiar" de um Bloco coloca na área de transferência a mensagem preenchida com o total e os detalhes do Bloco no Mês.
+- Os estornos atribuídos ao Responsável aparecem como linhas negativas e reduzem o total.
+- As Dívidas programadas ainda não vencidas não entram.
+- [ASSUMPTION: a mensagem traz só o Mês atual. O Saldo pendente de Meses anteriores não entra no total, e Rafael cobra esse saldo pela área de Recebimentos (FR-28)]
 
-### 4.7 Recebimentos
-**Descrição:** registrar quem pagou, total ou parcialmente, e nunca perder uma Cobrança. Realiza UJ-2 e UJ-3.
+### 4.8 Recebimentos e Meses anteriores
+**Descrição:** uma área separada do Painel para o que atravessa os Meses: o que foi pago, o que ficou pendente, o que vence no futuro e o histórico da Fatura. Realiza UJ-2 e UJ-3.
 
-#### FR-23: Registrar Pagamento
-Rafael pode selecionar uma ou várias Cobranças de um Responsável e registrar um Pagamento com data e valor.
+#### FR-25: Registrar Pagamento
+Rafael pode selecionar uma ou várias Cobranças de um Responsável, de qualquer Mês, e registrar um Pagamento com data e valor.
 - Se o valor for igual à soma das Cobranças, todas viram "paga".
 - Se o valor for menor, o Pagamento quita as Cobranças em ordem (das mais antigas para as mais novas), e a última fica "paga parcialmente" com o restante pendente. [ASSUMPTION: a ordem é das mais antigas para as mais novas]
 - Um Pagamento pode ser desfeito.
 
-#### FR-24: Ver Saldo pendente
-Para cada Responsável, o app mostra o Saldo pendente total e a lista das Cobranças não quitadas, com mês e valor restante.
+#### FR-26: Saldo pendente por Responsável
+Para cada Responsável, o app mostra o Saldo pendente total e a lista das Cobranças não quitadas, com Mês e valor restante.
 
-#### FR-25: Dívida programada
+#### FR-27: Dívida programada
 Rafael pode marcar Cobranças como Dívida programada, com vencimento combinado.
-- Elas aparecem numa área "A receber", com data e valor.
-- No mês do vencimento, passam a entrar na Mensagem de cobrança.
+- Elas aparecem em "A receber", com data e valor.
+- No Mês do vencimento, passam a entrar na Mensagem de cobrança daquele Mês.
 - Depois do vencimento, se não forem pagas, aparecem destacadas como atrasadas.
 
 [ASSUMPTION: esse é o mecanismo para "não esquecer uma conta futura", e substitui o lançamento mensal que Rafael fazia para o Lucas]
 
-#### FR-26: Histórico de Pagamentos
+#### FR-28: Cobrar pendências
+Na área de Recebimentos, Rafael pode copiar uma mensagem com o Saldo pendente de um Responsável, usando o mesmo modelo (FR-23) e listando as Cobranças em aberto por Mês.
+
+#### FR-29: Histórico de Pagamentos
 Rafael pode consultar todos os Pagamentos de um Responsável, com data, valor e as Cobranças que cada um quitou.
 
-### 4.8 Acesso e aparelhos
+#### FR-30: Meses anteriores da Fatura
+Uma seção mostra, por Mês, o saldo anterior, os pagamentos da Fatura e o resíduo que passou de um Mês para outro (ex.: R$ 25,90 em outubro/2026), para Rafael conferir a continuidade entre as Faturas.
 
-#### FR-27: Entrar e sincronizar
+### 4.9 Previsão e finanças pessoais
+**Descrição:** como app de finanças pessoais, o Conta Comigo também mostra para onde vai o dinheiro do Rafael e o que já está comprometido.
+
+#### FR-31: Gasto do Rafael por Categoria
+Para o Mês selecionado, o app mostra quanto Rafael gastou em cada Categoria, contando só a parte dele, incluindo a metade do Casal se a Fórmula dele disser isso. [ASSUMPTION: a "parte do Rafael" é definida por um Bloco que ele escolhe]
+
+#### FR-32: Previsão dos próximos Meses
+A partir das parcelas em andamento e das Contas manuais, o app mostra quanto já está comprometido nos próximos Meses, no total e por Responsável. Por exemplo: "MSC CRUZEIROS 01/12 → R$ 1.140,74 por mais 11 meses".
+
+#### FR-33: Evolução entre Meses
+Rafael pode ver como os totais por Categoria e por Responsável evoluíram nos últimos Meses. [ASSUMPTION: um gráfico simples basta na v1]
+
+### 4.10 Acesso e aparelhos
+
+#### FR-34: Entrar e sincronizar
 Só Rafael acessa o app, com login próprio. Os dados ficam iguais no PC, no iPad e no iPhone, e uma alteração feita num aparelho aparece nos outros.
 
-#### FR-28: Instalar como app
+#### FR-35: Instalar como app
 O web app pode ser instalado na tela inicial do iPhone e do iPad, sem App Store.
 
 ## 5. Plataforma e telas
 
 - **Prioridade:** PC e iPad primeiro, com a experiência completa (grade, fila, Blocos, Recebimentos).
-- **Celular (v1):** tudo funciona, mas o foco é consultar Blocos, copiar mensagens, registrar Pagamentos e ver Saldos pendentes. A grade completa (FR-13) aparece em formato de lista no celular. [ASSUMPTION: essa é a versão mínima aceitável no celular; uma experiência otimizada para ele fica para depois]
+- **Celular (v1):** tudo funciona, mas o foco é consultar Blocos, copiar mensagens, registrar Pagamentos e ver Saldos pendentes. No celular, a grade aparece em formato de lista. [ASSUMPTION: essa é a versão mínima aceitável no celular; uma experiência otimizada para ele fica para depois]
 
 ## 6. Requisitos não funcionais
 
 - **Precisão:** nenhum valor pode ser perdido ou duplicado na extração, na Divisão ou nos Pagamentos. Valores são tratados em centavos, sem arredondamento acumulado.
-- **Privacidade:** os dados financeiros ficam acessíveis só ao Rafael. A senha do PDF não é guardada. O PDF original pode ser guardado para consulta. [ASSUMPTION]
+- **Privacidade:** os dados financeiros e os PDFs ficam acessíveis só ao Rafael. A senha do PDF não é guardada.
 - **Desempenho:** importar e classificar uma Fatura de cerca de 50 Lançamentos leva menos de 1 minuto. [ASSUMPTION]
 - **Formato brasileiro:** moeda em R$ com vírgula decimal, datas dd/mm/aaaa e interface em português.
 
@@ -228,25 +263,24 @@ O web app pode ser instalado na tela inicial do iPhone e do iPad, sem App Store.
 
 - Não envia mensagens pelo WhatsApp nem confirma Pix automaticamente. Rafael copia, cola e registra o Pagamento.
 - Não lê faturas de outros bancos nem outros layouts do Santander.
-- Não conecta com o banco (Open Finance).
-- Não é um app de finanças pessoais completo: não tem orçamento, metas nem contas bancárias.
+- Não conecta com o banco (Open Finance) nem acompanha contas correntes ou investimentos.
 - Não tem acesso para as pessoas cobradas.
 
 ## 8. Escopo da primeira versão
 
-**Dentro:** §4.1 a §4.8 e §5.
+**Dentro:** §4.1 a §4.10 e §5.
 
 **Fora (por fase):**
-- **Depois:** experiência otimizada para o celular.
+- **Depois:** experiência otimizada para o celular. Orçamento e metas por Categoria, se Rafael quiser. [ASSUMPTION]
 - **Última etapa:** a Fatura do Rangel e o painel do casal com as duas Faturas.
 - **Só se o app abrir para outras pessoas:** contas para outros usuários, outros bancos, pesquisa de mercado completa e custo e privacidade da IA.
 
 ## 9. Métricas de sucesso
 
-- **SM-1:** fechamento do mês (do envio do PDF à última mensagem copiada) em menos de 10 minutos. Hoje leva cerca de 1h50. Valida FR-1 a FR-21.
-- **SM-2:** pelo menos 55% dos Lançamentos do mês classificados sem revisão desde o primeiro mês, crescendo depois. Valida FR-5 a FR-9.
-- **SM-3:** 100% das Faturas conciliadas, ou com a diferença explicada, antes de cobrar. Valida FR-3.
-- **SM-4:** nenhuma Cobrança esquecida. Todo valor devido está pago, pendente ou programado. Valida FR-23 a FR-25.
+- **SM-1:** fechamento do Mês (do envio do PDF à última mensagem copiada) em menos de 10 minutos. Hoje leva cerca de 1h50. Valida FR-3 a FR-24.
+- **SM-2:** pelo menos 55% dos Lançamentos do Mês classificados sem revisão desde o primeiro Mês, crescendo depois. Valida FR-8 a FR-12.
+- **SM-3:** 100% das Faturas com status "Conferido" antes de cobrar. Valida FR-6.
+- **SM-4:** nenhuma Cobrança esquecida. Todo valor devido está pago, pendente ou programado. Valida FR-25 a FR-28.
 
 **Contramétrica**
 - **SM-C1:** não aumentar a classificação automática à custa de classificar errado. Uma sugestão incerta vai para a fila em vez de ser aplicada. Contrabalança SM-2.
@@ -254,17 +288,18 @@ O web app pode ser instalado na tela inicial do iPhone e do iPad, sem App Store.
 ## 10. Perguntas em aberto e suposições
 
 **Perguntas em aberto**
-1. O app pode guardar o PDF original de cada mês para consulta?
-2. Os créditos e o cashback ficam sempre com o Rafael, ou algum dia são divididos (ex.: estorno de uma compra da Mãe)?
+1. Quais recursos de finanças pessoais, além de gasto por Categoria, previsão e evolução, são importantes para Rafael? Orçamento por Categoria? Metas?
+2. A IA para sugerir Categorias de estabelecimentos novos (FR-11) entra na v1 ou depois? Será decidido na arquitetura.
 
 **Índice de suposições**
-- §4.1 FR-1: a senha do PDF não é guardada.
-- §4.1 FR-2: créditos e cashback ficam com o Rafael, sem Responsável.
-- §4.1 FR-3: uma Conciliação divergente bloqueia a cobrança até ser resolvida.
-- §4.2 FR-7: as Regras são aprendidas sem confirmação.
-- §4.5 FR-17: o Casal é dividido 50/50, e os Blocos padrão de Rafael e Rangel já somam a metade.
-- §4.6 FR-21: o Saldo pendente entra no total da mensagem.
-- §4.7 FR-23: um pagamento parcial quita as Cobranças das mais antigas para as mais novas.
-- §4.7 FR-25: a Dívida programada é o mecanismo para lembrar de contas futuras.
+- §4.2 FR-3: a senha do PDF não é guardada.
+- §4.2 FR-6: uma Conferência divergente bloqueia a cobrança até ser resolvida.
+- §4.3 FR-10: as Regras são aprendidas sem confirmação.
+- §4.7 FR-24: a mensagem traz só o Mês atual, e o Saldo pendente é cobrado à parte (FR-28).
+- §4.8 FR-25: um pagamento parcial quita as Cobranças das mais antigas para as mais novas.
+- §4.8 FR-27: a Dívida programada é o mecanismo para lembrar de contas futuras.
+- §4.9 FR-31: a "parte do Rafael" é definida por um Bloco que ele escolhe.
+- §4.9 FR-33: um gráfico simples de evolução basta na v1.
 - §5: no celular, a grade aparece como lista, com foco em consultar, copiar e registrar Pagamentos.
-- §6: o PDF original pode ser guardado; a importação leva menos de 1 minuto.
+- §6: a importação leva menos de 1 minuto.
+- §8: orçamento e metas ficam para depois.
