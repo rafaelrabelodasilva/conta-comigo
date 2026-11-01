@@ -1140,3 +1140,88 @@ So that o Rangel receba "Casal R$ 5.639,35 ÷ 2 = R$ 2.819,68" e entenda a conta
 **And** valem as mesmas regras de inclusão da Story 4.6
 
 **And** o teste de aceite do Bloco "Rangel" = Rangel + (Casal ÷ 2) em outubro/2026 gera total R$ 2.819,68, igual ao valor do Bloco e ao passo a passo
+
+## Epic 5: Contas manuais
+
+Rafael cadastra contas fora do cartão (como a Bombinhas, com Divisão) que se repetem sozinhas nos Meses seguintes, e pode alterá-las e encerrá-las sem mexer no passado.
+
+### Story 5.1: Cadastrar uma Conta manual
+
+As a Rafael,
+I want cadastrar uma conta fora do cartão uma vez só,
+So that ela apareça sozinha em cada mês, já classificada (FR-16, FR-17).
+
+**Acceptance Criteria:**
+
+**Given** a migração que cria `contas_manuais` (`nome`, `valor_centavos`, `tipo_id`, `observacao`, `mes_inicial`, `repeticao` mensal ou parcelas, `parcela_total`, `divisao` com as partes, `encerrada_em_mes`, dono, RLS), cada uma ligada a **uma** Série, com as referências em `REFERENCIAS_JSONB`, e a RPC idempotente `materializar_contas_manuais(ate_mes)` (AD-15)
+**When** Rafael salva uma Conta em Contas → "＋ Nova conta"
+**Then** o formulário tem Nome, Valor, Repetição (Mensal até encerrar · N parcelas), Parcelas, "Começa em", Tipo, Observação e Divisão com "＋ Parte" (UX-DR24)
+**And** a RPC cria os Lançamentos até o Mês atual + 12 com `lancado_por = 'manual'`, `parcela_n` contado desde o Mês inicial (também nas recorrentes), `mes = somarMeses(mes_inicial, n − 1)` e `on conflict (serie_id, parcela_n) do nothing`
+**And** com Divisão, cada parcela é uma linha-mãe com `divisao` e suas filhas, como no AD-8
+**And** os Lançamentos entram já classificados e não passam pelo Revisar
+
+**Given** a Bombinhas: 6 parcelas, começa em Jul/26, Tipo Viagem, três partes de R$ 106,00 (Mãe, Casal, Lucas)
+**When** Rafael salva
+**Then** cada Mês de Jul/26 a Dez/26 tem uma parcela n/6 de R$ 318,00 dividida em três filhas de R$ 106,00
+**And** salvar de novo não duplica nada
+
+**Given** um Mês futuro
+**When** ele aparece no Painel ou em qualquer tela
+**Then** os Lançamentos da Conta aparecem como previstos (`ehPrevisto`) e entram nos Blocos com "inclui previstos"
+**And** na grade, as Contas manuais ficam no fim, depois da ordem da fatura
+
+### Story 5.2: Lista de Contas manuais
+
+As a Rafael,
+I want ver todas as minhas contas fora do cartão num lugar só,
+So that eu saiba o que está ativo e o que já acabou (FR-16).
+
+**Acceptance Criteria:**
+
+**Given** a tela Contas
+**When** Rafael a abre
+**Then** vê a lista com Conta (com a descrição da repetição, ex.: "6 parcelas · Jul/26 a Dez/26"), Valor por mês, Responsável ou Divisão (etiquetas), Tipo e situação (Ativa ou Encerrada) (UX-DR24)
+**And** os filtros "Ativas / Encerradas / Todas" funcionam
+**And** o ⋯ de cada linha tem Editar, Encerrar e Excluir
+**And** sem Contas aparece "Nenhuma conta manual", com "＋ Nova conta"
+
+### Story 5.3: Contas que se repetem sozinhas todo dia
+
+As a Rafael,
+I want que as contas recorrentes continuem aparecendo nos meses seguintes sem eu fazer nada,
+So that a Previsão nunca fique sem elas (FR-17, AD-13, AD-15).
+
+**Acceptance Criteria:**
+
+**Given** o `vercel.json` com o Cron diário `0 12 * * *` (09:00 em Brasília) e a rota `GET /api/cron/diario`
+**When** o Cron chama a rota com `Authorization: Bearer CRON_SECRET`
+**Then** a rota roda `materializar_contas_manuais` para o Mês atual + 12, com a chave secreta do Supabase só no servidor
+**And** uma chamada sem o segredo correto recebe 401 e não faz nada
+**And** rodar duas vezes no mesmo dia não cria nada novo
+
+**And** a chamada diária também mantém o projeto Supabase Free ativo
+**And** a rota não registra valores nem nomes em log
+
+### Story 5.4: Alterar, encerrar e excluir uma Conta manual
+
+As a Rafael,
+I want mudar o valor de uma conta, encerrá-la ou excluí-la sem mexer nos meses que já passaram,
+So that o histórico continue certo (FR-18, FR-46).
+
+**Acceptance Criteria:**
+
+**Given** uma Conta com Lançamentos em vários Meses
+**When** Rafael edita e salva
+**Then** o formulário avisa "Vale a partir de Mmm/AA. Os meses anteriores não mudam"
+**And** a RPC recria só os Lançamentos com `mes ≥ Mês atual` que não foram editados à mão (`editado_em is null`) e não têm Pagamento
+**And** os que ficaram como estavam aparecem listados no aviso
+
+**Given** "Encerrar"
+**When** Rafael escolhe "A partir de qual mês?"
+**Then** os Lançamentos daquele Mês em diante que ainda podem ser recriados são excluídos logicamente, e a Conta fica Encerrada
+**And** os Meses anteriores não mudam
+
+**Given** "Excluir"
+**When** Rafael confirma
+**Then** o app pergunta se exclui também os Lançamentos previstos dos meses seguintes
+**And** a exclusão é lógica e pode ser desfeita pelo aviso "Excluído · Desfazer"
