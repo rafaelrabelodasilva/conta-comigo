@@ -1,5 +1,5 @@
 ---
-status: draft
+status: final
 stepsCompleted: [1, 2, 3]
 inputDocuments:
   - _bmad-output/planning-artifacts/prds/prd-conta-comigo-2026-11-01/prd.md
