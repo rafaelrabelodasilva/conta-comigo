@@ -51,7 +51,7 @@ Rangel, Mãe e Lucas não acessam o app. Eles só recebem a mensagem de cobranç
   A Mãe manda o Pix com o total do mês. Rafael filtra a grade pela Mãe, seleciona tudo, confere que a barra mostra o mesmo valor do Pix e aplica "Pago" em 08/11/26. O Rangel paga a parte dele: Rafael filtra os Responsáveis Casal e Rangel, seleciona tudo e aplica "Pago". O Lucas paga só R$ 100 de R$ 215. Rafael seleciona os itens do Lucas e aplica "Pago" informando R$ 100, e os R$ 115 que faltam ficam pendentes. No dia 17/11/26, dez dias depois do vencimento, o que ainda não foi pago aparece como atrasado.
 
 - **UJ-3. Rafael lança uma viagem dividida que não está no cartão.**
-  Ele cadastra uma Conta manual, "Bombinhas", dividida em três partes: Mãe (Mãe e Pai), Casal (Rafael e Rangel) e Lucas (Lucas e Miri). Cada parte custa R$ 636,00 e é paga em 6 parcelas mensais de R$ 106,00, como na planilha. [ASSUMPTION: R$ 636,00 é o valor de cada parte, e não da viagem toda; a confirmar com Rafael] A Mãe paga mês a mês. O Lucas combinou de pagar tudo no final, então a parte dele vira uma Dívida programada com vencimento em abril. Até lá, ela fica em "A receber".
+  Ele cadastra uma Conta manual, "Bombinhas", dividida em três partes: Mãe (Mãe e Pai), Casal (Rafael e Rangel) e Lucas (Lucas e Miri). Cada parte é um casal e custa R$ 106,00 por mês, em 6 parcelas: R$ 636,00 por casal e R$ 1.908,00 a viagem toda, como na planilha (confirmado por Rafael). A Mãe paga mês a mês. O Lucas combinou de pagar tudo no final, então a parte dele vira uma Dívida programada com vencimento em abril. Até lá, ela fica em "A receber".
 
 - **UJ-4. Rafael cobra o Rangel pelo Bloco.**
   Rafael criou o Bloco "Rangel" = Rangel + (Casal ÷ 2). No Painel de novembro, ele toca em "Mensagem" nesse Bloco. O app mostra o cálculo (Rangel R$ 0,00 + Casal R$ 5.639,35 ÷ 2 = R$ 2.819,68) e a mensagem com o total de R$ 2.819,68 e os detalhes agrupados. Rafael copia e cola no WhatsApp do Rangel. Quando o Rangel paga, ele filtra Casal e Rangel, seleciona tudo e aplica "Pago".
@@ -447,4 +447,3 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 **Índice de suposições**
 
 Todas as suposições foram confirmadas por Rafael em 01/11/26 e incorporadas ao texto.
-- §2.3 UJ-3: R$ 636,00 é o valor de cada parte da Bombinhas (6 × R$ 106,00), e não da viagem toda. A confirmar com Rafael.
