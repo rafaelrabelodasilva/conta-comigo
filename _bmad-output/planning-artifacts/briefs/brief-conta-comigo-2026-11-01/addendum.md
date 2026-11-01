@@ -38,3 +38,22 @@ Colunas: Despesa | Valor | Parcela | Observação | Tipo | Responsabilidade | La
 - **Créditos e estornos:** ficam sem responsável.
 - **Totais (10/2026):** Rafael 2.290,74; Rangel 0,00; Casal 5.639,35 (metade: 2.819,68); Mãe 1.350,14; Lucas 215,16; total 9.280,23.
 - **Recorrência:** muitos lançamentos se repetem todo mês com o mesmo responsável e a mesma categoria (assinaturas, parcelamentos em andamento).
+
+## Quanto da fatura se repete (análise das abas 08, 09 e 10/2026)
+
+Classificação de outubro/2026 (44 linhas de despesa do cartão, sem contar créditos e lançamentos manuais):
+
+| Situação | Linhas | Como o app resolveria |
+|---|---|---|
+| Continuação de parcela (02/04, 05/10…) | 20 | Copia o responsável e a categoria do mês anterior (mesmo nome, parcela n-1), incluindo divisões como o Monjaro (2/3 Mãe, 1/3 Rafael) |
+| Avulsa recorrente com o mesmo responsável (Apple, Spotify, Amazon Music) | 4 | Regra por estabelecimento; precisa normalizar variações ("DM*SPOTIFY", "EBN SPOTIFY", "EBANX SPOTIFY") |
+| Estabelecimento conhecido, mas responsável variável (Grasso, Panvel) | 2 | Sugere o mais provável e pede confirmação |
+| Novo (5 parcelas 01/xx + 13 avulsas) | 18 | Precisa de Rafael; as parcelas novas passam a ser automáticas nos meses seguintes |
+
+- Cerca de 55% das linhas e cerca de 65% do valor (R$ 5.444 em parcelas + R$ 107 em recorrentes, de R$ 8.327) sairiam classificados só pelo histórico.
+- O que sobra é exatamente o que exige a memória de Rafael: compras avulsas novas em marketplaces (Shopee, Amazon, Mercado Livre).
+- Os nomes mudam entre meses para o mesmo estabelecimento ("AMAZONMETPLC" e "AMAZONMKTPLC", "LITE VIVOEASYANJAL" e "VIVOEASYANUAL"), então a comparação precisa tolerar diferenças.
+
+## Ideia futura: fatura do casal
+
+Rangel também subiria a fatura dele, e as duas seriam reunidas num painel único (ex.: internet paga no cartão dele e dividida pelo casal). "Quem subiu a fatura" vira pista de responsável. A adesão do Rangel é incerta.
