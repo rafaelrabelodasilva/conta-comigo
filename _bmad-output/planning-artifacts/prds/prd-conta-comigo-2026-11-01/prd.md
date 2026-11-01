@@ -15,7 +15,7 @@ Este PRD detalha a primeira versão do Conta Comigo para quem vai desenhar a exp
 
 O Conta Comigo é um app de finanças pessoais construído em torno do cartão de crédito do Rafael, que ele divide com outras pessoas. Ele sobe o PDF da fatura do Santander e digita a senha. O app extrai os lançamentos, confere com os totais da fatura e classifica sozinho o que já conhece, aprendendo com os meses anteriores: parcelas em andamento, assinaturas e contas fixas. Sobra para o Rafael só o que é novo, numa fila rápida de revisão.
 
-O Painel mostra o mês atual em Blocos que o próprio Rafael monta: quanto cada pessoa deve, quanto ele gastou e em quê. Tocar num Bloco filtra os lançamentos que formam aquele total, e um botão copia a mensagem de cobrança pronta para o WhatsApp. Fora do Painel, o app acompanha o que foi recebido, o que ficou pendente de meses anteriores e as dívidas combinadas para o futuro, para que nenhuma parcela se perca. A meta é trocar quase 1h50 de trabalho manual por menos de 10 minutos. Depois, numa segunda fase, o app passa a responder a pergunta que Rafael não consegue responder hoje: quanto sobra do salário. Ainda mais à frente, ele ajuda a planejar compras com Objetivos.
+O Painel mostra o mês atual em Blocos que o próprio Rafael monta: quanto cada pessoa deve, quanto ele gastou e em quê. Tocar num Bloco filtra os lançamentos que formam aquele total. Na grade, Rafael filtra e seleciona os lançamentos que quer cobrar, vê o total da seleção e gera a mensagem pronta para o WhatsApp. Quando a pessoa paga, ele seleciona os mesmos lançamentos e marca como pagos.
 
 ## 2. Usuário
 
@@ -37,16 +37,16 @@ Rangel, Mãe e Lucas não acessam o app. Eles só recebem a mensagem de cobranç
   O app começa vazio. Rafael cadastra os Responsáveis (Rafael, Rangel, Casal, Mãe, Lucas) e as Categorias. Depois importa o histórico de 2026 da planilha e monta os Blocos do jeito que quer, por exemplo "Rangel" = Rangel + (Casal ÷ 2). Por fim, configura o modelo da Mensagem de cobrança.
 
 - **UJ-1. Rafael fecha a fatura de novembro no iPad.**
-  No dia 5 a fatura fecha e o PDF chega por e-mail, protegido por senha. Rafael abre o app no iPad, sobe o PDF e digita a senha. O app mostra o resumo da importação: 47 Lançamentos, conferidos com os totais da fatura, 30 já classificados e 17 para revisar. Na fila, ele classifica as compras novas da Shopee e da Amazon, marcando várias de uma vez quando são da mesma pessoa. Ele também divide um remédio entre Mãe e ele, e atribui à Mãe o estorno de uma compra dela. No Painel do mês, toca no Bloco "Mãe": a grade passa a mostrar só os Lançamentos da Mãe, e ele confere. Toca de novo para limpar o filtro. Por fim, aperta "Copiar" no Bloco e cola a mensagem no WhatsApp dela. **Edge case:** se os Lançamentos não conferem com os totais da fatura, o app mostra a diferença antes de liberar a cobrança.
+  No dia 5 a fatura fecha e o PDF chega por e-mail, protegido por senha. Rafael abre o app no iPad, sobe o PDF e digita a senha. O app mostra o resumo da importação: 47 Lançamentos, conferidos com os totais da fatura, 30 já classificados e 17 para revisar. Na fila, ele classifica as compras novas da Shopee e da Amazon, marcando várias de uma vez quando são da mesma pessoa. Ele também divide um remédio entre Mãe e ele, e atribui à Mãe o estorno de uma compra dela. No Painel do mês, toca no Bloco "Mãe": a grade passa a mostrar só os Lançamentos da Mãe. Ele toca em "selecionar todos", vê na barra "23 itens · R$ 1.350,14", confere com o Bloco e toca em "Gerar mensagem". Copia o texto e cola no WhatsApp dela. **Edge case:** se os Lançamentos não conferem com os totais da fatura, o app mostra a diferença antes de liberar a cobrança.
 
 - **UJ-2. Rafael registra o que recebeu.**
-  A Mãe manda o Pix com o total do mês. Na área de Recebimentos, Rafael seleciona as Cobranças de novembro da Mãe e marca como pagas em 08/11. O Lucas paga só R$ 100 de R$ 215. Rafael registra o pagamento parcial, e os R$ 115 que faltam ficam como Saldo pendente do Lucas.
+  A Mãe manda o Pix com o total do mês. Rafael filtra a grade pela Mãe, seleciona tudo, confere que a barra mostra o mesmo valor do Pix e aplica "Pago" em 08/11. O Lucas paga só R$ 100 de R$ 215. Rafael seleciona os itens do Lucas, aplica "Pago" informando R$ 100, e os R$ 115 que faltam ficam como Saldo pendente do Lucas. No dia 17/11, dez dias depois do vencimento, o que o Rangel ainda não pagou aparece como atrasado.
 
 - **UJ-3. Rafael lança uma viagem dividida que não está no cartão.**
   Ele cadastra uma Conta manual, "Bombinhas", de R$ 636 em 6 parcelas mensais, dividida em três partes iguais: Mãe (Mãe e Pai), Casal (Rafael e Rangel) e Lucas (Lucas e Miri). A Mãe paga mês a mês. O Lucas combinou de pagar tudo no final, então a parte dele vira uma Dívida programada com vencimento em abril. Até lá, ela fica em "A receber".
 
 - **UJ-4. Em viagem, Rafael confere pelo iPhone quem pagou.**
-  Sem o iPad, ele abre o app no iPhone, vê os Saldos pendentes e copia a mensagem do Rangel. A revisão linha a linha fica para quando ele tiver uma tela maior.
+  Sem o iPad, ele abre o app no iPhone, vê os Saldos pendentes, filtra pelo Rangel, seleciona tudo e gera a mensagem dele. A revisão linha a linha fica para quando ele tiver uma tela maior.
 
 ## 3. Glossário
 
@@ -67,7 +67,9 @@ Rangel, Mãe e Lucas não acessam o app. Eles só recebem a mensagem de cobranç
 - **Bloco**: um totalizador nomeado do Painel, calculado por uma Fórmula sobre os Lançamentos do Mês.
 - **Fórmula**: a expressão de um Bloco, montada por seleção (sem digitação livre), com Responsáveis e Categorias como operandos, as operações somar, subtrair, multiplicar e dividir, números e parênteses. Exemplo: Rangel + (Casal ÷ 2).
 - **Painel**: a tela do Mês com os Blocos e a grade de Lançamentos.
-- **Mensagem de cobrança**: o texto gerado a partir de um Bloco, pronto para colar no WhatsApp.
+- **Seleção**: o conjunto de Lançamentos (ou partes deles) que Rafael marca na grade, depois de filtrar. Sobre uma Seleção ele gera a Mensagem de cobrança ou marca como pago.
+- **Mensagem de cobrança**: o texto gerado a partir de uma Seleção, pronto para colar no WhatsApp.
+- **Atraso**: estado de uma Cobrança não paga depois do vencimento da Fatura mais a tolerância (padrão: 10 dias).
 - **Conferência**: a checagem dos Lançamentos extraídos de uma Fatura contra os totais de despesas e de créditos dessa Fatura.
 - **Ajuste**: um pequeno crédito da Fatura vinculado a uma parcela do mesmo estabelecimento (ex.: MSC CRUZEIROS - R$ 0,08). Veja FR-47.
 - **Lançamento previsto**: um Lançamento que o próprio app criou num Mês futuro porque sabe que ele virá: as parcelas restantes de uma compra parcelada da Fatura ou de uma Conta manual. Fica sempre identificado como "previsto pelo sistema" até ser confirmado pela Fatura daquele Mês.
@@ -217,8 +219,8 @@ O Painel mostra todos os Lançamentos do Mês numa grade, com filtros por Respon
 #### FR-22: Navegar entre Meses
 Rafael pode trocar o Mês exibido no Painel para consultar Meses anteriores. O Mês atual é sempre o padrão ao abrir o app.
 
-### 4.7 Mensagem de cobrança
-**Descrição:** cada Bloco gera a mensagem do WhatsApp com um toque, a partir de um modelo que Rafael define. Realiza UJ-1 e UJ-4.
+### 4.7 Seleção e Mensagem de cobrança
+**Descrição:** a cobrança parte da grade: Rafael filtra (por Responsável, Categoria, estado…), seleciona alguns ou todos os Lançamentos, confere o total da Seleção e gera a mensagem a partir do modelo que ele define. Realiza UJ-1 e UJ-4.
 
 #### FR-23: Configurar o modelo da mensagem
 Rafael define o modelo da Mensagem de cobrança: saudação, frase do total, chave Pix, rodapé e o formato de cada linha de detalhe, escolhendo os campos (nome, Parcela, valor). O modelo atual dele é:
@@ -231,19 +233,25 @@ Detalhes:
 Nome da conta | Parcela | Valor
 ```
 
-#### FR-24: Copiar a Mensagem de cobrança
-O botão "Copiar" de um Bloco coloca na área de transferência a mensagem preenchida com o total e os detalhes do Bloco no Mês.
+#### FR-48: Selecionar e ver o total
+Na grade, Rafael pode marcar Lançamentos um a um ou "selecionar todos" os que estão no filtro. Uma barra sempre visível mostra quantos itens estão selecionados e o total da Seleção, atualizado a cada marcação.
+- Quando o filtro é por um Responsável, cada Lançamento entra na Seleção pelo valor da parte daquele Responsável (ex.: a metade dele numa conta dividida).
+
+#### FR-24: Gerar a Mensagem de cobrança
+Com uma Seleção feita, Rafael toca em "Gerar mensagem". O app mostra a mensagem preenchida com o modelo (FR-23), o total e os detalhes da Seleção, e um botão "Copiar" coloca o texto na área de transferência.
 - Os estornos atribuídos ao Responsável aparecem como linhas negativas e reduzem o total.
 - As Dívidas programadas ainda não vencidas não entram.
 - A mensagem é sempre só do Mês a que se refere: nunca inclui Meses passados nem futuros. O Saldo pendente de Meses anteriores é cobrado pela área de Recebimentos (FR-28).
+- Lançamentos de R$ 0,00 (ex.: ANUIDADE DIFERENCIADA 09/12) aparecem na grade, mas nunca entram na mensagem.
 
 ### 4.8 Recebimentos e Meses anteriores
 **Descrição:** uma área separada do Painel para o que atravessa os Meses: o que foi pago, o que ficou pendente, o que vence no futuro e o histórico da Fatura. Realiza UJ-2 e UJ-3.
 
-#### FR-25: Registrar Pagamento
-Rafael pode selecionar uma ou várias Cobranças de um Responsável, de qualquer Mês, e registrar um Pagamento com data e valor.
-- Se o valor for igual à soma das Cobranças, todas viram "paga".
-- Se o valor for menor, o Pagamento quita as Cobranças em ordem (das mais antigas para as mais novas), e a última fica "paga parcialmente" com o restante pendente. [ASSUMPTION: a ordem é das mais antigas para as mais novas]
+#### FR-25: Marcar como pago
+Rafael pode fazer uma Seleção (FR-48), de qualquer Mês, e aplicar "Pago" com a data do pagamento (padrão: hoje). O app registra um Pagamento com o total da Seleção.
+- Por padrão, o valor é o total da Seleção, e todas as Cobranças selecionadas viram "paga".
+- O estado (pendente, paga parcialmente, paga, atrasada) aparece em cada linha da grade e pode ser usado como filtro.
+- Se Rafael informar um valor menor, o Pagamento quita as Cobranças em ordem (das mais antigas para as mais novas), e a última fica "paga parcialmente" com o restante pendente. [ASSUMPTION: a ordem é das mais antigas para as mais novas]
 - Um Pagamento pode ser desfeito.
 
 #### FR-26: Saldo pendente por Responsável
@@ -258,7 +266,10 @@ Rafael pode marcar Cobranças como Dívida programada, com vencimento combinado.
 [ASSUMPTION: esse é o mecanismo para "não esquecer uma conta futura", e substitui o lançamento mensal que Rafael fazia para o Lucas]
 
 #### FR-28: Cobrar pendências
-Na área de Recebimentos, Rafael pode copiar uma mensagem com o Saldo pendente de um Responsável, usando o mesmo modelo (FR-23) e listando as Cobranças em aberto por Mês.
+Na área de Recebimentos, Rafael filtra as Cobranças pendentes de um Responsável, seleciona e gera uma mensagem com o mesmo modelo (FR-23), listando as Cobranças em aberto por Mês.
+
+#### FR-49: Atraso
+Uma Cobrança não paga até o vencimento da Fatura mais a tolerância (configurável, padrão de 10 dias) fica "atrasada". Ela aparece destacada na grade e em Recebimentos, e pode ser usada como filtro. Uma Dívida programada usa o próprio vencimento combinado.
 
 #### FR-29: Histórico de Pagamentos
 Rafael pode consultar todos os Pagamentos de um Responsável, com data, valor e as Cobranças que cada um quitou.
@@ -327,7 +338,7 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 ## 5. Plataforma e telas
 
 - **Prioridade:** PC e iPad primeiro, com a experiência completa (grade, fila, Blocos, Recebimentos).
-- **Celular (v1):** tudo funciona, mas o foco é consultar Blocos, copiar mensagens, registrar Pagamentos e ver Saldos pendentes. No celular, a grade aparece em formato de lista. [ASSUMPTION: essa é a versão mínima aceitável no celular; uma experiência otimizada para ele fica para depois]
+- **Celular (v1):** tudo funciona, mas o foco é consultar Blocos, gerar mensagens, marcar como pago e ver Saldos pendentes. No celular, a grade aparece em formato de lista. [ASSUMPTION: essa é a versão mínima aceitável no celular; uma experiência otimizada para ele fica para depois]
 
 ## 6. Requisitos não funcionais
 
@@ -355,7 +366,7 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 
 ## 9. Métricas de sucesso
 
-- **SM-1:** fechamento do Mês (do envio do PDF à última mensagem copiada) em menos de 10 minutos. Hoje leva cerca de 1h50. Valida FR-3 a FR-24.
+- **SM-1:** fechamento do Mês (do envio do PDF à última mensagem gerada) em menos de 10 minutos. Hoje leva cerca de 1h50. Valida FR-3 a FR-24.
 - **SM-2:** pelo menos 55% dos Lançamentos do Mês classificados sem revisão desde o primeiro Mês, crescendo depois. Valida FR-8 a FR-12.
 - **SM-3:** 100% das Faturas com status "Conferido" antes de cobrar. Valida FR-6.
 - **SM-4:** nenhuma Cobrança esquecida. Todo valor devido está pago, pendente ou programado. Valida FR-25 a FR-28.
