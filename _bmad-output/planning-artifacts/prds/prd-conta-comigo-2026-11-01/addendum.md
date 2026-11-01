@@ -26,3 +26,9 @@ Viagem paga à vista no cartão e dividida entre pessoas: R$ 636 em 6 partes de 
 - **Normalização de descrições:** remover asteriscos, espaços e prefixos de adquirente (DM*, EBN, EBANX, MP, PAG, IFD…) e tolerar pequenas diferenças (AMAZONMETPLC e AMAZONMKTPLC).
 - **Valores:** armazenar em centavos (inteiros). Na Divisão, o resto dos centavos vai para a última parte.
 - **Importação do histórico:** a planilha "Cartão" no Google Sheets, abas 01/2026 a 10/2026. As linhas sem Parcela são lançamentos manuais (Silvia, William, TVbox, Bombinhas) e podem virar Contas manuais.
+
+## Planejamento pessoal (ideias do Rafael, 01/11/2026)
+
+- **Orçamento por Categoria:** limite mensal, por exemplo "no máximo R$ 300 em Bobiças".
+- **Cofrinho / metas:** objetivos de compra (ex.: placa de vídeo), com quanto ele está guardando para cada um.
+- **Salário e sobra:** cadastrar o salário e ver, no painel principal do Mês, quanto sobrou, numa barra de %. "Hoje eu não sei quanto sobra do meu salário."
