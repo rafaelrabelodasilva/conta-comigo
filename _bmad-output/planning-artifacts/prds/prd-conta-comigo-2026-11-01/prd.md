@@ -427,6 +427,7 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 **Fora (por fase):**
 - **Fase 2 (planejamento):** §4.11, com Salário, Despesas extras, Sobra e Orçamento. Também a versão para o celular (iPhone).
 - **Fase 3 (últimas etapas):** §4.12 Objetivos, e a Fatura do Rangel com o painel do casal.
+- **Melhoria futura (sem fase definida):** busca em todos os Meses (ex.: todas as parcelas de "MAGALU").
 - **Só se o app abrir para outras pessoas:** contas para outros usuários, outros bancos, pesquisa de mercado completa e custo e privacidade da IA.
 
 ## 9. Métricas de sucesso
