@@ -295,7 +295,7 @@ conta-comigo/
 
 | Capability / Area | Lives in | Governed by |
 | --- | --- | --- |
-| Configuração inicial, importar planilha (FR-1, FR-2) | `features/configuracoes`, `domain/importacao-planilha`, RPC em transação | AD-1, AD-6, AD-8 |
+| Configuração inicial, importar planilha (FR-1, FR-2) | `features/configuracoes`, `domain/importacao-planilha` (lê no navegador o `.xlsx` baixado do Google Sheets e enviado pelo Rafael, sem integração com a conta Google), RPC em transação | AD-1, AD-6, AD-8 |
 | Importação e reimportação da Fatura (FR-3 a FR-7, FR-47, FR-51) | `features/importar`, `server/gemini`, RPC `importar_fatura` | AD-7, AD-6, AD-8 |
 | Ciclo e Mês (FR-36) | `domain/ciclo` | AD-9 |
 | Classificação, Regras e sugestão de Tipo (FR-8 a FR-12) | `domain/classificacao`, `features/revisar` | AD-1, AD-6, AD-7 |
