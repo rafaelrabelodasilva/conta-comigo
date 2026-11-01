@@ -488,3 +488,230 @@ So that eu não perca o histórico se algo acontecer com o banco (AD-17).
 **When** a restauração é testada no Supabase local
 **Then** os dados voltam completos, e o passo a passo da restauração fica documentado no repositório
 **And** o workflow também pode ser disparado à mão
+
+## Epic 2: Importar a fatura e conferir
+
+Rafael sobe o PDF da fatura com a senha e vê todos os Lançamentos do Mês na grade do Painel, com a Conferência geral e por cartão, a marca "verificar", os Ajustes de centavos, a correção à mão (inclusive classificar Responsável, Tipo e Status pelo painel do Lançamento) e a navegação entre Meses. Começa por uma prova técnica com a fatura de outubro no iPad.
+
+### Story 2.1: Prova técnica: ler a fatura de outubro no iPad
+
+As a Rafael,
+I want comprovar logo no começo que o app consegue abrir a minha fatura com senha no iPad e ler todos os lançamentos,
+So that a gente descubra cedo se o caminho pdf.js + Gemini funciona, antes de construir as telas em cima dele.
+
+**Acceptance Criteria:**
+
+**Given** uma página de teste protegida por login e o PDF da fatura de outubro/2026 (vence 06/10/26) com a senha
+**When** Rafael escolhe o PDF e digita a senha no Safari do iPad Pro (iPadOS 18+)
+**Then** o build legacy do `pdfjs-dist`, carregado só no cliente, abre o PDF e extrai o texto de todas as páginas
+**And** com a senha errada aparece "Senha incorreta" e dá para tentar de novo
+**And** a senha e o arquivo não saem do aparelho
+
+**Given** o texto extraído
+**When** a função do núcleo `removerDadosPessoais(texto)` roda
+**Then** CPF, endereço e números de cartão (exceto o final de 4 dígitos) são removidos, com teste em Vitest
+
+**Given** o schema zod único de extração no núcleo e a rota `POST /api/fatura/extrair` (`runtime = 'nodejs'`, `maxDuration = 60`, sessão obrigatória)
+**When** o texto limpo é enviado
+**Then** a rota faz uma única chamada ao Gemini (`GEMINI_MODEL`) com `responseJsonSchema` gerado por `z.toJSONSchema`, não grava nada e não registra o texto em log
+**And** a resposta validada traz cada Lançamento (Nome, data, Parcela, Valor, final do cartão, `tipo_sugerido`, `duvida`), os totais da Fatura (vencimento, fechamento, total de despesas, total de créditos, saldo anterior, pagamentos, total a pagar) e o "VALOR TOTAL" de cada cartão
+**And** os valores são convertidos para centavos inteiros por `paraCentavos("1.140,74")` do núcleo
+
+**Given** o resultado de outubro/2026
+**When** ele é comparado ao esperado
+**Then** são 49 Lançamentos, o pagamento da fatura anterior não aparece, a soma das despesas é R$ 8.327,39, a dos créditos é R$ 639,62, e a soma dos cinco cartões bate com o total de despesas
+**And** o tempo total, do PDF à resposta, fica abaixo de 1 minuto
+**And** o resultado (sim/não, tempos e diferenças encontradas) é registrado em `docs/prova-tecnica-fatura.md` com a decisão: seguir, ajustar o prompt ou acionar o plano B (leitor próprio do PDF)
+**And** o fixture de teste guardado no repositório é o texto extraído sem dados pessoais, nunca o PDF
+
+### Story 2.2: Formatos de dinheiro, data e Mês
+
+As a Rafael,
+I want ver todos os valores e datas sempre no mesmo formato,
+So that o app pareça a minha planilha e nada fique ambíguo (NFR4).
+
+**Acceptance Criteria:**
+
+**Given** o módulo de dinheiro do núcleo
+**When** os testes rodam
+**Then** `formatarDinheiro` produz "R$ 1.140,74", "R$ 0,00" e "- R$ 0,08", com espaço inseparável e sem usar o `Intl` direto (AD-2)
+**And** existe uma única função de arredondamento, meio para longe do zero (0,5 → 1; -0,5 → -1)
+**And** `dividirEmPartes(valor, frações)` arredonda cada parte e dá a diferença para a última: R$ 466,00 em 2/3 + 1/3 = R$ 310,67 + R$ 155,33
+
+**Given** os formatadores de data do núcleo
+**When** os testes rodam
+**Then** datas saem como "06/11/26", horas como "21:14", Meses como "Out/26" e "outubro/26", e `mes` é guardado como `AAAA-MM`
+**And** o lint impede formatação de dinheiro ou data fora desses formatadores
+
+### Story 2.3: Importar a fatura do Mês
+
+As a Rafael,
+I want subir o PDF da fatura, digitar a senha e ver o resumo antes de gravar,
+So that todos os lançamentos do mês entrem no app de uma vez, sem eu digitar nada (FR-3, FR-4, FR-5).
+
+**Acceptance Criteria:**
+
+**Given** a migração que cria `faturas` (`mes`, vencimento, fechamento, totais lidos, `alerta_dispensado_em`, `unique (owner_id, mes)`), `fatura_cartoes (fatura_id, final, total_centavos)` e `lancamentos` (`nome`, `nome_normalizado`, `apelido`, `valor_centavos`, `data`, `parcela_n`, `parcela_total`, `final_cartao`, `mes`, `fatura_id`, `ordem_fatura`, `duvida_extracao`, `lancado_por` enum `fatura|sistema|manual|historico`, `responsavel_id`, `tipo_id`, `status_id`, `observacao`, `editado_em`, `excluido_em`, dono, RLS, `replica identity full`)
+**When** Rafael toca em "＋ Importar fatura" no Painel
+**Then** abre a janela de 3 passos: escolher o PDF, digitar a senha, conferir (UX-DR20)
+**And** a barra de progresso mostra "Abrindo PDF", "Lendo lançamentos", "Conferindo", "Classificando"
+**And** o passo 3 mostra o vencimento e o Mês lidos ("Fatura de novembro · vence 06/11/26"), a Conferência e quantos Lançamentos serão gravados
+
+**Given** Rafael confirma no passo 3
+**When** a RPC `importar_fatura` roda
+**Then** a Fatura, os totais por cartão e os Lançamentos são gravados numa única transação, com `lancado_por = 'fatura'`, `nome_normalizado = normalizarNome(nome)`, a ordem do PDF em `ordem_fatura` e o Status padrão (AD-7, AD-10)
+**And** os créditos e estornos ficam com Valor negativo
+**And** o PDF e a senha não são guardados em lugar nenhum (FR-4)
+**And** a RPC devolve as linhas gravadas, e o Painel as mostra sem recarregar
+
+**Given** qualquer passo
+**When** Rafael toca em "Cancelar" ou a conexão cai
+**Then** nada é gravado ("A conexão caiu. Nada foi gravado. Tentar de novo")
+
+**Given** um PDF que não é fatura do Santander, ou uma extração incompleta
+**When** a leitura termina
+**Then** aparece "Este PDF não parece ser uma fatura do Santander. Confira o arquivo", ou "Não conseguimos ler todos os lançamentos (lemos N). Você pode importar mesmo assim e corrigir à mão, ou cancelar"
+
+**Given** um Mês que já tem Fatura
+**When** Rafael tenta importar de novo
+**Then** o app avisa que o Mês já foi importado e não grava nada (a reimportação chega no Épico 3)
+
+**And** importar a fatura de outubro, de ponta a ponta, leva menos de 1 minuto (NFR3)
+
+### Story 2.4: Painel do Mês com a grade de Lançamentos
+
+As a Rafael,
+I want ver a fatura do Mês e todos os lançamentos numa grade com as colunas da minha planilha,
+So that eu reconheça a planilha "Cartão" dentro do app (FR-21, FR-22).
+
+**Acceptance Criteria:**
+
+**Given** um Mês com Fatura importada
+**When** Rafael abre o Painel
+**Then** o `invoice-hero` mostra a sobrelinha ("FATURA DE OUTUBRO · VENCE 06/10/26"), o total a pagar e a barra de distribuição por Responsável, com legenda (UX-DR7)
+**And** tocar num segmento da barra filtra a grade por aquele Responsável
+
+**Given** a grade (`grid-row`, UX-DR10)
+**When** o Painel carrega
+**Then** aparecem as colunas caixa, Nome, Parcela, Valor (à direita, tnum), Tipo, Responsável (etiqueta com a cor), Lançado por e Status, na ordem da fatura
+**And** tocar num cabeçalho ordena e tocar de novo inverte
+**And** o cabeçalho fica fixo, e quando falta largura a grade rola para os lados com a caixa e o Nome fixos, sem esconder colunas
+**And** Lançamentos de R$ 0,00 aparecem normalmente
+**And** a linha nunca é pintada com a cor da pessoa
+**And** o VoiceOver lê cada linha como "Nome, Valor, Parcela, Responsável, Status" (UX-DR33)
+
+**Given** o `month-switcher` (UX-DR6)
+**When** Rafael troca de Mês pelas setas ou pela lista
+**Then** o Painel mostra aquele Mês, e o app sempre abre no Mês atual
+**And** um Mês com Fatura leva o selo "Fechado", e um Mês sem Fatura mostra "Fatura ainda não importada" com "Importar fatura"
+
+**And** enquanto carrega aparece o `skeleton`, nunca uma tela branca, e os layouts de iPad deitado, iPad em pé e PC seguem o UX-DR31
+
+### Story 2.5: Conferência e marca "verificar"
+
+As a Rafael,
+I want saber na hora se a soma dos lançamentos bate com a fatura e em qual cartão está a diferença,
+So that eu ache um erro de leitura sem conferir linha a linha (FR-6).
+
+**Acceptance Criteria:**
+
+**Given** a função do núcleo `conferir(fatura, cartoes, lancamentos)`, que considera os Lançamentos com aquele `fatura_id`
+**When** a soma das despesas e dos créditos bate com os totais lidos, geral e por cartão
+**Then** o `invoice-hero` mostra "✓ Conferido"
+**And** com os dados de outubro/2026 o teste de aceite dá R$ 8.327,39 e R$ 639,62
+
+**Given** uma diferença
+**When** o Painel mostra o Mês
+**Then** aparece a faixa âmbar "A soma dos lançamentos ficou R$ X abaixo do total da fatura. A diferença está no cartão final 8673", com "Ver lançamentos" e "Dispensar", sem bloquear nada
+**And** "Dispensar" grava `alerta_dispensado_em`
+
+**Given** a função derivada `precisaVerificar(lancamento, conferencia)`
+**When** um cartão tem diferença
+**Then** as linhas daquele cartão mostram a bolinha "verificar" (rótulo acessível "verificar este lançamento"), com as de `duvida_extracao` primeiro
+**And** o filtro "Verificar" liga e desliga essa lista
+**And** quando a Conferência volta a bater, as marcas somem sozinhas, sem nada gravado
+
+**And** saldo anterior e pagamentos não entram na Conferência
+
+### Story 2.6: Barra de filtros e busca
+
+As a Rafael,
+I want filtrar a grade por qualquer coluna e buscar pelo nome,
+So that eu encontre rápido o que preciso conferir (FR-21).
+
+**Acceptance Criteria:**
+
+**Given** a `filter-bar` (UX-DR9)
+**When** Rafael digita na busca
+**Then** a grade filtra por Nome ou Apelido enquanto ele digita, só no Mês aberto
+
+**Given** as pílulas de filtro Responsável, Tipo, Status, Lançado por, Parcela (à vista, parcelado, última parcela) e cartão
+**When** Rafael abre uma pílula
+**Then** aparece o popover com caixas para vários valores, a contagem de cada um, "Limpar" e "Aplicar"
+**And** os filtros se combinam com E entre colunas e OU dentro da mesma coluna
+**And** a pílula ativa mostra os valores ("Responsável: Casal, Rangel ▾")
+**And** "Limpar filtros" zera tudo e volta à ordem da fatura
+
+**Given** um filtro sem resultado
+**When** a grade fica vazia
+**Then** aparece "Nenhum lançamento com esses filtros", com "Limpar filtros"
+
+**And** trocar de Mês mantém os filtros
+**And** no iPad em pé, o que não couber vai para "Mais ▾"
+
+### Story 2.7: Painel do Lançamento: classificar, corrigir, incluir e excluir
+
+As a Rafael,
+I want abrir um lançamento para classificar, corrigir o que veio errado, incluir um que faltou ou excluir,
+So that o Mês fique certo mesmo antes da classificação automática (FR-7, FR-46).
+
+**Acceptance Criteria:**
+
+**Given** um toque no corpo de uma linha
+**When** o `side-panel` abre pela direita, sem esconder a grade (UX-DR14)
+**Then** Apelido, Tipo, Responsável, Status, Observação, Valor e data são editáveis, e Nome, Parcela, cartão e Lançado por são só leitura
+**And** cada campo salva ao sair dele, com "Salvando… / Salvo às HH:MM / Não salvo, tentando de novo", mandando só a coluna alterada e gravando `editado_em`
+**And** os seletores seguem o padrão `form-field` (UX-DR26)
+
+**Given** Rafael corrige o Valor de um Lançamento da Fatura
+**When** o campo é salvo
+**Then** a Conferência é recalculada e o painel mostra "Conferência: ✓" ou "diferença de R$ X"
+
+**Given** "＋ Lançamento" no topo do Painel
+**When** Rafael preenche Nome e Valor (obrigatórios) e salva
+**Then** o Lançamento entra com `lancado_por = 'manual'` no Mês dado pela regra de Ciclo da data, ou no Mês aberto se não houver data (AD-9)
+**And** se ele pertence à Fatura (correção da extração), fica com o `fatura_id` e entra na Conferência
+
+**Given** "Excluir" no rodapé
+**When** Rafael confirma
+**Then** o Lançamento recebe `excluido_em`, some de todas as telas, e aparece "Excluído · Desfazer", que limpa o campo e devolve o mesmo `id` (AD-16)
+
+**Given** o Lançamento aberto foi alterado em outro aparelho
+**When** a mudança chega
+**Then** aparece a faixa "Este lançamento foi alterado em outro aparelho às HH:MM"
+
+**And** a caixa da linha seleciona sem abrir o painel, e o toque longo ou ⋯ abre o menu com Abrir e Excluir
+
+### Story 2.8: Ajustes de centavos
+
+As a Rafael,
+I want que os créditos de centavos da fatura fiquem presos à parcela certa,
+So that eles não apareçam como estornos soltos (FR-47).
+
+**Acceptance Criteria:**
+
+**Given** a migração que acrescenta `ajuste_de_id` em `lancamentos` e a função do núcleo `reconhecerAjustes(lancamentos, limite)`
+**When** uma Fatura tem um crédito sem Parcela, com o mesmo `nome_normalizado` de uma parcela da mesma Fatura e valor absoluto abaixo do limite (padrão R$ 1,00, de `configuracoes`)
+**Then** a importação grava o crédito como Ajuste daquela parcela, com o mesmo Tipo e Responsável (AD-8)
+**And** o teste com "MSC CRUZEIROS 02/12 R$ 1.140,74" e "MSC CRUZEIROS - R$ 0,08" reconhece o Ajuste
+
+**Given** um Ajuste
+**When** a grade mostra a parcela
+**Then** o Ajuste aparece recuado sob ela, com o líquido "R$ 1.140,74 - R$ 0,08 = R$ 1.140,66" em `text-muted`
+**And** mudar o Tipo ou o Responsável da parcela muda também o do Ajuste na mesma gravação
+
+**Given** o painel do Ajuste
+**When** Rafael toca em "Desvincular"
+**Then** o crédito vira um Lançamento comum, e a mudança pode ser desfeita
+
+**And** o Ajuste continua entrando na Conferência como crédito
