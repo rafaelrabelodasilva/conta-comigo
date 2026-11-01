@@ -1,6 +1,6 @@
 ---
 title: "PRD: Conta Comigo"
-status: draft
+status: final
 created: 2026-11-01
 updated: 2026-11-01
 ---
@@ -139,7 +139,10 @@ O app extrai todos os Lançamentos da Fatura (despesas, parcelamentos, créditos
 #### FR-6: Conferir com a Fatura do Mês
 O app confere os Lançamentos extraídos com os totais da própria Fatura: soma das despesas = "Total despesas", e soma dos créditos = "Total de créditos" (em outubro/2026, R$ 8.327,39 e R$ 639,62).
 - Quando tudo confere, mostra "Conferido".
-- Quando algo não confere, mostra a diferença e bloqueia a geração das Mensagens de cobrança até Rafael corrigir. [ASSUMPTION: bloquear, e não apenas avisar]
+- Quando algo não confere, o app **avisa, mas não bloqueia**: mostra a diferença num alerta, e Rafael pode seguir classificando e cobrando. Um problema em uma ou duas contas não pode obrigá-lo a lançar tudo à mão.
+- Para ajudar a achar o erro, a Conferência também é feita por cartão: a Fatura traz o "VALOR TOTAL" de cada cartão (ex.: final 8175: R$ 4.360,69). Assim o alerta aponta em qual cartão está a diferença, e não só que existe uma.
+- Os Lançamentos que o app leu com dúvida, ou que estão no cartão com diferença, recebem uma marca discreta de "verificar", que **não é um Status**. Existe também um filtro "Verificar" na grade. Quando a Conferência volta a bater, as marcas somem sozinhas.
+- O alerta continua visível no Painel daquele Mês até a Conferência bater ou Rafael dispensá-lo.
 - Saldo anterior e pagamentos não entram na Conferência do Mês. Eles aparecem só na área de Meses anteriores (FR-30).
 
 #### FR-36: Ciclo da Fatura
@@ -419,7 +422,7 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 
 - **SM-1:** fechamento do Mês (do envio do PDF à última mensagem gerada) em menos de 10 minutos. Hoje leva cerca de 1h50. Valida FR-3 a FR-24.
 - **SM-2:** pelo menos 55% dos Lançamentos do Mês classificados sem revisão desde o primeiro Mês, crescendo depois. Valida FR-8 a FR-12, FR-44 e FR-45.
-- **SM-3:** 100% das Faturas com status "Conferido" antes de cobrar. Valida FR-6.
+- **SM-3:** toda Fatura fica "Conferida", ou tem a diferença localizada por cartão, antes de as cobranças irem para as pessoas. Valida FR-6.
 - **SM-4:** nenhum valor esquecido. Todo Lançamento de outro Responsável está pago, pendente ou programado. Valida FR-25 a FR-28 e FR-49.
 
 **Contramétrica**
@@ -431,6 +434,5 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 1. A IA para sugerir Tipos de Nomes novos (FR-11) entra na v1 ou depois? Será decidido na arquitetura.
 
 **Índice de suposições**
-- §4.2 FR-6: uma Conferência divergente bloqueia a cobrança até ser resolvida (em revisão com Rafael).
 
-As demais suposições foram confirmadas por Rafael em 01/11/26 e incorporadas ao texto.
+Todas as suposições foram confirmadas por Rafael em 01/11/26 e incorporadas ao texto.
