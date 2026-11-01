@@ -7,7 +7,7 @@ skill: bmad-sprint-planning
 
 # Prontidão para implementação: Conta Comigo
 
-**Veredito: CONCERNS.** Dá para implementar o plano. São só três pontos pequenos, todos fora do Épico 1, e cada um pode ser resolvido na história indicada antes de ela começar.
+**Veredito: CONCERNS.** Dá para implementar o plano. São cinco pontos pequenos; só o 4 (monitoramento de erros) toca o Épico 1, e cada um pode ser resolvido na história indicada antes de ela começar.
 
 ## O que foi conferido
 
@@ -38,6 +38,12 @@ skill: bmad-sprint-planning
 
 3. **Arredondamento (FR-54 × AD-2).** O PRD diz "meio para cima" e o AD-2 diz "meio para longe do zero". Os dois só dão resultados diferentes com valores negativos.
    *Resolver:* vale o AD-2, que é mais específico e já está na História 2.2. É só uma observação.
+
+4. **Monitoramento de erros sem história (Arquitetura → Deferred; epics.md, Additional Requirements).** A Arquitetura diz que o CI e o monitoramento de erros são definidos "na primeira story de infraestrutura", mas os critérios da História 1.1 só cobrem o CI. A ferramenta (ex.: Sentry, Vercel Logs) e a regra de não registrar texto de Fatura nem valores não estão em nenhuma história.
+   *Resolver:* Rafael decide antes da História 1.1 se o monitoramento entra nela (e com qual ferramenta) ou se fica para depois. Afeta diretamente o próximo `bmad-build`.
+
+5. **Herança de Divisão antes de a Divisão existir (FR-8, Histórias 3.7 e 3.8).** A História 3.7 diz que a parcela herda "Divisão", mas a coluna `divisao` só é criada na 3.8.
+   *Resolver:* na 3.7, herdar a Divisão só se a coluna já existir, ou implementar a 3.8 antes da 3.7. Não bloqueia o Épico 1.
 
 ## Pré-requisitos que não são de planejamento
 
