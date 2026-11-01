@@ -973,3 +973,170 @@ So that eu possa corrigir uma importação ruim (FR-51).
 **And** Regras e heranças são reaplicadas às linhas novas
 **And** os Lançamentos de Contas manuais do Mês não são tocados
 **And** tudo acontece numa única transação
+
+## Epic 4: Blocos e mensagem de cobrança
+
+Rafael monta os Blocos por fichas, vê o cálculo passo a passo, filtra a grade pelo Bloco, seleciona Lançamentos com o total sempre visível e gera e copia a mensagem do WhatsApp a partir da Seleção ou do Bloco.
+
+### Story 4.1: Montar um Bloco com fichas
+
+As a Rafael,
+I want montar um Bloco como "Rangel + (Casal ÷ 2)" tocando em fichas, vendo o resultado ao vivo,
+So that eu tenha os totais por pessoa sem fórmula digitada (FR-19, FR-54).
+
+**Acceptance Criteria:**
+
+**Given** o schema zod da Fórmula no núcleo (operando Responsável, Tipo, Responsável em Tipo, Todos; número; operação + − × ÷; grupo) e a migração que cria `blocos` (`nome`, `formula jsonb`, `ordem`, `de_cobranca`, `meu_bloco`, índice único parcial para `meu_bloco`, dono, RLS) com suas referências em `REFERENCIAS_JSONB` (AD-11, AD-16)
+**When** `avaliar(formula, linhas)` roda sobre `projetarPainel(mes)`
+**Then** calcula em racional exato, com precedência usual, e arredonda só o resultado final (AD-2)
+**And** devolve o valor, o passo a passo e os Lançamentos que entram
+**And** os testes de aceite de outubro/2026 dão Casal R$ 5.639,35, Casal ÷ 2 = R$ 2.819,68 (de R$ 2.819,675), Total R$ 9.280,23, Mãe R$ 1.350,14 e Lucas R$ 215,16
+**And** `projetarPainel` usa as filhas das Divisões, nunca a mãe dividida, e inclui Ajustes e Contas do Mês
+
+**Given** o Montador de Bloco (UX-DR16)
+**When** Rafael toca nas fichas Rangel, +, (, Casal, ÷, Número → 2, )
+**Then** a Fórmula aparece como "Rangel + (Casal ÷ 2)" com o resultado e o passo a passo ao vivo: "Rangel R$ 0,00 + (Casal R$ 5.639,35 ÷ 2 = R$ 2.819,675) = R$ 2.819,68"
+**And** tocar numa ficha da Fórmula a remove
+**And** "Responsável em Tipo" abre dois seletores (ex.: Rafael + Bobiças)
+
+**Given** uma Fórmula inválida
+**When** Rafael tenta salvar
+**Then** "Salvar" fica desativado com a razão: "Falta fechar um parêntese", "Divisão por zero" ou "A fórmula termina com uma operação"
+**And** não existe nenhum campo de texto livre para a Fórmula
+
+**And** o Montador tem as opções "Usar em Recebimentos" e "É o meu Bloco"
+
+### Story 4.2: Blocos no Painel
+
+As a Rafael,
+I want ver meus Blocos no Painel e poder renomear, reordenar, ver o cálculo e excluir,
+So that os totais do Mês fiquem sempre à mão (FR-19, FR-54).
+
+**Acceptance Criteria:**
+
+**Given** Blocos criados
+**When** Rafael abre o Painel
+**Then** o cartão dos Blocos mostra cada `block-card` com a bolinha da pessoa (se for de um Responsável só), o valor, o subtítulo com a Fórmula legível com os parênteses como foram montados, e os botões ⋯ e 💬 no rodapé (UX-DR8)
+**And** num Mês sem Fatura, os Blocos somam os previstos com a legenda "inclui previstos"
+**And** sem Blocos aparece "Crie seu primeiro Bloco para ver os totais por pessoa", com "＋ Novo bloco"
+
+**Given** o menu ⋯ (ou toque longo)
+**When** Rafael escolhe uma ação
+**Then** pode Editar fórmula, Ver cálculo (Montador só leitura com o passo a passo), Reordenar e Excluir bloco (com confirmação; Bloco de cobrança avisa "Este Bloco aparece em Recebimentos")
+
+**Given** "Reordenar"
+**When** Rafael ativa
+**Then** os Blocos tremem de leve, podem ser arrastados, e o botão vira "Concluir"
+
+**Given** qualquer mudança num Lançamento
+**When** ela é gravada em qualquer aparelho
+**Then** os valores dos Blocos mudam no lugar, sem esqueleto e sem recarregar (NFR5)
+**And** o valor do Bloco, o passo a passo e a mensagem sempre mostram o mesmo número
+
+**And** o VoiceOver lê o 💬 como "Gerar mensagem do Bloco {nome}" e o ⋯ como "Ações do Bloco {nome}"
+**And** o passo "Blocos" entra no Primeiro uso
+
+### Story 4.3: Filtrar a grade pelo Bloco
+
+As a Rafael,
+I want tocar num Bloco e ver só os lançamentos que entram nele,
+So that eu confira de onde vem o valor (FR-20).
+
+**Acceptance Criteria:**
+
+**Given** um Bloco no Painel
+**When** Rafael toca nele
+**Then** a grade mostra só os Lançamentos que `avaliar` diz que entram, aparece a pílula "Bloco: Nome ✕" na barra de filtros e o Bloco ganha a borda de destaque
+**And** tocar de novo, ou no ✕, desfaz o filtro
+**And** só um Bloco filtra por vez, e ele se combina com os filtros de coluna
+**And** "Limpar filtros" também desfaz o filtro do Bloco
+
+**Given** um Bloco que é uma soma simples
+**When** a grade é filtrada por ele
+**Then** o total da grade filtrada é igual ao valor do Bloco (teste com Mãe = R$ 1.350,14)
+
+### Story 4.4: Selecionar e ver o total
+
+As a Rafael,
+I want marcar lançamentos e ver a soma na hora,
+So that eu confira o valor antes de cobrar (FR-48).
+
+**Acceptance Criteria:**
+
+**Given** a grade do Painel
+**When** Rafael toca na caixa de uma linha
+**Then** a linha fica selecionada com o fundo `selection`, sem abrir o painel
+
+**Given** a caixa do cabeçalho
+**When** Rafael toca nela
+**Then** são selecionados todos os Lançamentos do filtro atual, inclusive os que não estão visíveis, e tocar de novo desmarca todos (UX-DR11)
+**And** no PC, ⌘/Ctrl+A faz o mesmo
+
+**Given** pelo menos 1 item selecionado
+**When** a `selection-bar` aparece presa embaixo (UX-DR12)
+**Then** mostra "N selecionados · R$ total", atualizado a cada toque, com Limpar, Aplicar status (reservado para o Épico 6), ⋯ Mais (Classificar em lote, Excluir) e Gerar mensagem
+**And** o VoiceOver anuncia o total quando muda
+**And** a Seleção é sempre de um único Mês: trocar de Mês limpa a Seleção com o aviso "Seleção limpa ao trocar de mês"
+
+**And** com o Bloco Mãe filtrado e "selecionar todos", a barra mostra "7 selecionados · R$ 1.350,14"
+
+### Story 4.5: Configurar o modelo da mensagem
+
+As a Rafael,
+I want definir o texto padrão da mensagem de cobrança,
+So that ela saia igual à que eu mando hoje (FR-23).
+
+**Acceptance Criteria:**
+
+**Given** Configurações → Modelo da mensagem
+**When** Rafael edita
+**Then** pode definir saudação, frase do total (com o marcador {total}), chave Pix e rodapé, e escolher com caixas os campos da linha de detalhe (Nome ou Apelido, Parcela, Valor) (UX-DR25)
+**And** o modelo é guardado em `configuracoes`
+**And** uma prévia ao vivo usa os dados do Mês atual
+**And** o modelo inicial vem vazio, e o modelo do Rafael ("Oi / Esse mês deu {total} / Pix … / Detalhes:") pode ser montado nesses campos
+
+**And** o passo "Mensagem" entra no Primeiro uso
+
+### Story 4.6: Gerar a mensagem a partir da Seleção
+
+As a Rafael,
+I want gerar a mensagem com os lançamentos que selecionei e copiar,
+So that eu cole no WhatsApp da pessoa (FR-24).
+
+**Acceptance Criteria:**
+
+**Given** a função do núcleo `gerarMensagem(modelo, projetarMensagem(selecao))`
+**When** os testes rodam
+**Then** entram só Lançamentos do Mês da Seleção que não estão pagos (`ehPago`), sem os de R$ 0,00 e sem previstos (a não ser com "Incluir previstos" num Mês sem Fatura)
+**And** estornos entram como linha negativa ("- R$ 25,90") e reduzem o total
+**And** um Ajuste entra numa linha própria logo abaixo da parcela, começando com "↳ Ajuste"
+**And** a mensagem de exemplo da Mãe de outubro sai no formato do EXPERIENCE.md (forma 1), com total R$ 1.350,14
+
+**Given** uma Seleção e "Gerar mensagem"
+**When** a janela abre (UX-DR17)
+**Then** mostra a mensagem no quadro `message`, o aviso do que ficou de fora ("2 itens não entram: 1 já pago, 1 de R$ 0,00") e os botões "Copiar", "Editar modelo" e "Fechar"
+**And** "Copiar" põe o texto na área de transferência, fecha a janela e mostra "Copiado"
+**And** se a cópia falhar, aparece "Não foi possível copiar. Selecione o texto e copie manualmente", com o texto selecionável
+**And** se nada entrar, aparece "Nada a cobrar nesta seleção" e "Copiar" fica desativado
+**And** o interruptor "Incluir previstos" só aparece num Mês sem Fatura
+
+### Story 4.7: Gerar a mensagem a partir de um Bloco
+
+As a Rafael,
+I want gerar a mensagem direto do Bloco, com os grupos de cada parte da fórmula,
+So that o Rangel receba "Casal R$ 5.639,35 ÷ 2 = R$ 2.819,68" e entenda a conta (FR-53).
+
+**Acceptance Criteria:**
+
+**Given** o 💬 de um Bloco
+**When** Rafael toca nele
+**Then** a mesma janela de Gerar mensagem abre com a forma 2 do EXPERIENCE.md: cada operando vira um grupo com o subtotal e a operação aplicada
+**And** um operando somado vira "Nome: R$ X"; com ÷ ou ×, "R$ X ÷ 2 = R$ Y"; subtraído, "Menos Nome: - R$ X"; um número solto, "Valor fixo: R$ X"
+**And** os Lançamentos de cada grupo aparecem recuados embaixo dele
+
+**Given** a Fórmula aplicada só aos itens que entram na mensagem
+**When** o total difere do valor do Bloco no Painel (porque parte já foi paga)
+**Then** a janela avisa "R$ X já foram pagos e não entram"
+**And** valem as mesmas regras de inclusão da Story 4.6
+
+**And** o teste de aceite do Bloco "Rangel" = Rangel + (Casal ÷ 2) em outubro/2026 gera total R$ 2.819,68, igual ao valor do Bloco e ao passo a passo
