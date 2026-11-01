@@ -21,7 +21,7 @@ Viagem paga à vista no cartão e dividida entre pessoas: R$ 636 em 6 partes de 
 
 ## Notas técnicas para a arquitetura (não são requisitos)
 
-- **Leitura do PDF:** o PDF do Santander vem criptografado. A senha é usada só durante a importação para abrir o arquivo. Há duas opções para a extração: um parser do layout do Santander (texto com coordenadas; o layout tem duas colunas e seções por cartão) ou um LLM com saída estruturada, como faz o Gemini hoje. Em qualquer caso, a Conciliação (FR-3) valida o resultado. Custo e privacidade da IA não bloqueiam a v1, porque o app é de uso pessoal.
+- **Leitura do PDF:** o PDF do Santander vem criptografado. A senha é usada só durante a importação para abrir o arquivo, e nem o PDF nem a senha são guardados: só os dados extraídos (como o CSV de hoje). Há duas opções para a extração: um parser do layout do Santander (texto com coordenadas; o layout tem duas colunas e seções por cartão) ou um LLM com saída estruturada, como faz o Gemini hoje. Em qualquer caso, a Conciliação (FR-3) valida o resultado. Custo e privacidade da IA não bloqueiam a v1, porque o app é de uso pessoal.
 - **Forma do app:** web app instalável (PWA) para PC, iPad e iPhone, com sincronização entre aparelhos (precisa de backend com login).
 - **Normalização de descrições:** remover asteriscos, espaços e prefixos de adquirente (DM*, EBN, EBANX, MP, PAG, IFD…) e tolerar pequenas diferenças (AMAZONMETPLC e AMAZONMKTPLC).
 - **Valores:** armazenar em centavos (inteiros). Na Divisão, o resto dos centavos vai para a última parte.
@@ -32,3 +32,4 @@ Viagem paga à vista no cartão e dividida entre pessoas: R$ 636 em 6 partes de 
 - **Orçamento por Categoria:** limite mensal, por exemplo "no máximo R$ 300 em Bobiças".
 - **Cofrinho / metas:** objetivos de compra (ex.: placa de vídeo), com quanto ele está guardando para cada um.
 - **Salário e sobra:** cadastrar o salário e ver, no painel principal do Mês, quanto sobrou, numa barra de %. "Hoje eu não sei quanto sobra do meu salário."
+- **Casamento de previstos (FR-45):** a chave é a descrição normalizada + Parcela (n/N) + Mês. O valor serve para conferir, e não para casar, porque pode variar alguns centavos. Duas compras iguais no mesmo estabelecimento, com a mesma parcela, precisam de desempate pela data da compra original, que a Fatura informa.

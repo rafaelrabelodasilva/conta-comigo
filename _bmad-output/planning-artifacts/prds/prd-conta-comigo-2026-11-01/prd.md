@@ -69,7 +69,8 @@ Rangel, Mãe e Lucas não acessam o app. Eles só recebem a mensagem de cobranç
 - **Painel**: a tela do Mês com os Blocos e a grade de Lançamentos.
 - **Mensagem de cobrança**: o texto gerado a partir de um Bloco, pronto para colar no WhatsApp.
 - **Conferência**: a checagem dos Lançamentos extraídos de uma Fatura contra os totais de despesas e de créditos dessa Fatura.
-- **Previsão**: os Lançamentos que já se sabe que virão nos próximos Meses, como parcelas restantes e Contas manuais.
+- **Lançamento previsto**: um Lançamento que o próprio app criou num Mês futuro porque sabe que ele virá: as parcelas restantes de uma compra parcelada da Fatura ou de uma Conta manual. Fica sempre identificado como "previsto pelo sistema" até ser confirmado pela Fatura daquele Mês.
+- **Previsão**: o conjunto dos Lançamentos previstos dos próximos Meses.
 - **Salário**: a renda mensal que Rafael cadastra (fase 2).
 - **Despesa extra**: um gasto do Rafael fora do cartão, cadastrado à mão (Pix, débito, aluguel…), que só entra no cálculo da Sobra (fase 2).
 - **Sobra**: estimativa de quanto restou do Salário no Mês. Não precisa ser exata (fase 2).
@@ -90,7 +91,7 @@ Rafael pode importar as abas 01/2026 a 10/2026 da planilha "Cartão" (colunas De
 - Depois da importação, o app mostra as Regras criadas para Rafael revisar.
 
 ### 4.2 Importação da Fatura
-**Descrição:** Rafael sobe o PDF e digita a senha. O app extrai os Lançamentos, deixa de fora o pagamento da fatura anterior (que não é despesa), faz a Conferência e guarda o PDF. Realiza UJ-1.
+**Descrição:** Rafael sobe o PDF e digita a senha. O app extrai os Lançamentos, deixa de fora o pagamento da fatura anterior (que não é despesa), faz a Conferência e descarta o PDF. Realiza UJ-1.
 
 #### FR-3: Importar PDF protegido
 Rafael pode enviar o PDF da Fatura e informar a senha no próprio app.
@@ -98,8 +99,8 @@ Rafael pode enviar o PDF da Fatura e informar a senha no próprio app.
 - A senha não é guardada depois da importação. [ASSUMPTION: Rafael prefere digitar todo mês a deixar a senha salva]
 - Uma Fatura do mesmo vencimento já importada não é duplicada. O app oferece substituir ou cancelar.
 
-#### FR-4: Guardar a Fatura original
-O app guarda o PDF original de cada Mês, sem senha, para Rafael consultar e baixar depois.
+#### FR-4: Não guardar o PDF
+O app usa o PDF só durante a importação. Depois da extração ele descarta o arquivo e guarda apenas os Lançamentos e os totais da Fatura (vencimento, fechamento, totais de despesas e de créditos, saldo anterior, pagamentos e total a pagar).
 
 #### FR-5: Extrair Lançamentos
 O app extrai todos os Lançamentos da Fatura (despesas, parcelamentos, créditos e estornos) de todos os cartões, titular e adicionais, com data, descrição, Parcela, valor e final do cartão.
@@ -128,6 +129,22 @@ Rafael pode editar, incluir e excluir Lançamentos de uma Fatura importada. A Co
 
 #### FR-8: Herdar parcelas em andamento
 Um Lançamento com Parcela n/N (n > 1) que corresponde ao Lançamento n−1/N do Mês anterior (mesma descrição normalizada e mesmo valor) recebe o mesmo Responsável, a mesma Categoria, a mesma Divisão e a mesma observação.
+- Normalmente a parcela já chega como Lançamento previsto (FR-44, FR-45). Esta regra cobre os casos sem previsto, como a primeira importação ou o histórico da planilha.
+
+#### FR-44: Lançar as parcelas futuras
+Ao importar uma Fatura, para cada Lançamento parcelado n/N com n < N, o app cria os Lançamentos previstos n+1/N até N/N nos Meses seguintes, com o mesmo valor, Responsável, Categoria, Divisão e observação.
+- Um Lançamento previsto é visualmente diferente de um Lançamento real (ex.: selo "previsto pelo sistema"), em todas as telas e na grade.
+- Ao tocar nele, o app mostra a origem: "criado a partir da parcela 05/10 de MAGALU na Fatura de 10/2026".
+- Se Rafael reclassificar a parcela atual, o app pergunta se deve aplicar a mudança às parcelas previstas.
+- As Contas manuais seguem a mesma lógica: as parcelas futuras ficam visíveis como previstas.
+
+#### FR-45: Casar previstos com a Fatura real
+Ao importar a Fatura de um Mês, o app compara cada Lançamento extraído com os Lançamentos previstos daquele Mês (mesma descrição normalizada e mesma Parcela).
+- **Casou:** o previsto vira o Lançamento real, com a classificação mantida. Nunca ficam dois Lançamentos para a mesma parcela.
+- **Casou, mas com valor diferente:** o app usa o valor da Fatura, mantém a classificação e mostra a diferença na fila de revisão.
+- **Previsto sem par na Fatura** (ex.: compra antecipada ou cancelada): continua marcado como previsto, não entra na Conferência e vai para a fila. Rafael decide se remove ou mantém.
+- **Parcela real sem previsto:** segue o fluxo normal (FR-8 e FR-9).
+- Os Lançamentos previstos nunca entram na Conferência (FR-6) nem na Mensagem de cobrança de um Mês cuja Fatura ainda não foi importada, a não ser que Rafael escolha incluí-los. [ASSUMPTION]
 
 #### FR-9: Aplicar Regras
 Um Lançamento à vista cujo estabelecimento tem Regra recebe a classificação da Regra. A comparação tolera variações de nome ("DM*SPOTIFY", "EBN SPOTIFY", "EBANX SPOTIFY").
@@ -247,7 +264,7 @@ Uma seção mostra, por Mês, o saldo anterior, os pagamentos da Fatura e o res�
 Para o Mês selecionado, o app mostra quanto Rafael gastou em cada Categoria, contando só a parte dele, incluindo a metade do Casal se a Fórmula dele disser isso. [ASSUMPTION: a "parte do Rafael" é definida por um Bloco que ele escolhe]
 
 #### FR-32: Previsão dos próximos Meses
-A partir das parcelas em andamento e das Contas manuais, o app mostra quanto já está comprometido nos próximos Meses, no total e por Responsável. Por exemplo: "MSC CRUZEIROS 01/12 → R$ 1.140,74 por mais 11 meses".
+A partir dos Lançamentos previstos (FR-44), o app mostra quanto já está comprometido nos próximos Meses, no total, por Responsável e por Categoria. Por exemplo: "MSC CRUZEIROS 01/12 → R$ 1.140,74 por mais 11 meses". Rafael pode abrir um Mês futuro no Painel e ver os Blocos calculados com os previstos.
 
 #### FR-33: Evolução entre Meses
 Rafael pode ver como os totais por Categoria e por Responsável evoluíram nos últimos Meses. [ASSUMPTION: um gráfico simples basta na v1]
@@ -299,7 +316,7 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 ## 6. Requisitos não funcionais
 
 - **Precisão:** nenhum valor pode ser perdido ou duplicado na extração, na Divisão ou nos Pagamentos. Valores são tratados em centavos, sem arredondamento acumulado.
-- **Privacidade:** os dados financeiros e os PDFs ficam acessíveis só ao Rafael. A senha do PDF não é guardada.
+- **Privacidade:** os dados financeiros ficam acessíveis só ao Rafael. Nem o PDF nem a senha são guardados.
 - **Desempenho:** importar e classificar uma Fatura de cerca de 50 Lançamentos leva menos de 1 minuto. [ASSUMPTION]
 - **Formato brasileiro:** moeda em R$ com vírgula decimal, datas dd/mm/aaaa e interface em português.
 
@@ -344,6 +361,7 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 - §4.9 FR-33: um gráfico simples de evolução basta na v1.
 - §5: no celular, a grade aparece como lista, com foco em consultar, copiar e registrar Pagamentos.
 - §6: a importação leva menos de 1 minuto.
+- §4.3 FR-45: previstos de um Mês sem Fatura importada não entram na cobrança, a menos que Rafael escolha.
 - §4.2 FR-36: a data de fechamento lida na Fatura prevalece sobre a configurada.
 - §4.11 FR-39: a barra da Sobra muda de cor abaixo de 10% e abaixo de zero.
 - §4.11 FR-40: alertas de Orçamento em 80% e 100%.
