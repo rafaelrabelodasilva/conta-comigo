@@ -14,6 +14,13 @@ Nenhum segredo fica neste arquivo. As chaves ficam só nas variáveis de ambient
 - Previews não recebem as variáveis do Supabase
 - Monitoramento de erros: logs da Vercel, sem texto de fatura, nomes de lançamentos nem valores
 
+## Repositório (História 1.1)
+- CI: `.github/workflows/ci.yml` em todo push e PR, Node 22. Job `verificar` (lint, typecheck, testes) e job `supabase` (`npx supabase start`/`stop` no Docker do runner, prova do banco local)
+- Supabase CLI fixada em `devDependencies` (`supabase`), usada por `npm run supabase -- <comando>`; config local em `supabase/config.toml`
+- Supabase local exige Docker; por enquanto só roda no CI (não há Docker no Mac)
+- `.env.example` lista só os nomes das variáveis; `.env*` locais ficam no `.gitignore`
+- Log no servidor: `src/server/log.ts` (uma linha JSON, só evento, código e campos da lista permitida)
+
 ## A configurar na História 1.1
 - Variáveis de Production: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`
 - Depois, nas histórias seguintes: `GEMINI_API_KEY`, `GEMINI_MODEL` (2.1), `CRON_SECRET` (5.3), chaves VAPID (7.5)

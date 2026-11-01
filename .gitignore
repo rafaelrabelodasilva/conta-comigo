@@ -2,3 +2,29 @@
 *.command
 .env
 node_modules/
+
+# next.js
+/.next/
+/out/
+/build
+next-env.d.ts
+*.tsbuildinfo
+
+# testes
+/coverage
+
+# env locais (segredos nunca no repositório — AD-12); o .env.example fica
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# supabase local
+supabase/.temp/
+supabase/.branches/
+supabase/.env
+
+# debug
+npm-debug.log*
+*.pem

@@ -102,7 +102,7 @@ Este documento quebra em épicos e histórias implementáveis os requisitos do P
 
 Da Arquitetura (ARCHITECTURE-SPINE.md, final):
 
-- **Starter (Epic 1, Story 1):** `create-next-app --ts --tailwind --app --src-dir` com Next.js 16.3.x (piso 16.2.11), React 19, TypeScript 6.x (sem `baseUrl`), Tailwind 4, Cache Components desligado; shadcn/ui (base Radix) ajustado aos tokens; Vitest; Supabase CLI fixada; estrutura `src/{domain,data,features,ui,server,app}`, `src/proxy.ts`, `supabase/migrations`.
+- **Starter (Epic 1, Story 1):** `create-next-app --ts --tailwind --app --src-dir` com Next.js 16.4.x (piso 16.4.3, correção de segurança), React 19, TypeScript 6.x (sem `baseUrl`), Tailwind 4, Cache Components desligado; shadcn/ui (base Radix) ajustado aos tokens; Vitest; Supabase CLI fixada; estrutura `src/{domain,data,features,ui,server,app}`, `src/proxy.ts`, `supabase/migrations`.
 - Núcleo puro em `src/domain` (AD-1): só TS e zod 4, imports relativos, "hoje" e Mês aberto como parâmetro; toda regra de negócio vive ali, com testes Vitest.
 - Dinheiro em centavos inteiros e um único arredondamento (meio para longe do zero); Divisão com a última parte recebendo a diferença; formatador próprio (sem `Intl` direto) (AD-2).
 - Supabase como única fonte da verdade; detector de conexão único; service worker só com o casco; gravação só das colunas alteradas (AD-3).
@@ -264,7 +264,7 @@ So that cada história seguinte já chegue ao iPad e ao PC assim que for conclu�
 **Acceptance Criteria:**
 
 **Given** o repositório `conta-comigo` sem código de app
-**When** o projeto é criado com `create-next-app --ts --tailwind --app --src-dir` (Next.js 16.3.x, React 19, TypeScript 6.x sem `baseUrl`, Tailwind 4, Cache Components desligado)
+**When** o projeto é criado com `create-next-app --ts --tailwind --app --src-dir` (Next.js 16.4.x, React 19, TypeScript 6.x sem `baseUrl`, Tailwind 4, Cache Components desligado)
 **Then** existem as pastas `src/domain`, `src/data`, `src/features`, `src/ui`, `src/server`, `src/app` e `supabase/migrations`, conforme o Structural Seed
 **And** `src/domain` só usa imports relativos e uma regra de lint impede que importe `src/data`, `src/ui`, `src/app`, Next.js ou Supabase (AD-1)
 
