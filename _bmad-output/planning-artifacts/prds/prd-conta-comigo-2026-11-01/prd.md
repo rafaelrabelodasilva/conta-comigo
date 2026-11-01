@@ -43,7 +43,7 @@ Rangel, Mãe e Lucas não acessam o app. Eles só recebem a mensagem de cobranç
   O app começa vazio. Rafael cadastra os Responsáveis (Rafael, Rangel, Casal, Mãe, Lucas), os Tipos (Casa, Saúde, Gatos, Bobiças…) e os Status (Pago, Não pago). Depois importa o histórico de 2026 da planilha e cria os Blocos: "Rafael" = Responsável Rafael, "Casal" = Responsável Casal, "Mãe", "Lucas" e "Total" = todos os Lançamentos do Mês. Por fim, configura o modelo da Mensagem de cobrança.
 
 - **UJ-1. Rafael fecha a fatura de novembro no iPad.**
-  No dia 5 a fatura fecha e o PDF chega por e-mail, protegido por senha. Rafael abre o app no iPad, sobe o PDF e digita a senha. O app mostra a Fatura de 06/11/26 e o resumo da importação: 47 Lançamentos conferidos com os totais da fatura, 30 já classificados (a maioria parcelas previstas que casaram) e 17 para revisar. Na fila, ele classifica as compras novas da Shopee e da Amazon, marcando várias de uma vez quando são da mesma pessoa. Ele dá o Apelido "Ração dos gatos" a "PETSUPERMARK OR2174325", divide um remédio entre Mãe e ele e atribui à Mãe o estorno de uma compra dela. No Painel, toca no Bloco "Mãe", e a grade mostra só os Lançamentos da Mãe. Ele toca em "selecionar todos", vê na barra "23 itens · R$ 1.350,14" e toca em "Gerar mensagem". Copia o texto e cola no WhatsApp dela.
+  No dia 5 a fatura fecha e o PDF chega por e-mail, protegido por senha. Rafael abre o app no iPad, sobe o PDF e digita a senha. O app mostra a Fatura de 06/11/26 e o resumo da importação: 47 Lançamentos conferidos com os totais da fatura, 30 já classificados (a maioria parcelas previstas que casaram) e 17 para revisar. Na fila, ele classifica as compras novas da Shopee e da Amazon, marcando várias de uma vez quando são da mesma pessoa. Ele dá o Apelido "Ração dos gatos" a "PETSUPERMARK OR2174325", divide um remédio entre Mãe e ele e atribui à Mãe o estorno de uma compra dela. No Painel, toca no Bloco "Mãe", e a grade mostra só os Lançamentos da Mãe. Ele toca em "selecionar todos", vê na barra "7 itens · R$ 1.350,14" e toca em "Gerar mensagem". Copia o texto e cola no WhatsApp dela.
   **Edge case:** se os Lançamentos não conferem com os totais da fatura, o app mostra a diferença antes de liberar a cobrança.
   **Edge case:** se ele subir por engano a fatura de outro mês, o app mostra o vencimento lido no PDF antes de importar. Se ele subir de novo a fatura de um Mês já importado, o app avisa que vai apagar os dados daquele Mês e importar tudo de novo.
 
@@ -51,7 +51,7 @@ Rangel, Mãe e Lucas não acessam o app. Eles só recebem a mensagem de cobranç
   A Mãe manda o Pix com o total do mês. Rafael filtra a grade pela Mãe, seleciona tudo, confere que a barra mostra o mesmo valor do Pix e aplica "Pago" em 08/11/26. O Rangel paga a parte dele: Rafael filtra os Responsáveis Casal e Rangel, seleciona tudo e aplica "Pago". O Lucas paga só R$ 100 de R$ 215. Rafael seleciona os itens do Lucas e aplica "Pago" informando R$ 100, e os R$ 115 que faltam ficam pendentes. No dia 17/11/26, dez dias depois do vencimento, o que ainda não foi pago aparece como atrasado.
 
 - **UJ-3. Rafael lança uma viagem dividida que não está no cartão.**
-  Ele cadastra uma Conta manual, "Bombinhas", de R$ 636 em 6 parcelas mensais, dividida em três partes iguais de R$ 106: Mãe (Mãe e Pai), Casal (Rafael e Rangel) e Lucas (Lucas e Miri). A Mãe paga mês a mês. O Lucas combinou de pagar tudo no final, então a parte dele vira uma Dívida programada com vencimento em abril. Até lá, ela fica em "A receber".
+  Ele cadastra uma Conta manual, "Bombinhas", dividida em três partes: Mãe (Mãe e Pai), Casal (Rafael e Rangel) e Lucas (Lucas e Miri). Cada parte custa R$ 636,00 e é paga em 6 parcelas mensais de R$ 106,00, como na planilha. [ASSUMPTION: R$ 636,00 é o valor de cada parte, e não da viagem toda; a confirmar com Rafael] A Mãe paga mês a mês. O Lucas combinou de pagar tudo no final, então a parte dele vira uma Dívida programada com vencimento em abril. Até lá, ela fica em "A receber".
 
 - **UJ-4. Rafael cobra o Rangel pelo Bloco.**
   Rafael criou o Bloco "Rangel" = Rangel + (Casal ÷ 2). No Painel de novembro, ele toca em "Mensagem" nesse Bloco. O app mostra o cálculo (Rangel R$ 0,00 + Casal R$ 5.639,35 ÷ 2 = R$ 2.819,68) e a mensagem com o total de R$ 2.819,68 e os detalhes agrupados. Rafael copia e cola no WhatsApp do Rangel. Quando o Rangel paga, ele filtra Casal e Rangel, seleciona tudo e aplica "Pago".
@@ -284,7 +284,7 @@ Casal: R$ 5.639,35 ÷ 2 = R$ 2.819,68
   …
 Total: R$ 2.819,68
 ```
-O formato exato dos detalhes agrupados será definido no UX.
+O formato exato dos detalhes agrupados está definido no UX (EXPERIENCE.md, "Formato da mensagem").
 - Valem as mesmas regras do FR-24 (só o Mês, sem R$ 0,00, sem Dívidas programadas não vencidas).
 
 #### FR-54: Mostrar e garantir o cálculo do Bloco
@@ -300,11 +300,13 @@ Para qualquer Bloco, Rafael pode abrir o cálculo passo a passo: o subtotal de c
 #### FR-25: Aplicar Status "Pago"
 Rafael pode fazer uma Seleção (FR-48), de qualquer Mês, e aplicar um Status que conta como pago, com a data do pagamento (padrão: hoje). O app registra um Pagamento com o total da Seleção.
 - Exemplo: o Rangel paga, e Rafael filtra Casal e Rangel, seleciona tudo e aplica "Pago". As contas do Casal ficam pagas inteiras, porque a parte do Rafael ele mesmo já pagou.
-- Se Rafael informar um valor recebido menor que o total, os Lançamentos são quitados em ordem (dos mais antigos para os mais novos). O último fica "Pago parcialmente", com o restante pendente.
+- Se Rafael informar um valor recebido menor que o total, o app pergunta o que fazer com a diferença:
+  - **"Fica pendente"** (ex.: o Lucas pagou só uma parte): os Lançamentos são quitados em ordem, dos mais antigos para os mais novos. O último fica "Pago parcialmente", com o restante pendente.
+  - **"Não é dívida, é a minha parte"** (ex.: o Rangel paga a metade do Casal): todos os Lançamentos selecionados ficam pagos, e o Pagamento registra o valor realmente recebido.
 - Um Pagamento pode ser desfeito.
 
-#### FR-26: Saldo pendente por Responsável
-Para cada Responsável, o app mostra o Saldo pendente total e a lista dos Lançamentos não pagos, com Mês e valor restante.
+#### FR-26: Saldo pendente por pessoa cobrada
+Em Recebimentos, cada pessoa cobrada aparece a partir de um **Bloco de cobrança**: um Bloco que Rafael marca para aparecer ali (ex.: Mãe, Lucas e "Rangel" = Rangel + (Casal ÷ 2)). Para cada um, o app mostra o Saldo pendente (a Fórmula do Bloco aplicada aos Lançamentos não pagos de todos os Meses) e a lista desses Lançamentos, com Mês e valor restante. Assim, o pendente do Rangel é a metade dele do Casal, e não o Casal inteiro.
 
 #### FR-27: Dívida programada
 Rafael pode marcar Lançamentos como Dívida programada, com vencimento combinado.
@@ -436,3 +438,4 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 **Índice de suposições**
 
 Todas as suposições foram confirmadas por Rafael em 01/11/26 e incorporadas ao texto.
+- §2.3 UJ-3: R$ 636,00 é o valor de cada parte da Bombinhas (6 × R$ 106,00), e não da viagem toda. A confirmar com Rafael.
