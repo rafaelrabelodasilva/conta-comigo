@@ -273,10 +273,11 @@ So that cada história seguinte já chegue ao iPad e ao PC assim que for conclu�
 **Then** o Vitest executa ao menos um teste de exemplo do núcleo e passa
 **And** existe um workflow de CI no GitHub Actions que roda lint, typecheck e testes em todo push e PR
 
-**Given** um projeto Supabase de produção e outro de desenvolvimento (plano Free) e um projeto Vercel (Hobby) ligado ao repositório
+**Given** um único projeto Supabase Free `conta-comigo` (produção) e um projeto Vercel (Hobby) ligado ao repositório
 **When** a branch `main` recebe um push
 **Then** a Vercel publica em Production apontando para o Supabase de produção
-**And** os Previews de PR apontam só para o Supabase de desenvolvimento, nunca para o de produção
+**And** os Previews de PR não recebem as variáveis do Supabase, então nunca apontam para o banco de produção; testes e migrações usam o Supabase local
+**And** o monitoramento de erros é feito pelos logs da Vercel, e um utilitário único de log no servidor nunca registra texto de Fatura, nomes de Lançamentos nem valores (AD-17)
 **And** a Supabase CLI está fixada no `package.json` e `supabase start` sobe o banco local
 **And** nenhuma variável secreta usa o prefixo `NEXT_PUBLIC_` (AD-12)
 

@@ -171,7 +171,7 @@ graph TD
 
 - **Binds:** NFR Privacidade, NFR Confiabilidade, Non-goal "sem exportação"
 - **Prevents:** perder todos os dados (o Supabase é a única cópia) e o projeto pausar sozinho.
-- **Rule:** Supabase no plano **Free** e Vercel no plano **Hobby**. Um GitHub Actions semanal, no próprio repositório privado, roda `supabase db dump`, criptografa com `age` (chave pública no repositório, privada só com Rafael) e guarda como artifact com 90 dias de retenção. A restauração é testada uma vez, no Supabase local, antes do primeiro uso real. Limites aceitos: o projeto pausa após 7 dias sem atividade (o cron diário evita), 500 MB de banco e cota do Gemini gratuito, que basta para uma Fatura por mês.
+- **Rule:** Supabase no plano **Free**, com **um único projeto** (`conta-comigo`, produção), na segunda vaga gratuita da conta (a primeira é do meu-produto-app), e Vercel no plano **Hobby**. Monitoramento de erros só pelos logs da Vercel, que nunca registram texto de Fatura, nomes de Lançamentos nem valores. Um GitHub Actions semanal, no próprio repositório privado, roda `supabase db dump`, criptografa com `age` (chave pública no repositório, privada só com Rafael) e guarda como artifact com 90 dias de retenção. A restauração é testada uma vez, no Supabase local, antes do primeiro uso real. Limites aceitos: o projeto pausa após 7 dias sem atividade (o cron diário evita), 500 MB de banco e cota do Gemini gratuito, que basta para uma Fatura por mês.
 
 ## Consistency Conventions
 
@@ -268,7 +268,7 @@ Colunas e restrições que as stories não podem esquecer: `faturas unique (owne
 
 **Ambientes:**
 - **Produção:** branch `main` → Vercel Production + projeto Supabase de produção. As migrações vão para produção por `supabase db push`, rodado à mão pelo Claude Code depois do merge.
-- **Testes:** Pull requests → Vercel Preview, apontando para o Supabase local (`supabase start`) ou para um segundo projeto Free de desenvolvimento. O Preview nunca aponta para o banco de produção.
+- **Testes:** testes e migrações rodam no Supabase local (`supabase start`) e no CI. Não existe projeto Supabase de desenvolvimento (limite de 2 projetos Free por conta). Os Previews da Vercel não recebem variáveis do Supabase e servem só para ver telas sem dados; nunca apontam para o banco de produção.
 - **Desenvolvimento local:** `next dev` + `supabase start`.
 - **iPad:** iPadOS 18 ou mais novo, com o app instalado na tela inicial (exigido pelo pdf.js e pelo Web Push).
 
@@ -320,5 +320,5 @@ conta-comigo/
 - **Versão para iPhone:** fase 2.
 - **Schema da fase 2 (Salário, Despesa extra, Orçamento) e da fase 3 (Objetivos, Fatura do Rangel):** sem tabelas na v1.
 - **Busca em todos os meses:** melhoria futura.
-- **Pipeline de CI (lint, typecheck, testes) e monitoramento de erros:** definidos na primeira story de infraestrutura. O monitoramento não pode registrar texto de Fatura nem valores.
+- **Pipeline de CI (lint, typecheck, testes):** definido na Story 1.1. Monitoramento de erros decidido: logs da Vercel (AD-17); Sentry ou similar só se fizer falta.
 - **Bibliotecas de gráfico (Previsão) e de arrastar (Montador de Bloco):** escolhidas pela story, sem tocar em regra de negócio.
