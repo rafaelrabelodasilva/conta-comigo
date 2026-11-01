@@ -53,8 +53,8 @@ Rangel, Mãe e Lucas não acessam o app. Eles só recebem a mensagem de cobranç
 - **UJ-3. Rafael lança uma viagem dividida que não está no cartão.**
   Ele cadastra uma Conta manual, "Bombinhas", de R$ 636 em 6 parcelas mensais, dividida em três partes iguais de R$ 106: Mãe (Mãe e Pai), Casal (Rafael e Rangel) e Lucas (Lucas e Miri). A Mãe paga mês a mês. O Lucas combinou de pagar tudo no final, então a parte dele vira uma Dívida programada com vencimento em abril. Até lá, ela fica em "A receber".
 
-- **UJ-4. Em viagem, Rafael confere pelo iPhone quem pagou.**
-  Sem o iPad, ele abre o app no iPhone, filtra os itens não pagos, vê quem está devendo e gera a mensagem do Lucas. A revisão linha a linha fica para quando ele tiver uma tela maior.
+- **UJ-4. Rafael cobra o Rangel pelo Bloco.**
+  Rafael criou o Bloco "Rangel" = Rangel + (Casal ÷ 2). No Painel de novembro, ele toca em "Mensagem" nesse Bloco. O app mostra o cálculo (Rangel R$ 0,00 + Casal R$ 5.639,35 ÷ 2 = R$ 2.819,68) e a mensagem com o total de R$ 2.819,68 e os detalhes agrupados. Rafael copia e cola no WhatsApp do Rangel. Quando o Rangel paga, ele filtra Casal e Rangel, seleciona tudo e aplica "Pago".
 
 ## 3. Glossário
 
@@ -249,7 +249,7 @@ O Painel mostra todos os Lançamentos do Mês numa grade com as colunas da plani
 Rafael pode trocar o Mês exibido no Painel para consultar Meses anteriores e futuros (com os previstos). O Mês atual é sempre o padrão ao abrir o app.
 
 ### 4.7 Seleção e Mensagem de cobrança
-**Descrição:** a cobrança parte da grade: Rafael filtra, seleciona alguns ou todos os Lançamentos, confere o total da Seleção e gera a mensagem a partir do modelo que ele define. Realiza UJ-1 e UJ-4.
+**Descrição:** há duas formas de gerar a mensagem, sempre a partir do modelo que Rafael define. Na primeira, a partir de uma Seleção, ele filtra a grade, seleciona alguns ou todos os Lançamentos e confere o total. Na segunda, a partir de um Bloco, a mensagem usa o resultado da Fórmula, por exemplo Rangel + (Casal ÷ 2). Realiza UJ-1 e UJ-4.
 
 #### FR-23: Configurar o modelo da mensagem
 Rafael define o modelo da Mensagem de cobrança: saudação, frase do total, chave Pix, rodapé e o formato de cada linha de detalhe, escolhendo os campos (Nome ou Apelido, Parcela, Valor). O modelo atual dele é:
@@ -271,6 +271,25 @@ Com uma Seleção feita, Rafael toca em "Gerar mensagem". O app mostra a mensage
 - A mensagem é sempre só do Mês a que se refere: nunca inclui Meses passados nem futuros. O Saldo pendente de Meses anteriores é cobrado pela área de Recebimentos (FR-28).
 - As Dívidas programadas ainda não vencidas não entram.
 - Lançamentos de R$ 0,00 (ex.: ANUIDADE DIFERENCIADA 09/12) aparecem na grade, mas nunca entram na mensagem.
+
+#### FR-53: Gerar a mensagem a partir de um Bloco
+Cada Bloco tem um botão "Mensagem". O app gera a Mensagem de cobrança com o total igual ao resultado da Fórmula do Bloco, e os detalhes agrupados por operando, mostrando a operação aplicada a cada grupo. Exemplo para o Bloco "Rangel" = Rangel + (Casal ÷ 2):
+```
+Rangel: R$ 0,00
+Casal: R$ 5.639,35 ÷ 2 = R$ 2.819,68
+  BELLA PIETRA ROCHAS E | 03/04 | R$ 800,00
+  …
+Total: R$ 2.819,68
+```
+[ASSUMPTION: o formato exato dos detalhes agrupados será definido no UX]
+- Valem as mesmas regras do FR-24 (só o Mês, sem R$ 0,00, sem Dívidas programadas não vencidas).
+
+#### FR-54: Mostrar e garantir o cálculo do Bloco
+Para qualquer Bloco, Rafael pode abrir o cálculo passo a passo: o subtotal de cada operando, cada operação e o resultado.
+- A Fórmula segue a precedência matemática usual (parênteses, depois × e ÷, depois + e −).
+- Os cálculos são feitos em centavos, e o arredondamento para centavos só acontece no resultado final, com meio para cima. [ASSUMPTION: regra de arredondamento]
+- O resultado do Bloco, o detalhamento passo a passo e a mensagem do FR-53 sempre mostram o mesmo número.
+- Exemplos de referência (outubro/2026) servem de teste de aceite: Casal = R$ 5.639,35, Casal ÷ 2 = R$ 2.819,68 (arredondado de R$ 2.819,675), Total = R$ 9.280,23, Mãe = R$ 1.350,14, Lucas = R$ 215,16.
 
 ### 4.8 Recebimentos e Meses anteriores
 **Descrição:** o que atravessa os Meses fica numa área separada do Painel: o que foi pago, o que ficou pendente, o que vence no futuro e o histórico da Fatura. Realiza UJ-2 e UJ-3.
@@ -319,7 +338,7 @@ Rafael pode ver como os totais por Tipo e por Responsável evoluíram nos últim
 ### 4.10 Acesso, edição e aparelhos
 
 #### FR-34: Entrar e sincronizar
-Só Rafael acessa o app, com login próprio. Os dados ficam iguais no PC, no iPad e no iPhone.
+Só Rafael acessa o app, com login próprio. Os dados ficam iguais no PC e no iPad.
 
 #### FR-46: Editar e excluir qualquer coisa, com atualização imediata
 Rafael pode editar e excluir qualquer Lançamento, Conta manual, Pagamento, Regra, Bloco, Responsável, Tipo e Status.
@@ -329,7 +348,7 @@ Rafael pode editar e excluir qualquer Lançamento, Conta manual, Pagamento, Regr
 - Excluir um Responsável, Tipo ou Status em uso pede para escolher um substituto, ou arquiva em vez de excluir.
 
 #### FR-35: Instalar como app
-O web app pode ser instalado na tela inicial do iPhone e do iPad, sem App Store.
+O web app pode ser instalado na tela inicial do iPad, sem App Store.
 
 ### 4.11 Planejamento (fase 2)
 **Descrição:** depois que o fechamento do cartão estiver funcionando bem, o app passa a mostrar quanto sobra do Salário e a controlar orçamentos. A Sobra é uma estimativa, porque Pix e combinados informais ficam de fora.
@@ -369,8 +388,8 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 
 ## 5. Plataforma e telas
 
-- **Prioridade:** PC e iPad primeiro, com a experiência completa (grade, fila, Blocos, Recebimentos).
-- **Celular (v1):** tudo funciona, mas o foco é consultar Blocos, gerar mensagens, aplicar "Pago" e ver o que está pendente. No celular, a grade aparece em formato de lista. [ASSUMPTION: essa é a versão mínima aceitável no celular; uma experiência otimizada para ele fica para depois]
+- **v1: PC (navegador) e iPad Pro 11" (M4)**, com a experiência completa (grade, fila, Blocos, Recebimentos). As telas são pensadas para tela grande, com a grade de todas as colunas visível.
+- **Celular (iPhone 13 Pro Max): fora da v1.** São muitas informações para uma tela pequena. Uma versão para o celular, com foco em consultar Blocos, gerar mensagens e aplicar "Pago", fica para a fase 2.
 
 ## 6. Requisitos não funcionais
 
@@ -392,7 +411,7 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 **Dentro (v1):** §4.1 a §4.10 e §5.
 
 **Fora (por fase):**
-- **Fase 2 (planejamento):** §4.11, com Salário, Despesas extras, Sobra e Orçamento. Também a experiência otimizada para o celular.
+- **Fase 2 (planejamento):** §4.11, com Salário, Despesas extras, Sobra e Orçamento. Também a versão para o celular (iPhone).
 - **Fase 3 (últimas etapas):** §4.12 Objetivos, e a Fatura do Rangel com o painel do casal. [ASSUMPTION: as duas ficam na mesma fase final]
 - **Só se o app abrir para outras pessoas:** contas para outros usuários, outros bancos, pesquisa de mercado completa e custo e privacidade da IA.
 
@@ -409,8 +428,7 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 ## 10. Perguntas em aberto e suposições
 
 **Perguntas em aberto**
-1. **Mensagem do Rangel:** quando Rafael seleciona Casal + Rangel para gerar a mensagem, o total deve ser a soma de tudo, ou metade do Casal mais as contas do Rangel? Hoje a planilha mostra o Casal inteiro (R$ 5.639,35) e a metade (R$ 2.819,68).
-2. A IA para sugerir Tipos de Nomes novos (FR-11) entra na v1 ou depois? Será decidido na arquitetura.
+1. A IA para sugerir Tipos de Nomes novos (FR-11) entra na v1 ou depois? Será decidido na arquitetura.
 
 **Índice de suposições**
 - §4.2 FR-3: a senha do PDF não é guardada.
@@ -424,6 +442,7 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 - §4.9 FR-33: um gráfico simples de evolução basta na v1.
 - §4.11 FR-39: a barra da Sobra muda de cor abaixo de 10% e abaixo de zero.
 - §4.11 FR-40: alertas de Orçamento em 80% e 100%.
-- §5: no celular, a grade aparece como lista, com foco em consultar, gerar mensagens e aplicar "Pago".
+- §4.7 FR-53: o formato dos detalhes agrupados da mensagem do Bloco será definido no UX.
+- §4.7 FR-54: arredondamento só no resultado final, meio para cima.
 - §6: a importação leva menos de 1 minuto.
 - §8: Objetivos e painel do casal ficam juntos na fase 3.
