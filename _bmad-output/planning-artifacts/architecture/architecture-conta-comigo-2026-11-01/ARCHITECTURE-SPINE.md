@@ -5,7 +5,7 @@ purpose: build-substrate
 altitude: feature
 paradigm: 'functional core, imperative shell (núcleo de domínio puro + casca Next.js/Supabase)'
 scope: 'Conta Comigo v1: PRD §4.1–§4.10 + FR-55, UX final (DESIGN.md, EXPERIENCE.md)'
-status: draft
+status: final
 created: '2026-11-01'
 updated: '2026-11-01'
 binds: [FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, FR-8, FR-9, FR-10, FR-11, FR-12, FR-13, FR-14, FR-15, FR-16, FR-17, FR-18, FR-19, FR-20, FR-21, FR-22, FR-23, FR-24, FR-25, FR-26, FR-27, FR-28, FR-29, FR-30, FR-31, FR-32, FR-33, FR-34, FR-35, FR-36, FR-44, FR-45, FR-46, FR-47, FR-48, FR-49, FR-50, FR-51, FR-52, FR-53, FR-54, FR-55]
@@ -167,7 +167,7 @@ graph TD
 - **Prevents:** um "Desfazer" recriar a linha com outro `id` e quebrar Série, Ajuste e Pagamento, e cadastros em uso sumirem das somas.
 - **Rule:** Lançamentos e Pagamentos têm `excluido_em timestamptz null`. Os repositórios filtram `excluido_em is null`, "Desfazer" limpa o campo, e as restrições únicas são índices parciais `where excluido_em is null`. A exclusão física só acontece na reimportação (AD-7). Responsável, Tipo e Status têm `arquivado boolean`: um cadastro arquivado some das listas de escolha mas continua nas somas. Substituir um cadastro em uso é a RPC `substituir_cadastro`, que troca os ids também dentro do `jsonb` (Fórmulas, Regras, Divisões), listados na constante `REFERENCIAS_JSONB` do núcleo.
 
-### AD-17 — Operação: plano gratuito com backup fora do Supabase
+### AD-17 — Operação: plano gratuito com backup fora do Supabase [ADOPTED]
 
 - **Binds:** NFR Privacidade, NFR Confiabilidade, Non-goal "sem exportação"
 - **Prevents:** perder todos os dados (o Supabase é a única cópia) e o projeto pausar sozinho.
