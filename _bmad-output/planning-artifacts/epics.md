@@ -1,6 +1,6 @@
 ---
 status: draft
-stepsCompleted: [1, 2]
+stepsCompleted: [1, 2, 3]
 inputDocuments:
   - _bmad-output/planning-artifacts/prds/prd-conta-comigo-2026-11-01/prd.md
   - _bmad-output/planning-artifacts/architecture/architecture-conta-comigo-2026-11-01/ARCHITECTURE-SPINE.md
@@ -1415,3 +1415,99 @@ So that o Saldo pendente nunca mude sem eu saber (FR-46, FR-51).
 **When** a RPC `importar_fatura` roda
 **Then** `pagamento_itens` conta como referência: as linhas casadas mantêm os Pagamentos, e as sem par com Pagamento ficam com `revisao_motivo = 'sumiu_na_reimportacao'`
 **And** o teste de aceite "reimportar outubro com Pagamentos" termina com o mesmo Saldo pendente de antes
+
+## Epic 7: Previsão e lembretes
+
+Rafael vê quanto está comprometido nos próximos Meses, a evolução dos últimos 6 Meses e o próprio gasto por Tipo, e recebe lembretes no dia do fechamento e quando alguém atrasa.
+
+### Story 7.1: Próximos meses
+
+As a Rafael,
+I want ver quanto já está comprometido nos próximos 6 meses,
+So that eu saiba o que vem pela frente antes de gastar (FR-32).
+
+**Acceptance Criteria:**
+
+**Given** a tela Previsão com as abas "Próximos meses", "Evolução" e "Meu gasto por Tipo", com a aba escolhida guardada (UX-DR23)
+**When** Rafael abre "Próximos meses"
+**Then** vê barras empilhadas por Responsável dos 6 Meses seguintes, com o total em cima e o mês embaixo (`chart-bar`), e uma tabela Responsável × Mês
+**And** o seletor "Por Responsável / Por Tipo" muda o agrupamento
+**And** os valores vêm dos previstos e das Contas manuais, calculados pelo núcleo (`domain/previsao`), e nada é gravado
+**And** cada série parcelada pode ser vista como "MSC CRUZEIROS 01/12 → R$ 1.140,74 por mais 11 meses"
+**And** tocar num mês abre o Painel daquele mês, com os previstos
+
+**And** sem previstos aparece "Nenhum lançamento previsto para os próximos meses"
+**And** os números do gráfico também aparecem em texto, e a cor nunca é a única informação
+
+### Story 7.2: Evolução dos últimos meses
+
+As a Rafael,
+I want comparar os totais dos últimos 6 meses,
+So that eu veja se estamos gastando mais ou menos (FR-33).
+
+**Acceptance Criteria:**
+
+**Given** a aba "Evolução"
+**When** Rafael a abre
+**Then** vê barras empilhadas dos últimos 6 Meses com Fatura importada, por Responsável ou por Tipo
+**And** com menos de 6 Meses, mostra os que existem
+**And** com menos de 2 Meses importados aparece "Evolução disponível a partir de 2 meses importados"
+
+### Story 7.3: Meu gasto por Tipo
+
+As a Rafael,
+I want ver para onde vai a minha parte do dinheiro em cada mês,
+So that eu acompanhe o meu próprio gasto, não só o que cobro dos outros (FR-31).
+
+**Acceptance Criteria:**
+
+**Given** o "meu Bloco" escolhido (ex.: Rafael + (Casal ÷ 2))
+**When** Rafael abre a aba "Meu gasto por Tipo" e escolhe o Mês no seletor próprio
+**Then** o núcleo aplica a Fórmula do "meu Bloco" por Tipo e mostra barras horizontais do maior para o menor, com o valor e a % do total
+**And** a soma das barras é igual ao valor do "meu Bloco" naquele Mês (com o arredondamento do AD-2 testado)
+**And** tocar num Tipo abre o Painel filtrado por aquele Tipo
+
+**And** sem "meu Bloco" aparece "Escolha qual Bloco representa o seu gasto", com atalho para Configurações
+
+### Story 7.4: Lembretes dentro do app
+
+As a Rafael,
+I want um aviso no app no dia do fechamento e quando alguém atrasa,
+So that eu não esqueça de importar a fatura nem de cobrar (FR-55).
+
+**Acceptance Criteria:**
+
+**Given** as funções do núcleo `lembretesDoDia(hoje, ciclo, lancamentos, blocosDeCobranca, preferencias)`
+**When** é o dia do fechamento
+**Then** aparece a faixa "A fatura de novembro fechou. Importe o PDF quando chegar", e tocar abre o Painel
+
+**Given** um Bloco de cobrança que passa a ter itens atrasados
+**When** o app abre
+**Then** aparece a faixa "O Lucas tem R$ 115,16 em atraso desde 16/11/26", e tocar abre Recebimentos
+**And** "atrasado" usa a mesma `estaAtrasado` da grade
+
+**Given** Configurações → Aparência
+**When** Rafael desliga um tipo de lembrete
+**Then** aquele lembrete não aparece mais, e a preferência fica em `configuracoes`
+
+### Story 7.5: Notificações no iPad e no PC
+
+As a Rafael,
+I want receber esses lembretes como notificação, mesmo com o app fechado,
+So that eu seja avisado sem precisar abrir o app (FR-55, AD-13).
+
+**Acceptance Criteria:**
+
+**Given** a migração que cria `push_inscricoes` e `lembretes_enviados (tipo, referencia, dia)` com restrição única
+**When** Rafael toca em "Ativar notificações" em Configurações, com o app instalado na tela inicial do iPad (iPadOS 18+) ou no navegador do PC
+**Then** o pedido de permissão só acontece por esse toque, e a inscrição Web Push (VAPID) é guardada
+**And** a `VAPID_PRIVATE_KEY` existe só no servidor
+
+**Given** a rota diária `GET /api/cron/diario`
+**When** ela roda depois da materialização das Contas manuais
+**Then** calcula os lembretes com as mesmas funções da faixa do app, respeitando as preferências
+**And** insere em `lembretes_enviados` antes de enviar, e só envia se a inserção deu certo, então o mesmo lembrete nunca sai duas vezes
+**And** envia pelo pacote `web-push` para cada inscrição, e apaga a inscrição quando o envio devolve 404 ou 410
+**And** tocar na notificação abre o Painel ou Recebimentos
+
+**And** a notificação nunca leva valores de outras pessoas além do que a faixa do app mostra, e nada é registrado em log
