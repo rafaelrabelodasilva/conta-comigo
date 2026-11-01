@@ -40,11 +40,17 @@ Um app que transforma "fatura em PDF" em "mensagem de cobrança por pessoa", com
 - **Controle de pagamento.** Marca, por pessoa e por mês, quem já pagou.
 - **Visão do próprio gasto.** Quanto o próprio Rafael gastou no mês, por categoria.
 
-Funciona no PC, no iPhone e no iPad. [ASSUMPTION: um web app responsivo, instalável na tela inicial, atende os três sem precisar de app nativo]
+É um web app: abre no navegador do PC e pode ser instalado na tela inicial do iPhone e do iPad, sem passar pela App Store. A usabilidade de referência é a do Listonic: listas simples, itens agrupados por categoria, marcar com um toque e tudo sincronizado entre os aparelhos. A fila de revisão e o controle de pagamento devem passar essa mesma sensação.
 
 ## O que torna diferente
 
-Apps de divisão de contas, como o Splitwise, pedem que cada gasto seja digitado à mão. Apps de finanças pessoais leem a fatura, mas organizam o gasto de uma pessoa só. O Conta Comigo junta as duas coisas para um caso comum no Brasil e mal atendido: **um cartão, várias pessoas, todo mês**. A vantagem dele não é técnica. Ele foi pensado para o fluxo real da fatura brasileira (parcelas "05/10", cartões adicionais, estornos, cashback, saldo remanescente) e aprende com o histórico de quem usa. [ASSUMPTION: não há concorrente direto que faça isso; verificar antes do PRD]
+Numa pesquisa rápida de mercado, não apareceu nenhum app que faça esse fluxo de ponta a ponta:
+
+- **Splitwise, Tricount e similares** dividem despesas em grupo, mas cada gasto é lançado à mão. As importações que oferecem são de outros apps de divisão, não de faturas.
+- **SplitMyExpenses** conecta contas e cartões e aceita CSV, mas não mostra como transforma as linhas importadas em despesas divididas, e não trata a fatura brasileira.
+- **Billy e Tabify** usam IA para ler a foto de uma conta de restaurante e distribuir os itens entre pessoas. É um evento avulso, não o fechamento mensal de um cartão.
+
+O Conta Comigo atende um caso comum no Brasil: **um cartão, várias pessoas, todo mês**. A vantagem dele não é técnica. Ele foi pensado para o fluxo real da fatura brasileira (parcelas "05/10", cartões adicionais, estornos, cashback, saldo remanescente) e aprende com o histórico de quem usa. Como o app é pessoal, isso basta. A concorrência só volta a importar se ele abrir para outras pessoas.
 
 ## Para quem é
 
@@ -54,8 +60,8 @@ Apps de divisão de contas, como o Splitwise, pedem que cada gasto seja digitado
 
 ## Critérios de sucesso
 
-- Do envio do PDF às mensagens prontas em **menos de 10 minutos** [ASSUMPTION: meta inicial; medir o tempo atual].
-- **Pelo menos 55% das linhas classificadas sem intervenção** já no segundo mês de uso, crescendo com o histórico.
+- Do envio do PDF às mensagens prontas em **menos de 10 minutos**. Hoje o processo leva quase 1h50.
+- **Pelo menos 55% das linhas classificadas sem intervenção** desde o primeiro mês, com o histórico de 2026 importado, e esse número cresce com o uso.
 - **Zero divergência não explicada** entre a soma dos lançamentos e o total da fatura.
 - A planilha do Google deixa de ser necessária.
 - Todo mês fica claro quem já pagou.
@@ -65,7 +71,7 @@ Apps de divisão de contas, como o Splitwise, pedem que cada gasto seja digitado
 **Na primeira versão:**
 - App pessoal: um usuário (Rafael), uma fatura por mês, só do Santander e no layout atual do PDF, com as pessoas e categorias que ele já usa.
 - Importação do PDF, conciliação com o resumo, classificação automática com revisão, divisão de lançamentos, contas manuais recorrentes ou parceladas, totais por pessoa, mensagem para o WhatsApp e status de pagamento.
-- Importação do histórico da planilha atual, para o app já começar sabendo classificar. [ASSUMPTION: vale o esforço; sem isso, o primeiro mês é todo manual]
+- Importação do histórico da planilha, só das abas de 2026 (01/2026 a 10/2026), para o app já começar sabendo classificar. As abas de 2025 ficam de fora porque podem ter classificações erradas. Como o histórico pode ter erros, as regras aprendidas devem ser fáceis de ver e corrigir.
 
 **Fora da primeira versão:**
 - Contas para outras pessoas e faturas de outros bancos.

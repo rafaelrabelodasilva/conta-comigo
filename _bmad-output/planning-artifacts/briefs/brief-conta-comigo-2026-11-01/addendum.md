@@ -72,3 +72,18 @@ Nome da conta | Parcela | Valor R$ 0,00
 ## Contas fora do cartão
 
 Cadastro manual com valor, número de parcelas (ou recorrência mensal) e responsável. Exemplos atuais: Silvia (R$ 400, mensal), William/Will (R$ 420, mensal), TVbox (R$ 30, mensal), Bombinhas (R$ 636 em 6x, dividido em três partes de R$ 106: Mãe e Pai, Rafael e Rangel, Lucas e Miri).
+
+## Pesquisa de mercado (rápida, 01/11/2026)
+
+- **Splitwise, Tricount, Splitser:** divisão de despesas em grupo com lançamento manual. As importações que oferecem são de outros apps de divisão, como o importador de Splitwise do Tricount e o serviço de migração do Splitser.
+- **SplitMyExpenses:** conecta contas bancárias e cartões, aceita CSV e importa do Splitwise. A página não explica como as linhas importadas viram despesas divididas.
+- **Billy, Tabify:** IA que lê a foto de uma conta (restaurante) e distribui os itens entre pessoas. Billy gera resumos por pessoa para enviar por mensagem.
+- Não foi encontrado nenhum app que importe a fatura brasileira em PDF, acompanhe as parcelas e divida por pessoa todo mês. A pesquisa não foi exaustiva. Se o app abrir para outras pessoas, vale fazer uma pesquisa completa com `bmad-deep-recon`.
+
+## Referência de usabilidade: Listonic
+
+App de lista de compras de que o Rafael gosta. Itens adicionados rapidamente (por busca ou voz), agrupados por seção ou em ordem própria, marcados com um toque, sincronizados em tempo real entre aparelhos e funcionando offline. Inspira a fila de revisão (classificar com um toque, agrupada) e o controle de pagamento (marcar quem pagou).
+
+## Histórico a importar
+
+Apenas as abas 01/2026 a 10/2026 da planilha "Cartão". As abas de 2025 podem ter classificações erradas. A aba "TBC 00/2026" parece ser um modelo e precisa ser confirmada antes.
