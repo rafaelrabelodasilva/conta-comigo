@@ -15,7 +15,7 @@ Este PRD detalha a primeira versão do Conta Comigo para quem vai desenhar a exp
 
 O Conta Comigo é um app de finanças pessoais construído em torno do cartão de crédito do Rafael, que ele divide com outras pessoas. Ele sobe o PDF da fatura do Santander e digita a senha. O app extrai os lançamentos, confere com os totais da fatura e classifica sozinho o que já conhece, aprendendo com os meses anteriores: parcelas em andamento, assinaturas e contas fixas. Sobra para o Rafael só o que é novo, numa fila rápida de revisão.
 
-O Painel mostra o mês atual em Blocos que o próprio Rafael monta: quanto cada pessoa deve, quanto ele gastou e em quê. Tocar num Bloco filtra os lançamentos que formam aquele total, e um botão copia a mensagem de cobrança pronta para o WhatsApp. Fora do Painel, o app acompanha o que foi recebido, o que ficou pendente de meses anteriores e as dívidas combinadas para o futuro, para que nenhuma parcela se perca. A meta é trocar quase 1h50 de trabalho manual por menos de 10 minutos, e ainda dar ao Rafael uma visão clara das próprias finanças.
+O Painel mostra o mês atual em Blocos que o próprio Rafael monta: quanto cada pessoa deve, quanto ele gastou e em quê. Tocar num Bloco filtra os lançamentos que formam aquele total, e um botão copia a mensagem de cobrança pronta para o WhatsApp. Fora do Painel, o app acompanha o que foi recebido, o que ficou pendente de meses anteriores e as dívidas combinadas para o futuro, para que nenhuma parcela se perca. A meta é trocar quase 1h50 de trabalho manual por menos de 10 minutos. Depois, numa segunda fase, o app passa a responder a pergunta que Rafael não consegue responder hoje: quanto sobra do salário. Ainda mais à frente, ele ajuda a planejar compras com Objetivos.
 
 ## 2. Usuário
 
@@ -51,7 +51,8 @@ Rangel, Mãe e Lucas não acessam o app. Eles só recebem a mensagem de cobranç
 ## 3. Glossário
 
 - **Fatura**: o PDF mensal do cartão Santander, com vencimento, totais de despesas e de créditos, saldo anterior, pagamentos e total a pagar. Uma Fatura por mês.
-- **Mês**: o mês de vencimento de uma Fatura. O Painel sempre mostra um Mês, por padrão o atual.
+- **Ciclo**: o período de compras de uma Fatura, do dia seguinte ao fechamento anterior até o dia de fechamento. O dia de fechamento é configurável e pode mudar.
+- **Mês**: o mês de vencimento de uma Fatura, que corresponde a um Ciclo. O Painel sempre mostra um Mês, por padrão o atual.
 - **Lançamento**: uma linha extraída da Fatura ou gerada por uma Conta manual. Tem descrição, data, valor (negativo se for crédito ou estorno), Parcela e, se veio da Fatura, o final do cartão.
 - **Parcela**: posição "n/N" de um Lançamento parcelado ("05/10"). "1/1" significa à vista.
 - **Responsável**: a quem um Lançamento, ou uma parte dele, é atribuído. Pode ser uma pessoa (Rafael, Rangel, Mãe, Lucas) ou um grupo (Casal). Rafael cadastra, renomeia e arquiva os Responsáveis.
@@ -69,6 +70,11 @@ Rangel, Mãe e Lucas não acessam o app. Eles só recebem a mensagem de cobranç
 - **Mensagem de cobrança**: o texto gerado a partir de um Bloco, pronto para colar no WhatsApp.
 - **Conferência**: a checagem dos Lançamentos extraídos de uma Fatura contra os totais de despesas e de créditos dessa Fatura.
 - **Previsão**: os Lançamentos que já se sabe que virão nos próximos Meses, como parcelas restantes e Contas manuais.
+- **Salário**: a renda mensal que Rafael cadastra (fase 2).
+- **Despesa extra**: um gasto do Rafael fora do cartão, cadastrado à mão (Pix, débito, aluguel…), que só entra no cálculo da Sobra (fase 2).
+- **Sobra**: estimativa de quanto restou do Salário no Mês. Não precisa ser exata (fase 2).
+- **Orçamento**: limite mensal de gasto do Rafael numa Categoria (fase 2).
+- **Objetivo**: uma compra planejada (ex.: placa de vídeo), com valor total e data final, que vira parcelas mensais forçadas (fase 3).
 
 ## 4. Funcionalidades
 
@@ -106,6 +112,13 @@ O app confere os Lançamentos extraídos com os totais da própria Fatura: soma 
 - Quando tudo confere, mostra "Conferido".
 - Quando algo não confere, mostra a diferença e bloqueia a geração das Mensagens de cobrança até Rafael corrigir. [ASSUMPTION: bloquear, e não apenas avisar]
 - Saldo anterior e pagamentos não entram na Conferência do Mês. Eles aparecem só na área de Meses anteriores (FR-27).
+
+#### FR-36: Ciclo da Fatura
+Rafael configura o dia de fechamento e o dia de vencimento do cartão, e pode alterá-los quando mudar o fechamento no banco.
+- A mudança vale a partir do próximo Ciclo, e os Ciclos já fechados não mudam.
+- Cada Mês tem um estado: aberto (ainda recebe Lançamentos manuais) ou fechado (Fatura importada e conferida).
+- Lançamentos criados no app (Contas manuais e, na fase 3, parcelas de Objetivos) entram no Mês cujo Ciclo contém a data deles: uma data depois do fechamento vai para o Mês seguinte.
+- A data de fechamento extraída da Fatura importada prevalece sobre a configuração se as duas forem diferentes, e o app avisa. [ASSUMPTION]
 
 #### FR-7: Corrigir a extração
 Rafael pode editar, incluir e excluir Lançamentos de uma Fatura importada. A Conferência é recalculada na hora.
@@ -196,7 +209,7 @@ Nome da conta | Parcela | Valor
 O botão "Copiar" de um Bloco coloca na área de transferência a mensagem preenchida com o total e os detalhes do Bloco no Mês.
 - Os estornos atribuídos ao Responsável aparecem como linhas negativas e reduzem o total.
 - As Dívidas programadas ainda não vencidas não entram.
-- [ASSUMPTION: a mensagem traz só o Mês atual. O Saldo pendente de Meses anteriores não entra no total, e Rafael cobra esse saldo pela área de Recebimentos (FR-28)]
+- A mensagem traz só o Mês atual. O Saldo pendente de Meses anteriores não entra no total, e Rafael cobra esse saldo pela área de Recebimentos (FR-28).
 
 ### 4.8 Recebimentos e Meses anteriores
 **Descrição:** uma área separada do Painel para o que atravessa os Meses: o que foi pago, o que ficou pendente, o que vence no futuro e o histórico da Fatura. Realiza UJ-2 e UJ-3.
@@ -247,6 +260,37 @@ Só Rafael acessa o app, com login próprio. Os dados ficam iguais no PC, no iPa
 #### FR-35: Instalar como app
 O web app pode ser instalado na tela inicial do iPhone e do iPad, sem App Store.
 
+### 4.11 Planejamento (fase 2)
+**Descrição:** depois que o fechamento do cartão estiver funcionando bem, o app passa a mostrar quanto sobra do Salário e a controlar orçamentos. A Sobra é uma estimativa, porque Pix e combinados informais ficam de fora.
+
+#### FR-37: Cadastrar Salário
+Rafael cadastra o Salário mensal e pode ajustar o valor de um Mês específico (ex.: 13º, bônus).
+
+#### FR-38: Cadastrar Despesas extras
+Rafael cadastra Despesas extras fora do cartão, avulsas ou recorrentes, com valor, Categoria e Mês.
+
+#### FR-39: Sobra do Mês
+O Painel principal do Mês mostra a Sobra numa barra de % do Salário:
+Sobra = Salário − total da Fatura + Pagamentos recebidos no Mês − Despesas extras.
+- A barra muda de cor quando a Sobra fica baixa ou negativa. [ASSUMPTION: abaixo de 10% e abaixo de zero]
+- O app mostra a composição do cálculo, para Rafael entender de onde vem o número.
+
+#### FR-40: Orçamento por Categoria
+Rafael define um limite mensal para uma Categoria (ex.: Bobiças até R$ 300), considerando só a parte dele.
+- O Painel mostra, para cada Orçamento, quanto já foi usado em % e destaca quando passar de 80% e de 100%. [ASSUMPTION: esses limites de alerta]
+
+### 4.12 Objetivos (fase 3)
+**Descrição:** um Objetivo força Rafael a se organizar para uma compra: o app transforma o valor total em parcelas mensais até a data escolhida. É um dos últimos recursos a construir.
+
+#### FR-41: Criar Objetivo
+Rafael cadastra um Objetivo com nome (ex.: "Placa de vídeo XPTO"), valor total e data final. O app calcula quantas parcelas cabem até lá, considerando os Ciclos (FR-36), e o valor de cada uma, e mostra a proposta antes de confirmar.
+
+#### FR-42: Lançar as parcelas do Objetivo
+Ao confirmar, o app cria um Lançamento por Mês com a parcela do Objetivo, atribuído ao Rafael. Esses Lançamentos entram na Sobra (FR-39) como despesa do Mês.
+
+#### FR-43: Acompanhar o Objetivo
+Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto falta. O app mostra se o Objetivo está em dia com as parcelas. Ele também pode alterar a data final ou o valor, e o app recalcula as parcelas restantes.
+
 ## 5. Plataforma e telas
 
 - **Prioridade:** PC e iPad primeiro, com a experiência completa (grade, fila, Blocos, Recebimentos).
@@ -268,11 +312,11 @@ O web app pode ser instalado na tela inicial do iPhone e do iPad, sem App Store.
 
 ## 8. Escopo da primeira versão
 
-**Dentro:** §4.1 a §4.10 e §5.
+**Dentro (v1):** §4.1 a §4.10 (incluindo FR-36) e §5.
 
 **Fora (por fase):**
-- **Depois:** experiência otimizada para o celular. Orçamento e metas por Categoria, se Rafael quiser. [ASSUMPTION]
-- **Última etapa:** a Fatura do Rangel e o painel do casal com as duas Faturas.
+- **Fase 2 (planejamento):** §4.11, com Salário, Despesas extras, Sobra e Orçamento. Também a experiência otimizada para o celular.
+- **Fase 3 (últimas etapas):** §4.12 Objetivos, e a Fatura do Rangel com o painel do casal. [ASSUMPTION: as duas ficam na mesma fase final]
 - **Só se o app abrir para outras pessoas:** contas para outros usuários, outros bancos, pesquisa de mercado completa e custo e privacidade da IA.
 
 ## 9. Métricas de sucesso
@@ -288,18 +332,19 @@ O web app pode ser instalado na tela inicial do iPhone e do iPad, sem App Store.
 ## 10. Perguntas em aberto e suposições
 
 **Perguntas em aberto**
-1. Quais recursos de finanças pessoais, além de gasto por Categoria, previsão e evolução, são importantes para Rafael? Orçamento por Categoria? Metas?
-2. A IA para sugerir Categorias de estabelecimentos novos (FR-11) entra na v1 ou depois? Será decidido na arquitetura.
+1. A IA para sugerir Categorias de estabelecimentos novos (FR-11) entra na v1 ou depois? Será decidido na arquitetura.
 
 **Índice de suposições**
 - §4.2 FR-3: a senha do PDF não é guardada.
 - §4.2 FR-6: uma Conferência divergente bloqueia a cobrança até ser resolvida.
 - §4.3 FR-10: as Regras são aprendidas sem confirmação.
-- §4.7 FR-24: a mensagem traz só o Mês atual, e o Saldo pendente é cobrado à parte (FR-28).
 - §4.8 FR-25: um pagamento parcial quita as Cobranças das mais antigas para as mais novas.
 - §4.8 FR-27: a Dívida programada é o mecanismo para lembrar de contas futuras.
 - §4.9 FR-31: a "parte do Rafael" é definida por um Bloco que ele escolhe.
 - §4.9 FR-33: um gráfico simples de evolução basta na v1.
 - §5: no celular, a grade aparece como lista, com foco em consultar, copiar e registrar Pagamentos.
 - §6: a importação leva menos de 1 minuto.
-- §8: orçamento e metas ficam para depois.
+- §4.2 FR-36: a data de fechamento lida na Fatura prevalece sobre a configurada.
+- §4.11 FR-39: a barra da Sobra muda de cor abaixo de 10% e abaixo de zero.
+- §4.11 FR-40: alertas de Orçamento em 80% e 100%.
+- §8: Objetivos e painel do casal ficam juntos na fase 3.
