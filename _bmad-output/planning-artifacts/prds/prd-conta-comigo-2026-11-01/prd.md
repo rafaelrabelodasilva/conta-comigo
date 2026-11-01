@@ -117,7 +117,7 @@ Rafael pode criar, renomear, editar e excluir Status, e marcar cada um como "con
 #### FR-3: Importar PDF protegido
 Rafael pode enviar o PDF da Fatura e informar a senha no próprio app.
 - O app abre PDFs protegidos com a senha informada. Se a senha estiver errada, ele avisa e pede de novo.
-- A senha não é guardada depois da importação. [ASSUMPTION: Rafael prefere digitar todo mês a deixar a senha salva]
+- A senha não é guardada depois da importação.
 - Antes de gravar, o app mostra o vencimento e o Mês lidos no PDF, para Rafael confirmar que é a Fatura certa.
 
 #### FR-51: Reimportar um Mês
@@ -125,7 +125,7 @@ Se Rafael importar uma Fatura de um Mês que já tem Fatura importada, o app avi
 - Só faz isso depois da confirmação.
 - Antes de confirmar, o app avisa se algum desses Lançamentos já tem Pagamento registrado ou classificação feita à mão, e mostra quantos.
 - Depois de reimportar, as Regras e as parcelas herdadas são reaplicadas, para Rafael não precisar classificar de novo o que já sabia.
-- Lançamentos de Contas manuais do Mês não são apagados. [ASSUMPTION]
+- Lançamentos de Contas manuais do Mês não são apagados.
 
 #### FR-4: Não guardar o PDF
 O app usa o PDF só durante a importação. Depois da extração ele descarta o arquivo e guarda apenas os Lançamentos e os totais da Fatura (vencimento, fechamento, totais de despesas e de créditos, saldo anterior, pagamentos e total a pagar).
@@ -147,7 +147,7 @@ Rafael configura o dia de fechamento e o dia de vencimento do cartão, e pode al
 - A mudança vale a partir do próximo Ciclo, e os Ciclos já fechados não mudam.
 - Cada Mês tem um estado: aberto (ainda recebe Lançamentos manuais) ou fechado (Fatura importada e conferida).
 - Lançamentos criados no app (Contas manuais e, na fase 3, parcelas de Objetivos) entram no Mês cujo Ciclo contém a data deles: uma data depois do fechamento vai para o Mês seguinte.
-- A data de fechamento extraída da Fatura importada prevalece sobre a configuração se as duas forem diferentes, e o app avisa. [ASSUMPTION]
+- O dia de fechamento serve só para decidir o Mês dos Lançamentos criados no app. A importação da Fatura não compara nada com ele: só lê os valores do PDF.
 
 #### FR-47: Ajustes de centavos
 Às vezes a Fatura traz, junto de uma parcela, um pequeno crédito com o mesmo Nome. Por exemplo, na Fatura de 06/11/26 vieram "MSC CRUZEIROS 02/12 R$ 1.140,74" e "MSC CRUZEIROS - R$ 0,08". O app reconhece esse crédito como Ajuste da parcela, e não como um estorno solto.
@@ -187,7 +187,7 @@ Um Lançamento à vista cujo Nome tem Regra recebe a classificação da Regra. A
 - Se o Nome tem histórico com Responsáveis diferentes (ex.: farmácias), o app **sugere** o mais frequente, mas deixa o Lançamento na fila para confirmação.
 
 #### FR-10: Aprender com a revisão
-Quando Rafael classifica um Lançamento, o app cria ou atualiza a Regra daquele Nome. [ASSUMPTION: aprende sozinho; Rafael não precisa confirmar cada Regra]
+Quando Rafael classifica um Lançamento, o app cria ou atualiza a Regra daquele Nome. Rafael não precisa confirmar cada Regra.
 
 #### FR-11: Sugerir para Nomes novos
 Para um Nome sem histórico, o app pode sugerir o Tipo (e, quando houver pista, o Responsável), por exemplo "COBASI" → Gatos. A sugestão sempre passa pela fila.
@@ -281,13 +281,13 @@ Casal: R$ 5.639,35 ÷ 2 = R$ 2.819,68
   …
 Total: R$ 2.819,68
 ```
-[ASSUMPTION: o formato exato dos detalhes agrupados será definido no UX]
+O formato exato dos detalhes agrupados será definido no UX.
 - Valem as mesmas regras do FR-24 (só o Mês, sem R$ 0,00, sem Dívidas programadas não vencidas).
 
 #### FR-54: Mostrar e garantir o cálculo do Bloco
 Para qualquer Bloco, Rafael pode abrir o cálculo passo a passo: o subtotal de cada operando, cada operação e o resultado.
 - A Fórmula segue a precedência matemática usual (parênteses, depois × e ÷, depois + e −).
-- Os cálculos são feitos em centavos, e o arredondamento para centavos só acontece no resultado final, com meio para cima. [ASSUMPTION: regra de arredondamento]
+- Os cálculos são feitos em centavos, e o arredondamento para centavos só acontece no resultado final, com meio para cima.
 - O resultado do Bloco, o detalhamento passo a passo e a mensagem do FR-53 sempre mostram o mesmo número.
 - Exemplos de referência (outubro/2026) servem de teste de aceite: Casal = R$ 5.639,35, Casal ÷ 2 = R$ 2.819,68 (arredondado de R$ 2.819,675), Total = R$ 9.280,23, Mãe = R$ 1.350,14, Lucas = R$ 215,16.
 
@@ -297,7 +297,7 @@ Para qualquer Bloco, Rafael pode abrir o cálculo passo a passo: o subtotal de c
 #### FR-25: Aplicar Status "Pago"
 Rafael pode fazer uma Seleção (FR-48), de qualquer Mês, e aplicar um Status que conta como pago, com a data do pagamento (padrão: hoje). O app registra um Pagamento com o total da Seleção.
 - Exemplo: o Rangel paga, e Rafael filtra Casal e Rangel, seleciona tudo e aplica "Pago". As contas do Casal ficam pagas inteiras, porque a parte do Rafael ele mesmo já pagou.
-- Se Rafael informar um valor recebido menor que o total, os Lançamentos são quitados em ordem (dos mais antigos para os mais novos). O último fica "Pago parcialmente", com o restante pendente. [ASSUMPTION: a ordem é dos mais antigos para os mais novos]
+- Se Rafael informar um valor recebido menor que o total, os Lançamentos são quitados em ordem (dos mais antigos para os mais novos). O último fica "Pago parcialmente", com o restante pendente.
 - Um Pagamento pode ser desfeito.
 
 #### FR-26: Saldo pendente por Responsável
@@ -309,7 +309,7 @@ Rafael pode marcar Lançamentos como Dívida programada, com vencimento combinad
 - No Mês do vencimento, passam a entrar na Mensagem de cobrança daquele Mês.
 - Depois do vencimento, se não forem pagos, aparecem como atrasados.
 
-[ASSUMPTION: esse é o mecanismo para "não esquecer uma conta futura", e substitui o lançamento mensal que Rafael fazia para o Lucas]
+Esse é o mecanismo para "não esquecer uma conta futura", e substitui o lançamento mensal que Rafael fazia para o Lucas.
 
 #### FR-28: Cobrar pendências
 Na área de Recebimentos, Rafael filtra os Lançamentos não pagos de um Responsável, seleciona e gera uma mensagem com o mesmo modelo (FR-23), listando o que está em aberto por Mês.
@@ -327,13 +327,13 @@ Uma seção mostra, por Mês, o saldo anterior, os pagamentos da Fatura e o res�
 **Descrição:** como app de finanças pessoais, o Conta Comigo também mostra para onde vai o dinheiro do Rafael e o que já está comprometido.
 
 #### FR-31: Gasto do Rafael por Tipo
-Para o Mês selecionado, o app mostra quanto Rafael gastou em cada Tipo. [ASSUMPTION: a "parte do Rafael" é definida por um Bloco que ele escolhe, por exemplo Rafael ou Rafael + (Casal ÷ 2)]
+Para o Mês selecionado, o app mostra quanto Rafael gastou em cada Tipo. A "parte do Rafael" é definida por um Bloco que ele escolhe, por exemplo Rafael ou Rafael + (Casal ÷ 2).
 
 #### FR-32: Previsão dos próximos Meses
 A partir dos Lançamentos previstos (FR-44), o app mostra quanto já está comprometido nos próximos Meses, no total, por Responsável e por Tipo. Por exemplo: "MSC CRUZEIROS 01/12 → R$ 1.140,74 por mais 11 meses". Rafael pode abrir um Mês futuro no Painel e ver os Blocos calculados com os previstos.
 
 #### FR-33: Evolução entre Meses
-Rafael pode ver como os totais por Tipo e por Responsável evoluíram nos últimos 6 Meses. [ASSUMPTION: um gráfico simples basta na v1]
+Rafael pode ver como os totais por Tipo e por Responsável evoluíram nos últimos 6 Meses. Um gráfico simples basta na v1.
 
 ### 4.10 Acesso, edição e aparelhos
 
@@ -367,12 +367,12 @@ Rafael cadastra Despesas extras fora do cartão, avulsas ou recorrentes, com Val
 #### FR-39: Sobra do Mês
 O Painel principal do Mês mostra a Sobra numa barra de % do Salário:
 Sobra = Salário − total da Fatura + Pagamentos recebidos no Mês − Despesas extras.
-- A barra muda de cor quando a Sobra fica baixa ou negativa. [ASSUMPTION: abaixo de 10% e abaixo de zero]
+- A barra muda de cor quando a Sobra fica baixa ou negativa. Os limites são abaixo de 10% e abaixo de zero.
 - O app mostra a composição do cálculo, para Rafael entender de onde vem o número.
 
 #### FR-40: Orçamento por Tipo
 Rafael define um limite mensal para um Tipo (ex.: Bobiças até R$ 300), considerando só a parte dele.
-- O Painel mostra, para cada Orçamento, quanto já foi usado em % e destaca quando passar de 80% e de 100%. [ASSUMPTION: esses limites de alerta]
+- O Painel mostra, para cada Orçamento, quanto já foi usado em % e destaca quando passar de 80% e de 100%.
 
 ### 4.12 Objetivos (fase 3)
 **Descrição:** um Objetivo é uma compra planejada (ex.: placa de vídeo) que força Rafael a se organizar: o app transforma o valor total em parcelas mensais até a data escolhida. É um dos últimos recursos a construir.
@@ -395,7 +395,7 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 
 - **Precisão:** nenhum valor pode ser perdido ou duplicado na extração, na Divisão, no casamento de previstos, na reimportação ou nos Pagamentos. Valores são tratados em centavos, sem arredondamento acumulado.
 - **Privacidade:** os dados financeiros ficam acessíveis só ao Rafael. Nem o PDF nem a senha são guardados.
-- **Desempenho:** importar e classificar uma Fatura de cerca de 50 Lançamentos leva menos de 1 minuto. [ASSUMPTION]
+- **Desempenho:** importar e classificar uma Fatura de cerca de 50 Lançamentos leva menos de 1 minuto.
 - **Formatos (obrigatórios em todas as telas e mensagens):** datas DD/MM/AA (ex.: 06/11/26), horas HH:MM (24 h), valores R$ 0,00, com ponto de milhar e vírgula decimal (ex.: R$ 1.140,74). Valores negativos aparecem como - R$ 0,08. Interface em português.
 - **Atualização em tempo real:** qualquer mudança aparece em todas as telas e aparelhos abertos sem recarregar a página (FR-46).
 
@@ -412,7 +412,7 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 
 **Fora (por fase):**
 - **Fase 2 (planejamento):** §4.11, com Salário, Despesas extras, Sobra e Orçamento. Também a versão para o celular (iPhone).
-- **Fase 3 (últimas etapas):** §4.12 Objetivos, e a Fatura do Rangel com o painel do casal. [ASSUMPTION: as duas ficam na mesma fase final]
+- **Fase 3 (últimas etapas):** §4.12 Objetivos, e a Fatura do Rangel com o painel do casal.
 - **Só se o app abrir para outras pessoas:** contas para outros usuários, outros bancos, pesquisa de mercado completa e custo e privacidade da IA.
 
 ## 9. Métricas de sucesso
@@ -431,18 +431,6 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 1. A IA para sugerir Tipos de Nomes novos (FR-11) entra na v1 ou depois? Será decidido na arquitetura.
 
 **Índice de suposições**
-- §4.2 FR-3: a senha do PDF não é guardada.
-- §4.2 FR-51: reimportar não apaga os Lançamentos de Contas manuais do Mês.
-- §4.2 FR-6: uma Conferência divergente bloqueia a cobrança até ser resolvida.
-- §4.2 FR-36: a data de fechamento lida na Fatura prevalece sobre a configurada.
-- §4.3 FR-10: as Regras são aprendidas sem confirmação.
-- §4.8 FR-25: um pagamento parcial quita dos mais antigos para os mais novos.
-- §4.8 FR-27: a Dívida programada é o mecanismo para lembrar de contas futuras.
-- §4.9 FR-31: a "parte do Rafael" é definida por um Bloco que ele escolhe.
-- §4.9 FR-33: um gráfico simples de evolução basta na v1.
-- §4.11 FR-39: a barra da Sobra muda de cor abaixo de 10% e abaixo de zero.
-- §4.11 FR-40: alertas de Orçamento em 80% e 100%.
-- §4.7 FR-53: o formato dos detalhes agrupados da mensagem do Bloco será definido no UX.
-- §4.7 FR-54: arredondamento só no resultado final, meio para cima.
-- §6: a importação leva menos de 1 minuto.
-- §8: Objetivos e painel do casal ficam juntos na fase 3.
+- §4.2 FR-6: uma Conferência divergente bloqueia a cobrança até ser resolvida (em revisão com Rafael).
+
+As demais suposições foram confirmadas por Rafael em 01/11/26 e incorporadas ao texto.
