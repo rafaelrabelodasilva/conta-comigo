@@ -352,6 +352,13 @@ Rafael pode editar e excluir qualquer Lançamento, Conta manual, Pagamento, Regr
 - Ao editar ou excluir algo que já tem Pagamento registrado, o app avisa e mostra o que muda no Saldo pendente.
 - Excluir um Responsável, Tipo ou Status em uso pede para escolher um substituto, ou arquiva em vez de excluir.
 
+#### FR-55: Lembretes
+O app avisa Rafael, por notificação (com o app instalado e a permissão dada) e por uma faixa dentro do app:
+- no dia do fechamento da fatura, para importar o PDF quando ele chegar;
+- quando alguém passa a ter itens atrasados (FR-49).
+
+Cada tipo de lembrete pode ser desligado em Configurações.
+
 #### FR-35: Instalar como app
 O web app pode ser instalado na tela inicial do iPad, sem App Store.
 
@@ -410,6 +417,8 @@ Rafael vê quanto já foi acumulado em cada Objetivo, em valor e em %, e quanto 
 - Não lê faturas de outros bancos nem outros layouts do Santander.
 - Não conecta com o banco (Open Finance) nem acompanha contas correntes ou investimentos.
 - Não tem acesso para as pessoas cobradas.
+- Não exporta dados (CSV ou planilha). O histórico fica no app.
+- Não personaliza a mensagem por pessoa: existe um único modelo padrão.
 
 ## 8. Escopo da primeira versão
 

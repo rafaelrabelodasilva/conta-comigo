@@ -30,7 +30,7 @@ O menu lateral (`{components.nav-rail}`) tem, nesta ordem:
 |---|---|---|---|
 | **Painel** ("Painel") | Abrir o app · menu | Mês selecionado: cartão da fatura, Blocos, barra de filtros, grade, Seleção e mensagem | FR-19 a FR-24, FR-48, FR-53, FR-54 |
 | **Revisar** ("Revisar", com contador) | Menu · resumo da importação | Fila do que é novo ou está em dúvida no último Mês importado | FR-9, FR-13 a FR-15, FR-45, FR-47 |
-| **Recebimentos** ("Recebimentos") | Menu | Quem deve o quê, de todos os Meses: cartões por Bloco de cobrança, "A receber", histórico de Pagamentos, Meses anteriores da Fatura | FR-25 a FR-30, FR-49 |
+| **Recebimentos** ("Receber") | Menu | Quem deve o quê, de todos os Meses: cartões por Bloco de cobrança, "A receber", histórico de Pagamentos, Meses anteriores da Fatura | FR-25 a FR-30, FR-49 |
 | **Previsão** ("Previsão") | Menu | Três abas: **Próximos meses** (FR-32), **Evolução** (FR-33) e **Meu gasto por Tipo** (FR-31) | FR-31 a FR-33 |
 | **Contas manuais** ("Contas") | Menu | Lista, cadastro e edição das Contas manuais | FR-16 a FR-18 |
 | **Configurações** ("Config.") | Menu (último) | Responsáveis e cores, Tipos, Status, Regras aprendidas, Blocos de cobrança e "meu Bloco", modelo da mensagem, Ciclo do cartão, Conferência e atraso, Aparência, Importar planilha, Sair | FR-1, FR-2, FR-12, FR-23, FR-31, FR-36, FR-47, FR-49, FR-50 |
@@ -116,7 +116,7 @@ Total: R$ 2.819,68
 | Componente | Comportamento |
 |---|---|
 | **Seletor de Mês** | As setas trocam o Mês. Tocar no nome abre a lista de meses, com os futuros marcados como "Previsto". Trocar de Mês mantém os filtros e limpa a Seleção, com o aviso "Seleção limpa ao trocar de mês". |
-| **Cartão da fatura** | Mostra o total a pagar do Mês. Tocar em "⚠ Diferença" aplica o filtro "Verificar". Num Mês sem Fatura, mostra "Fatura ainda não importada", o total dos previstos e "Importar fatura". |
+| **Cartão da fatura** | Mostra o total a pagar do Mês e, embaixo, "Recebido no mês" (Pagamentos registrados com data no Mês) e "Falta receber" (soma dos Blocos de cobrança com o que está em aberto no Mês). Tocar em "Falta receber" abre Recebimentos. Tocar em "⚠ Diferença" aplica o filtro "Verificar". Num Mês sem Fatura, mostra "Fatura ainda não importada", o total dos previstos e "Importar fatura". |
 | **Barra de distribuição** | Segmentos proporcionais à soma de cada Responsável no Mês. Tocar num segmento filtra a grade por aquele Responsável. |
 | **Cartão dos Blocos** | O cabeçalho tem "＋ Novo bloco" (abre o Montador) e "Reordenar". Em "Reordenar", os Blocos tremem de leve e podem ser arrastados, e o botão vira "Concluir". |
 | **Bloco** | **Toque**: filtra a grade pelos Lançamentos que entram na Fórmula, aparece a pílula "Bloco: Nome ✕" na barra de filtros e a borda fica em destaque. **Toque de novo**: desfaz. Só um Bloco filtra por vez, e ele se soma aos filtros de coluna. **💬**: Gerar mensagem, forma 2. **⋯** (ou toque longo): Editar fórmula, Ver cálculo (abre o Montador só para leitura, com o passo a passo), Gerar mensagem, Reordenar e **Excluir bloco** (com confirmação; Blocos de cobrança avisam "Este Bloco aparece em Recebimentos"). |
@@ -195,6 +195,7 @@ Total: R$ 2.819,68
 
 | Componente | Comportamento |
 |---|---|
+| **Lembretes** (FR-55) | Avisos do sistema (notificação no iPad e no PC, com o app instalado e a permissão dada) e uma faixa dentro do app: **no dia do fechamento** ("A fatura de novembro fechou. Importe o PDF quando chegar") e **quando um Bloco de cobrança passa a ter itens atrasados** ("O Lucas tem R$ 115,16 em atraso desde 16/11/26"). Tocar no aviso abre o Painel ou Recebimentos. Em Configurações → Aparência, cada tipo de lembrete pode ser ligado ou desligado. |
 | **Menu lateral** | O item ativo fica destacado. O contador do Revisar mostra os itens pendentes da fila e some quando ela zera. No PC, há atalhos ⌘/Ctrl + 1…6. |
 | **Etiqueta de pessoa** | Tocar filtra a grade pelo Responsável (atalho). |
 | **Aviso inferior** | Aparece por 6 segundos, e um novo aviso substitui o anterior. "Desfazer" reverte a última ação. |
@@ -266,6 +267,8 @@ Total: R$ 2.819,68
 
 ## Inspiration & Anti-patterns
 
+- **Não existe exportação** (CSV ou planilha): decisão do Rafael. O app é o lugar do histórico.
+- **Uma única Mensagem de cobrança padrão** para todas as pessoas: decisão do Rafael, sem saudação por pessoa.
 - **Inspiração: Listonic.** Ações de um toque, listas agrupadas, nada escondido. Aplicado na fila de Revisar e na seleção da grade.
 - **Inspiração: a planilha "Cartão".** As mesmas colunas, na mesma ordem, e os mesmos totais. Rafael tem que reconhecer a planilha dele no app.
 - **Evitar:**
