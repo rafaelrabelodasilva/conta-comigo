@@ -1,0 +1,73 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Contas manuais</title><style>/* Governado por DESIGN.md (tokens) e EXPERIENCE.md (Component Patterns, State Patterns, Key Flows). Tema Grafite com verde. */
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#E6E7E9;color:#16191A}
+.wrap{padding:24px 16px}.wrap>h1{font-size:20px;margin:0 0 4px}.wrap>p{color:#555;font-size:14px;margin:0 0 14px;max-width:900px;line-height:1.5}
+.ipad{display:inline-block;padding:14px;background:#1b1b1d;border-radius:28px;margin-bottom:24px}.scroll{overflow-x:auto}
+.t{--bg:#F4F5F5;--sf:#FFFFFF;--bd:#E1E4E3;--bs:#EEF0EF;--tx:#16191A;--mu:#62696B;--nav:#1F2426;--ni:#3A4144;--ac:#16A34A;--af:#FFFFFF;--sel:#16A34A14;
+ --pf:#065F46;--pb:#D1FAE5;--uf:#92400E;--ub:#FEF3C7;--rf:#1E40AF;--rb:#DBEAFE;--lf:#B91C1C;--lb:#FEE2E2;--ff:#475569;--fb:#E2E8F0;--ver:#DC2626;--wb:#FFF7E6;--wd:#F5C26B;--ta:1F;--tb:55}
+.t.dark{--bg:#0F1112;--sf:#171A1B;--bd:#262B2D;--bs:#1E2224;--tx:#E6E8E8;--mu:#9BA2A4;--nav:#0A0B0C;--ni:#2A3033;--ac:#22C55E;--af:#0F1112;--sel:#22C55E1F;
+ --pf:#86EFAC;--pb:#14532D66;--uf:#FCD34D;--ub:#78350F66;--rf:#93C5FD;--rb:#1E3A8A66;--lf:#FCA5A5;--lb:#7F1D1D66;--ff:#CBD5E1;--fb:#33415566;--ver:#F87171;--wb:#3A2A0C;--wd:#B7791F}
+.t{width:1194px;height:834px;background:var(--bg);color:var(--tx);font-size:13px;display:grid;grid-template-columns:64px 1fr;overflow:hidden;border-radius:12px;position:relative}
+.rail{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px}
+.rail a{display:flex;flex-direction:column;align-items:center;gap:3px;width:56px;padding:6px 0;border-radius:10px;color:#9BA2A4;font-size:9.5px;text-decoration:none;position:relative}
+.rail a i{width:22px;height:22px;border-radius:6px;background:var(--ni);display:block}.rail a.on{color:#fff}.rail a.on i{background:var(--ac)}
+.rail .badge{position:absolute;top:2px;right:8px;background:#DC2626;color:#fff;border-radius:999px;font-size:9px;padding:0 5px;font-weight:700}
+.main{padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-width:0;min-height:0}
+.topbar{display:flex;align-items:center;gap:10px}.topbar h2{font-size:17px;margin:0}.sp{flex:1}
+.mon{border:1px solid var(--bd);background:var(--sf);border-radius:6px;padding:7px 10px;font-weight:600}
+.btn{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border-radius:6px;font-weight:700;background:var(--ac);color:var(--af)}
+.btn2{display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border-radius:6px;border:1px solid var(--bd);background:var(--sf);color:var(--tx);font-weight:600}
+.row1{display:grid;grid-template-columns:1.3fr 2fr;gap:12px}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:14px;padding:16px}
+.eb{color:var(--mu);font-size:12px;text-transform:uppercase;letter-spacing:.06em}.hv{font-size:34px;font-weight:700;letter-spacing:-.01em;margin:6px 0 10px}
+.bar{height:8px;border-radius:999px;overflow:hidden;display:flex}.bar span{display:block;height:100%}
+.leg{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;color:var(--mu);font-size:12px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.ok{color:var(--ac);font-weight:700}
+.blocks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.blk{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px;position:relative}.blk.on{border-color:var(--ac);box-shadow:0 0 0 1px var(--ac)}
+.blk .n{font-size:12px;color:var(--mu);font-weight:600}.blk .s{padding-right:64px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.blk .v{font-size:20px;font-weight:700;margin-top:2px}.blk .s{font-size:11px;color:var(--mu)}
+.blk .msg{position:absolute;bottom:8px;right:8px;width:26px;height:26px;border-radius:6px;border:1px solid var(--bd);display:grid;place-items:center;font-size:12px;color:var(--mu);background:var(--sf)}
+.filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.fpill{border:1px solid var(--bd);border-radius:999px;padding:4px 10px;background:var(--sf);font-size:12px;color:var(--mu)}
+.fpill.on{border-color:var(--ac);color:var(--tx);font-weight:600}
+.gridc{background:var(--sf);border:1px solid var(--bd);border-radius:14px;padding:2px 6px;flex:1;overflow:hidden;min-height:0}
+table{width:100%;border-collapse:collapse}th{text-align:left;color:var(--mu);font-weight:600;font-size:12px;padding:9px 8px;border-bottom:1px solid var(--bd)}
+td{height:44px;padding:0 8px;border-bottom:1px solid var(--bs);white-space:nowrap}.r{text-align:right}.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.sel td{background:var(--sel)}.cb{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--mu);display:inline-block;vertical-align:middle}tr.sel .cb,.cb.on{background:var(--ac);border-color:var(--ac)}
+.orig{color:var(--mu)}.ver{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ver);margin-right:6px}
+.pill{font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600}.st-p{background:var(--pb);color:var(--pf)}.st-u{background:var(--ub);color:var(--uf)}.st-r{background:var(--rb);color:var(--rf)}.st-l{background:var(--lb);color:var(--lf)}.st-f{background:var(--fb);color:var(--ff)}
+.ptag{display:inline-block;padding:1px 9px;border-radius:999px;font-weight:700;font-size:12px}
+.lb{font-size:11px;color:var(--mu);border:1px solid var(--bd);border-radius:4px;padding:1px 6px}
+.selbar{background:var(--nav);color:#fff;border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 6px 18px rgba(0,0,0,.18)}
+.selbar .btn2{background:transparent;color:#fff;border-color:#4A5255}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.4)}
+.modal{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:600px;background:var(--sf);border-radius:14px;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.modal h3{margin:0 0 4px;font-size:17px}.modal .sub{color:var(--mu);margin:0 0 14px}
+.steps{display:flex;gap:8px;margin-bottom:14px}.steps span{flex:1;height:4px;border-radius:4px;background:var(--bd)}.steps span.on{background:var(--ac)}
+.panel{position:absolute;top:0;right:0;bottom:0;width:400px;background:var(--sf);border-left:1px solid var(--bd);box-shadow:-10px 0 30px rgba(0,0,0,.12);padding:18px;display:flex;flex-direction:column;gap:12px}
+.field{display:flex;flex-direction:column;gap:4px}.field label{font-size:12px;color:var(--mu);font-weight:600}.inp{border:1px solid var(--bd);border-radius:6px;padding:10px;background:var(--bg)}
+.chipf{display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:999px;border:1px solid var(--bd);background:var(--bg);font-weight:600;margin:3px}
+.op{display:inline-grid;place-items:center;width:40px;height:40px;border-radius:8px;border:1px solid var(--bd);background:var(--bg);font-weight:700;font-size:16px;margin:3px}
+.formula{min-height:56px;border:2px dashed var(--bd);border-radius:10px;padding:8px;display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+.ftok{padding:6px 10px;border-radius:8px;background:var(--sel);border:1px solid var(--ac);font-weight:700}
+.msgbox{white-space:pre;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:14px;line-height:1.5;max-height:330px;overflow:hidden}
+.toast{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);background:var(--nav);color:#fff;border-radius:10px;padding:10px 16px;font-weight:600}
+.warn{background:var(--wb);border:1px solid var(--wd);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px}
+.rv{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--bs)}.rv .tt{flex:1;min-width:0}.rv small{display:block;color:var(--mu);font-size:12px;margin-top:2px}
+.sug{color:var(--mu);font-size:12px}.t.port{width:834px;height:1194px}.t.port .row1{grid-template-columns:1fr}
+.gscroll{overflow-x:auto}.gscroll table{min-width:1040px}.stick1{position:sticky;left:0;background:var(--sf);z-index:1}.stick2{position:sticky;left:34px;background:var(--sf);z-index:1;box-shadow:6px 0 6px -6px rgba(0,0,0,.18)}
+.cardh{display:flex;align-items:center;gap:8px;margin-bottom:10px}.cardh b{font-size:13px}.mini{display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:6px;border:1px solid var(--bd);font-size:12px;font-weight:600;background:var(--sf)}
+.mini.pri{background:var(--ac);color:var(--af);border-color:var(--ac)}
+.blk .more{position:absolute;bottom:8px;right:40px;width:26px;height:26px;border-radius:6px;border:1px solid var(--bd);display:grid;place-items:center;font-size:13px;color:var(--mu);background:var(--sf)}
+.search{display:flex;align-items:center;gap:6px;border:1px solid var(--bd);border-radius:6px;padding:0 10px;min-height:32px;background:var(--sf);color:var(--mu);min-width:220px}
+.dd{border:1px solid var(--bd);border-radius:999px;padding:4px 10px;background:var(--sf);font-size:12px;color:var(--tx);font-weight:600}.dd.on{border-color:var(--ac);background:var(--sel)}
+.pop{position:absolute;background:var(--sf);border:1px solid var(--bd);border-radius:12px;box-shadow:0 14px 34px rgba(0,0,0,.2);padding:8px;z-index:5}
+.pop .it{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;min-height:28px}.pop .it.h{background:var(--bg)}
+.tabsv{display:flex;flex-direction:column;gap:2px;min-width:190px}.tabsv span{padding:10px 12px;border-radius:8px;color:var(--mu);font-weight:600}.tabsv span.on{background:var(--sel);color:var(--tx)}
+.sw{width:22px;height:22px;border-radius:50%;display:inline-block;border:2px solid transparent}.sw.on{border-color:var(--tx)}
+.tog{width:38px;height:22px;border-radius:999px;background:var(--ac);display:inline-block;position:relative}.tog::after{content:"";position:absolute;right:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff}.tog.off{background:var(--bd)}.tog.off::after{left:3px;right:auto}
+.acc{width:36px;height:36px;border-radius:8px;background:var(--ac);color:var(--af);display:grid;place-items:center;font-weight:800}
+</style></head><body><div class="wrap"><h1>Contas manuais</h1><p>Lista das Contas manuais e o cadastro da Bombinhas (R$ 636,00 em 6 parcelas, dividida em três partes, com a parte do Lucas como dívida programada). Ilustra: FR-16 a FR-18, FR-27 e o UJ-3.</p><h3 style="font-size:15px;margin:6px 0 8px">Modo claro</h3><div class="scroll"><div class="ipad"><div class="t"><div class="rail"><a class=""><i></i>Painel</a><a class=""><i></i>Revisar<span class="badge">17</span></a><a class=""><i></i>Recebimentos</a><a class=""><i></i>Previsão</a><a class="on"><i></i>Contas</a><a class=""><i></i>Ajustes</a></div><div class="main"><div class="topbar"><h2>Contas manuais</h2><span class="sp"></span><span class="btn">＋ Nova conta</span></div><div class="gridc" style="flex:none;padding:6px"><table><thead><tr><th>Conta</th><th class="r">Valor</th><th>Responsável</th><th>Tipo</th><th>Situação</th><th></th></tr></thead><tbody><tr><td><b>Silvia</b><div style="color:var(--mu);font-size:12px">Mensal · desde 01/26</div></td><td class="r num">R$ 400,00</td><td><span class="ptag" style="background:#0EA5E91F;color:#0EA5E9;border:1px solid #0EA5E955">Rafael</span></td><td>Saúde</td><td><span class="pill st-p">ativa</span></td><td><span class="mini">⋯</span></td></tr><tr><td><b>William</b><div style="color:var(--mu);font-size:12px">Mensal · desde 03/26</div></td><td class="r num">R$ 420,00</td><td><span class="ptag" style="background:#A855F71F;color:#A855F7;border:1px solid #A855F755">Casal</span></td><td>Bobiças</td><td><span class="pill st-p">ativa</span></td><td><span class="mini">⋯</span></td></tr><tr><td><b>TVbox</b><div style="color:var(--mu);font-size:12px">Mensal · desde 01/26</div></td><td class="r num">R$ 30,00</td><td><span class="ptag" style="background:#0EA5E91F;color:#0EA5E9;border:1px solid #0EA5E955">Rafael</span></td><td>Steams</td><td><span class="pill st-p">ativa</span></td><td><span class="mini">⋯</span></td></tr><tr><td><b>Bombinhas</b><div style="color:var(--mu);font-size:12px">6 parcelas · 04/06 · R$ 636,00 dividido em 3</div></td><td class="r num">R$ 318,00/mês</td><td><span class="ptag" style="background:#A855F71F;color:#A855F7;border:1px solid #A855F755">Casal</span> <span class="ptag" style="background:#F59E0B1F;color:#F59E0B;border:1px solid #F59E0B55">Mãe</span> <span class="ptag" style="background:#22C55E1F;color:#22C55E;border:1px solid #22C55E55">Lucas</span></td><td>Viagem</td><td><span class="pill st-p">ativa</span></td><td><span class="mini">⋯</span></td></tr></tbody></table></div></div><div class="scrim"></div><div class="modal" style="width:620px"><h3>Nova conta manual</h3><p class="sub">Contas que não passam pelo cartão. Elas entram sozinhas nos meses certos.</p>
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:10px"><div class="field"><label>Nome</label><div class="inp">Bombinhas</div></div><div class="field"><label>Valor total</label><div class="inp num">R$ 636,00</div></div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px"><div class="field"><label>Repetição</label><div class="inp">Parcelada ▾</div></div><div class="field"><label>Parcelas</label><div class="inp num">6</div></div><div class="field"><label>Começa em</label><div class="inp num">Jul/26</div></div></div>
+<div class="field" style="margin-top:10px"><label>Tipo</label><div class="inp">Viagem ▾</div></div>
+<div class="field" style="margin-top:10px"><label>Divisão (por parcela: R$ 106,00)</label><div class="card" style="padding:6px;background:var(--bg)"><table><tr><td><span class="ptag" style="background:#F59E0B1F;color:#F59E0B;border:1px solid #F59E0B55">Mãe</span></td><td>Mãe e Pai</td><td class="r num">R$ 106,00</td><td><span class="mini">Dívida programada ▾</span></td></tr><tr><td><span class="ptag" style="background:#A855F71F;color:#A855F7;border:1px solid #A855F755">Casal</span></td><td>Rafael e Rangel</td><td class="r num">R$ 106,00</td><td><span class="mini">Mensal</span></td></tr><tr><td><span class="ptag" style="background:#22C55E1F;color:#22C55E;border:1px solid #22C55E55">Lucas</span></td><td>Lucas e Miri</td><td class="r num">R$ 106,00</td><td><span class="mini pri">Paga tudo em 06/04/27</span></td></tr></table></div></div>
+<div style="display:flex;gap:10px;margin-top:14px"><span class="sp"></span><span class="btn2">Cancelar</span><span class="btn">Salvar</span></div></div></div></div></div></div></body></html>

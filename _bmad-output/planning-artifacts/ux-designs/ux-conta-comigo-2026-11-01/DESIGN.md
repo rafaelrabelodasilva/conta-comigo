@@ -233,7 +233,7 @@ A escala de espaçamento é de 4 em 4 px (`{spacing.1}` a `{spacing.6}`). No iPa
 - A grade ocupa o resto da altura e rola por dentro do cartão. A barra de seleção fica presa embaixo e só aparece quando há Seleção.
 - O painel lateral do Lançamento tem 400 px e abre por cima da grade, pela direita.
 
-No PC, a largura extra vai para a grade, que ganha colunas (Lançado por, data, cartão). No iPad em pé (834 pt), os Blocos ficam em 3 colunas sobre o cartão da fatura, e a grade esconde as colunas Tipo e Lançado por. [ASSUMPTION]
+No PC, a largura extra vai para a grade, que ganha colunas (Lançado por, data, cartão). No iPad em pé (834 pt), os Blocos ficam em 3 colunas abaixo do cartão da fatura, e a grade rola para os lados, com a caixa de seleção e o Nome fixos. Nenhuma coluna é escondida.
 
 ## Elevation & Depth
 
@@ -246,7 +246,7 @@ Os cantos são arredondados, mas discretos: `{rounded.lg}` (14 px) em cartões e
 ## Components
 
 - **Cartão da fatura** (`invoice-hero`): sobrelinha com mês e vencimento; o valor total a pagar em `{typography.hero-value}`; a barra de distribuição por pessoa (segmentos nas cores das pessoas, proporcionais à soma de cada Responsável); a legenda com bolinhas; e o selo "✓ Conferido" (verde) ou "⚠ Diferença de R$ X" (âmbar).
-- **Bloco** (`block-card`): nome com a bolinha da pessoa (quando o Bloco é de uma pessoa só), valor em `{typography.block-value}` e subtítulo com a contagem de itens ou a Fórmula legível. O Bloco ativo (filtrando) tem borda `{colors.accent}`. Tem um botão discreto "Mensagem" no canto. [ASSUMPTION: ícone de balão de conversa]
+- **Bloco** (`block-card`): nome com a bolinha da pessoa (quando o Bloco é de uma pessoa só), valor em `{typography.block-value}` e subtítulo com a contagem de itens ou a Fórmula legível. O Bloco ativo (filtrando) tem borda `{colors.accent}`. No canto de baixo, à direita, ficam dois botões quadrados de 26 px com área de toque de 44 pt: ⋯ (menu do Bloco) e 💬 (mensagem). O cabeçalho do cartão dos Blocos tem "Reordenar" (secundário) e "＋ Novo bloco" (primário, compacto).
 - **Grade** (`grid-row`): linhas de `{spacing.row-height}`, divisórias finas e, na linha selecionada, fundo `{colors.selection}`. As colunas seguem a planilha: caixa de seleção, Nome (ou Apelido em negrito + Nome em cinza), Parcela, Valor (alinhado à direita), Tipo, Responsável (etiqueta), Lançado por e Status (selo). O selo "Previsto" fica junto do Nome.
 - **Etiqueta de pessoa** (`person-tag`): pílula com o nome do Responsável, fundo e borda na cor da pessoa (claros) e texto na cor da pessoa.
 - **Selo de Status** (`status-pill`): pílula pequena com o par fundo e texto do estado.

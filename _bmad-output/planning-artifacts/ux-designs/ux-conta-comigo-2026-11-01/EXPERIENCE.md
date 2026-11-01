@@ -40,7 +40,7 @@ O menu lateral (`{components.nav-rail}`) tem ícones com rótulo curto embaixo.
 |---|---|---|
 | **Importar fatura** | Botão "Importar fatura" no topo do Painel | Janela em 3 passos |
 | **Lançamento** | Toque no corpo de uma linha da grade | Painel lateral à direita, com a grade visível |
-| **Montador de Bloco** | "＋ Bloco" no cartão dos Blocos · "Editar" num Bloco | Janela |
+| **Montador de Bloco** | "＋ Novo bloco" no cabeçalho do cartão dos Blocos · "⋯ → Editar fórmula" num Bloco | Janela |
 | **Gerar mensagem** | "Gerar mensagem" na barra de Seleção · "Mensagem" num Bloco | Janela |
 | **Aplicar status** | "Aplicar status" na barra de Seleção | Janela pequena |
 | **Primeiro uso** | Primeira abertura | Passo a passo em tela cheia, com "Pular" em cada passo |
@@ -64,8 +64,10 @@ O menu lateral (`{components.nav-rail}`) tem ícones com rótulo curto embaixo.
 |---|---|
 | **Cartão da fatura** | Mostra o total a pagar do Mês. Tocar no selo "⚠ Diferença" leva à grade filtrada por "Verificar". Num Mês sem Fatura importada, mostra "Fatura ainda não importada", o total dos previstos e o botão "Importar fatura". |
 | **Barra de distribuição** | Os segmentos são proporcionais à soma de cada Responsável que é pessoa. Tocar num segmento equivale a tocar no Bloco daquela pessoa. [ASSUMPTION] |
-| **Bloco** | **Toque** = filtra a grade pelos Lançamentos da Fórmula (borda `{colors.accent}`). **Toque de novo** = desfaz o filtro. Só um Bloco filtra por vez. O botão **"Mensagem"** no Bloco abre "Gerar mensagem" com o total da Fórmula (FR-53). **Toque longo** (ou "⋯") = Editar, Ver cálculo (FR-54), Reordenar, Apagar. |
-| **Grade** | Colunas da planilha. Os cabeçalhos ordenam ao toque (de novo, inverte). A barra de filtros acima da grade tem um seletor por coluna (Responsável, Tipo, Status, Lançado por, cartão) e o filtro "Verificar". Os filtros ativos aparecem como pílulas removíveis, e há o botão **"Limpar filtros"**. A grade rola por dentro do cartão, com o cabeçalho fixo. |
+| **Cartão dos Blocos** | O cabeçalho "Blocos" tem **"＋ Novo bloco"** (abre o Montador) e **"Reordenar"** (entra no modo de arrastar). |
+| **Bloco** | **Toque** = filtra a grade pelos Lançamentos da Fórmula (borda `{colors.accent}`). **Toque de novo** = desfaz o filtro. Só um Bloco filtra por vez. Cada Bloco tem dois botões sempre visíveis no canto de baixo: **💬** (gera a mensagem com o total da Fórmula, FR-53) e **⋯**, com Editar fórmula, Ver cálculo (FR-54), Gerar mensagem, Reordenar e **Excluir bloco** (com confirmação). O toque longo abre o mesmo menu ⋯. |
+| **Barra de filtros** | Fica logo acima da grade e é o jeito principal de filtrar, **sem precisar achar um valor na grade**. Tem uma **busca** por Nome ou Apelido (filtra enquanto digita) e um **seletor por coluna**: Responsável, Tipo, Status, Lançado por, Parcela (à vista, parcelado, última parcela) e cartão, além do botão "Verificar". Cada seletor abre uma lista com **caixas para marcar vários valores** (ex.: Casal + Rangel), com a etiqueta colorida e a contagem de cada um, e os botões "Limpar" e "Aplicar". O seletor ativo mostra o que está filtrando ("Responsável: Casal, Rangel"). Os filtros se combinam (E entre colunas, OU dentro da mesma coluna). **"Limpar filtros"** zera tudo, inclusive o filtro do Bloco. |
+| **Grade** | Colunas da planilha. Os cabeçalhos ordenam ao toque (de novo, inverte). A grade rola por dentro do cartão, com o cabeçalho fixo. Quando a largura não comporta todas as colunas, **a grade rola para os lados**, com a caixa de seleção e o Nome fixos à esquerda. Nenhuma coluna é escondida. |
 | **Caixa de seleção** | A área de toque é a célula inteira da primeira coluna (44 × 44 pt). A caixa do cabeçalho seleciona **todos os Lançamentos do filtro atual**, mesmo os que não estão visíveis. |
 | **Linha** | Tocar na caixa seleciona. Tocar em qualquer outra parte abre o Lançamento no painel lateral. Lançamentos divididos aparecem como linhas separadas, ligadas por um "↳" discreto. O Ajuste (FR-47) aparece logo abaixo da parcela, recuado, com o líquido. |
 | **Barra de Seleção** | Aparece quando há 1 ou mais itens selecionados e mostra "N selecionados · R$ total", **atualizado a cada toque** (FR-48). Ações: "Limpar", "Aplicar status", "Gerar mensagem". A Seleção continua mesmo trocando o filtro, e a barra mostra "N selecionados (M fora do filtro)". [ASSUMPTION] |
@@ -75,7 +77,7 @@ O menu lateral (`{components.nav-rail}`) tem ícones com rótulo curto embaixo.
 | **Aplicar status** | Lista dos Status cadastrados, a data (padrão hoje) e "Valor recebido" (padrão: total da Seleção). Se o valor for menor, aparece "Faltam R$ 115,00. Esse valor fica pendente" antes de confirmar. |
 | **Importar fatura** | Passo 1: escolher o PDF (Arquivos do iPad ou do computador). Passo 2: digitar a senha. Passo 3: conferir o vencimento e o Mês lidos e ver o resumo (Conferência, quantos foram classificados, quantos ir para Revisar), com "Ir para revisão" ou "Ver no Painel". |
 | **Fila de Revisar** | Agrupada por Nome. Cada item tem uma linha de sugestão ("Sugestão: Casal · Casa"), com "✓" (aceita, um toque) e "Mudar" (abre seletores de Responsável e Tipo com as opções mais usadas primeiro). Dá para selecionar vários e aplicar de uma vez. Um contador "Faltam 17" fica no topo. |
-| **Etiqueta de pessoa** e **selos** | Só informam. Tocar numa etiqueta de pessoa na grade filtra pela pessoa. [ASSUMPTION] |
+| **Etiqueta de pessoa** e **selos** | Tocar numa etiqueta de pessoa na grade é um atalho para filtrar pela pessoa. O jeito principal continua sendo a barra de filtros. |
 
 ## State Patterns
 
@@ -94,7 +96,7 @@ O menu lateral (`{components.nav-rail}`) tem ícones com rótulo curto embaixo.
 | **Filtro sem resultado** | Grade | "Nenhum lançamento com esses filtros", com o botão "Limpar filtros". |
 | **Fila vazia** | Revisar | "Tudo revisado. Nada novo neste mês." O contador do menu some. |
 | **Atualização vinda de outro aparelho** | Qualquer tela | Os números mudam na hora (FR-46), sem recarregar. Se o Lançamento aberto no painel lateral mudar em outro aparelho, aparece "Atualizado em outro aparelho". |
-| **Sem conexão** | App inteiro | Faixa "Sem conexão. As mudanças serão salvas quando voltar." [ASSUMPTION: edição offline com sincronização; confirmar na arquitetura] |
+| **Sem conexão** | App inteiro | Faixa "Sem conexão. As mudanças serão salvas quando voltar." A edição offline com sincronização foi confirmada por Rafael, e a arquitetura define como fazer. |
 
 ## Interaction Primitives
 
@@ -110,7 +112,7 @@ O menu lateral (`{components.nav-rail}`) tem ícones com rótulo curto embaixo.
 - A área de toque mínima é de 44 × 44 pt, inclusive nas caixas de seleção, cuja caixa desenhada tem 18 px.
 - **A informação nunca depende só da cor:** a etiqueta da pessoa tem o nome escrito, o Status tem texto, e a marca "verificar" tem rótulo para leitores de tela ("verificar este lançamento").
 - O contraste do texto sobre os fundos é de pelo menos 4,5:1 nos dois modos. As cores de pessoa claras (ex.: âmbar) usam o texto escurecido na etiqueta do modo claro, se necessário. [NOTE FOR UX: validar contraste das 8 cores de pessoa]
-- O app respeita o tamanho de texto do sistema até 130% sem quebrar a grade. Acima disso, a grade esconde colunas secundárias.
+- O app respeita o tamanho de texto do sistema até 130% sem quebrar a grade. Acima disso, a grade passa a rolar para os lados.
 - O VoiceOver lê cada linha da grade como "Nome, Valor, Parcela, Responsável, Status", e a barra de seleção é anunciada ao mudar.
 
 ## Responsive & Platform
@@ -118,9 +120,9 @@ O menu lateral (`{components.nav-rail}`) tem ícones com rótulo curto embaixo.
 | Largura | Layout |
 |---|---|
 | **iPad deitado (1194 pt)**: referência | Menu lateral + cartão da fatura (40%) e Blocos em 2 × 3 (60%) lado a lado + grade |
-| **iPad em pé (834 pt)** | Menu lateral + cartão da fatura em largura total + Blocos em 3 colunas + grade sem as colunas Tipo e Lançado por. O painel do Lançamento ocupa 100% da altura e 70% da largura. |
+| **iPad em pé (834 pt)** | Menu lateral + cartão da fatura em largura total + Blocos em 3 colunas + grade com **rolagem lateral** (seleção e Nome fixos; nenhuma coluna escondida). A barra de filtros mostra busca, Responsável, Tipo, Status e "Mais ▾" com os outros seletores. O painel do Lançamento ocupa 100% da altura e 70% da largura. |
 | **PC (≥ 1280 px)** | O mesmo layout do iPad deitado, com a grade ganhando as colunas data e cartão. O painel lateral não esconde a grade. |
-| **Celular (< 700 px)** | Fora da v1. Mostra "O Conta Comigo foi feito para iPad e computador" e um resumo dos Blocos, só para leitura. [ASSUMPTION] |
+| **Celular (< 700 px)** | Fora da v1. Mostra "O Conta Comigo foi feito para iPad e computador" e um resumo dos Blocos, só para leitura. |
 
 ## Inspiration & Anti-patterns
 
@@ -167,11 +169,17 @@ As telas de referência ilustram estes documentos, no tamanho real do iPad Pro 1
 
 | Tela | Mock | Ilustra |
 |---|---|---|
-| Painel do Mês (claro e escuro) | [painel.html](mockups/painel.html) | Bloco, Grade, Barra de Seleção, Conferido, Verificar · Flow 1, passos 5 e 6 |
+| Painel do Mês (claro, escuro, filtro aberto, menu ⋯ do Bloco, iPad em pé) | [painel.html](mockups/painel.html) | Cartão dos Blocos, Bloco, Barra de filtros, Grade, Barra de Seleção, rolagem lateral · Flow 1, passos 5 e 6 |
+| Painel do Lançamento | [lancamento.html](mockups/lancamento.html) | Painel do Lançamento, FR-44, FR-52 |
+| Aplicar status (pagamento parcial) | [aplicar-status.html](mockups/aplicar-status.html) | Aplicar status · Flow 2, passo 4 |
 | Gerar mensagem pelo Bloco | [gerar-mensagem.html](mockups/gerar-mensagem.html) | Gerar mensagem (FR-53) · Flow 1, passo 7 |
 | Montador de Bloco | [montador-bloco.html](mockups/montador-bloco.html) | Montador de Bloco, cálculo (FR-54) · Flow 3 |
 | Revisar | [revisar.html](mockups/revisar.html) | Fila de Revisar · Flow 1, passo 4 |
 | Importar fatura (conferência) | [importar.html](mockups/importar.html) | Importar fatura, Mês sem Fatura · Flow 1, passos 2 e 3 |
 | Recebimentos | [recebimentos.html](mockups/recebimentos.html) | Saldo pendente, A receber, histórico · Flow 2 |
+| Previsão | [previsao.html](mockups/previsao.html) | FR-32, FR-33 |
+| Contas manuais (lista e cadastro) | [contas-manuais.html](mockups/contas-manuais.html) | FR-16 a FR-18, FR-27 · UJ-3 |
+| Ajustes | [ajustes.html](mockups/ajustes.html) | Responsáveis e cores, Status, Ciclo · FR-36, FR-49, FR-50 |
+| Primeiro uso | [primeiro-uso.html](mockups/primeiro-uso.html) | Primeiro uso · UJ-0 |
 
-**Sem mock (só pelos documentos):** Painel do Lançamento, Aplicar status, Previsão, Contas manuais, Configurações e Primeiro uso. [ASSUMPTION: confirmar com Rafael se algum precisa de referência visual]
+Todas as telas da IA têm mock, como Rafael pediu ("tudo antes de iniciarmos").
