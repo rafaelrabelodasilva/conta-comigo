@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Direções visuais · Conta Comigo</title>
+<style>
+  /* Página de comparação (neutra) */
+  :root { color-scheme: light; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#ECEDEF; color:#1C1D21; }
+  .intro { max-width:1100px; margin:0 auto; padding:28px 16px 8px; }
+  .intro h1 { font-size:22px; margin:0 0 6px; }
+  .intro p { margin:0; color:#555; font-size:14px; line-height:1.5; }
+  section.dir { max-width:1100px; margin:28px auto; padding:0 16px; }
+  .dir-head h2 { font-size:18px; margin:0 0 4px; }
+  .dir-head p { margin:0 0 12px; color:#555; font-size:14px; line-height:1.5; max-width:800px; }
+  .ipad { border-radius:26px; padding:14px; background:#1b1b1d; box-shadow:0 10px 30px rgba(0,0,0,.18); }
+  .screen { border-radius:14px; overflow:hidden; min-height:560px; }
+  .num { font-variant-numeric: tabular-nums; white-space:nowrap; }
+  table { width:100%; border-collapse:collapse; }
+  @media (max-width:700px){ .hide-sm{display:none;} }
+
+  /* ============ A · PLANILHA REFINADA ============
+     bg #FFFFFF · surface #F7F8FA · line #E3E5E8 · text #1F2328 · muted #6A737D
+     accent #2563EB · pago #1A7F37 · pendente #9A6700 · verificar #CF222E
+  */
+  .A .screen{background:#fff;color:#1F2328;font-size:13px;}
+  .A .top{display:flex;align-items:center;gap:16px;padding:10px 16px;border-bottom:1px solid #E3E5E8;background:#F7F8FA;}
+  .A .top b{font-size:14px}.A .top .sp{flex:1}.A .chip{border:1px solid #E3E5E8;border-radius:6px;padding:4px 8px;background:#fff;}
+  .A .hero{display:flex;align-items:baseline;gap:18px;padding:14px 16px;border-bottom:1px solid #E3E5E8;flex-wrap:wrap;}
+  .A .hero .v{font-size:26px;font-weight:600}.A .hero .l{color:#6A737D}
+  .A .ok{color:#1A7F37;font-weight:600}
+  .A .blocks{display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid #E3E5E8;}
+  .A .blk{padding:10px 16px;border-right:1px solid #E3E5E8}.A .blk:last-child{border-right:0}
+  .A .blk .n{color:#6A737D;font-size:12px}.A .blk .v{font-size:17px;font-weight:600;margin-top:2px}
+  .A .blk.on{background:#EFF4FF;box-shadow:inset 0 -2px 0 #2563EB}
+  .A th{position:sticky;top:0;text-align:left;font-weight:600;color:#6A737D;font-size:12px;background:#F7F8FA;border-bottom:1px solid #E3E5E8;padding:6px 10px}
+  .A td{padding:6px 10px;border-bottom:1px solid #F0F1F3}.A td.r,.A th.r{text-align:right}
+  .A tr.sel td{background:#EFF4FF}.A .cb{width:14px;height:14px;border:1.5px solid #AFB8C1;border-radius:3px;display:inline-block;vertical-align:middle}
+  .A tr.sel .cb{background:#2563EB;border-color:#2563EB}
+  .A .tag{font-size:11px;padding:1px 6px;border-radius:4px;background:#F0F1F3;color:#57606A}
+  .A .prev{background:#FFF8C5;color:#7D4E00}.A .ver{color:#CF222E;font-weight:700}
+  .A .pago{color:#1A7F37}.A .pend{color:#9A6700}.A .neg{color:#1A7F37}
+  .A .nick{font-weight:600}.A .orig{color:#6A737D;font-size:11px;display:block}
+  .A .selbar{display:flex;gap:12px;align-items:center;padding:10px 16px;background:#1F2328;color:#fff}
+  .A .selbar .sp{flex:1}.A .btn{background:#2563EB;color:#fff;border-radius:6px;padding:6px 12px;font-weight:600}.A .btn2{border:1px solid #57606A;border-radius:6px;padding:6px 12px}
+
+  /* ============ B · PAINEL ANALÍTICO ============
+     bg #F3F5F9 · card #FFFFFF · ink #0F172A · muted #64748B · navy #1E293B
+     accent #0EA5E9 · pago #10B981 · pendente #F59E0B · verificar #EF4444
+  */
+  .B .screen{background:#F3F5F9;color:#0F172A;font-size:13px;display:grid;grid-template-columns:64px 1fr;}
+  .B .rail{background:#1E293B;display:flex;flex-direction:column;align-items:center;gap:18px;padding-top:18px}
+  .B .rail i{width:26px;height:26px;border-radius:8px;background:#334155;display:block}.B .rail i.on{background:#0EA5E9}
+  .B .main{padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+  .B .row1{display:grid;grid-template-columns:1.3fr 2fr;gap:14px}
+  .B .card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 1px 2px rgba(15,23,42,.06)}
+  .B .hero .l{color:#64748B;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+  .B .hero .v{font-size:34px;font-weight:700;margin:6px 0}.B .bar{height:8px;border-radius:8px;background:#E2E8F0;overflow:hidden;display:flex}
+  .B .bar span{display:block;height:100%}
+  .B .legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;color:#64748B;font-size:12px}
+  .B .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+  .B .blocks{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .B .blk{background:#F8FAFC;border-radius:12px;padding:12px;border:1px solid #E2E8F0}
+  .B .blk.on{border-color:#0EA5E9;background:#F0F9FF}
+  .B .blk .n{font-size:12px;color:#64748B}.B .blk .v{font-size:20px;font-weight:700}.B .blk .s{font-size:11px;color:#64748B}
+  .B th{text-align:left;color:#64748B;font-weight:600;font-size:12px;padding:8px 10px;border-bottom:1px solid #E2E8F0}
+  .B td{padding:9px 10px;border-bottom:1px solid #F1F5F9}.B td.r,.B th.r{text-align:right}
+  .B tr.sel td{background:#F0F9FF}.B .pill{font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600}
+  .B .p-ok{background:#D1FAE5;color:#065F46}.B .p-pend{background:#FEF3C7;color:#92400E}.B .p-prev{background:#E0F2FE;color:#075985}
+  .B .ver{display:inline-block;width:8px;height:8px;border-radius:50%;background:#EF4444;margin-right:6px}
+  .B .selbar{position:relative;background:#1E293B;color:#fff;border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:12px}
+  .B .selbar .sp{flex:1}.B .btn{background:#0EA5E9;border-radius:8px;padding:7px 14px;font-weight:700}
+
+  /* ============ C · CALMO E AREJADO (estilo lista) ============
+     bg #FAFAF7 · card #FFFFFF · ink #22262A · muted #7A8086 · line #ECECE6
+     accent #2F9E6E · pago #2F9E6E · pendente #D08B1E · verificar #D9534F
+  */
+  .C .screen{background:#FAFAF7;color:#22262A;font-size:15px;padding:22px 26px}
+  .C .hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .C .month{font-size:15px;color:#7A8086}.C .month b{color:#22262A}
+  .C .hero{background:#fff;border-radius:20px;padding:22px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.04)}
+  .C .hero .l{color:#7A8086}.C .hero .v{font-size:40px;font-weight:700;letter-spacing:-.02em;margin:4px 0}
+  .C .hero .ok{color:#2F9E6E;font-size:14px}
+  .C .blocks{display:flex;gap:10px;margin:16px 0;overflow:auto}
+  .C .blk{flex:1;min-width:120px;background:#fff;border-radius:16px;padding:14px;box-shadow:0 2px 10px rgba(0,0,0,.04)}
+  .C .blk.on{outline:2px solid #2F9E6E}
+  .C .blk .n{color:#7A8086;font-size:13px}.C .blk .v{font-size:20px;font-weight:700;margin-top:4px}
+  .C .grp{color:#7A8086;font-size:13px;margin:16px 4px 6px;text-transform:uppercase;letter-spacing:.05em}
+  .C .list{background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.04)}
+  .C .it{display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid #ECECE6}
+  .C .it:last-child{border:0}.C .circ{width:22px;height:22px;border-radius:50%;border:2px solid #C9CCC6;flex:none}
+  .C .it.sel .circ{background:#2F9E6E;border-color:#2F9E6E}
+  .C .it .t{flex:1;min-width:0}.C .it .t small{display:block;color:#7A8086;font-size:12px}
+  .C .it .v{font-weight:600}.C .badge{font-size:11px;border-radius:999px;padding:2px 8px;background:#EEF6F1;color:#2F9E6E;margin-left:6px}
+  .C .b-prev{background:#EEF1FA;color:#4A5BA8}.C .b-ver{background:#FBEDEC;color:#D9534F}
+  .C .selbar{margin-top:14px;background:#22262A;color:#fff;border-radius:16px;padding:12px 18px;display:flex;align-items:center;gap:12px}
+  .C .selbar .sp{flex:1}.C .btn{background:#2F9E6E;border-radius:12px;padding:8px 16px;font-weight:700}
+
+  /* ============ D · CONTÁBIL SÓBRIO (modo escuro) ============
+     bg #111315 · surface #1A1D21 · line #2A2F35 · ink #E8EAED · muted #9AA1A9
+     accent #C9A86A (dourado) · pago #7BC47F · pendente #E0B25C · verificar #F07167
+  */
+  .D .screen{background:#111315;color:#E8EAED;font-size:13px;padding:18px 20px}
+  .D .serif{font-family:Georgia,"Times New Roman",serif}
+  .D .hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1px solid #2A2F35;padding-bottom:12px}
+  .D .hdr .t{font-size:13px;color:#9AA1A9;text-transform:uppercase;letter-spacing:.1em}
+  .D .hdr .v{font-size:36px;color:#E8EAED}.D .hdr .r{text-align:right;color:#9AA1A9}
+  .D .ok{color:#7BC47F}
+  .D .blocks{display:grid;grid-template-columns:repeat(5,1fr);gap:0;border-bottom:1px solid #2A2F35}
+  .D .blk{padding:12px 10px;border-right:1px solid #2A2F35}.D .blk:last-child{border:0}
+  .D .blk .n{color:#9AA1A9;font-size:11px;text-transform:uppercase;letter-spacing:.08em}.D .blk .v{font-size:19px;margin-top:4px}
+  .D .blk.on .v{color:#C9A86A}.D .blk.on{background:#1A1D21}
+  .D th{text-align:left;font-weight:500;color:#9AA1A9;font-size:11px;text-transform:uppercase;letter-spacing:.08em;padding:8px 8px;border-bottom:1px solid #2A2F35}
+  .D td{padding:8px;border-bottom:1px solid #1E2226}.D td.r,.D th.r{text-align:right}
+  .D tr.sel td{background:#1F232A}.D .mark{color:#C9A86A}
+  .D .pago{color:#7BC47F}.D .pend{color:#E0B25C}.D .ver{color:#F07167}.D .prev{color:#9AA1A9;font-style:italic}
+  .D .selbar{margin-top:12px;border:1px solid #C9A86A;border-radius:8px;padding:10px 14px;display:flex;gap:14px;align-items:center}
+  .D .selbar .sp{flex:1}.D .btn{background:#C9A86A;color:#111315;border-radius:6px;padding:6px 14px;font-weight:700}
+</style>
+</head>
+<body>
+<div class="intro">
+  <h1>Conta Comigo: 4 direções visuais</h1>
+  <p>Todas mostram a mesma tela, o Painel de outubro/2026 no iPad, com os seus números reais. Elas não diferem só nas cores: mudam a densidade, o tamanho dos números e o "jeito" do app. Escolha uma, misture ("o topo da B com a grade da A") ou descarte todas. As cores finais e o modo escuro ou claro de cada uma são definidos depois.</p>
+</div>
+
+<!-- A -->
+<section class="dir A">
+  <div class="dir-head"><h2>A · Planilha refinada</h2>
+  <p>A mais próxima da sua planilha, só que organizada. É densa, com muitas linhas visíveis de uma vez e números alinhados em colunas. Os Blocos ficam numa faixa logo abaixo do valor da fatura. É para quem quer analisar tudo sem rolar a tela.</p></div>
+  <div class="ipad"><div class="screen">
+    <div class="top"><b>Conta Comigo</b><span class="chip">◀ Out/26 ▶</span><span class="sp"></span><span class="chip">Revisar (0)</span><span class="chip">Recebimentos</span><span class="chip">＋ Importar fatura</span></div>
+    <div class="hero"><span class="l">Fatura · vence 06/10/26</span><span class="v num">R$ 7.713,67</span><span class="ok">✓ Conferido</span><span class="l">49 lançamentos · 6 manuais</span></div>
+    <div class="blocks">
+      <div class="blk"><div class="n">Rafael</div><div class="v num">R$ 2.290,74</div></div>
+      <div class="blk on"><div class="n">Casal</div><div class="v num">R$ 5.639,35</div></div>
+      <div class="blk"><div class="n">Mãe</div><div class="v num">R$ 1.350,14</div></div>
+      <div class="blk"><div class="n">Lucas</div><div class="v num">R$ 215,16</div></div>
+      <div class="blk"><div class="n">Total</div><div class="v num">R$ 9.280,23</div></div>
+    </div>
+    <table>
+      <thead><tr><th></th><th>Nome</th><th>Parcela</th><th class="r">Valor</th><th class="hide-sm">Tipo</th><th>Responsável</th><th class="hide-sm">Lançado por</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr class="sel"><td><span class="cb"></span></td><td>BELLA PIETRA ROCHAS E</td><td class="num">03/04</td><td class="r num">R$ 800,00</td><td class="hide-sm">Casa</td><td>Casal</td><td class="hide-sm"><span class="tag">Fatura</span></td><td class="pend">Não pago</td></tr>
+        <tr class="sel"><td><span class="cb"></span></td><td><span class="nick">Lava e seca</span><span class="orig">MAGALU MAGALU</span></td><td class="num">05/10</td><td class="r num">R$ 445,89</td><td class="hide-sm">Casa</td><td>Casal</td><td class="hide-sm"><span class="tag">Fatura</span></td><td class="pend">Não pago</td></tr>
+        <tr class="sel"><td><span class="cb"></span></td><td><span class="nick">Lava-louças</span><span class="orig">AMAZONMKTPLC BAISMOVEI</span></td><td class="num">05/12</td><td class="r num">R$ 473,28</td><td class="hide-sm">Casa</td><td>Casal</td><td class="hide-sm"><span class="tag">Fatura</span></td><td class="pend">Não pago</td></tr>
+        <tr><td><span class="cb"></span></td><td><span class="ver">!</span> SHOPEE STARHOUSE MEGA</td><td class="num">1/1</td><td class="r num">R$ 78,08</td><td class="hide-sm">Casa</td><td>Casal</td><td class="hide-sm"><span class="tag">Fatura</span></td><td class="pend">Não pago</td></tr>
+        <tr><td><span class="cb"></span></td><td>KOLINA PREMIER VEICUL</td><td class="num">05/10</td><td class="r num">R$ 670,00</td><td class="hide-sm">Carro</td><td>Casal</td><td class="hide-sm"><span class="tag">Fatura</span></td><td class="pago">Pago 12/10/26</td></tr>
+        <tr><td><span class="cb"></span></td><td>Bombinhas Rafael e Rangel</td><td class="num">04/06</td><td class="r num">R$ 106,00</td><td class="hide-sm">Viagem</td><td>Casal</td><td class="hide-sm"><span class="tag prev">Manual</span></td><td class="pend">Não pago</td></tr>
+      </tbody>
+    </table>
+    <div class="selbar"><span>3 selecionados</span><b class="num">R$ 1.719,17</b><span class="sp"></span><span class="btn2">Aplicar status</span><span class="btn">Gerar mensagem</span></div>
+  </div></div>
+</section>
+
+<!-- B -->
+<section class="dir B">
+  <div class="dir-head"><h2>B · Painel analítico</h2>
+  <p>Um painel em cartões, com o valor do cartão em destaque e uma barra que mostra de quem é cada parte da fatura. Os Blocos são cartões grandes, e a grade fica embaixo, mais espaçada. Passa a sensação de "ferramenta de análise", com uma barra de navegação lateral.</p></div>
+  <div class="ipad"><div class="screen">
+    <div class="rail"><i class="on"></i><i></i><i></i><i></i></div>
+    <div class="main">
+      <div class="row1">
+        <div class="card hero">
+          <div class="l">Fatura de outubro · vence 06/10/26</div>
+          <div class="v num">R$ 7.713,67</div>
+          <div class="bar"><span style="width:24%;background:#0EA5E9"></span><span style="width:59%;background:#6366F1"></span><span style="width:14%;background:#F59E0B"></span><span style="width:3%;background:#10B981"></span></div>
+          <div class="legend"><span><i class="dot" style="background:#0EA5E9"></i>Rafael</span><span><i class="dot" style="background:#6366F1"></i>Casal</span><span><i class="dot" style="background:#F59E0B"></i>Mãe</span><span><i class="dot" style="background:#10B981"></i>Lucas</span></div>
+          <div class="legend" style="margin-top:10px"><span style="color:#10B981;font-weight:700">✓ Conferido</span><span>49 lançamentos</span></div>
+        </div>
+        <div class="card"><div class="blocks">
+          <div class="blk"><div class="n">Rafael</div><div class="v num">R$ 2.290,74</div><div class="s">24 itens</div></div>
+          <div class="blk on"><div class="n">Casal</div><div class="v num">R$ 5.639,35</div><div class="s">18 itens · filtrando</div></div>
+          <div class="blk"><div class="n">Rangel</div><div class="v num">R$ 2.819,68</div><div class="s">Rangel + Casal ÷ 2</div></div>
+          <div class="blk"><div class="n">Mãe</div><div class="v num">R$ 1.350,14</div><div class="s">7 itens</div></div>
+          <div class="blk"><div class="n">Lucas</div><div class="v num">R$ 215,16</div><div class="s">2 itens</div></div>
+          <div class="blk"><div class="n">Total</div><div class="v num">R$ 9.280,23</div><div class="s">cartão + manuais</div></div>
+        </div></div>
+      </div>
+      <div class="card" style="padding:6px 6px 0">
+        <table>
+          <thead><tr><th>Nome</th><th>Parcela</th><th class="r">Valor</th><th class="hide-sm">Tipo</th><th>Responsável</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr class="sel"><td>BELLA PIETRA ROCHAS E</td><td class="num">03/04</td><td class="r num">R$ 800,00</td><td class="hide-sm">Casa</td><td>Casal</td><td><span class="pill p-pend">Não pago</span></td></tr>
+            <tr class="sel"><td><b>Lava e seca</b> <span style="color:#64748B">· MAGALU</span></td><td class="num">05/10</td><td class="r num">R$ 445,89</td><td class="hide-sm">Casa</td><td>Casal</td><td><span class="pill p-pend">Não pago</span></td></tr>
+            <tr><td><span class="ver"></span>SHOPEE STARHOUSE MEGA</td><td class="num">1/1</td><td class="r num">R$ 78,08</td><td class="hide-sm">Casa</td><td>Casal</td><td><span class="pill p-pend">Não pago</span></td></tr>
+            <tr><td>KOLINA PREMIER VEICUL</td><td class="num">05/10</td><td class="r num">R$ 670,00</td><td class="hide-sm">Carro</td><td>Casal</td><td><span class="pill p-ok">Pago</span></td></tr>
+            <tr><td>Bombinhas Rafael e Rangel</td><td class="num">04/06</td><td class="r num">R$ 106,00</td><td class="hide-sm">Viagem</td><td>Casal</td><td><span class="pill p-prev">Manual</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="selbar"><span>2 selecionados</span><b class="num">R$ 1.245,89</b><span class="sp"></span><span>Aplicar status</span><span class="btn">Gerar mensagem</span></div>
+    </div>
+  </div></div>
+</section>
+
+<!-- C -->
+<section class="dir C">
+  <div class="dir-head"><h2>C · Calmo e arejado (estilo Listonic)</h2>
+  <p>Lista em vez de tabela, com itens grandes para o dedo, agrupados por Responsável e marcados com um toque no círculo. O valor do cartão fica no centro, grande. É a mais leve e a mais "app", mas mostra menos linhas por vez.</p></div>
+  <div class="ipad"><div class="screen">
+    <div class="hdr"><span class="month">◀ <b>Outubro 2026</b> ▶</span><span class="month">Revisar · Recebimentos · ＋ Fatura</span></div>
+    <div class="hero"><div class="l">Fatura · vence 06/10/26</div><div class="v num">R$ 7.713,67</div><div class="ok">✓ Conferido · 49 lançamentos</div></div>
+    <div class="blocks">
+      <div class="blk"><div class="n">Rafael</div><div class="v num">R$ 2.290,74</div></div>
+      <div class="blk on"><div class="n">Casal</div><div class="v num">R$ 5.639,35</div></div>
+      <div class="blk"><div class="n">Mãe</div><div class="v num">R$ 1.350,14</div></div>
+      <div class="blk"><div class="n">Lucas</div><div class="v num">R$ 215,16</div></div>
+      <div class="blk"><div class="n">Total</div><div class="v num">R$ 9.280,23</div></div>
+    </div>
+    <div class="grp">Casal · Casa</div>
+    <div class="list">
+      <div class="it sel"><span class="circ"></span><div class="t">BELLA PIETRA ROCHAS E<small>03/04 · Fatura · Não pago</small></div><span class="v num">R$ 800,00</span></div>
+      <div class="it sel"><span class="circ"></span><div class="t">Lava e seca<small>MAGALU · 05/10 · Não pago</small></div><span class="v num">R$ 445,89</span></div>
+      <div class="it"><span class="circ"></span><div class="t">SHOPEE STARHOUSE MEGA<span class="badge b-ver">verificar</span><small>1/1 · Não pago</small></div><span class="v num">R$ 78,08</span></div>
+    </div>
+    <div class="grp">Casal · Viagem</div>
+    <div class="list">
+      <div class="it"><span class="circ"></span><div class="t">Bombinhas Rafael e Rangel<span class="badge b-prev">manual</span><small>04/06 · Não pago</small></div><span class="v num">R$ 106,00</span></div>
+    </div>
+    <div class="selbar"><span>2 selecionados</span><b class="num">R$ 1.245,89</b><span class="sp"></span><span>Status</span><span class="btn">Gerar mensagem</span></div>
+  </div></div>
+</section>
+
+<!-- D -->
+<section class="dir D">
+  <div class="dir-head"><h2>D · Contábil sóbrio (mostrado no escuro)</h2>
+  <p>Visual de livro-caixa: títulos com serifa, linhas finas, poucas cores e um único destaque dourado. Densidade parecida com a da A, mas com mais "peso" e seriedade. Mostrado no modo escuro para você ver como ficaria.</p></div>
+  <div class="ipad"><div class="screen">
+    <div class="hdr"><div><div class="t">Fatura de outubro · vence 06/10/26</div><div class="v serif num">R$ 7.713,67</div></div><div class="r">◀ Out/26 ▶<br><span class="ok">✓ Conferido</span> · 49 lançamentos</div></div>
+    <div class="blocks">
+      <div class="blk"><div class="n">Rafael</div><div class="v serif num">R$ 2.290,74</div></div>
+      <div class="blk on"><div class="n">Casal</div><div class="v serif num">R$ 5.639,35</div></div>
+      <div class="blk"><div class="n">Mãe</div><div class="v serif num">R$ 1.350,14</div></div>
+      <div class="blk"><div class="n">Lucas</div><div class="v serif num">R$ 215,16</div></div>
+      <div class="blk"><div class="n">Total</div><div class="v serif num">R$ 9.280,23</div></div>
+    </div>
+    <table>
+      <thead><tr><th></th><th>Nome</th><th>Parcela</th><th class="r">Valor</th><th class="hide-sm">Tipo</th><th>Resp.</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr class="sel"><td class="mark">●</td><td>BELLA PIETRA ROCHAS E</td><td class="num">03/04</td><td class="r num">R$ 800,00</td><td class="hide-sm">Casa</td><td>Casal</td><td class="pend">Não pago</td></tr>
+        <tr class="sel"><td class="mark">●</td><td>Lava e seca <span class="prev">· MAGALU</span></td><td class="num">05/10</td><td class="r num">R$ 445,89</td><td class="hide-sm">Casa</td><td>Casal</td><td class="pend">Não pago</td></tr>
+        <tr><td>○</td><td><span class="ver">!</span> SHOPEE STARHOUSE MEGA</td><td class="num">1/1</td><td class="r num">R$ 78,08</td><td class="hide-sm">Casa</td><td>Casal</td><td class="pend">Não pago</td></tr>
+        <tr><td>○</td><td>KOLINA PREMIER VEICUL</td><td class="num">05/10</td><td class="r num">R$ 670,00</td><td class="hide-sm">Carro</td><td>Casal</td><td class="pago">Pago</td></tr>
+        <tr><td>○</td><td>Bombinhas Rafael e Rangel <span class="prev">manual</span></td><td class="num">04/06</td><td class="r num">R$ 106,00</td><td class="hide-sm">Viagem</td><td>Casal</td><td class="pend">Não pago</td></tr>
+      </tbody>
+    </table>
+    <div class="selbar"><span>2 selecionados</span><b class="num">R$ 1.245,89</b><span class="sp"></span><span>Aplicar status</span><span class="btn">Gerar mensagem</span></div>
+  </div></div>
+</section>
+</body>
+</html>
