@@ -197,7 +197,7 @@ graph TD
 | --- | --- |
 | Node.js | 22 LTS (Vercel e GitHub Actions) |
 | TypeScript | 6.x (sem `baseUrl`) |
-| Next.js (App Router) | 16.3.x (piso 16.2.11), criado com `create-next-app --ts --tailwind --app --src-dir`, Cache Components desligado na v1 |
+| Next.js (App Router) | 16.4.x (piso 16.4.3: as versões até 16.4.0 têm falha crítica de segurança), criado com `create-next-app --ts --tailwind --app --src-dir`, Cache Components desligado na v1 |
 | React | 19.x |
 | Tailwind CSS | 4.x |
 | shadcn/ui | CLI atual no init, base Radix |
