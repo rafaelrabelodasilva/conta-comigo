@@ -57,3 +57,18 @@ Classificação de outubro/2026 (44 linhas de despesa do cartão, sem contar cr�
 ## Ideia futura: fatura do casal
 
 Rangel também subiria a fatura dele, e as duas seriam reunidas num painel único (ex.: internet paga no cartão dele e dividida pelo casal). "Quem subiu a fatura" vira pista de responsável. A adesão do Rangel é incerta.
+
+## Mensagem de cobrança atual (modelo)
+
+```
+Oi
+Esse mês deu R$ 1.350,14
+Pix rafaelrabelodasilva@outlook.com
+
+Detalhes:
+Nome da conta | Parcela | Valor R$ 0,00
+```
+
+## Contas fora do cartão
+
+Cadastro manual com valor, número de parcelas (ou recorrência mensal) e responsável. Exemplos atuais: Silvia (R$ 400, mensal), William/Will (R$ 420, mensal), TVbox (R$ 30, mensal), Bombinhas (R$ 636 em 6x, dividido em três partes de R$ 106: Mãe e Pai, Rafael e Rangel, Lucas e Miri).
