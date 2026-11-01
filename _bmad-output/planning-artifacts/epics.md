@@ -1225,3 +1225,193 @@ So that o histórico continue certo (FR-18, FR-46).
 **When** Rafael confirma
 **Then** o app pergunta se exclui também os Lançamentos previstos dos meses seguintes
 **And** a exclusão é lógica e pode ser desfeita pelo aviso "Excluído · Desfazer"
+
+## Epic 6: Recebimentos
+
+Rafael registra quem pagou (total, "fica pendente" ou "minha parte"), desfaz Pagamentos e acompanha em Recebimentos o Saldo pendente de cada Bloco de cobrança, as Dívidas programadas, os atrasados, o histórico de Pagamentos e os Meses anteriores da fatura, e cobra pendências.
+
+### Story 6.1: Marcar como pago
+
+As a Rafael,
+I want selecionar o que a pessoa pagou e aplicar "Pago" com a data,
+So that eu saiba o que já recebi (FR-25).
+
+**Acceptance Criteria:**
+
+**Given** a migração que cria `pagamentos` (`valor_recebido_centavos`, `data`, `modo` `total|parcial|minha_parte`, `excluido_em`, dono, RLS) e `pagamento_itens` (`pagamento_id`, `lancamento_id`, `valor_centavos`, `status_anterior_id`, `status_aplicado_id`), e a RPC `aplicar_pagamento` (AD-10)
+**When** Rafael seleciona Lançamentos e toca em "Aplicar status" na barra de Seleção
+**Then** abre a janela com a lista de Status (UX-DR18)
+**And** se o escolhido conta como pago, aparecem Data (padrão hoje) e Valor recebido (padrão o total da Seleção)
+**And** se não conta como pago, data e valor somem e só o Status muda
+
+**Given** um Status pago com o valor igual ao total
+**When** Rafael aplica
+**Then** a RPC grava um Pagamento `total`, um item por Lançamento com o valor quitado e os Status anterior e aplicado, e muda o Status das linhas, numa transação
+**And** os selos viram "Pago" em todos os aparelhos, e aparece "N lançamentos marcados como pagos · Desfazer"
+
+**Given** as funções do núcleo `ehPago` e `restante`
+**When** os testes rodam
+**Then** `ehPago(l) = status.conta_como_pago` e `restante(l) = ehPago ? 0 : valor − Σ itens não excluídos`
+**And** aplicar à mão um Status "não pago" numa linha que tem itens de Pagamento é recusado, com a mensagem de que é preciso desfazer o Pagamento antes
+
+**And** um valor recebido maior que o total não é aceito: "O valor recebido não pode passar de R$ X"
+
+### Story 6.2: Pagamento parcial e "a minha parte"
+
+As a Rafael,
+I want registrar quando alguém pagou menos que o total, dizendo se o resto fica pendente ou se é a minha parte,
+So that o Lucas fique devendo o que falta e o Rangel fique em dia quando paga a metade do Casal (FR-25).
+
+**Acceptance Criteria:**
+
+**Given** um Valor recebido menor que o total
+**When** Rafael aplica um Status pago
+**Then** aparece "O que fazer com a diferença de R$ X?" com dois cartões de opção de mesma altura, rádio de 18 px e valor sem quebra de linha: "Fica pendente" e "Não é dívida, é a minha parte"
+
+**Given** "Fica pendente"
+**When** a RPC grava um Pagamento `parcial`
+**Then** o núcleo quita os Lançamentos dos mais antigos para os mais novos, com os créditos primeiro
+**And** os quitados por inteiro ficam com o Status pago, e o último fica com o Status anterior e um item parcial
+**And** "Pago parcialmente" (0 < Σ itens < valor) é calculado e nunca gravado, e o painel do Lançamento mostra "falta R$ X"
+**And** no exemplo do Lucas, que paga R$ 100,00 de R$ 215,16, ficam pendentes R$ 115,16
+
+**Given** "Não é dívida, é a minha parte"
+**When** a RPC grava um Pagamento `minha_parte`
+**Then** todos os Lançamentos selecionados ficam pagos, e o Pagamento registra o valor realmente recebido
+**And** no exemplo do Rangel (18 Lançamentos de Casal e Rangel, R$ 5.639,35, recebido R$ 2.819,68), todos ficam "Pago"
+
+**And** a mensagem de cobrança passa a incluir só o restante de um Lançamento pago parcialmente
+
+### Story 6.3: Histórico e desfazer Pagamentos
+
+As a Rafael,
+I want ver todos os pagamentos e desfazer um que registrei errado,
+So that eu corrija um erro mesmo depois que o aviso sumiu (FR-25, FR-29).
+
+**Acceptance Criteria:**
+
+**Given** Recebimentos → Histórico de Pagamentos
+**When** Rafael abre a seção
+**Then** vê a lista com data, Responsável, quantidade de Lançamentos, valor recebido e o modo ("parcial", "minha parte") (UX-DR22)
+**And** pode filtrar por Responsável
+**And** tocar abre o detalhe com os Lançamentos que o Pagamento quitou
+
+**Given** "Desfazer pagamento" (no detalhe, com confirmação) ou o "Desfazer" do aviso
+**When** Rafael confirma
+**Then** o Pagamento é excluído logicamente, e o `status_anterior_id` volta só nas linhas cujo Status atual ainda é o `status_aplicado_id` e que nenhum Pagamento posterior tocou (AD-10)
+**And** o teste de aceite cobre desfazer dois Pagamentos fora de ordem sem estragar o Status
+
+### Story 6.4: Atrasado
+
+As a Rafael,
+I want ver destacado o que passou do vencimento sem ser pago,
+So that eu saiba quem cobrar primeiro (FR-49).
+
+**Acceptance Criteria:**
+
+**Given** a função do núcleo `estaAtrasado(l, hoje, tolerancia)` usando `vencimento_combinado` ou `vencimentoDoMes` (AD-9, AD-10)
+**When** um Lançamento não pago passa do vencimento + a tolerância de `configuracoes` (padrão 10 dias)
+**Then** o selo "Atrasado" substitui "Não pago" na grade e em Recebimentos
+**And** o filtro de Status da grade tem "Atrasado"
+**And** nada sobre atraso é gravado no banco
+
+**And** os testes cobrem o dia exato do limite em `America/Sao_Paulo`
+
+### Story 6.5: Recebimentos por Bloco de cobrança
+
+As a Rafael,
+I want ver, para cada pessoa que eu cobro, quanto ela deve somando todos os meses,
+So that o Rangel apareça com a metade do Casal e não com o Casal inteiro (FR-26).
+
+**Acceptance Criteria:**
+
+**Given** Configurações → Blocos de cobrança
+**When** Rafael liga "Usar em Recebimentos" em Mãe, Lucas e Rangel e escolhe o "meu Bloco"
+**Then** a escolha é gravada nos Blocos (UX-DR25)
+
+**Given** a projeção do núcleo `projetarPendente()`, que usa o `restante` dos Lançamentos não pagos de todos os Meses
+**When** Rafael abre Recebimentos
+**Then** aparece um cartão por Bloco de cobrança com a etiqueta, o selo "Em dia", "Não pago" ou "Atrasado", o Saldo pendente (`avaliar(formula, projetarPendente())`), os meses em aberto, "Ver" e "Cobrar pendências" (UX-DR22)
+**And** "Ver" abre os Lançamentos em aberto agrupados por Mês, com a mesma seleção e barra do Painel, de onde dá para aplicar "Pago"
+
+**Given** o `invoice-hero` do Painel
+**When** o Mês tem Pagamentos
+**Then** "Recebido no mês" soma os Pagamentos com data no Mês, e "Falta receber" soma os Blocos de cobrança com o que está em aberto no Mês; tocar em "Falta receber" abre Recebimentos
+
+**And** sem Blocos de cobrança aparece "Marque em Configurações quais Blocos aparecem aqui"; com tudo pago, os cartões ficam "Em dia" e as listas mostram "Nada em aberto"
+
+### Story 6.6: Dívida programada
+
+As a Rafael,
+I want marcar uma conta para ser cobrada numa data combinada,
+So that eu não esqueça a parte do Lucas na Bombinhas até 06/04/27 (FR-27).
+
+**Acceptance Criteria:**
+
+**Given** a migração que acrescenta `vencimento_combinado` em `lancamentos`
+**When** Rafael usa "⋯ Mais → Programar dívida" na barra de Seleção ou o campo no painel do Lançamento
+**Then** abre a janela com a data combinada (obrigatória) e uma observação opcional, para qualquer Lançamento ou parte de uma Divisão (UX-DR19)
+**And** o Lançamento ganha o selo "Programada · 06/04/27"
+
+**Given** uma Dívida programada ainda não vencida
+**When** uma mensagem é gerada
+**Then** ela não entra até o Mês do vencimento, e então passa a entrar
+**And** depois do vencimento, se não paga, fica "Atrasado" pelo vencimento combinado
+
+**Given** Recebimentos → A receber
+**When** Rafael abre a seção
+**Then** vê as Dívidas programadas (Nome ou Apelido, Responsável, vencimento, valor) ordenadas por data, com as vencidas como "Atrasado"; tocar abre o painel do Lançamento
+**And** sem nenhuma aparece "Nenhuma dívida programada"
+
+**Given** o formulário de Conta manual
+**When** uma parte da Divisão é marcada como "Dívida programada" com data
+**Then** as filhas daquela parte são materializadas com o `vencimento_combinado`
+**And** na Bombinhas, a parte do Lucas soma R$ 636,00 em "A receber" com vencimento em 06/04/27, enquanto Mãe e Casal continuam com R$ 106,00 por mês nas mensagens
+
+### Story 6.7: Cobrar pendências
+
+As a Rafael,
+I want gerar uma mensagem com tudo que uma pessoa ainda me deve, mês a mês,
+So that eu cobre o que ficou para trás (FR-28).
+
+**Acceptance Criteria:**
+
+**Given** "Cobrar pendências" num cartão de Recebimentos
+**When** a janela de Gerar mensagem abre
+**Then** usa o mesmo modelo, com a frase do total trocada por "Em aberto: R$ X" e os detalhes agrupados por Mês ("Outubro/26", "Setembro/26"), na forma 3 do EXPERIENCE.md
+**And** entram só os valores restantes dos Lançamentos em aberto daquele Bloco de cobrança, de todos os Meses
+**And** "Copiar" funciona como nas outras mensagens
+
+### Story 6.8: Meses anteriores da fatura
+
+As a Rafael,
+I want ver o saldo anterior, o pagamento e o resíduo de cada fatura,
+So that eu confira a continuidade entre um mês e outro (FR-30).
+
+**Acceptance Criteria:**
+
+**Given** os totais lidos de cada Fatura
+**When** Rafael abre Recebimentos → Meses anteriores da Fatura
+**Then** vê uma tabela por Mês com saldo anterior, pagamento da fatura, resíduo que passou para o mês seguinte e o selo de Conferência
+**And** outubro/2026 mostra o resíduo de R$ 25,90
+
+### Story 6.9: Editar, excluir e reimportar algo já pago
+
+As a Rafael,
+I want ser avisado quando mexo num lançamento que já tem pagamento,
+So that o Saldo pendente nunca mude sem eu saber (FR-46, FR-51).
+
+**Acceptance Criteria:**
+
+**Given** um Lançamento com Pagamento
+**When** Rafael edita o Valor ou o exclui
+**Then** o app avisa "Este lançamento tem pagamento registrado em DD/MM/AA. O Saldo pendente da Mãe muda de R$ X para R$ Y"
+
+**Given** um Lançamento pago e depois excluído
+**When** `projetarPendente` roda
+**Then** aparece a linha de crédito negativa correspondente ao valor já pago, e o Saldo pendente reflete isso
+
+**Given** a reimportação de um Mês com Pagamentos
+**When** a RPC `importar_fatura` roda
+**Then** `pagamento_itens` conta como referência: as linhas casadas mantêm os Pagamentos, e as sem par com Pagamento ficam com `revisao_motivo = 'sumiu_na_reimportacao'`
+**And** o teste de aceite "reimportar outubro com Pagamentos" termina com o mesmo Saldo pendente de antes
