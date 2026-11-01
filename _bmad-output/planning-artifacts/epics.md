@@ -787,11 +787,11 @@ So that as três compras da Shopee do Casal levem um toque só (FR-14).
 **When** Rafael usa "Aplicar sugestões", "Responsável…" ou "Tipo…"
 **Then** todos recebem a classificação numa única gravação, e cada Regra é aprendida
 
-**Given** vários Lançamentos marcados na grade do Painel
-**When** Rafael escolhe Classificar em lote
-**Then** pode atribuir de uma vez Tipo, Responsável, Status e Observação
-**And** a mudança aparece em todos os aparelhos sem recarregar
+**Given** a função de lote `classificarEmLote(ids, campos)` usada pelo Revisar
+**When** ela recebe Tipo, Responsável, Status e Observação
+**Then** grava todos de uma vez, ensina as Regras e a mudança aparece em todos os aparelhos sem recarregar
 **And** a ação pode ser desfeita pelo aviso "Desfazer"
+**And** a mesma função é a que a barra de Seleção do Painel usa no Épico 4
 
 ### Story 3.4: Gerenciar Regras aprendidas
 
@@ -995,7 +995,7 @@ So that eu tenha os totais por pessoa sem fórmula digitada (FR-19, FR-54).
 **Then** calcula em racional exato, com precedência usual, e arredonda só o resultado final (AD-2)
 **And** devolve o valor, o passo a passo e os Lançamentos que entram
 **And** os testes de aceite de outubro/2026 dão Casal R$ 5.639,35, Casal ÷ 2 = R$ 2.819,68 (de R$ 2.819,675), Total R$ 9.280,23, Mãe R$ 1.350,14 e Lucas R$ 215,16
-**And** `projetarPainel` usa as filhas das Divisões, nunca a mãe dividida, e inclui Ajustes e Contas do Mês
+**And** `projetarPainel` usa as filhas das Divisões, nunca a mãe dividida, e inclui os Ajustes e todos os Lançamentos do Mês
 
 **Given** o Montador de Bloco (UX-DR16)
 **When** Rafael toca nas fichas Rangel, +, (, Casal, ÷, Número → 2, )
@@ -1078,7 +1078,7 @@ So that eu confira o valor antes de cobrar (FR-48).
 
 **Given** pelo menos 1 item selecionado
 **When** a `selection-bar` aparece presa embaixo (UX-DR12)
-**Then** mostra "N selecionados · R$ total", atualizado a cada toque, com Limpar, Aplicar status (reservado para o Épico 6), ⋯ Mais (Classificar em lote, Excluir) e Gerar mensagem
+**Then** mostra "N selecionados · R$ total", atualizado a cada toque, com Limpar, ⋯ Mais (Classificar em lote, que atribui Tipo, Responsável, Status e Observação pela função da Story 3.3, e Excluir) e Gerar mensagem (FR-14)
 **And** o VoiceOver anuncia o total quando muda
 **And** a Seleção é sempre de um único Mês: trocar de Mês limpa a Seleção com o aviso "Seleção limpa ao trocar de mês"
 
@@ -1111,7 +1111,7 @@ So that eu cole no WhatsApp da pessoa (FR-24).
 
 **Given** a função do núcleo `gerarMensagem(modelo, projetarMensagem(selecao))`
 **When** os testes rodam
-**Then** entram só Lançamentos do Mês da Seleção que não estão pagos (`ehPago`), sem os de R$ 0,00 e sem previstos (a não ser com "Incluir previstos" num Mês sem Fatura)
+**Then** entram só Lançamentos do Mês da Seleção cujo Status não conta como pago, sem os de R$ 0,00 e sem previstos (a não ser com "Incluir previstos" num Mês sem Fatura)
 **And** estornos entram como linha negativa ("- R$ 25,90") e reduzem o total
 **And** um Ajuste entra numa linha própria logo abaixo da parcela, começando com "↳ Ajuste"
 **And** a mensagem de exemplo da Mãe de outubro sai no formato do EXPERIENCE.md (forma 1), com total R$ 1.350,14
@@ -1217,7 +1217,7 @@ So that o histórico continue certo (FR-18, FR-46).
 **Given** uma Conta com Lançamentos em vários Meses
 **When** Rafael edita e salva
 **Then** o formulário avisa "Vale a partir de Mmm/AA. Os meses anteriores não mudam"
-**And** a RPC recria só os Lançamentos com `mes ≥ Mês atual` que não foram editados à mão (`editado_em is null`) e não têm Pagamento
+**And** a RPC recria só os Lançamentos com `mes ≥ Mês atual` que não foram editados à mão (`editado_em is null`) e cujo Status não conta como pago
 **And** os que ficaram como estavam aparecem listados no aviso
 
 **Given** "Encerrar"
@@ -1243,7 +1243,7 @@ So that eu saiba o que já recebi (FR-25).
 **Acceptance Criteria:**
 
 **Given** a migração que cria `pagamentos` (`valor_recebido_centavos`, `data`, `modo` `total|parcial|minha_parte`, `excluido_em`, dono, RLS) e `pagamento_itens` (`pagamento_id`, `lancamento_id`, `valor_centavos`, `status_anterior_id`, `status_aplicado_id`), e a RPC `aplicar_pagamento` (AD-10)
-**When** Rafael seleciona Lançamentos e toca em "Aplicar status" na barra de Seleção
+**When** Rafael seleciona Lançamentos e toca em "Aplicar status", ação que esta história acrescenta à barra de Seleção (e à barra de Recebimentos)
 **Then** abre a janela com a lista de Status (UX-DR18)
 **And** se o escolhido conta como pago, aparecem Data (padrão hoje) e Valor recebido (padrão o total da Seleção)
 **And** se não conta como pago, data e valor somem e só o Status muda
@@ -1414,6 +1414,10 @@ So that o Saldo pendente nunca mude sem eu saber (FR-46, FR-51).
 **Given** um Lançamento pago e depois excluído
 **When** `projetarPendente` roda
 **Then** aparece a linha de crédito negativa correspondente ao valor já pago, e o Saldo pendente reflete isso
+
+**Given** uma Conta manual alterada ou encerrada
+**When** a RPC recria Lançamentos futuros
+**Then** também preserva os que têm `pagamento_itens` (AD-15)
 
 **Given** a reimportação de um Mês com Pagamentos
 **When** a RPC `importar_fatura` roda
