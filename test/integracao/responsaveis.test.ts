@@ -185,11 +185,27 @@ describe.skipIf(!ligado)("Responsáveis no Supabase local", () => {
     // O Realtime pode levar um instante para ligar o postgres_changes depois
     // do SUBSCRIBED: grava de novo a cada 2 s (nome diferente a cada vez)
     // até o evento chegar, para o teste não depender de sorte no tempo.
+    // Diagnóstico: o cliente de serviço ignora o RLS. Se ele recebe e o
+    // usuário não, o problema é de autenticação/RLS; se nenhum recebe, é da
+    // publicação ou do Realtime.
+    const statusA: string[] = [];
+    let eventosAdmin = 0;
+    const canalAdmin = admin
+      .channel("teste-responsaveis-admin")
+      .on("postgres_changes", { event: "*", schema: "public", table: "responsaveis" }, () => {
+        eventosAdmin++;
+      })
+      .subscribe();
+
     let repetidor: ReturnType<typeof setInterval> | undefined;
     const recebido = new Promise<{ id: string; nome: string; updated_at: string }>((resolver, rejeitar) => {
       const limite = setTimeout(() => {
         clearInterval(repetidor);
-        rejeitar(new Error("evento não chegou"));
+        rejeitar(
+          new Error(
+            `evento não chegou (status do canal: ${statusA.join(", ")}; eventos no cliente de serviço: ${eventosAdmin})`,
+          ),
+        );
       }, 25_000);
       const canal = outroAparelho
         .channel("teste-responsaveis")
@@ -205,7 +221,8 @@ describe.skipIf(!ligado)("Responsáveis no Supabase local", () => {
             resolver(nova);
           },
         )
-        .subscribe((status) => {
+        .subscribe((status, erro) => {
+          statusA.push(erro ? `${status} (${erro.message})` : status);
           if (status !== "SUBSCRIBED" || repetidor) return;
           let tentativa = 0;
           const gravar = () =>
@@ -235,5 +252,6 @@ describe.skipIf(!ligado)("Responsáveis no Supabase local", () => {
 
     expect(eventosDeB).toEqual([]);
     await b.cliente.removeChannel(canalB);
+    await admin.removeChannel(canalAdmin);
   }, 40_000);
 });

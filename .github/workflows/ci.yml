@@ -79,6 +79,12 @@ jobs:
             echo "src/data/database.types.ts difere do gerado. Copie a saída acima (lado +) para o arquivo."
             exit 1
           fi
+      - name: Logs do Realtime (só em falha)
+        if: failure()
+        run: |
+          docker ps --format '{{.Names}}' | grep -i realtime | while read -r c; do
+            echo "== $c"; docker logs --tail 200 "$c" 2>&1
+          done
       - name: Parar o Supabase local
         if: always()
         run: npx supabase stop --no-backup
