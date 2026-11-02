@@ -11,9 +11,11 @@ export default async function PaginaRedefinirSenha() {
   if (!(await temSessao())) redirect("/entrar?motivo=link_expirou");
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
-      <h1 className="text-3xl font-semibold">Criar nova senha</h1>
-      <FormularioNovaSenha />
+    <main className="flex flex-1 flex-col items-center justify-center p-4">
+      <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-lg border border-border bg-surface p-6">
+        <h1 className="texto-title">Criar nova senha</h1>
+        <FormularioNovaSenha />
+      </div>
     </main>
   );
 }

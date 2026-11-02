@@ -2,7 +2,7 @@
 title: 'História 1.3: Visual base e menu lateral'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-progress'
+status: 'in-review'
 route: 'dispatch'
 baseline_commit: 'cf35950dd55562f7a131e505ab5d66d283d9f0f0'
 review_loop_iteration: 0
@@ -62,25 +62,34 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `package.json` -- adicionar `radix-ui`, `class-variance-authority`, `clsx`, `tailwind-merge`; criar `components.json` (estilo shadcn, aliases `@/ui`) -- base dos componentes.
-- [ ] `src/app/globals.css` -- todas as cores do DESIGN.md (claro em `:root`, escuro em `prefers-color-scheme: dark`), `@theme inline` com cores, raios (`sm/md/lg/full`), espaçamentos nomeados (`rail`, `toque`, `linha`, `icone`, `painel-lateral`), sombras (`flutuante`, `popover`, `lateral`); `@utility` para cada papel tipográfico (`texto-hero-value` … `texto-message`, com `tabular-nums` nos numéricos); `:focus-visible` com anel de 2 px em `focus-ring` -- UX-DR1–3.
-- [ ] `src/ui/contraste.ts` + `src/ui/tokens.test.ts` -- funções puras de luminância/contraste/composição; o teste lê `globals.css`, confere que existem todos os tokens do DESIGN.md nos dois modos e mede os pares listados nas Design Notes -- verificação automatizada.
-- [ ] `test/sem-cor-literal.test.ts` -- falha se `src/**/*.{ts,tsx,css}`, exceto `globals.css`, tiver `#rgb`, `rgb(`, `hsl(` ou classes de paleta padrão -- regra "sem cor literal".
-- [ ] `src/ui/cn.ts`, `src/ui/Botao.tsx`, `src/ui/Campo.tsx`, `src/ui/Esqueleto.tsx` -- variantes `primario`/`secundario`/`destrutivo` × `padrao`(44)/`compacto`(30, toque 44 via pseudo-elemento); campo de 44 com erro em `danger-fg` e mensagem abaixo -- UX-DR27, UX-DR28.
-- [ ] `src/ui/toast.ts` (+ teste) e `src/ui/Toast.tsx` -- redutor puro (mostrar substitui, fechar, desfazer) e provedor com `useToast()`, 6 s, `aria-live="polite"`, pílula `nav` -- UX-DR28.
-- [ ] `src/ui/toque-longo.ts` (+ teste), `src/ui/MenuAcoes.tsx` -- detector com timers injetados; botão ⋯ sempre visível (Radix DropdownMenu, 44 px) que o toque longo abre -- UX-DR32.
-- [ ] `src/ui/Janela.tsx`, `src/ui/ConfirmarAcao.tsx`, `src/ui/FaixaPergunta.tsx`, `src/ui/ErroAoCarregar.tsx`, `src/ui/EstadoVazio.tsx` -- Dialog (Esc fecha), AlertDialog com botão destrutivo focado (Enter confirma), faixa âmbar com "Só este"/"Aplicar a todos", "Não foi possível carregar." + "Tentar de novo" -- UX-DR30, UX-DR32.
-- [ ] `src/ui/navegacao.ts` (+ teste) -- lista dos 6 itens (rótulo, rota, ícone), `itemAtivo(caminho)` e `destinoDoAtalho(evento)` -- regras do menu.
-- [ ] `src/ui/NavRail.tsx` -- Client Component: `Link`s com `aria-current`, rótulos `nav-label`, ativo com fundo branco 8% e ícone `accent-line`, atalhos ⌘/Ctrl+1…6 por `router.push` -- UX-DR5.
-- [ ] `src/app/(app)/layout.tsx`, `src/app/(app)/page.tsx`, `revisar/`, `recebimentos/`, `previsao/`, `contas/`, `configuracoes/` -- rail + conteúdo com `ToastProvider`; cada página confere `temSessao()`, mostra título (`texto-title`) e `EstadoVazio` provisório; Configurações tem "Sair"; abaixo de 700 px, só o aviso -- UX-DR5, UX-DR31.
-- [ ] `src/domain/mensagens.ts` (+ teste) -- códigos `app.tela_pequena`, `carregar.falhou`, `salvar.falhou`, `conexao.sem_conexao`, `conexao.gravar_sem_conexao`, `acao.desfeita`, e `RESPOSTAS_PERGUNTA` -- UX-DR34.
-- [ ] `src/features/entrar/*.tsx`, `src/app/entrar/page.tsx`, `src/app/redefinir-senha/page.tsx` -- trocar classes cruas por `Botao`/`Campo`/tokens -- consistência visual.
+- [x] `package.json` -- adicionar `radix-ui`, `class-variance-authority`, `clsx`, `tailwind-merge`; criar `components.json` (estilo shadcn, aliases `@/ui`) -- base dos componentes.
+- [x] `src/app/globals.css` -- todas as cores do DESIGN.md (claro em `:root`, escuro em `prefers-color-scheme: dark`), `@theme inline` com cores, raios (`sm/md/lg/full`), espaçamentos nomeados (`rail`, `toque`, `linha`, `icone`, `painel-lateral`), sombras (`flutuante`, `popover`, `lateral`); `@utility` para cada papel tipográfico (`texto-hero-value` … `texto-message`, com `tabular-nums` nos numéricos); `:focus-visible` com anel de 2 px em `focus-ring` -- UX-DR1–3.
+- [x] `src/ui/contraste.ts` + `src/ui/tokens.test.ts` -- funções puras de luminância/contraste/composição; o teste lê `globals.css`, confere que existem todos os tokens do DESIGN.md nos dois modos e mede os pares listados nas Design Notes -- verificação automatizada.
+- [x] `test/sem-cor-literal.test.ts` -- falha se `src/**/*.{ts,tsx,css}`, exceto `globals.css`, tiver `#rgb`, `rgb(`, `hsl(` ou classes de paleta padrão -- regra "sem cor literal".
+- [x] `src/ui/cn.ts`, `src/ui/Botao.tsx`, `src/ui/Campo.tsx`, `src/ui/Esqueleto.tsx` -- variantes `primario`/`secundario`/`destrutivo` × `padrao`(44)/`compacto`(30, toque 44 via pseudo-elemento); campo de 44 com erro em `danger-fg` e mensagem abaixo -- UX-DR27, UX-DR28.
+- [x] `src/ui/toast.ts` (+ teste) e `src/ui/Toast.tsx` -- redutor puro (mostrar substitui, fechar, desfazer) e provedor com `useToast()`, 6 s, `aria-live="polite"`, pílula `nav` -- UX-DR28.
+- [x] `src/ui/toque-longo.ts` (+ teste), `src/ui/MenuAcoes.tsx` -- detector com timers injetados; botão ⋯ sempre visível (Radix DropdownMenu, 44 px) que o toque longo abre -- UX-DR32.
+- [x] `src/ui/Janela.tsx`, `src/ui/ConfirmarAcao.tsx`, `src/ui/FaixaPergunta.tsx`, `src/ui/ErroAoCarregar.tsx`, `src/ui/EstadoVazio.tsx` -- Dialog (Esc fecha), AlertDialog com botão destrutivo focado (Enter confirma), faixa âmbar com "Só este"/"Aplicar a todos", "Não foi possível carregar." + "Tentar de novo" -- UX-DR30, UX-DR32.
+- [x] `src/ui/navegacao.ts` (+ teste) -- lista dos 6 itens (rótulo, rota, ícone), `itemAtivo(caminho)` e `destinoDoAtalho(evento)` -- regras do menu.
+- [x] `src/ui/NavRail.tsx` -- Client Component: `Link`s com `aria-current`, rótulos `nav-label`, ativo com fundo branco 8% e ícone `accent-line`, atalhos ⌘/Ctrl+1…6 por `router.push` -- UX-DR5.
+- [x] `src/app/(app)/layout.tsx`, `src/app/(app)/page.tsx`, `revisar/`, `recebimentos/`, `previsao/`, `contas/`, `configuracoes/` -- rail + conteúdo com `ToastProvider`; cada página confere `temSessao()`, mostra título (`texto-title`) e `EstadoVazio` provisório; Configurações tem "Sair"; abaixo de 700 px, só o aviso -- UX-DR5, UX-DR31.
+- [x] `src/domain/mensagens.ts` (+ teste) -- códigos `app.tela_pequena`, `carregar.falhou`, `salvar.falhou`, `conexao.sem_conexao`, `conexao.gravar_sem_conexao`, `acao.desfeita`, e `RESPOSTAS_PERGUNTA` -- UX-DR34.
+- [x] `src/features/entrar/*.tsx`, `src/app/entrar/page.tsx`, `src/app/redefinir-senha/page.tsx` -- trocar classes cruas por `Botao`/`Campo`/tokens -- consistência visual.
 
 **Acceptance Criteria:**
 - Given o sistema em modo escuro, when o app abre, then as cores são as `-dark` do DESIGN.md sem recarregar nada.
 - Given o teste de contraste, when roda no CI, then todo par de texto tem ≥ 4,5:1 e bordas/ícones ≥ 3:1 nos dois modos.
 - Given qualquer tela autenticada, when Rafael navega pelo teclado, then o foco aparece com anel de 2 px.
 - Given um Client Component com classe `bg-red-500`, when o teste de cor literal roda, then falha.
+
+## Implementation Notes
+
+- **Desvio do DESIGN.md (pede aprovação):** branco sobre `verify` no escuro (`#F87171`) dá 2,77:1. Criado o token `--on-verify`: branco no claro (4,83:1) e `#0F1112` no escuro (6,84:1). Só aparece no contador do Revisar, que ainda não recebe número (Épico 3).
+- Tokens derivados além do DESIGN.md: `--on-dark` (branco do toast e do rótulo ativo) e `--nav-active` (branco a 8%). Breakpoint `app` = 700 px.
+- Extras: `Tela.tsx` (título da tela), `app.em_breve` e `ROTULOS` em `mensagens.ts`.
+- Toast com raio `md` (token do DESIGN.md), não pílula.
+- `src/app/(app)/layout.test.tsx` cobre a linha "tela estreita" da matriz (renderiza o layout com o menu simulado).
+- Atalhos ⌘/Ctrl+1…6 podem ser tomados pelo navegador para trocar de aba; conferir num PC/Mac de verdade.
 
 ## Design Notes
 

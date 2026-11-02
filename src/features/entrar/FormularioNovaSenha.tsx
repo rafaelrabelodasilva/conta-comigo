@@ -2,6 +2,8 @@
 
 import { useActionState } from "react";
 import { mensagem } from "@/domain/mensagens";
+import { Botao } from "@/ui/Botao";
+import { Campo } from "@/ui/Campo";
 import { redefinirSenha } from "./acoes";
 import { ESTADO_INICIAL } from "./estado";
 
@@ -10,36 +12,28 @@ export function FormularioNovaSenha() {
 
   return (
     <form action={acao} className="flex w-full max-w-sm flex-col gap-4" noValidate>
-      <label className="flex flex-col gap-1">
-        <span>Nova senha</span>
-        <input
-          type="password"
-          name="senha"
-          autoComplete="new-password"
-          required
-          className="min-h-11 rounded border px-3"
-        />
-      </label>
-      <label className="flex flex-col gap-1">
-        <span>Confirme a nova senha</span>
-        <input
-          type="password"
-          name="confirmacao"
-          autoComplete="new-password"
-          required
-          className="min-h-11 rounded border px-3"
-        />
-      </label>
+      <Campo
+        rotulo="Nova senha"
+        type="password"
+        name="senha"
+        autoComplete="new-password"
+        required
+      />
+      <Campo
+        rotulo="Confirme a nova senha"
+        type="password"
+        name="confirmacao"
+        autoComplete="new-password"
+        required
+      />
       {estado.codigo ? (
-        <p role="alert">{mensagem(estado.codigo)}</p>
+        <p role="alert" className="texto-label font-normal text-danger-fg">
+          {mensagem(estado.codigo)}
+        </p>
       ) : null}
-      <button
-        type="submit"
-        disabled={pendente}
-        className="min-h-11 rounded border px-4 font-semibold"
-      >
+      <Botao type="submit" variante="primario" disabled={pendente}>
         {pendente ? "Salvando…" : "Salvar nova senha"}
-      </button>
+      </Botao>
     </form>
   );
 }
