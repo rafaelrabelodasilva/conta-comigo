@@ -72,6 +72,33 @@ export type Database = {
         }
         Relationships: []
       }
+      tipos: {
+        Row: {
+          arquivado: boolean
+          created_at: string
+          id: string
+          nome: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          arquivado?: boolean
+          created_at?: string
+          id?: string
+          nome: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Update: {
+          arquivado?: boolean
+          created_at?: string
+          id?: string
+          nome?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

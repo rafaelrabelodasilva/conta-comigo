@@ -2,7 +2,14 @@
 // e SQL chamam estas funções; o banco só garante as restrições (cor 1..8,
 // cor única por dono, nome sem espaços nas pontas e com 1 a 30 caracteres).
 
+import { NOME_MAX, chaveDoNome, validarNomeCadastro } from "./nome-cadastro";
 import type { Resultado } from "./resultado";
+
+const CODIGOS_NOME = {
+  vazio: "responsavel.nome_vazio",
+  longo: "responsavel.nome_longo",
+  repetido: "responsavel.nome_repetido",
+};
 
 /** O que o núcleo precisa saber de um Responsável. */
 export type Responsavel = {
@@ -28,21 +35,11 @@ export const CORES_PESSOA: readonly CorPessoa[] = [
   { cor: 8, nome: "Ocre" },
 ];
 
-export const NOME_MAX = 30;
+export { NOME_MAX, chaveDoNome };
 
 /** Nome da cor `n`, ou `undefined` se não for uma das 8. */
 export function nomeDaCor(n: number): string | undefined {
   return CORES_PESSOA.find((c) => c.cor === n)?.nome;
-}
-
-/** Chave de comparação de nomes: sem maiúsculas, sem acentos, espaços colapsados. */
-export function chaveDoNome(nome: string): string {
-  return nome
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 /**
@@ -56,18 +53,7 @@ export function validarNome(
   responsaveis: readonly Responsavel[],
   idProprio?: string,
 ): Resultado<string> {
-  const limpo = nome.trim();
-  if (limpo.length === 0) return { ok: false, erro: { codigo: "responsavel.nome_vazio" } };
-  // Conta por caractere (code point), como o `char_length` do banco.
-  if ([...limpo].length > NOME_MAX) {
-    return { ok: false, erro: { codigo: "responsavel.nome_longo" } };
-  }
-  const chave = chaveDoNome(limpo);
-  const repetido = responsaveis.some(
-    (r) => !r.arquivado && r.id !== idProprio && chaveDoNome(r.nome) === chave,
-  );
-  if (repetido) return { ok: false, erro: { codigo: "responsavel.nome_repetido" } };
-  return { ok: true, valor: limpo };
+  return validarNomeCadastro(nome, responsaveis, CODIGOS_NOME, idProprio);
 }
 
 /**

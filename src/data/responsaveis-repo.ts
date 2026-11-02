@@ -6,6 +6,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
+import { FALHOU, OK, gravarComOtimismo as gravarOtimista, type ResultadoGravacao } from "./gravacao";
 import { colunasAlteradas } from "./realtime-estado";
 import { criarClienteNavegador } from "./supabase/navegador";
 
@@ -16,11 +17,7 @@ export type MudancaResponsavel = Partial<Pick<LinhaResponsavel, "nome" | "cor" |
 
 export type NovoResponsavel = Pick<LinhaResponsavel, "nome" | "cor" | "ordem">;
 
-/** `ok: false` = o banco recusou ou não respondeu; a tela mostra "salvar.falhou". */
-export type ResultadoGravacao = { ok: true } | { ok: false };
-
-const FALHOU: ResultadoGravacao = { ok: false };
-const OK: ResultadoGravacao = { ok: true };
+export type { ResultadoGravacao };
 
 export function criarRepoResponsaveis(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
@@ -28,25 +25,11 @@ export function criarRepoResponsaveis(deps: {
 }) {
   const { obterCliente, memoria } = deps;
 
-  async function gravarComOtimismo(
+  function gravarComOtimismo(
     mudancas: readonly (MudancaResponsavel & { id: string })[],
     gravar: (cliente: SupabaseClient<Database>) => Promise<LinhaResponsavel[] | null>,
   ): Promise<ResultadoGravacao> {
-    const cliente = obterCliente();
-    if (!cliente) return FALHOU;
-    const desfazer = memoria.aplicarOtimista(mudancas);
-    try {
-      const linhas = await gravar(cliente);
-      if (!linhas) {
-        desfazer();
-        return FALHOU;
-      }
-      memoria.aplicarLote(linhas);
-      return OK;
-    } catch {
-      desfazer();
-      return FALHOU;
-    }
+    return gravarOtimista(obterCliente, memoria, mudancas, gravar);
   }
 
   /** Grava só as colunas que mudaram em relação à memória. */
