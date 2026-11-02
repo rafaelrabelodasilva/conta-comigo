@@ -33,7 +33,18 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build
+      - name: Build com segredo-isca no ambiente
+        env:
+          # Isca: se o código vazar a chave secreta para o cliente, o grep acha.
+          SUPABASE_SECRET_KEY: sb_secret_ci_canary
+        run: npm run build
+      - name: Nenhum segredo no bundle do cliente (AD-12)
+        run: |
+          test -d .next/static || { echo ".next/static não existe."; exit 1; }
+          if grep -rnE "SUPABASE_SECRET_KEY|sb_secret_" .next/static; then
+            echo "Segredo encontrado nos arquivos do cliente."
+            exit 1
+          fi
 
   supabase:
     name: Supabase local sobe
@@ -49,6 +60,15 @@ jobs:
       - run: npx supabase --version
       - run: npx supabase start
       - run: npx supabase status
+      - name: Teste de integração do Auth (login funciona, cadastro recusado)
+        env:
+          INTEGRACAO_SUPABASE: "1"
+        run: |
+          # Chaves locais do Supabase (não são segredos de produção).
+          set -a
+          eval "$(npx supabase status -o env)"
+          set +a
+          npx vitest run test/integracao
       - name: Parar o Supabase local
         if: always()
         run: npx supabase stop --no-backup
