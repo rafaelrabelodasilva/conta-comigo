@@ -23,6 +23,34 @@ export const MENSAGENS = {
   "auth.senha_igual": "A nova senha precisa ser diferente da atual.",
   "auth.erro_inesperado": "Não foi possível concluir agora. Tente de novo.",
   "erro.desconhecido": "Algo deu errado. Tente de novo.",
+  "app.tela_pequena": "O Conta Comigo foi feito para iPad e computador.",
+  "app.em_breve": "Esta tela ainda está sendo construída.",
+  "carregar.falhou": "Não foi possível carregar.",
+  "salvar.falhou": "Não foi possível salvar. Tente de novo.",
+  "conexao.sem_conexao": "Sem conexão. Você pode consultar, mas não alterar.",
+  "conexao.gravar_sem_conexao":
+    "Sem conexão. Tente de novo quando a internet voltar.",
+  "acao.desfeita": "Ação desfeita.",
+} as const;
+
+/**
+ * As duas respostas de toda pergunta do app (EXPERIENCE.md). Constantes
+ * únicas: nenhuma tela escreve esses textos por conta própria.
+ */
+export const RESPOSTAS_PERGUNTA = {
+  so_este: "Só este",
+  aplicar_a_todos: "Aplicar a todos",
+} as const;
+
+export type RespostaPergunta = keyof typeof RESPOSTAS_PERGUNTA;
+
+/** Rótulos de ação repetidos nos componentes comuns. */
+export const ROTULOS = {
+  tentar_de_novo: "Tentar de novo",
+  desfazer: "Desfazer",
+  cancelar: "Cancelar",
+  fechar: "Fechar",
+  sair: "Sair",
 } as const;
 
 export type CodigoMensagem = keyof typeof MENSAGENS;

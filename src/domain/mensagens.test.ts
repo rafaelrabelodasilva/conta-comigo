@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { MENSAGENS, ehCodigoConhecido, mensagem } from "./mensagens";
+import {
+  MENSAGENS,
+  RESPOSTAS_PERGUNTA,
+  ROTULOS,
+  ehCodigoConhecido,
+  mensagem,
+} from "./mensagens";
 
 describe("mensagem", () => {
   it("devolve o texto do código", () => {
@@ -38,5 +44,36 @@ describe("mensagem", () => {
     for (const codigo of Object.keys(MENSAGENS)) {
       expect(codigo).toMatch(/^[a-z]+\.[a-z_]+$/);
     }
+  });
+});
+
+describe("códigos das telas comuns (História 1.3)", () => {
+  it("tem os textos do EXPERIENCE.md", () => {
+    expect(mensagem("app.tela_pequena")).toBe(
+      "O Conta Comigo foi feito para iPad e computador.",
+    );
+    expect(mensagem("carregar.falhou")).toBe("Não foi possível carregar.");
+    expect(mensagem("salvar.falhou")).toBe(
+      "Não foi possível salvar. Tente de novo.",
+    );
+    expect(mensagem("conexao.sem_conexao")).toBe(
+      "Sem conexão. Você pode consultar, mas não alterar.",
+    );
+    expect(mensagem("conexao.gravar_sem_conexao")).toBe(
+      "Sem conexão. Tente de novo quando a internet voltar.",
+    );
+    expect(ehCodigoConhecido("acao.desfeita")).toBe(true);
+  });
+
+  it("as perguntas têm sempre as mesmas duas respostas", () => {
+    expect(Object.values(RESPOSTAS_PERGUNTA)).toEqual([
+      "Só este",
+      "Aplicar a todos",
+    ]);
+  });
+
+  it("os rótulos comuns dizem o que fazem", () => {
+    expect(ROTULOS.tentar_de_novo).toBe("Tentar de novo");
+    expect(ROTULOS.desfazer).toBe("Desfazer");
   });
 });
