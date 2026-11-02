@@ -29,6 +29,14 @@ const temporizadoresDoNavegador = {
   cancelar: (handle: number) => window.clearTimeout(handle),
 };
 
+/**
+ * O evento nasceu dentro da área no DOM. Os itens do menu ficam num portal:
+ * seus eventos sobem pela árvore do React até aqui, mas não são do conteúdo.
+ */
+function doConteudo(e: { target: EventTarget; currentTarget: EventTarget }): boolean {
+  return e.target instanceof Node && (e.currentTarget as Node).contains(e.target);
+}
+
 export function MenuAcoes({ rotulo, itens, children, className }: PropsMenuAcoes) {
   const [aberto, setAberto] = useState(false);
   // O clique que vem depois de um toque longo não pode acionar o conteúdo.
@@ -58,12 +66,12 @@ export function MenuAcoes({ rotulo, itens, children, className }: PropsMenuAcoes
           sideOffset={6}
           className="z-50 min-w-48 rounded-lg border border-border bg-surface p-1 text-text shadow-popover"
         >
-          {itens.map((item) => (
+          {itens.map((item, i) => (
             <DropdownMenu.Item
-              key={item.rotulo}
+              key={`${i}-${item.rotulo}`}
               onSelect={item.aoEscolher}
               className={cn(
-                "flex min-h-toque cursor-pointer items-center rounded-sm px-3 texto-body outline-none select-none data-highlighted:bg-selection",
+                "flex min-h-toque cursor-pointer items-center rounded-sm px-3 texto-body select-none data-highlighted:bg-selection",
                 item.destrutivo && "text-danger-fg",
               )}
             >
@@ -81,23 +89,32 @@ export function MenuAcoes({ rotulo, itens, children, className }: PropsMenuAcoes
     <div
       className={cn("flex items-center gap-2 select-none [-webkit-touch-callout:none]", className)}
       onPointerDown={(e) => {
+        engolirClique.current = false;
+        if (!doConteudo(e)) return;
         // Toque longo é do dedo e da caneta; no mouse há o ⋯ e o clique direito.
         if (e.pointerType === "mouse") return;
-        engolirClique.current = false;
         detector.iniciar(e.clientX, e.clientY);
       }}
-      onPointerMove={(e) => detector.mover(e.clientX, e.clientY)}
-      onPointerUp={() => {
-        if (detector.soltar()) engolirClique.current = true;
+      onPointerMove={(e) => {
+        if (doConteudo(e)) detector.mover(e.clientX, e.clientY);
       }}
-      onPointerCancel={() => detector.cancelar()}
+      onPointerUp={(e) => {
+        if (doConteudo(e) && detector.soltar()) engolirClique.current = true;
+      }}
+      onPointerCancel={(e) => {
+        if (doConteudo(e)) detector.cancelar();
+      }}
       onPointerLeave={() => detector.cancelar()}
+      onKeyDown={() => {
+        engolirClique.current = false;
+      }}
       onContextMenu={(e) => {
         // Clique direito (ou o menu do sistema após toque longo) abre o ⋯.
         e.preventDefault();
         setAberto(true);
       }}
       onClickCapture={(e) => {
+        if (!doConteudo(e)) return;
         if (engolirClique.current) {
           engolirClique.current = false;
           e.preventDefault();

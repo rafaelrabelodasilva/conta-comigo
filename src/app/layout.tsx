@@ -16,7 +16,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="pt-BR" className="h-full antialiased [color-scheme:light_dark]">
+    <html lang="pt-BR" className="h-full antialiased">
       <body className="flex min-h-full flex-col bg-background text-text">{children}</body>
     </html>
   );

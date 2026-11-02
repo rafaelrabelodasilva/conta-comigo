@@ -91,6 +91,8 @@ const PARES_GRAFICOS: Par[] = [
   { frente: "nav-icon-idle", fundo: "nav" },
   { frente: "accent-line", fundo: "surface" },
   { frente: "focus-ring", fundo: "background" },
+  { frente: "focus-ring", fundo: "surface" },
+  { frente: "focus-ring", fundo: "nav" },
   { frente: "verify", fundo: "surface" },
 ];
 

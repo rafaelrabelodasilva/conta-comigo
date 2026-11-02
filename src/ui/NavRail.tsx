@@ -40,6 +40,9 @@ const TRACOS: Record<IconeNav, ReactNode> = {
   ),
 };
 
+// Janela, confirmação e menu ⋯ abertos (Radix só os mantém no DOM abertos).
+const SOBREPOSICOES = "[role=dialog],[role=alertdialog],[role=menu]";
+
 function Icone({ nome }: { nome: IconeNav }) {
   return (
     <svg
@@ -75,6 +78,10 @@ export function NavRail({ contadorRevisar = 0 }: { contadorRevisar?: number }) {
         altKey: evento.altKey,
         shiftKey: evento.shiftKey,
         isComposing: evento.isComposing,
+        repeat: evento.repeat,
+        dentroDeSobreposicao: Boolean(
+          alvo?.closest(SOBREPOSICOES) ?? document.querySelector(SOBREPOSICOES),
+        ),
         alvo: alvo && {
           tagName: alvo.tagName,
           type: alvo instanceof HTMLInputElement ? alvo.type : undefined,

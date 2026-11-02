@@ -39,6 +39,10 @@ export function Botao({
   ...props
 }: PropsBotao) {
   const classes = cn(variantesBotao({ variante, tamanho }), className);
-  if (asChild) return <Slot.Root className={classes} {...props} />;
+  if (asChild) {
+    return (
+      <Slot.Root className={classes} {...(type === undefined ? {} : { type })} {...props} />
+    );
+  }
   return <button type={type ?? "button"} className={classes} {...props} />;
 }

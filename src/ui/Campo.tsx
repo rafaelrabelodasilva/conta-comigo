@@ -9,7 +9,15 @@ export type PropsCampo = ComponentProps<"input"> & {
   erro?: string | null;
 };
 
-export function Campo({ rotulo, erro, id, className, ...props }: PropsCampo) {
+export function Campo({
+  rotulo,
+  erro,
+  id,
+  className,
+  "aria-describedby": descritoPor,
+  "aria-invalid": invalido,
+  ...props
+}: PropsCampo) {
   const gerado = useId();
   const idCampo = id ?? gerado;
   const idErro = `${idCampo}-erro`;
@@ -21,14 +29,14 @@ export function Campo({ rotulo, erro, id, className, ...props }: PropsCampo) {
       </label>
       <input
         id={idCampo}
-        aria-invalid={erro ? true : undefined}
-        aria-describedby={erro ? idErro : undefined}
+        {...props}
+        aria-invalid={erro ? true : invalido}
+        aria-describedby={[descritoPor, erro ? idErro : null].filter(Boolean).join(" ") || undefined}
         className={cn(
           "min-h-toque w-full rounded-sm border border-border bg-background px-3 texto-body text-text placeholder:text-text-muted",
           erro && "border-danger-fg",
           className,
         )}
-        {...props}
       />
       {erro ? (
         <p id={idErro} className="texto-label font-normal text-danger-fg">

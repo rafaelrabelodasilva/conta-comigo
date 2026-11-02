@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { mensagem } from "@/domain/mensagens";
 import { temSessao } from "@/data/supabase/servidor";
@@ -6,6 +7,8 @@ import { itemDaRota } from "@/ui/navegacao";
 import { Tela } from "@/ui/Tela";
 
 const item = itemDaRota("/");
+
+export const metadata: Metadata = { title: `${item.titulo} · Conta Comigo` };
 
 // Painel provisório: o conteúdo chega nas próximas histórias.
 export default async function PaginaPainel() {

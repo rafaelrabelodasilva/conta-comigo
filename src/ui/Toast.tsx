@@ -22,7 +22,7 @@ import {
   type NovoToast,
 } from "./toast";
 
-// Aviso inferior (`toast`): pílula escura centralizada embaixo, 6 s na tela,
+// Aviso inferior (`toast`): faixa escura de raio md, centralizada embaixo, 6 s na tela,
 // um substitui o outro, "Desfazer" opcional. As regras estão em `toast.ts`.
 
 type ApiToast = {

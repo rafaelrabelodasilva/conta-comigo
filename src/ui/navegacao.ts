@@ -58,6 +58,10 @@ export type EventoTecla = {
   altKey: boolean;
   shiftKey: boolean;
   isComposing?: boolean;
+  /** Tecla mantida apertada: o atalho não se repete. */
+  repeat?: boolean;
+  /** Há janela, confirmação ou menu aberto: o atalho não tira a pessoa dali. */
+  dentroDeSobreposicao?: boolean;
   alvo?: AlvoTecla;
 };
 
@@ -86,11 +90,13 @@ export function ehCampoDeTexto(alvo: AlvoTecla | undefined): boolean {
 
 /**
  * Destino do atalho ⌘/Ctrl + 1…6, ou `null`. Sem modificador, com Alt ou
- * Shift, ou dentro de um campo de texto, o atalho é ignorado.
+ * Shift, tecla repetida, com sobreposição aberta ou dentro de um campo de
+ * texto, o atalho é ignorado.
  */
 export function destinoDoAtalho(evento: EventoTecla): RotaNav | null {
   if (!(evento.metaKey || evento.ctrlKey)) return null;
   if (evento.altKey || evento.shiftKey || evento.isComposing) return null;
+  if (evento.repeat || evento.dentroDeSobreposicao) return null;
   if (ehCampoDeTexto(evento.alvo)) return null;
 
   const digito = /^Digit([1-6])$/.exec(evento.code ?? "")?.[1] ?? evento.key;

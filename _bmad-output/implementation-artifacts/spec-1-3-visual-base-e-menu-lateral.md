@@ -2,7 +2,7 @@
 title: 'História 1.3: Visual base e menu lateral'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: 'cf35950dd55562f7a131e505ab5d66d283d9f0f0'
 review_loop_iteration: 0

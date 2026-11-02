@@ -15,9 +15,33 @@ const PALETA_PADRAO =
 const UTILITARIOS_DE_COR =
   "bg|text|border(?:-[xytrblse])?|ring(?:-offset)?|outline|fill|stroke|from|via|to|divide|placeholder|accent|caret|decoration|shadow|inset-shadow|inset-ring";
 
+// Cores nomeadas do CSS (CSS Color 4), menos `transparent` e `currentcolor`.
+const CORES_NOMEADAS =
+  "aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen";
+
+// Utilitários do Tailwind que recebem cor em valor arbitrário (`bg-[red]`).
+const UTILITARIOS_ARBITRARIOS =
+  "bg|border(?:-[xytrblse])?|fill|stroke|ring(?:-offset)?|outline|decoration|caret|accent|divide|from|via|to";
+// Valores arbitrários que não são cor: medidas, tokens e dicas de tipo.
+const NAO_E_COR = String.raw`(?![\d.\-]|var\(|calc\(|url\(|currentColor\]|transparent\]|inherit\]|(?:length|size|position|image|percentage|number|line-width):)`;
+
 const REGRAS: { nome: string; regex: RegExp }[] = [
-  { nome: "cor hexadecimal", regex: /#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?![0-9a-z_-])/gi },
+  { nome: "cor hexadecimal", regex: /(?<![&\w])#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?![0-9a-z_-])/gi },
   { nome: "função de cor", regex: /\b(?:rgba?|hsla?|hwb|oklch|oklab|lab|lch|color)\(/gi },
+  {
+    nome: "cor em valor arbitrário",
+    regex: new RegExp(
+      `(?<![\\w-])(?:[\\w-]+:)*(?:(?:${UTILITARIOS_ARBITRARIOS})-\\[${NAO_E_COR}|text-\\[(?![\\d.]|length:))[^\\]\\s]+\\]`,
+      "g",
+    ),
+  },
+  {
+    nome: "cor nomeada em estilo",
+    regex: new RegExp(
+      `\\b(?:color|background(?:-color)?|backgroundColor|border(?:-color)?|borderColor)\\s*:\\s*["'\`]?(?:${CORES_NOMEADAS})(?![\\w-])`,
+      "gi",
+    ),
+  },
   {
     nome: "classe da paleta padrão",
     regex: new RegExp(
@@ -38,7 +62,7 @@ function arquivos(pasta: string): string[] {
   return readdirSync(pasta, { withFileTypes: true }).flatMap((e) => {
     const caminho = join(pasta, e.name);
     if (e.isDirectory()) return arquivos(caminho);
-    return /\.(ts|tsx|css)$/.test(e.name) ? [caminho] : [];
+    return /\.(m?[jt]sx?|css)$/.test(e.name) ? [caminho] : [];
   });
 }
 
@@ -56,8 +80,42 @@ describe("detector de cor literal", () => {
   it("acha hex e funções de cor", () => {
     expect(coresLiterais(`color: #fff;`)).toHaveLength(1);
     expect(coresLiterais(`style={{ color: "#16A34A14" }}`)).toHaveLength(1);
-    expect(coresLiterais(`"bg-[#123456]"`)).toHaveLength(1);
+    expect(coresLiterais(`"bg-[#123456]"`)).toContain("cor hexadecimal: #123456");
     expect(coresLiterais(`background: rgb(0 0 0); color: hsl(0 0% 0%)`)).toHaveLength(2);
+  });
+
+  it("acha cor em valor arbitrário", () => {
+    for (const classe of [
+      "bg-[red]",
+      "text-[tomato]",
+      "hover:border-[papayawhip]",
+      "stroke-[navy]",
+      "ring-[#000]",
+      "from-[oklch(0.5_0.1_10)]",
+      "decoration-[blue]",
+    ]) {
+      expect(coresLiterais(`"${classe}"`), classe).not.toEqual([]);
+    }
+  });
+
+  it("acha cor nomeada em estilo", () => {
+    expect(coresLiterais(`style={{ color: "red" }}`)).toHaveLength(1);
+    expect(coresLiterais(`style={{ backgroundColor: 'tomato' }}`)).toHaveLength(1);
+    expect(coresLiterais(`.x { border-color: white; background: black }`)).toHaveLength(2);
+  });
+
+  it("não acusa medidas e tokens em valor arbitrário", () => {
+    expect(
+      coresLiterais(
+        `"text-[13px] border-[2px] ring-[3px] bg-[var(--surface)] bg-[url(/a.png)] outline-[1.5px] w-[calc(100%-2rem)] max-w-[640px] bg-[length:200%]"`,
+      ),
+    ).toEqual([]);
+  });
+
+  it("não acusa entidade HTML nem cor transparente/corrente", () => {
+    expect(coresLiterais(`<span>&#8942;</span> &#x22EE;`)).toEqual([]);
+    expect(coresLiterais(`style={{ color: "currentColor", background: "transparent" }}`)).toEqual([]);
+    expect(coresLiterais(`"fill-[currentColor] bg-[transparent]"`)).toEqual([]);
   });
 
   it("não acusa tokens nem texto comum", () => {

@@ -115,6 +115,15 @@ describe("destinoDoAtalho", () => {
     );
   });
 
+  it("tecla mantida apertada não repete o atalho", () => {
+    expect(destinoDoAtalho(tecla({ ctrlKey: true, repeat: true }))).toBeNull();
+    expect(destinoDoAtalho(tecla({ ctrlKey: true, repeat: false }))).toBe("/recebimentos");
+  });
+
+  it("com janela, confirmação ou menu aberto, ignora", () => {
+    expect(destinoDoAtalho(tecla({ metaKey: true, dentroDeSobreposicao: true }))).toBeNull();
+  });
+
   it("durante composição de texto (IME), ignora", () => {
     expect(destinoDoAtalho(tecla({ ctrlKey: true, isComposing: true }))).toBeNull();
   });
