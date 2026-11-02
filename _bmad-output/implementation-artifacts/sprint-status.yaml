@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 11-01-2026 19:39
-last_updated: 11-02-2026 15:30
+last_updated: 11-02-2026 16:00
 project: conta-comigo
 project_key: NOKEY
 tracking_system: file-system
@@ -40,7 +40,7 @@ development_status:
   1-2-entrar-com-e-mail-e-senha: done
   1-3-visual-base-e-menu-lateral: done
   1-4-cadastrar-responsáveis-com-cor-sincronizados-entre-aparelhos: done
-  1-5-cadastrar-tipos: review
+  1-5-cadastrar-tipos: done
   1-6-gerenciar-status-e-substituir-cadastros-em-uso: backlog
   1-7-configurar-o-ciclo-do-cartão-e-a-aparência: backlog
   1-8-primeiro-uso: backlog
