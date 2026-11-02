@@ -174,7 +174,7 @@ export type Database = {
         }[]
       }
       referencias_cadastro: {
-        Args: never
+        Args: Record<PropertyKey, never>
         Returns: {
           cadastro: string
           coluna: string
@@ -184,7 +184,7 @@ export type Database = {
         }[]
       }
       referencias_fk_nao_listadas: {
-        Args: never
+        Args: Record<PropertyKey, never>
         Returns: {
           coluna: string
           tabela: string
