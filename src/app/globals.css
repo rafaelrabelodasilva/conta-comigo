@@ -7,13 +7,16 @@
  * `test/sem-cor-literal.test.ts` confere). Componentes usam só as classes
  * geradas a partir destes tokens (`bg-surface`, `text-text-muted`…).
  *
- * Claro em `:root`; escuro em `prefers-color-scheme: dark`, sem recarregar.
- * Os valores são conferidos contra o DESIGN.md e medidos (contraste) por
- * `src/ui/tokens.test.ts`.
+ * Claro em `:root`. Escuro em dois blocos com os mesmos valores (o teste
+ * exige que sejam iguais): `prefers-color-scheme: dark` quando a Aparência
+ * não está fixa em Claro, e `[data-tema="escuro"]` quando está fixa em
+ * Escuro. O `<html>` recebe `data-tema` (Configurações → Aparência), sem
+ * recarregar. Os valores são conferidos contra o DESIGN.md e medidos
+ * (contraste) por `src/ui/tokens.test.ts`.
  */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   --background: #f4f5f5;
   --surface: #ffffff;
@@ -83,7 +86,9 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-tema="claro"]) {
+    color-scheme: dark;
+
     --background: #0f1112;
     --surface: #171a1b;
     --border: #262b2d;
@@ -132,6 +137,59 @@
     --person-8-fg: #fde047;
     --person-8-bg: #352a17;
   }
+}
+
+/* Aparência fixa em Escuro: os mesmos valores do bloco acima. */
+:root[data-tema="escuro"] {
+  color-scheme: dark;
+
+  --background: #0f1112;
+  --surface: #171a1b;
+  --border: #262b2d;
+  --border-subtle: #1e2224;
+  --text: #e6e8e8;
+  --text-muted: #9ba2a4;
+  --nav: #0a0b0c;
+  --nav-icon-idle: #8a9396;
+  --nav-label: #c9cfd1;
+  --accent: #22c55e;
+  --accent-line: #22c55e;
+  --accent-foreground: #0f1112;
+  --selection: #22c55e1f;
+  --focus-ring: #60a5fa;
+  --status-paid-fg: #86efac;
+  --status-paid-bg: #14532d66;
+  --status-unpaid-fg: #fcd34d;
+  --status-unpaid-bg: #78350f66;
+  --status-partial-fg: #93c5fd;
+  --status-partial-bg: #1e3a8a66;
+  --status-late-fg: #fca5a5;
+  --status-late-bg: #7f1d1d66;
+  --forecast-fg: #cbd5e1;
+  --forecast-bg: #33415566;
+  --verify: #dc2626;
+  --danger-fg: #fca5a5;
+  --danger-bg: #7f1d1d66;
+  --alert-warning-bg: #3a2a0c;
+  --alert-warning-border: #b7791f;
+  --scrim: #00000099;
+
+  --person-1-fg: #7dd3fc;
+  --person-1-bg: #153948;
+  --person-2-fg: #d8b4fe;
+  --person-2-bg: #37274b;
+  --person-3-fg: #fcd34d;
+  --person-3-bg: #483717;
+  --person-4-fg: #5eead4;
+  --person-4-bg: #153533;
+  --person-5-fg: #f9a8d4;
+  --person-5-bg: #462437;
+  --person-6-fg: #fdba74;
+  --person-6-bg: #452818;
+  --person-7-fg: #a5b4fc;
+  --person-7-bg: #282b4a;
+  --person-8-fg: #fde047;
+  --person-8-bg: #352a17;
 }
 
 /*

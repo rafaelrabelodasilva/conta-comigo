@@ -13,6 +13,9 @@ const linha = (extra: Partial<LinhaConfiguracoes> = {}): LinhaConfiguracoes => (
   id: "cfg",
   owner_id: "dono",
   status_padrao_id: null,
+  aparencia: "sistema",
+  limite_ajuste_centavos: 100,
+  tolerancia_atraso_dias: 10,
   created_at: T1,
   updated_at: T1,
   ...extra,
@@ -111,5 +114,58 @@ describe("repositório de Configurações", () => {
 
     const semCliente = criarRepoConfiguracoes({ obterCliente: () => null, memoria: recusa.memoria });
     expect(await semCliente.definirStatusPadrao("pago")).toEqual({ ok: false });
+  });
+
+  it("Aparência e Conferência gravam só as colunas alteradas", async () => {
+    const m = montar([linha()], (c) => ({
+      data: linha({ ...(c.corpo as object), updated_at: T2 }),
+      error: null,
+    }));
+    await pronto(m);
+    expect(await m.repo.definirAparencia("escuro")).toEqual({ ok: true });
+    expect(await m.repo.definirConferencia({ limite_ajuste_centavos: 150, tolerancia_atraso_dias: 10 })).toEqual({
+      ok: true,
+    });
+    expect(await m.repo.definirConferencia({ limite_ajuste_centavos: 200, tolerancia_atraso_dias: 15 })).toEqual({
+      ok: true,
+    });
+    expect(m.chamadas.map((c) => c.corpo)).toEqual([
+      { aparencia: "escuro" },
+      { limite_ajuste_centavos: 150 },
+      { limite_ajuste_centavos: 200, tolerancia_atraso_dias: 15 },
+    ]);
+    expect(m.chamadas.every((c) => (c.opcoes as { onConflict: string }).onConflict === "owner_id")).toBe(true);
+  });
+
+  it("sem linha, a Conferência cria a linha num só upsert com as duas colunas", async () => {
+    const m = montar([], (c) => ({ data: linha(c.corpo as object), error: null }));
+    await pronto(m);
+    expect(await m.repo.definirConferencia({ limite_ajuste_centavos: 150, tolerancia_atraso_dias: 15 })).toEqual({
+      ok: true,
+    });
+    expect(m.chamadas.map((c) => c.corpo)).toEqual([{ limite_ajuste_centavos: 150, tolerancia_atraso_dias: 15 }]);
+    expect(m.memoria.linha("cfg")).toMatchObject({ limite_ajuste_centavos: 150, tolerancia_atraso_dias: 15 });
+  });
+
+  it("sem linha, a Aparência cria a linha só com ela (o resto fica com o padrão do banco)", async () => {
+    const m = montar([], (c) => ({ data: linha(c.corpo as object), error: null }));
+    await pronto(m);
+    expect(await m.repo.definirAparencia("claro")).toEqual({ ok: true });
+    expect(m.chamadas.map((c) => c.corpo)).toEqual([{ aparencia: "claro" }]);
+    expect(m.memoria.linha("cfg")?.aparencia).toBe("claro");
+  });
+
+  it("valor igual não chama o banco; recusa volta o anterior", async () => {
+    const m = montar([linha({ aparencia: "escuro" })], () => ({ data: null, error: { code: "23514" } }));
+    await pronto(m);
+    expect(await m.repo.definirAparencia("escuro")).toEqual({ ok: true });
+    expect(m.chamadas).toEqual([]);
+
+    const gravacao = m.repo.definirConferencia({ limite_ajuste_centavos: 5000, tolerancia_atraso_dias: 20 });
+    expect(m.memoria.linha("cfg")).toMatchObject({ limite_ajuste_centavos: 5000, tolerancia_atraso_dias: 20 }); // otimista
+    expect(await gravacao).toEqual({ ok: false });
+    // Um só desfazer: as duas colunas voltam juntas.
+    expect(m.memoria.linha("cfg")).toMatchObject({ limite_ajuste_centavos: 100, tolerancia_atraso_dias: 10 });
+    expect(m.chamadas).toHaveLength(1);
   });
 });

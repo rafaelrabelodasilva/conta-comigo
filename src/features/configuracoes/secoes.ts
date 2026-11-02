@@ -1,7 +1,14 @@
-// Seções de Configurações escolhidas por `?secao=` (Histórias 1.4 a 1.6).
-// Ciclo e Aparência chegam na História 1.7.
+// Seções de Configurações escolhidas por `?secao=` (Histórias 1.4 a 1.7),
+// na ordem do EXPERIENCE.md.
 
-export const CHAVES_SECAO = ["responsaveis", "tipos", "status"] as const;
+export const CHAVES_SECAO = [
+  "responsaveis",
+  "tipos",
+  "status",
+  "ciclo",
+  "conferencia",
+  "aparencia",
+] as const;
 
 export type ChaveSecao = (typeof CHAVES_SECAO)[number];
 

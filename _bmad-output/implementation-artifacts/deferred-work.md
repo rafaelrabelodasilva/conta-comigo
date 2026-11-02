@@ -36,3 +36,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-6-gerenciar-status-e-substituir-cadastros-em-uso.md`
   summary: Na primeira história com referência que conta uso (Lançamentos, Épico 2) ou jsonb, testar no banco os ramos "em uso" de `contar_usos_cadastro` e `substituir_cadastro` (contagem > 0, `cadastro.em_uso`, troca em jsonb pela RPC) e o reabrir a janela de substituto quando a RPC recusar por uso.
   evidence: Medium não verificado: hoje `referencias_cadastro()` só tem `configuracoes.status_padrao_id` (coluna, sem uso), então o SQL dinâmico desses ramos nunca rodou; erro de sintaxe passaria no CI.
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-7-configurar-o-ciclo-do-cartao-e-a-aparencia.md`
+  summary: Testes de componente (jsdom) para `SecaoCiclo`, `SecaoConferencia` e `SecaoAparencia`: dias passados na ordem certa a `planejarMudancaCiclo`, nada gravado com plano `null`, mensagem no campo e rascunho mantido após recusa.
+  evidence: Medium não verificado: nenhuma seção tem teste de componente (Vitest em `node`); um erro de fiação inseriria uma linha errada em `config_ciclo`, que só pode ser superada, nunca corrigida.

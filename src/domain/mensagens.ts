@@ -55,6 +55,15 @@ export const MENSAGENS = {
   "cadastro.nao_encontrado": "Este cadastro não existe mais.",
   "cadastro.invalido": "Não foi possível excluir. Tente de novo.",
   "cadastro.excluir_irreversivel": "Esta ação não pode ser desfeita.",
+  "ciclo.dia_invalido": "Use um dia de 1 a 31.",
+  "ciclo.data_invalida": "Data inválida.",
+  "ciclo.mes_invalido": "Mês inválido.",
+  "ciclo.sem_configuracao": "Informe o dia de fechamento e o de vencimento do cartão.",
+  "ciclo.vigente_no_passado": "A mudança do Ciclo não pode valer para um mês que já passou.",
+  "dinheiro.invalido": "Valor inválido. Use, por exemplo, 1,50.",
+  "ajuste.limite_invalido": "Valor inválido. Use, por exemplo, 1,50.",
+  "ajuste.limite_fora": "Use um valor de R$ 0,01 a R$ 10,00.",
+  "atraso.tolerancia_invalida": "Use de 0 a 60 dias.",
 } as const;
 
 /**
@@ -98,6 +107,18 @@ export const ROTULOS = {
   substituto: "Substituir por",
   escolha: "Escolha…",
   secoes_configuracoes: "Seções de Configurações",
+  salvar: "Salvar",
+  ciclo: "Ciclo do cartão",
+  dia_fechamento: "Dia de fechamento",
+  dia_vencimento: "Dia de vencimento",
+  nota_ciclo: "O fechamento só define em que mês entram as contas lançadas à mão",
+  conferencia: "Conferência e atraso",
+  limite_ajuste: "Limite do Ajuste",
+  tolerancia_atraso: "Tolerância de atraso (dias)",
+  aparencia: "Aparência",
+  aparencia_sistema: "Sistema",
+  aparencia_claro: "Claro",
+  aparencia_escuro: "Escuro",
 } as const;
 
 /** Nome acessível do ⋯ de um item, ex.: "Ações de Rafael". */
@@ -133,6 +154,16 @@ export function tituloExcluir(nome: string): string {
 /** Nome acessível da chave "Conta como pago" de um Status. */
 export function rotuloContaComoPagoDe(nome: string): string {
   return `${nome} conta como pago`;
+}
+
+/** O Ciclo que vale hoje: "Vale hoje (Dez/26): fechamento dia 28, vencimento dia 6". */
+export function rotuloCicloAtual(mes: string, fechamento: number, vencimento: number): string {
+  return `Vale hoje (${mes}): fechamento dia ${fechamento}, vencimento dia ${vencimento}`;
+}
+
+/** A mudança já salva: "A partir de Jan/27: fechamento dia 5, vencimento dia 15". */
+export function rotuloProximoCiclo(mes: string, fechamento: number, vencimento: number): string {
+  return `A partir de ${mes}: fechamento dia ${fechamento}, vencimento dia ${vencimento}`;
 }
 
 export type CodigoMensagem = keyof typeof MENSAGENS;

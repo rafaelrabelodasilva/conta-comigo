@@ -3,6 +3,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ROTULOS } from "@/domain/mensagens";
 import { temSessao } from "@/data/supabase/servidor";
+import { SecaoAparencia } from "@/features/configuracoes/SecaoAparencia";
+import { SecaoCiclo } from "@/features/configuracoes/SecaoCiclo";
+import { SecaoConferencia } from "@/features/configuracoes/SecaoConferencia";
 import { SecaoResponsaveis } from "@/features/configuracoes/SecaoResponsaveis";
 import { SecaoStatus } from "@/features/configuracoes/SecaoStatus";
 import { SecaoTipos } from "@/features/configuracoes/SecaoTipos";
@@ -22,6 +25,9 @@ const CONTEUDO_SECAO: Record<ChaveSecao, { rotulo: string; Conteudo: () => React
   responsaveis: { rotulo: ROTULOS.responsaveis, Conteudo: SecaoResponsaveis },
   tipos: { rotulo: ROTULOS.tipos, Conteudo: SecaoTipos },
   status: { rotulo: ROTULOS.status, Conteudo: SecaoStatus },
+  ciclo: { rotulo: ROTULOS.ciclo, Conteudo: SecaoCiclo },
+  conferencia: { rotulo: ROTULOS.conferencia, Conteudo: SecaoConferencia },
+  aparencia: { rotulo: ROTULOS.aparencia, Conteudo: SecaoAparencia },
 };
 
 const SECOES = CHAVES_SECAO.map((chave) => ({ chave, ...CONTEUDO_SECAO[chave] }));

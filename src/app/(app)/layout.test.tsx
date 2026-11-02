@@ -7,6 +7,8 @@ import { mensagem } from "@/domain/mensagens";
 // O menu usa o roteador do Next, que não existe no teste; aqui só importa
 // o que o layout mostra em cada largura.
 vi.mock("@/ui/NavRail", () => ({ NavRail: () => <nav data-teste="menu" /> }));
+// O tema usa o gerenciador de Realtime; aqui só importa que é montado.
+vi.mock("@/features/configuracoes/AplicarTema", () => ({ AplicarTema: () => <i data-teste="tema" /> }));
 
 const { default: LayoutApp } = await import("./layout");
 
@@ -16,6 +18,10 @@ describe("layout das telas autenticadas", () => {
       <p>conteúdo</p>
     </LayoutApp>,
   );
+
+  it("monta AplicarTema (a Aparência vale em todas as telas)", () => {
+    expect(html).toContain('<i data-teste="tema"></i>');
+  });
 
   it("abaixo de 700 px mostra só o aviso de tela pequena", () => {
     const css = readFileSync(

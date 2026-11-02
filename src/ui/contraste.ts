@@ -77,22 +77,52 @@ function semComentarios(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
+function esquemaDe(bloco: string): string | undefined {
+  return /(^|[;{\s])color-scheme\s*:\s*([^;]+);/.exec(bloco)?.[2].trim();
+}
+
+/** Um bloco de tokens: as variáveis declaradas e o `color-scheme` fixado nele. */
+export type BlocoTokens = { tokens: Tokens; colorScheme: string | undefined };
+
+function lerBloco(bloco: string): BlocoTokens {
+  return { tokens: declaracoes(bloco), colorScheme: esquemaDe(bloco) };
+}
+
 /**
- * Tokens de cor resolvidos em cada modo, a partir do texto do `globals.css`:
- * o claro é o primeiro `:root { … }` de nível superior; o escuro é o claro
- * sobrescrito pelo `:root` dentro de `@media (prefers-color-scheme: dark)`.
+ * Tokens de cor de cada modo, a partir do texto do `globals.css`:
+ * - `claro`: o primeiro `:root { … }` de nível superior;
+ * - `escuro`: o claro sobrescrito pelo `:root:not([data-tema="claro"])`
+ *   dentro de `@media (prefers-color-scheme: dark)` (Aparência = Sistema);
+ * - `escuroFixo`: o claro sobrescrito pelo `:root[data-tema="escuro"]` de
+ *   nível superior (Aparência = Escuro).
+ * `blocos` traz cada bloco cru (sem herdar do claro), com o `color-scheme`.
  */
-export function lerTokens(cssBruto: string): { claro: Tokens; escuro: Tokens } {
+export function lerTokens(cssBruto: string): {
+  claro: Tokens;
+  escuro: Tokens;
+  escuroFixo: Tokens;
+  blocos: { claro: BlocoTokens; escuro: BlocoTokens; escuroFixo: BlocoTokens };
+} {
   const css = semComentarios(cssBruto);
   const raiz = /(^|\n)\s*:root\s*\{/.exec(css);
   if (!raiz) throw new Error("globals.css sem :root.");
-  const claro = declaracoes(blocoDesde(css, raiz.index));
+  const claro = lerBloco(blocoDesde(css, raiz.index));
 
   const midia = /@media\s*\(\s*prefers-color-scheme\s*:\s*dark\s*\)\s*\{/.exec(css);
   if (!midia) throw new Error("globals.css sem o modo escuro.");
   const dentro = blocoDesde(css, midia.index);
-  const raizEscura = /:root\s*\{/.exec(dentro);
-  const escuro = raizEscura ? declaracoes(blocoDesde(dentro, raizEscura.index)) : {};
+  const raizEscura = /:root:not\(\s*\[data-tema="claro"\]\s*\)\s*\{/.exec(dentro);
+  if (!raizEscura) throw new Error('globals.css sem :root:not([data-tema="claro"]) no modo escuro.');
+  const escuro = lerBloco(blocoDesde(dentro, raizEscura.index));
 
-  return { claro, escuro: { ...claro, ...escuro } };
+  const fixo = /(^|\n):root\[data-tema="escuro"\]\s*\{/.exec(css);
+  if (!fixo) throw new Error('globals.css sem :root[data-tema="escuro"].');
+  const escuroFixo = lerBloco(blocoDesde(css, fixo.index));
+
+  return {
+    claro: claro.tokens,
+    escuro: { ...claro.tokens, ...escuro.tokens },
+    escuroFixo: { ...claro.tokens, ...escuroFixo.tokens },
+    blocos: { claro, escuro, escuroFixo },
+  };
 }

@@ -14,7 +14,7 @@ const css = ler("src/app/globals.css");
 const design = ler(
   "_bmad-output/planning-artifacts/ux-designs/ux-conta-comigo-2026-11-01/DESIGN.md",
 );
-const { claro, escuro } = lerTokens(css);
+const { claro, escuro, escuroFixo, blocos } = lerTokens(css);
 
 /** Cores do bloco `colors:` do frontmatter do DESIGN.md. */
 function coresDoDesign(texto: string): Record<string, string> {
@@ -44,6 +44,18 @@ describe("tokens do DESIGN.md no globals.css", () => {
     expect(escuro[nome], `--${nome} no escuro`).toBeDefined();
     expect(lerHex(claro[nome])).toEqual(lerHex(valorClaro));
     expect(lerHex(escuro[nome])).toEqual(lerHex(valorEscuro));
+  });
+
+  it("os dois blocos escuros (sistema e Aparência fixa) são iguais", () => {
+    expect(Object.keys(blocos.escuro.tokens).length).toBeGreaterThan(40);
+    expect(blocos.escuroFixo.tokens).toEqual(blocos.escuro.tokens);
+    expect(escuroFixo).toEqual(escuro);
+  });
+
+  it("cada bloco fixa o próprio color-scheme", () => {
+    expect(blocos.claro.colorScheme).toBe("light");
+    expect(blocos.escuro.colorScheme).toBe("dark");
+    expect(blocos.escuroFixo.colorScheme).toBe("dark");
   });
 
   it("o tema do Tailwind tira a paleta padrão", () => {
@@ -104,6 +116,7 @@ const nome = ({ frente, fundo }: Par) => `${frente} / ${fundo}`;
 describe.each([
   ["claro", claro],
   ["escuro", escuro],
+  ["escuro fixo", escuroFixo],
 ] as const)("contraste no modo %s", (_modo, tokens) => {
   it.each(PARES_TEXTO.map((p) => [nome(p), p] as const))("texto %s ≥ 4,5:1", (_n, par) => {
     expect(medir(tokens, par)).toBeGreaterThanOrEqual(4.5);

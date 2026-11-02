@@ -1,4 +1,4 @@
-// Apoio aos testes de integração da História 1.6 (Supabase local): clientes,
+// Apoio aos testes de integração (Histórias 1.6 e 1.7) (Supabase local): clientes,
 // usuários de teste com limpeza e espera de um evento do Realtime.
 // Só usado com INTEGRACAO_SUPABASE=1 e as chaves de `supabase status -o env`.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -22,7 +22,7 @@ function variavel(...nomes: string[]): string {
   throw new Error(`Faltam as variáveis ${nomes.join(" ou ")} (supabase status -o env).`);
 }
 
-/** Admin, criação de usuários (com sessão própria) e limpeza das tabelas da 1.6. */
+/** Admin, criação de usuários (com sessão própria) e limpeza das tabelas de negócio. */
 export function supabaseLocal(prefixo: string) {
   const url = variavel("API_URL", "SUPABASE_URL");
   const chavePublica = variavel("PUBLISHABLE_KEY", "ANON_KEY");
@@ -53,6 +53,7 @@ export function supabaseLocal(prefixo: string) {
 
   async function limpar() {
     for (const u of usuarios) {
+      await admin.from("config_ciclo").delete().eq("owner_id", u.id);
       await admin.from("configuracoes").delete().eq("owner_id", u.id);
       await admin.from("status").delete().eq("owner_id", u.id);
       await admin.from("tipos").delete().eq("owner_id", u.id);
@@ -65,16 +66,17 @@ export function supabaseLocal(prefixo: string) {
 }
 
 /**
- * Espera um evento (`UPDATE` ou `DELETE`) de `tabela` que satisfaça `aceita`
- * chegar a `ouvinte`. `aceita` recebe `new` no UPDATE e `old` no DELETE.
+ * Espera um evento (`INSERT`, `UPDATE` ou `DELETE`) de `tabela` que satisfaça
+ * `aceita` chegar a `ouvinte`. `aceita` recebe `new` no INSERT e no UPDATE e
+ * `old` no DELETE.
  * O Realtime pode levar um instante para ligar o postgres_changes depois do
  * SUBSCRIBED: `gravar` é chamado de novo a cada 2 s até o evento chegar.
  * Sempre remove o canal e para de gravar, também em falha.
  */
 export async function esperarEvento<T>(
   ouvinte: Cliente,
-  tabela: "status" | "configuracoes",
-  evento: "UPDATE" | "DELETE",
+  tabela: "status" | "configuracoes" | "config_ciclo",
+  evento: "INSERT" | "UPDATE" | "DELETE",
   aceita: (linha: T) => boolean,
   gravar: (tentativa: number) => PromiseLike<unknown>,
 ): Promise<T> {

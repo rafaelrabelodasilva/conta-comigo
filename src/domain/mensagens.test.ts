@@ -6,9 +6,11 @@ import {
   ehCodigoConhecido,
   mensagem,
   rotuloAcoesDe,
+  rotuloCicloAtual,
   rotuloContaComoPagoDe,
   rotuloCor,
   rotuloCorDe,
+  rotuloProximoCiclo,
   rotuloRegistros,
   tituloEmUso,
   tituloExcluir,
@@ -170,5 +172,40 @@ describe("códigos de Status e de exclusão (História 1.6)", () => {
     expect(tituloEmUso(1, "Pago")).toBe("1 registro usa “Pago”");
     expect(tituloExcluir("Casa")).toBe("Excluir “Casa”?");
     expect(rotuloContaComoPagoDe("Pago")).toBe("Pago conta como pago");
+  });
+});
+
+describe("Ciclo, Conferência e atraso e Aparência (História 1.7)", () => {
+  it("tem as mensagens dos campos e do banco", () => {
+    expect(mensagem("ciclo.dia_invalido")).toBe("Use um dia de 1 a 31.");
+    expect(mensagem("ajuste.limite_fora")).toBe("Use um valor de R$ 0,01 a R$ 10,00.");
+    expect(mensagem("atraso.tolerancia_invalida")).toBe("Use de 0 a 60 dias.");
+    for (const codigo of [
+      "ciclo.data_invalida",
+      "ciclo.mes_invalido",
+      "ciclo.sem_configuracao",
+      "ciclo.vigente_no_passado",
+      "dinheiro.invalido",
+      "ajuste.limite_invalido",
+    ]) {
+      expect(ehCodigoConhecido(codigo)).toBe(true);
+    }
+  });
+
+  it("os rótulos das seções e a nota do Ciclo", () => {
+    expect(ROTULOS.ciclo).toBe("Ciclo do cartão");
+    expect(ROTULOS.conferencia).toBe("Conferência e atraso");
+    expect(ROTULOS.aparencia).toBe("Aparência");
+    expect(ROTULOS.nota_ciclo).toBe("O fechamento só define em que mês entram as contas lançadas à mão");
+    expect(ROTULOS.dia_fechamento).toBe("Dia de fechamento");
+    expect(ROTULOS.dia_vencimento).toBe("Dia de vencimento");
+    expect(ROTULOS.salvar).toBe("Salvar");
+    expect([ROTULOS.aparencia_sistema, ROTULOS.aparencia_claro, ROTULOS.aparencia_escuro]).toEqual([
+      "Sistema",
+      "Claro",
+      "Escuro",
+    ]);
+    expect(rotuloProximoCiclo("Jan/27", 5, 15)).toBe("A partir de Jan/27: fechamento dia 5, vencimento dia 15");
+    expect(rotuloCicloAtual("Dez/26", 28, 6)).toBe("Vale hoje (Dez/26): fechamento dia 28, vencimento dia 6");
   });
 });
