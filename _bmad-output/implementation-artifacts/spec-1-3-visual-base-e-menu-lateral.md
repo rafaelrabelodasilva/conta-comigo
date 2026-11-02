@@ -2,8 +2,9 @@
 title: 'História 1.3: Visual base e menu lateral'
 type: 'feature'
 created: '2026-11-02'
-status: 'draft'
+status: 'in-progress'
 route: 'dispatch'
+baseline_commit: 'cf35950dd55562f7a131e505ab5d66d283d9f0f0'
 review_loop_iteration: 0
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-1-context.md'
