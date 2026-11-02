@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { opcoesDeSubstituto } from "@/domain/cadastros";
 import { ROTULOS, mensagem } from "@/domain/mensagens";
-import { ordenarParaConfiguracoes, validarDesarquivarTipo, validarNomeTipo } from "@/domain/tipos";
+import { ativos, ordenarParaConfiguracoes, validarDesarquivarTipo, validarNomeTipo } from "@/domain/tipos";
 import { gerenciador, useLinhas } from "@/data/realtime";
 import { repoTipos, type ResultadoGravacao } from "@/data/tipos-repo";
 import { Botao } from "@/ui/Botao";
@@ -11,6 +12,7 @@ import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
 import { Esqueleto } from "@/ui/Esqueleto";
 import { EstadoVazio } from "@/ui/EstadoVazio";
 import { useToast } from "@/ui/Toast";
+import { useExcluirCadastro } from "./ExcluirCadastro";
 import { LinhaTipo } from "./LinhaTipo";
 
 // Configurações → Tipos. Lê só pelo hook do gerenciador de Realtime e grava
@@ -31,6 +33,16 @@ export function SecaoTipos() {
   function avisarSeFalhou(r: ResultadoGravacao) {
     if (!r.ok) toast.mostrar({ texto: mensagem("salvar.falhou") });
   }
+
+  async function arquivar(id: string) {
+    avisarSeFalhou(await repo.arquivar(id));
+  }
+
+  const exclusao = useExcluirCadastro({
+    cadastro: "tipo",
+    opcoes: (deId) => opcoesDeSubstituto(ativos(linhas), deId),
+    aoArquivar: (id) => void arquivar(id),
+  });
 
   async function adicionar() {
     const nome = validarNomeTipo(nomeNovo, linhas);
@@ -88,8 +100,9 @@ export function SecaoTipos() {
             tipo={t}
             todos={linhas}
             aoRenomear={async (id, nome) => avisarSeFalhou(await repo.atualizar(id, { nome }))}
-            aoArquivar={async (id) => avisarSeFalhou(await repo.arquivar(id))}
+            aoArquivar={arquivar}
             aoDesarquivar={desarquivar}
+            aoExcluir={(id) => void exclusao.pedir({ id, nome: t.nome })}
           />
         ))}
       </ul>
@@ -150,6 +163,8 @@ export function SecaoTipos() {
           </div>
         </form>
       ) : null}
+
+      {exclusao.elemento}
     </section>
   );
 }

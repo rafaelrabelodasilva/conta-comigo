@@ -7,7 +7,7 @@ import { cn } from "@/ui/cn";
 import { MenuAcoes, type ItemMenuAcoes } from "@/ui/MenuAcoes";
 
 // Uma linha da seção Tipos: nome editável (grava ao sair do campo ou com
-// Enter; Esc desfaz o rascunho) e ⋯ com Arquivar ou Desarquivar.
+// Enter; Esc desfaz o rascunho) e ⋯ com Arquivar ou Desarquivar e Excluir.
 
 export type PropsLinhaTipo = {
   tipo: Tipo;
@@ -16,9 +16,10 @@ export type PropsLinhaTipo = {
   aoRenomear: (id: string, nome: string) => void;
   aoArquivar: (id: string) => void;
   aoDesarquivar: (id: string) => void;
+  aoExcluir: (id: string) => void;
 };
 
-export function LinhaTipo({ tipo, todos, aoRenomear, aoArquivar, aoDesarquivar }: PropsLinhaTipo) {
+export function LinhaTipo({ tipo, todos, aoRenomear, aoArquivar, aoDesarquivar, aoExcluir }: PropsLinhaTipo) {
   const { id, nome, arquivado } = tipo;
   // Enquanto edita, o campo mostra o rascunho; fora disso, o nome da memória
   // (que volta sozinho ao anterior se o banco recusar).
@@ -39,9 +40,12 @@ export function LinhaTipo({ tipo, todos, aoRenomear, aoArquivar, aoDesarquivar }
     if (r.valor !== nome) aoRenomear(id, r.valor);
   }
 
-  const itens: ItemMenuAcoes[] = arquivado
-    ? [{ rotulo: ROTULOS.desarquivar, aoEscolher: () => aoDesarquivar(id) }]
-    : [{ rotulo: ROTULOS.arquivar, aoEscolher: () => aoArquivar(id) }];
+  const itens: ItemMenuAcoes[] = [
+    arquivado
+      ? { rotulo: ROTULOS.desarquivar, aoEscolher: () => aoDesarquivar(id) }
+      : { rotulo: ROTULOS.arquivar, aoEscolher: () => aoArquivar(id) },
+    { rotulo: ROTULOS.excluir, aoEscolher: () => aoExcluir(id), destrutivo: true },
+  ];
 
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border-subtle px-2 py-2 last:border-b-0">

@@ -39,6 +39,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      configuracoes: {
+        Row: {
+          created_at: string
+          id: string
+          owner_id: string
+          status_padrao_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          owner_id?: string
+          status_padrao_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          owner_id?: string
+          status_padrao_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "configuracoes_status_padrao_fkey"
+            columns: ["owner_id", "status_padrao_id"]
+            isOneToOne: false
+            referencedRelation: "status"
+            referencedColumns: ["owner_id", "id"]
+          },
+        ]
+      }
       responsaveis: {
         Row: {
           arquivado: boolean
@@ -67,6 +99,36 @@ export type Database = {
           id?: string
           nome?: string
           ordem?: number
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      status: {
+        Row: {
+          arquivado: boolean
+          conta_como_pago: boolean
+          created_at: string
+          id: string
+          nome: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          arquivado?: boolean
+          conta_como_pago?: boolean
+          created_at?: string
+          id?: string
+          nome: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Update: {
+          arquivado?: boolean
+          conta_como_pago?: boolean
+          created_at?: string
+          id?: string
+          nome?: string
           owner_id?: string
           updated_at?: string
         }
@@ -104,6 +166,30 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      contar_usos_cadastro: {
+        Args: { cadastro: string }
+        Returns: {
+          id: string
+          usos: number
+        }[]
+      }
+      referencias_cadastro: {
+        Args: never
+        Returns: {
+          cadastro: string
+          coluna: string
+          conta_uso: boolean
+          forma: string
+          tabela: string
+        }[]
+      }
+      referencias_fk_nao_listadas: {
+        Args: never
+        Returns: {
+          coluna: string
+          tabela: string
+        }[]
+      }
       reordenar_responsaveis: {
         Args: { ids: string[] }
         Returns: {
@@ -122,6 +208,14 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      substituir_cadastro: {
+        Args: { cadastro: string; de_id: string; para_id?: string }
+        Returns: undefined
+      }
+      trocar_id_jsonb: {
+        Args: { de: string; doc: Json; para: string }
+        Returns: Json
       }
     }
     Enums: {

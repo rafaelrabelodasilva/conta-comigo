@@ -20,10 +20,10 @@ import {
   mostrarToast,
   type EstadoToast,
   type NovoToast,
-} from "./toast";
+} from "./toast-estado";
 
 // Aviso inferior (`toast`): faixa escura de raio md, centralizada embaixo, 6 s na tela,
-// um substitui o outro, "Desfazer" opcional. As regras estão em `toast.ts`.
+// um substitui o outro, "Desfazer" opcional. As regras estão em `toast-estado.ts`.
 
 type ApiToast = {
   mostrar: (novo: NovoToast) => void;

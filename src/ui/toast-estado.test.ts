@@ -5,7 +5,7 @@ import {
   desfazerToast,
   fecharToast,
   mostrarToast,
-} from "./toast";
+} from "./toast-estado";
 
 describe("toast", () => {
   it("dura 6 segundos", () => {

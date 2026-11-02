@@ -4,8 +4,9 @@ import { redirect } from "next/navigation";
 import { ROTULOS } from "@/domain/mensagens";
 import { temSessao } from "@/data/supabase/servidor";
 import { SecaoResponsaveis } from "@/features/configuracoes/SecaoResponsaveis";
+import { SecaoStatus } from "@/features/configuracoes/SecaoStatus";
 import { SecaoTipos } from "@/features/configuracoes/SecaoTipos";
-import { secaoEscolhida, type ChaveSecao } from "@/features/configuracoes/secoes";
+import { CHAVES_SECAO, secaoEscolhida, type ChaveSecao } from "@/features/configuracoes/secoes";
 import { sair } from "@/features/entrar/acoes";
 import { cn } from "@/ui/cn";
 import { itemDaRota } from "@/ui/navegacao";
@@ -15,11 +16,15 @@ const item = itemDaRota("/configuracoes");
 
 export const metadata: Metadata = { title: `${item.titulo} · Conta Comigo` };
 
-// Seções na ordem da lista à esquerda; a escolhida vem de `?secao=`.
-const SECOES: readonly { chave: ChaveSecao; rotulo: string; Conteudo: () => React.JSX.Element }[] = [
-  { chave: "responsaveis", rotulo: ROTULOS.responsaveis, Conteudo: SecaoResponsaveis },
-  { chave: "tipos", rotulo: ROTULOS.tipos, Conteudo: SecaoTipos },
-];
+// Uma entrada por chave de CHAVES_SECAO (faltar uma é erro de tipo); a
+// ordem da lista à esquerda é a de CHAVES_SECAO e a escolhida vem de `?secao=`.
+const CONTEUDO_SECAO: Record<ChaveSecao, { rotulo: string; Conteudo: () => React.JSX.Element }> = {
+  responsaveis: { rotulo: ROTULOS.responsaveis, Conteudo: SecaoResponsaveis },
+  tipos: { rotulo: ROTULOS.tipos, Conteudo: SecaoTipos },
+  status: { rotulo: ROTULOS.status, Conteudo: SecaoStatus },
+};
+
+const SECOES = CHAVES_SECAO.map((chave) => ({ chave, ...CONTEUDO_SECAO[chave] }));
 
 // Configurações: seções à esquerda, conteúdo à direita (EXPERIENCE.md).
 // "Sair" fica no fim da lista e encerra a sessão neste aparelho.
@@ -32,7 +37,7 @@ export default async function PaginaConfiguracoes({
   if (!(await temSessao())) redirect("/entrar");
 
   const chave = secaoEscolhida((await searchParams).secao);
-  const { Conteudo } = SECOES.find((s) => s.chave === chave) ?? SECOES[0];
+  const { Conteudo } = CONTEUDO_SECAO[chave];
 
   return (
     <Tela titulo={item.titulo}>

@@ -15,7 +15,7 @@ import { MenuAcoes, type ItemMenuAcoes } from "@/ui/MenuAcoes";
 import { SeletorCor } from "./SeletorCor";
 
 // Uma linha da seção Responsáveis: nome editável (grava ao sair do campo),
-// seletor de cor e ⋯ com Mover para cima/baixo e Arquivar/Desarquivar.
+// seletor de cor e ⋯ com Mover para cima/baixo, Arquivar/Desarquivar e Excluir.
 
 export type PropsLinhaResponsavel = {
   responsavel: Responsavel;
@@ -26,6 +26,7 @@ export type PropsLinhaResponsavel = {
   aoMover: (id: string, direcao: Direcao) => void;
   aoArquivar: (id: string) => void;
   aoDesarquivar: (id: string) => void;
+  aoExcluir: (id: string) => void;
 };
 
 export function LinhaResponsavel({
@@ -36,6 +37,7 @@ export function LinhaResponsavel({
   aoMover,
   aoArquivar,
   aoDesarquivar,
+  aoExcluir,
 }: PropsLinhaResponsavel) {
   const { id, nome, cor, arquivado } = responsavel;
   // Enquanto edita, o campo mostra o rascunho; fora disso, o nome da memória
@@ -58,8 +60,9 @@ export function LinhaResponsavel({
   }
 
   const mover = podeMover(todos, id);
+  const excluir: ItemMenuAcoes = { rotulo: ROTULOS.excluir, aoEscolher: () => aoExcluir(id), destrutivo: true };
   const itens: ItemMenuAcoes[] = arquivado
-    ? [{ rotulo: ROTULOS.desarquivar, aoEscolher: () => aoDesarquivar(id) }]
+    ? [{ rotulo: ROTULOS.desarquivar, aoEscolher: () => aoDesarquivar(id) }, excluir]
     : [
         ...(mover.cima
           ? [{ rotulo: ROTULOS.mover_para_cima, aoEscolher: () => aoMover(id, "cima") }]
@@ -68,6 +71,7 @@ export function LinhaResponsavel({
           ? [{ rotulo: ROTULOS.mover_para_baixo, aoEscolher: () => aoMover(id, "baixo") }]
           : []),
         { rotulo: ROTULOS.arquivar, aoEscolher: () => aoArquivar(id) },
+        excluir,
       ];
 
   return (
