@@ -77,10 +77,13 @@ jobs:
           # O arquivo vem de `supabase gen types typescript --linked` (produção),
           # que formata diferente do gerador local e traz a versão do PostgREST.
           # Compara só o conteúdo: sem espaços, aspas, vírgulas e parênteses,
-          # sem o bloco __InternalSupabase e sem `ComputedFields: never`.
+          # sem o bloco __InternalSupabase e sem `ComputedFields: never`. Função
+          # sem argumentos: o local escreve `Args: Record<PropertyKey, never>` e
+          # o de produção `Args: never`; os dois viram `Args: never`.
           npx supabase gen types typescript --local > "$RUNNER_TEMP/database.types.ts"
           normalizar() {
-            sed -e '/Allows to automatically instantiate/,/^  }$/d' -e '/ComputedFields: never/d' "$1" \
+            sed -e '/Allows to automatically instantiate/,/^  }$/d' -e '/ComputedFields: never/d' \
+              -e 's/Args: Record<PropertyKey, never>/Args: never/' "$1" \
               | tr -d " \n\t\"',;()|" | fold -w 80
           }
           if ! diff -u <(normalizar src/data/database.types.ts) <(normalizar "$RUNNER_TEMP/database.types.ts"); then
