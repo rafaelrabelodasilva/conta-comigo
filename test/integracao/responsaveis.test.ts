@@ -182,8 +182,15 @@ describe.skipIf(!ligado)("Responsáveis no Supabase local", () => {
       });
     });
 
+    // O Realtime pode levar um instante para ligar o postgres_changes depois
+    // do SUBSCRIBED: grava de novo a cada 2 s (nome diferente a cada vez)
+    // até o evento chegar, para o teste não depender de sorte no tempo.
+    let repetidor: ReturnType<typeof setInterval> | undefined;
     const recebido = new Promise<{ id: string; nome: string; updated_at: string }>((resolver, rejeitar) => {
-      const limite = setTimeout(() => rejeitar(new Error("evento não chegou")), 15_000);
+      const limite = setTimeout(() => {
+        clearInterval(repetidor);
+        rejeitar(new Error("evento não chegou"));
+      }, 25_000);
       const canal = outroAparelho
         .channel("teste-responsaveis")
         .on(
@@ -191,25 +198,40 @@ describe.skipIf(!ligado)("Responsáveis no Supabase local", () => {
           { event: "UPDATE", schema: "public", table: "responsaveis" },
           (payload) => {
             const nova = payload.new as { id: string; nome: string; updated_at: string };
-            if (nova.nome !== "Lucas M.") return;
+            if (nova.id !== alvo!.id || !nova.nome.startsWith("Lucas M")) return;
             clearTimeout(limite);
+            clearInterval(repetidor);
             void outroAparelho.removeChannel(canal);
             resolver(nova);
           },
         )
-        .subscribe(async (status) => {
-          if (status !== "SUBSCRIBED") return;
-          await a.cliente.from("responsaveis").update({ nome: "Lucas M." }).eq("id", alvo!.id);
+        .subscribe((status) => {
+          if (status !== "SUBSCRIBED" || repetidor) return;
+          let tentativa = 0;
+          const gravar = () =>
+            void a.cliente
+              .from("responsaveis")
+              .update({ nome: `Lucas M${++tentativa}` })
+              .eq("id", alvo!.id);
+          gravar();
+          repetidor = setInterval(gravar, 2_000);
         });
     });
 
     const nova = await recebido;
-    expect(nova.nome).toBe("Lucas M.");
+    expect(nova.nome).toMatch(/^Lucas M\d+$/);
+    // Dá tempo de um eventual evento indevido chegar ao canal de B.
+    await new Promise((r) => setTimeout(r, 1_000));
 
     // O `updated_at` do evento é o mesmo instante gravado no banco.
     const { data: lida } = await a.cliente.from("responsaveis").select("*").eq("id", alvo!.id).single();
     expect(Number.isNaN(instanteMicros(nova.updated_at))).toBe(false);
-    expect(instanteMicros(nova.updated_at)).toBe(instanteMicros(lida!.updated_at));
+    if (lida!.nome === nova.nome) {
+      expect(instanteMicros(nova.updated_at)).toBe(instanteMicros(lida!.updated_at));
+    } else {
+      // Uma regravação ainda em curso chegou depois do evento.
+      expect(instanteMicros(lida!.updated_at)).toBeGreaterThan(instanteMicros(nova.updated_at));
+    }
 
     expect(eventosDeB).toEqual([]);
     await b.cliente.removeChannel(canalB);
