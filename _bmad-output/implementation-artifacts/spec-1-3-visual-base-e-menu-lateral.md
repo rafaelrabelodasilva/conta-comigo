@@ -91,6 +91,46 @@ context:
 - `src/app/(app)/layout.test.tsx` cobre a linha "tela estreita" da matriz (renderiza o layout com o menu simulado).
 - Atalhos ⌘/Ctrl+1…6 podem ser tomados pelo navegador para trocar de aba; conferir num PC/Mac de verdade.
 
+## Spec Change Log
+
+## Review Triage Log
+
+Revisão 1 (blind-hunter, edge-case-hunter, verification-gap):
+
+| # | Achado | Veredito | Evidência | Rota |
+|---|--------|----------|-----------|------|
+| 1 | `engolirClique` fica ligado depois de toque longo sem `click` e engole o próximo clique de mouse ou teclado (blind, edge, verification-gap) | medium | O retorno do mouse em `onPointerDown` vem antes de zerar a flag; teclado nunca zera | patch |
+| 2 | Segurar um item do menu (portal) por 500 ms borbulha até o invólucro e o clique do item é engolido | medium | Eventos React atravessam o portal; `onClickCapture` do invólucro roda antes do item | patch |
+| 3 | Segundo dedo reinicia ou cancela o toque longo | low | Raro; correção exige rastrear `pointerId` | rejeitado |
+| 4 | `Botao asChild` num Server Component pode quebrar (Slot usa `useComposedRefs`, sem "use client") | maybe-false | `react-slot` não tem "use client"; resolveria renderizar uma página servidor com `asChild`. Nenhum uso hoje | defer |
+| 5 | `type` é descartado com `asChild` | low | `type` sai da desestruturação e não volta ao Slot | patch |
+| 6 | `aria-describedby`/`aria-invalid` do chamador sobrescrevem o vínculo do erro em `Campo` | low | Spread depois dos atributos; correção direta | patch |
+| 7 | ⌘/Ctrl+1…6 navega com Janela ou Confirmação aberta e perde o que estava nela (blind, edge) | medium | O ouvinte global ignora só campos de texto | patch |
+| 8 | Tecla segurada (`repeat`) chama `router.push` várias vezes | low | Correção direta | patch |
+| 9 | Atalhos navegam abaixo de 700 px | low | Só troca a rota por trás do mesmo aviso | rejeitado |
+| 10 | Entidade HTML (`&#8942;`) acusa falso positivo de cor | low | Regex casa `#8942`; correção direta | patch |
+| 11 | Cores nomeadas e valores arbitrários (`bg-[red]`, `text-[tomato]`) escapam da regra (blind, edge) | medium | Regex só conhece hex, funções e paleta | patch |
+| 12 | `.js/.jsx/.mjs` em `src` não são varridos | low | Filtro de extensão; correção direta | patch |
+| 13 | `lerTokens` erra se o `@media` vier antes do `:root` | low | Ordem fixa no arquivo; exigiria reescrever o leitor | rejeitado |
+| 14 | Par com token ausente dá TypeError pouco claro | low | Falha alto mesmo assim | rejeitado |
+| 15 | `key={item.rotulo}` duplica com rótulos iguais | low | Correção direta | patch |
+| 16 | Itens do menu ⋯ com `outline-none`: sem anel de 2 px no teclado | medium | O utilitário sobrepõe o `:focus-visible` da base | patch |
+| 17 | `Campo.erro` não é usado nos formulários | false | Login não pode dizer qual campo errou (1.2); o erro fica no parágrafo geral | rejeitado |
+| 18 | Sem `loading.tsx`/`error.tsx` no grupo `(app)` | low | Telas provisórias sem dados; cada história liga os seus estados | rejeitado |
+| 19 | Comportamento dos componentes sem teste de DOM: Confirmação foca o destrutivo, temporizador e "Desfazer" do provedor, clique engolido, adaptador de teclado (blind, verification-gap) | medium | Vitest roda em `node`, sem jsdom/happy-dom | defer |
+| 20 | Toast de 6 s sem pausa em foco ou hover (WCAG 2.2.1) | low | Usuário único, uso por toque; 6 s é decisão do UX | rejeitado |
+| 21 | Comentário do toast diz "pílula" mas o raio é `md` | low | Comentário desatualizado | patch |
+| 22 | `focus-ring` não medido sobre `nav` (3,03:1) nem sobre `surface` | low | Pares faltando no teste | patch |
+| 23 | Teste de tokens compara só cores (raios, espaços e tipografia não) | low | Valores fixos que mudam raramente | rejeitado |
+| 24 | `layout.test.tsx` compara HTML exato | low | Frágil, mas cobre a linha da matriz | rejeitado |
+| 25 | Painel sem `metadata`; guarda de sessão repetida | low | Título da aba cai no padrão; correção direta (só o título) | patch |
+| 26 | Estilos de mensagem de erro diferentes entre telas | low | `codigoMotivo` é informação, não erro | rejeitado |
+| 27 | Status da spec e do sprint-status divergem | false | Sincronizado no passo de apresentação | rejeitado |
+| 28 | `color-scheme` declarado três vezes | low | Classe arbitrária redundante; remoção direta | patch |
+| 29 | `ConfirmarAcao` fecha antes de ação assíncrona terminar | low | Nenhum uso ainda; cada história decide | rejeitado |
+| 30 | Item ativo do `NavRail` sem teste | medium | Só as funções puras são testadas; o layout simula o menu | patch |
+| 31 | Região `aria-live` do toast sem teste | low | Asserção estática cabe no estilo atual | patch |
+
 ## Design Notes
 
 Pares medidos (fg/bg): `text`, `text-muted` sobre `background` e `surface`; `accent-foreground`/`accent`; `accent` sobre `surface` e `background` (pior caso: 4,59 no claro); `nav-label`/`nav`; branco/`nav` (toast, rótulo ativo); branco/`verify` (contador); `danger-fg` sobre `surface` e `danger-bg`; `text`/`alert-warning-bg`; `text`/`selection`; `forecast-*`, os 4 `status-*` e os 8 `person-N-fg/bg`. Com 3:1: `nav-icon-idle`/`nav`, `accent-line`/`surface`, `focus-ring`/`background`, `verify`/`surface`. Medição prévia: todos passam.
