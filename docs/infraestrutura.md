@@ -23,6 +23,7 @@ Nenhum segredo fica neste arquivo. As chaves ficam só nas variáveis de ambient
 
 ## Variáveis de ambiente da Vercel
 - Configuradas na História 1.1 (2026-11-01), **só em Production**: `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (plain), `SUPABASE_SECRET_KEY` (sensitive, cadastrada pelo Rafael). Preview e Development não têm nenhuma.
+- **Pendente antes do primeiro uso real:** trocar a senha do usuário do Rafael no Supabase Auth (apareceu numa conversa com o agente na 1.2), pelo próprio "Esqueci a senha" do app, por uma senha forte.
 - **Pendente antes do primeiro uso real:** trocar a `SUPABASE_SECRET_KEY` (a chave atual apareceu numa conversa com o agente). No Supabase, criar uma chave secreta nova, atualizar a variável na Vercel e apagar a antiga.
 - Nas histórias seguintes: `GEMINI_API_KEY`, `GEMINI_MODEL` (2.1), `CRON_SECRET` (5.3), chaves VAPID (7.5)
 
