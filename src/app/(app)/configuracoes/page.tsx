@@ -33,7 +33,8 @@ const CONTEUDO_SECAO: Record<ChaveSecao, { rotulo: string; Conteudo: () => React
 const SECOES = CHAVES_SECAO.map((chave) => ({ chave, ...CONTEUDO_SECAO[chave] }));
 
 // Configurações: seções à esquerda, conteúdo à direita (EXPERIENCE.md).
-// "Sair" fica no fim da lista e encerra a sessão neste aparelho.
+// "Retomar o Primeiro uso" leva ao passo 1; "Sair" fica no fim da lista e
+// encerra a sessão neste aparelho.
 export default async function PaginaConfiguracoes({
   searchParams,
 }: {
@@ -68,6 +69,13 @@ export default async function PaginaConfiguracoes({
               </Link>
             );
           })}
+          {/* Volta ao passo 1 sem mexer na marca: o Primeiro uso não volta a abrir sozinho. */}
+          <Link
+            href="/primeiro-uso"
+            className="flex min-h-toque items-center rounded-sm px-3 texto-body text-text"
+          >
+            {ROTULOS.retomar_primeiro_uso}
+          </Link>
           <form action={sair}>
             <button
               type="submit"

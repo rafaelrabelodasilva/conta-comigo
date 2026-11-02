@@ -26,15 +26,21 @@ export function configuracoesDoDono(
 export type MudancaConfiguracoes = Partial<
   Pick<
     LinhaConfiguracoes,
-    "status_padrao_id" | "aparencia" | "limite_ajuste_centavos" | "tolerancia_atraso_dias"
+    | "status_padrao_id"
+    | "aparencia"
+    | "limite_ajuste_centavos"
+    | "tolerancia_atraso_dias"
+    | "primeiro_uso_em"
   >
 >;
 
 export function criarRepoConfiguracoes(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
   memoria: Gerenciador<LinhaConfiguracoes>;
+  /** Relógio de quem grava a marca do Primeiro uso; nos testes, fixo. */
+  agora?: () => Date;
 }) {
-  const { obterCliente, memoria } = deps;
+  const { obterCliente, memoria, agora = () => new Date() } = deps;
 
   /** Upsert em `owner_id` só com as colunas dadas (cria a linha se faltar). */
   async function upsertParcial(
@@ -98,6 +104,15 @@ export function criarRepoConfiguracoes(deps: {
         limite_ajuste_centavos: valores.limite_ajuste_centavos,
         tolerancia_atraso_dias: valores.tolerancia_atraso_dias,
       });
+    },
+
+    /**
+     * Marca o Primeiro uso como terminado (concluído ou pulado até o fim):
+     * `primeiro_uso_em` = agora, por upsert em `owner_id`. Vale em todos os
+     * aparelhos: o Painel deixa de abrir o Primeiro uso sozinho.
+     */
+    concluirPrimeiroUso(): Promise<ResultadoGravacao> {
+      return definir({ primeiro_uso_em: agora().toISOString() });
     },
   };
 }

@@ -76,6 +76,7 @@ export type Database = {
           id: string
           limite_ajuste_centavos: number
           owner_id: string
+          primeiro_uso_em: string | null
           status_padrao_id: string | null
           tolerancia_atraso_dias: number
           updated_at: string
@@ -86,6 +87,7 @@ export type Database = {
           id?: string
           limite_ajuste_centavos?: number
           owner_id?: string
+          primeiro_uso_em?: string | null
           status_padrao_id?: string | null
           tolerancia_atraso_dias?: number
           updated_at?: string
@@ -96,6 +98,7 @@ export type Database = {
           id?: string
           limite_ajuste_centavos?: number
           owner_id?: string
+          primeiro_uso_em?: string | null
           status_padrao_id?: string | null
           tolerancia_atraso_dias?: number
           updated_at?: string

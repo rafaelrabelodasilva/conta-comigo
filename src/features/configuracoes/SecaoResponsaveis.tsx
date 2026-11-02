@@ -22,19 +22,23 @@ import { Esqueleto } from "@/ui/Esqueleto";
 import { EstadoVazio } from "@/ui/EstadoVazio";
 import { useToast } from "@/ui/Toast";
 import { useExcluirCadastro } from "./ExcluirCadastro";
+import { useAvisarRascunho, useRascunhosDasLinhas, type PropsSecao } from "./rascunho";
 import { LinhaResponsavel } from "./LinhaResponsavel";
 
 // Configurações → Responsáveis. Lê só pelo hook do gerenciador de Realtime
 // e grava só pelo repositório; as regras vêm do núcleo. Mudanças feitas em
 // outro aparelho aparecem sozinhas.
 
-export function SecaoResponsaveis() {
+export function SecaoResponsaveis({ aoMudarRascunho }: PropsSecao = {}) {
   const { status, linhas } = useLinhas("responsaveis");
   const toast = useToast();
   const [criando, setCriando] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
   const [erroNovo, setErroNovo] = useState<string | null>(null);
   const [salvandoNovo, setSalvandoNovo] = useState(false);
+  // Só no Primeiro uso: avisa se há nome novo digitado ou nome em edição.
+  const rascunhosLinhas = useRascunhosDasLinhas();
+  useAvisarRascunho((criando && nomeNovo.trim() !== "") || rascunhosLinhas.algum, aoMudarRascunho);
 
   const repo = repoResponsaveis();
   const lista = ordenarParaConfiguracoes(linhas);
@@ -125,6 +129,7 @@ export function SecaoResponsaveis() {
             aoMover={mover}
             aoArquivar={arquivar}
             aoDesarquivar={desarquivar}
+            aoMudarRascunho={aoMudarRascunho ? rascunhosLinhas.mudar : undefined}
             aoExcluir={(id) => void exclusao.pedir({ id, nome: r.nome })}
           />
         ))}

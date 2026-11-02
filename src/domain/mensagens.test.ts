@@ -10,11 +10,15 @@ import {
   rotuloContaComoPagoDe,
   rotuloCor,
   rotuloCorDe,
+  rotuloPasso,
   rotuloProximoCiclo,
+  rotuloProximosPassos,
+  TEXTOS_PASSO,
   rotuloRegistros,
   tituloEmUso,
   tituloExcluir,
 } from "./mensagens";
+import { PASSOS_PRIMEIRO_USO } from "./primeiro-uso";
 
 describe("mensagem", () => {
   it("devolve o texto do código", () => {
@@ -207,5 +211,37 @@ describe("Ciclo, Conferência e atraso e Aparência (História 1.7)", () => {
     ]);
     expect(rotuloProximoCiclo("Jan/27", 5, 15)).toBe("A partir de Jan/27: fechamento dia 5, vencimento dia 15");
     expect(rotuloCicloAtual("Dez/26", 28, 6)).toBe("Vale hoje (Dez/26): fechamento dia 28, vencimento dia 6");
+  });
+});
+
+describe("textos do Primeiro uso (História 1.8)", () => {
+  it("o Painel vazio chama para importar a primeira fatura", () => {
+    expect(mensagem("painel.vazio")).toBe("Importe sua primeira fatura");
+  });
+
+  it("todo passo tem seção, pergunta e ajuda, com o nome da seção de Configurações", () => {
+    expect(Object.keys(TEXTOS_PASSO).sort()).toEqual([...PASSOS_PRIMEIRO_USO].sort());
+    expect(PASSOS_PRIMEIRO_USO.map((p) => TEXTOS_PASSO[p].secao)).toEqual([
+      ROTULOS.responsaveis,
+      ROTULOS.tipos,
+      ROTULOS.status,
+      ROTULOS.ciclo,
+    ]);
+    for (const passo of PASSOS_PRIMEIRO_USO) {
+      expect(TEXTOS_PASSO[passo].pergunta).toMatch(/\?$/);
+      expect(TEXTOS_PASSO[passo].ajuda.length).toBeGreaterThan(0);
+    }
+    expect(TEXTOS_PASSO.responsaveis.pergunta).toBe("Quem divide o cartão com você?");
+  });
+
+  it("cabeçalho do passo, próximos passos e botões", () => {
+    expect(rotuloPasso(1, 4, "Responsáveis")).toBe("Passo 1 de 4 · Responsáveis");
+    expect(rotuloProximosPassos(["Tipos", "Status", "Ciclo do cartão"])).toBe(
+      "Próximos passos: Tipos → Status → Ciclo do cartão",
+    );
+    expect([ROTULOS.pular, ROTULOS.continuar, ROTULOS.concluir]).toEqual(["Pular", "Continuar", "Concluir"]);
+    expect(ROTULOS.retomar_primeiro_uso).toBe("Retomar o Primeiro uso");
+    expect(mensagem("rascunho.nao_salvo")).toBe("Você digitou algo que não foi salvo.");
+    expect([ROTULOS.voltar_para_salvar, ROTULOS.descartar]).toEqual(["Voltar para salvar", "Descartar"]);
   });
 });

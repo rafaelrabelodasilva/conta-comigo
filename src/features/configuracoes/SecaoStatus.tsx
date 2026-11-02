@@ -23,6 +23,7 @@ import { EstadoVazio } from "@/ui/EstadoVazio";
 import { Seletor } from "@/ui/Seletor";
 import { useToast } from "@/ui/Toast";
 import { useExcluirCadastro } from "./ExcluirCadastro";
+import { useAvisarRascunho, useRascunhosDasLinhas, type PropsSecao } from "./rascunho";
 import { LinhaStatus } from "./LinhaStatus";
 
 // Configurações → Status. Lê só pelos hooks do gerenciador de Realtime
@@ -30,7 +31,7 @@ import { LinhaStatus } from "./LinhaStatus";
 // do núcleo. Acima da lista, o Status padrão das linhas novas. A contagem de
 // uso é lida ao abrir a seção e depois de excluir (não é tempo real).
 
-export function SecaoStatus() {
+export function SecaoStatus({ aoMudarRascunho }: PropsSecao = {}) {
   const { status, linhas } = useLinhas("status");
   const config = useLinhas("configuracoes");
   const toast = useToast();
@@ -38,6 +39,9 @@ export function SecaoStatus() {
   const [nomeNovo, setNomeNovo] = useState("");
   const [erroNovo, setErroNovo] = useState<string | null>(null);
   const [salvandoNovo, setSalvandoNovo] = useState(false);
+  // Só no Primeiro uso: avisa se há nome novo digitado ou nome em edição.
+  const rascunhosLinhas = useRascunhosDasLinhas();
+  useAvisarRascunho((criando && nomeNovo.trim() !== "") || rascunhosLinhas.algum, aoMudarRascunho);
   const [usos, setUsos] = useState<ReadonlyMap<string, number> | null>(null);
 
   const repo = repoStatus();
@@ -158,6 +162,7 @@ export function SecaoStatus() {
             }
             aoArquivar={arquivar}
             aoDesarquivar={desarquivar}
+            aoMudarRascunho={aoMudarRascunho ? rascunhosLinhas.mudar : undefined}
             aoExcluir={(id) => void exclusao.pedir({ id, nome: s.nome })}
           />
         ))}

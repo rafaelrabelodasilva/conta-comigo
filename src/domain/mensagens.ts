@@ -5,6 +5,8 @@
 // Regras: os códigos são estáveis (podem ir para o log); as mensagens são
 // para a pessoa e podem mudar. Erro de login nunca diz qual campo errou.
 
+import type { PassoPrimeiroUso } from "./primeiro-uso";
+
 export const MENSAGENS = {
   "auth.campos_vazios": "Preencha o e-mail e a senha.",
   "auth.email_vazio": "Preencha o e-mail.",
@@ -25,6 +27,8 @@ export const MENSAGENS = {
   "erro.desconhecido": "Algo deu errado. Tente de novo.",
   "app.tela_pequena": "O Conta Comigo foi feito para iPad e computador.",
   "app.em_breve": "Esta tela ainda está sendo construída.",
+  "painel.vazio": "Importe sua primeira fatura",
+  "rascunho.nao_salvo": "Você digitou algo que não foi salvo.",
   "carregar.falhou": "Não foi possível carregar.",
   "salvar.falhou": "Não foi possível salvar. Tente de novo.",
   "conexao.sem_conexao": "Sem conexão. Você pode consultar, mas não alterar.",
@@ -119,7 +123,53 @@ export const ROTULOS = {
   aparencia_sistema: "Sistema",
   aparencia_claro: "Claro",
   aparencia_escuro: "Escuro",
+  primeiro_uso: "Primeiro uso",
+  retomar_primeiro_uso: "Retomar o Primeiro uso",
+  pular: "Pular",
+  continuar: "Continuar",
+  concluir: "Concluir",
+  voltar_para_salvar: "Voltar para salvar",
+  descartar: "Descartar",
 } as const;
+
+/**
+ * Textos de cada passo do Primeiro uso (mockup `primeiro-uso.html`): o nome
+ * da seção, a pergunta e a frase de ajuda. Um passo novo em
+ * `PASSOS_PRIMEIRO_USO` sem texto aqui é erro de tipo.
+ */
+export const TEXTOS_PASSO = {
+  responsaveis: {
+    secao: ROTULOS.responsaveis,
+    pergunta: "Quem divide o cartão com você?",
+    ajuda:
+      "Cadastre quem paga contas do seu cartão. Pode ser uma pessoa ou um grupo, como “Casal”. Cada um ganha uma cor.",
+  },
+  tipos: {
+    secao: ROTULOS.tipos,
+    pergunta: "Como você quer classificar seus gastos?",
+    ajuda: "Crie os Tipos que separam seus gastos, como Casa, Mercado ou Viagem.",
+  },
+  status: {
+    secao: ROTULOS.status,
+    pergunta: "Como você acompanha o pagamento das contas?",
+    ajuda: "Crie os Status das suas contas, como Não pago e Pago, e marque quais contam como pago.",
+  },
+  ciclo: {
+    secao: ROTULOS.ciclo,
+    pergunta: "Quando o seu cartão fecha e vence?",
+    ajuda: "Informe o dia de fechamento e o de vencimento da fatura. Dá para mudar depois em Configurações.",
+  },
+} as const satisfies Record<PassoPrimeiroUso, { secao: string; pergunta: string; ajuda: string }>;
+
+/** Cabeçalho do passo: "Passo 1 de 4 · Responsáveis". */
+export function rotuloPasso(numero: number, total: number, secao: string): string {
+  return `Passo ${numero} de ${total} · ${secao}`;
+}
+
+/** Os passos que faltam: "Próximos passos: Tipos → Status → Ciclo do cartão". */
+export function rotuloProximosPassos(secoes: readonly string[]): string {
+  return `Próximos passos: ${secoes.join(" → ")}`;
+}
 
 /** Nome acessível do ⋯ de um item, ex.: "Ações de Rafael". */
 export function rotuloAcoesDe(nome: string): string {

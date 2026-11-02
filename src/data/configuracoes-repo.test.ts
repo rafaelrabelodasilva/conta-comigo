@@ -8,6 +8,7 @@ type Chamada = { tabela: string; corpo: unknown; opcoes: unknown };
 
 const T1 = "2026-11-02T12:00:00+00:00";
 const T2 = "2026-11-02T12:00:05+00:00";
+const AGORA = "2026-11-02T15:30:00.000Z";
 
 const linha = (extra: Partial<LinhaConfiguracoes> = {}): LinhaConfiguracoes => ({
   id: "cfg",
@@ -16,6 +17,7 @@ const linha = (extra: Partial<LinhaConfiguracoes> = {}): LinhaConfiguracoes => (
   aparencia: "sistema",
   limite_ajuste_centavos: 100,
   tolerancia_atraso_dias: 10,
+  primeiro_uso_em: null,
   created_at: T1,
   updated_at: T1,
   ...extra,
@@ -50,7 +52,7 @@ function montar(
     tabela: "configuracoes",
     obterCliente: () => cliente,
   });
-  const repo = criarRepoConfiguracoes({ obterCliente: () => cliente, memoria });
+  const repo = criarRepoConfiguracoes({ obterCliente: () => cliente, memoria, agora: () => new Date(AGORA) });
   return { chamadas, memoria, repo };
 }
 
@@ -167,5 +169,31 @@ describe("repositório de Configurações", () => {
     // Um só desfazer: as duas colunas voltam juntas.
     expect(m.memoria.linha("cfg")).toMatchObject({ limite_ajuste_centavos: 100, tolerancia_atraso_dias: 10 });
     expect(m.chamadas).toHaveLength(1);
+  });
+
+  it("concluir o Primeiro uso sem linha cria a linha só com a marca", async () => {
+    const m = montar([], (c) => ({ data: linha(c.corpo as object), error: null }));
+    await pronto(m);
+    expect(await m.repo.concluirPrimeiroUso()).toEqual({ ok: true });
+    expect(m.chamadas).toEqual([
+      { tabela: "configuracoes", corpo: { primeiro_uso_em: AGORA }, opcoes: { onConflict: "owner_id" } },
+    ]);
+    expect(m.memoria.linha("cfg")?.primeiro_uso_em).toBe(AGORA);
+  });
+
+  it("concluir o Primeiro uso com linha grava só a marca; recusa volta a nula", async () => {
+    const ok = montar([linha({ aparencia: "escuro" })], (c) => ({
+      data: linha({ aparencia: "escuro", ...(c.corpo as object), updated_at: T2 }),
+      error: null,
+    }));
+    await pronto(ok);
+    expect(await ok.repo.concluirPrimeiroUso()).toEqual({ ok: true });
+    expect(ok.chamadas.map((c) => c.corpo)).toEqual([{ primeiro_uso_em: AGORA }]);
+    expect(ok.memoria.linha("cfg")).toMatchObject({ primeiro_uso_em: AGORA, aparencia: "escuro" });
+
+    const recusa = montar([linha()], () => ({ data: null, error: { code: "42501" } }));
+    await pronto(recusa);
+    expect(await recusa.repo.concluirPrimeiroUso()).toEqual({ ok: false });
+    expect(recusa.memoria.linha("cfg")?.primeiro_uso_em).toBeNull();
   });
 });
