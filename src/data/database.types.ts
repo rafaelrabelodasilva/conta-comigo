@@ -39,26 +39,65 @@ export type Database = {
   }
   public: {
     Tables: {
-      configuracoes: {
+      config_ciclo: {
         Row: {
           created_at: string
+          dia_fechamento: number
+          dia_vencimento: number
           id: string
           owner_id: string
-          status_padrao_id: string | null
           updated_at: string
+          vigente_desde: string
         }
         Insert: {
           created_at?: string
+          dia_fechamento: number
+          dia_vencimento: number
           id?: string
           owner_id?: string
-          status_padrao_id?: string | null
           updated_at?: string
+          vigente_desde: string
         }
         Update: {
           created_at?: string
+          dia_fechamento?: number
+          dia_vencimento?: number
           id?: string
           owner_id?: string
+          updated_at?: string
+          vigente_desde?: string
+        }
+        Relationships: []
+      }
+      configuracoes: {
+        Row: {
+          aparencia: string
+          created_at: string
+          id: string
+          limite_ajuste_centavos: number
+          owner_id: string
+          status_padrao_id: string | null
+          tolerancia_atraso_dias: number
+          updated_at: string
+        }
+        Insert: {
+          aparencia?: string
+          created_at?: string
+          id?: string
+          limite_ajuste_centavos?: number
+          owner_id?: string
           status_padrao_id?: string | null
+          tolerancia_atraso_dias?: number
+          updated_at?: string
+        }
+        Update: {
+          aparencia?: string
+          created_at?: string
+          id?: string
+          limite_ajuste_centavos?: number
+          owner_id?: string
+          status_padrao_id?: string | null
+          tolerancia_atraso_dias?: number
           updated_at?: string
         }
         Relationships: [

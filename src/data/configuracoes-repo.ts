@@ -1,11 +1,14 @@
 // Repositório de Configurações (AD-3). Uma linha por dono em
-// `configuracoes`; a primeira gravação a cria (upsert em `owner_id`). Manda
-// só as colunas alteradas e aplica a resposta no gerenciador de Realtime.
+// `configuracoes`; a primeira gravação a cria (upsert em `owner_id`, com os
+// padrões do banco nas outras colunas). Manda só as colunas alteradas e
+// aplica a resposta no gerenciador de Realtime.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Aparencia } from "@/domain/configuracoes";
 import type { Database } from "./database.types";
 import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
 import { FALHOU, OK, gravarComOtimismo, type ResultadoGravacao } from "./gravacao";
+import { colunasAlteradas } from "./realtime-estado";
 import { criarClienteNavegador } from "./supabase/navegador";
 
 export type LinhaConfiguracoes = LinhaDe<"configuracoes">;
@@ -19,50 +22,82 @@ export function configuracoesDoDono(
   return linhas[0];
 }
 
+/** Colunas que a tela pode mudar. */
+export type MudancaConfiguracoes = Partial<
+  Pick<
+    LinhaConfiguracoes,
+    "status_padrao_id" | "aparencia" | "limite_ajuste_centavos" | "tolerancia_atraso_dias"
+  >
+>;
+
 export function criarRepoConfiguracoes(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
   memoria: Gerenciador<LinhaConfiguracoes>;
 }) {
   const { obterCliente, memoria } = deps;
 
-  async function upsertStatusPadrao(
+  /** Upsert em `owner_id` só com as colunas dadas (cria a linha se faltar). */
+  async function upsertParcial(
     cliente: SupabaseClient<Database>,
-    statusId: string | null,
+    corpo: MudancaConfiguracoes,
   ): Promise<LinhaConfiguracoes[] | null> {
     const { data, error } = await cliente
       .from("configuracoes")
-      .upsert({ status_padrao_id: statusId }, { onConflict: "owner_id" })
+      .upsert(corpo, { onConflict: "owner_id" })
       .select()
       .single();
     return error || !data ? null : [data];
   }
 
+  /**
+   * Grava só as colunas que mudaram. Com a linha em memória, com otimismo
+   * (desfeito se o banco recusar); sem ela, cria por upsert e aplica a resposta.
+   */
+  async function definir(mudanca: MudancaConfiguracoes): Promise<ResultadoGravacao> {
+    const atual = configuracoesDoDono(memoria.linhas());
+    if (atual) {
+      const corpo = colunasAlteradas<MudancaConfiguracoes>(atual, mudanca);
+      if (Object.keys(corpo).length === 0) return OK;
+      return gravarComOtimismo(obterCliente, memoria, [{ id: atual.id, ...corpo }], (cliente) =>
+        upsertParcial(cliente, corpo),
+      );
+    }
+    const corpo = colunasAlteradas<MudancaConfiguracoes>({}, mudanca);
+    const cliente = obterCliente();
+    if (!cliente) return FALHOU;
+    try {
+      const linhas = await upsertParcial(cliente, corpo);
+      if (!linhas) return FALHOU;
+      memoria.aplicarLote(linhas);
+      return OK;
+    } catch {
+      return FALHOU;
+    }
+  }
+
   return {
+    /** Status padrão das linhas novas (`null` = "Nenhum (não pago)"). */
+    definirStatusPadrao(statusId: string | null): Promise<ResultadoGravacao> {
+      return definir({ status_padrao_id: statusId });
+    },
+
+    /** A tela já validou com o núcleo (`APARENCIAS`). */
+    definirAparencia(aparencia: Aparencia): Promise<ResultadoGravacao> {
+      return definir({ aparencia });
+    },
+
     /**
-     * Status padrão das linhas novas (`null` = "Nenhum (não pago)"). Cria a
-     * linha de Configurações se faltar; senão grava só a coluna, com otimismo.
+     * Conferência e atraso numa só gravação (um upsert, um desfazer): só as
+     * colunas que mudaram. A tela já validou com `validarLimiteAjuste` e
+     * `validarToleranciaAtraso` do núcleo.
      */
-    async definirStatusPadrao(statusId: string | null): Promise<ResultadoGravacao> {
-      const atual = configuracoesDoDono(memoria.linhas());
-      if (atual) {
-        if (atual.status_padrao_id === statusId) return OK;
-        return gravarComOtimismo(
-          obterCliente,
-          memoria,
-          [{ id: atual.id, status_padrao_id: statusId }],
-          (cliente) => upsertStatusPadrao(cliente, statusId),
-        );
-      }
-      const cliente = obterCliente();
-      if (!cliente) return FALHOU;
-      try {
-        const linhas = await upsertStatusPadrao(cliente, statusId);
-        if (!linhas) return FALHOU;
-        memoria.aplicarLote(linhas);
-        return OK;
-      } catch {
-        return FALHOU;
-      }
+    definirConferencia(
+      valores: Pick<LinhaConfiguracoes, "limite_ajuste_centavos" | "tolerancia_atraso_dias">,
+    ): Promise<ResultadoGravacao> {
+      return definir({
+        limite_ajuste_centavos: valores.limite_ajuste_centavos,
+        tolerancia_atraso_dias: valores.tolerancia_atraso_dias,
+      });
     },
   };
 }
