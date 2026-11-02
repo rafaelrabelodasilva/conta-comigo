@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { compor, contraste, lerHex, lerTokens, type Tokens } from "./contraste";
+import { TOKEN_MARCA_PESSOA } from "./cores-pessoa";
 
 // Lê o próprio globals.css (fonte única dos tokens) e o DESIGN.md (fonte
 // da verdade dos valores) e mede o contraste dos pares usados nas telas.
@@ -94,6 +95,8 @@ const PARES_GRAFICOS: Par[] = [
   { frente: "focus-ring", fundo: "surface" },
   { frente: "focus-ring", fundo: "nav" },
   { frente: "verify", fundo: "surface" },
+  // ✓ do seletor de cor sobre a cor escolhida (História 1.4).
+  ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ frente: TOKEN_MARCA_PESSOA, fundo: `person-${n}` })),
 ];
 
 const nome = ({ frente, fundo }: Par) => `${frente} / ${fundo}`;

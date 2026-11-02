@@ -41,7 +41,9 @@ jobs:
       - name: Nenhum segredo no bundle do cliente (AD-12)
         run: |
           test -d .next/static || { echo ".next/static não existe."; exit 1; }
-          if grep -rnE "SUPABASE_SECRET_KEY|sb_secret_" .next/static; then
+          # Procura o valor da isca, não o prefixo `sb_secret_`: o supabase-js
+          # do navegador traz esse prefixo numa checagem de formato de chave.
+          if grep -rnE "SUPABASE_SECRET_KEY|sb_secret_ci_canary" .next/static; then
             echo "Segredo encontrado nos arquivos do cliente."
             exit 1
           fi
@@ -60,15 +62,23 @@ jobs:
       - run: npx supabase --version
       - run: npx supabase start
       - run: npx supabase status
-      - name: Teste de integração do Auth (login funciona, cadastro recusado)
+      - name: Testes de integração (Auth, Responsáveis com RLS e Realtime)
         env:
           INTEGRACAO_SUPABASE: "1"
         run: |
           # Chaves locais do Supabase (não são segredos de produção).
+          # O `supabase start` já aplicou as migrações do zero.
           set -a
           eval "$(npx supabase status -o env)"
           set +a
           npx vitest run test/integracao
+      - name: Tipos do banco iguais aos gerados (AD-14)
+        run: |
+          npx supabase gen types typescript --local > "$RUNNER_TEMP/database.types.ts"
+          if ! diff -u src/data/database.types.ts "$RUNNER_TEMP/database.types.ts"; then
+            echo "src/data/database.types.ts difere do gerado. Copie a saída acima (lado +) para o arquivo."
+            exit 1
+          fi
       - name: Parar o Supabase local
         if: always()
         run: npx supabase stop --no-backup

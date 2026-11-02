@@ -5,6 +5,9 @@ import {
   ROTULOS,
   ehCodigoConhecido,
   mensagem,
+  rotuloAcoesDe,
+  rotuloCor,
+  rotuloCorDe,
 } from "./mensagens";
 
 describe("mensagem", () => {
@@ -75,5 +78,37 @@ describe("códigos das telas comuns (História 1.3)", () => {
   it("os rótulos comuns dizem o que fazem", () => {
     expect(ROTULOS.tentar_de_novo).toBe("Tentar de novo");
     expect(ROTULOS.desfazer).toBe("Desfazer");
+  });
+});
+
+describe("códigos de Responsável (História 1.4)", () => {
+  it("tem as mensagens do cadastro", () => {
+    expect(mensagem("responsavel.nome_vazio")).toBe("Preencha o nome.");
+    expect(mensagem("responsavel.nome_repetido")).toBe(
+      "Já existe um Responsável com esse nome.",
+    );
+    expect(mensagem("responsavel.sem_cor_livre")).toBe("Todas as 8 cores estão em uso.");
+    expect(ehCodigoConhecido("responsavel.nome_longo")).toBe(true);
+    expect(ehCodigoConhecido("responsavel.nao_move")).toBe(true);
+  });
+
+  it("os rótulos do ⋯ dizem o que fazem", () => {
+    expect(ROTULOS.mover_para_cima).toBe("Mover para cima");
+    expect(ROTULOS.mover_para_baixo).toBe("Mover para baixo");
+    expect(ROTULOS.desarquivar).toBe("Desarquivar");
+    expect(ROTULOS.arquivado).toBe("Arquivado");
+  });
+});
+
+describe("textos da seção Responsáveis", () => {
+  it("vêm do mapa e das funções de rótulo", () => {
+    expect(mensagem("responsavel.lista_vazia")).toBe("Cadastre quem divide a fatura com você.");
+    expect(ROTULOS.novo).toBe("Novo");
+    expect(ROTULOS.responsaveis).toBe("Responsáveis");
+    expect(ROTULOS.nome_novo_responsavel).toBe("Nome do novo Responsável");
+    expect(rotuloAcoesDe("Rafael")).toBe("Ações de Rafael");
+    expect(rotuloCorDe("Rafael")).toBe("Cor de Rafael");
+    expect(rotuloCor("Azul", false)).toBe("Azul");
+    expect(rotuloCor("Azul", true)).toBe("Azul, em uso");
   });
 });
