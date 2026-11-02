@@ -215,13 +215,14 @@ describe.skipIf(!ligado)("Responsáveis no Supabase local", () => {
         .subscribe();
     }
 
+    const gravacoes: string[] = [];
     let repetidor: ReturnType<typeof setInterval> | undefined;
     const recebido = new Promise<{ id: string; nome: string; updated_at: string }>((resolver, rejeitar) => {
       const limite = setTimeout(() => {
         clearInterval(repetidor);
         rejeitar(
           new Error(
-            `evento não chegou (status do canal: ${statusA.join(", ")}; eventos no cliente de serviço: ${eventosAdmin}; com ANON_KEY: ${clienteChaveAntiga ? eventosChaveAntiga : "sem ANON_KEY"})`,
+            `evento não chegou (status do canal: ${statusA.join(", ")}; eventos no cliente de serviço: ${eventosAdmin}; com ANON_KEY: ${clienteChaveAntiga ? eventosChaveAntiga : "sem ANON_KEY"}; gravações: ${gravacoes.join(", ")})`,
           ),
         );
       }, 25_000);
@@ -244,10 +245,12 @@ describe.skipIf(!ligado)("Responsáveis no Supabase local", () => {
           if (status !== "SUBSCRIBED" || repetidor) return;
           let tentativa = 0;
           const gravar = () =>
+            // O supabase-js só manda a consulta quando alguém chama `then`.
             void a.cliente
               .from("responsaveis")
               .update({ nome: `Lucas M${++tentativa}` })
-              .eq("id", alvo!.id);
+              .eq("id", alvo!.id)
+              .then(({ error }) => gravacoes.push(error ? `erro ${error.code}` : "ok"));
           gravar();
           repetidor = setInterval(gravar, 2_000);
         });
