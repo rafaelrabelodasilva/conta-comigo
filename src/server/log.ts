@@ -1,3 +1,5 @@
+import "server-only";
+
 // Utilitário único de log no servidor (AD-17).
 //
 // Escreve uma linha JSON por evento nos logs da Vercel. Aceita só:

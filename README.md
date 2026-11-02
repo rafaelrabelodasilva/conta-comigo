@@ -34,6 +34,8 @@ npm run supabase -- start    # sobe o banco local
 npm run supabase -- stop
 ```
 
+Login: Supabase Auth com e-mail e senha (sem cadastro público). Sem as variáveis do Supabase no `.env.local`, o app abre em `/entrar` com "Login indisponível neste ambiente". Com o Supabase local, crie o usuário pelo Studio (`http://127.0.0.1:54323`, Authentication → Add user) e use `API_URL`/`PUBLISHABLE_KEY` de `npm run supabase -- status -o env`. No reset de senha local, o e-mail chega no testador de e-mail do Supabase local (Inbucket, `http://127.0.0.1:54324`) e o link só funciona a partir de `127.0.0.1:3000` ou `localhost:3000`. O teste `test/integracao` só roda com `INTEGRACAO_SUPABASE=1` (no CI). Configuração do Auth em produção: `docs/infraestrutura.md`.
+
 Variáveis de ambiente: veja `.env.example` (só nomes). Os valores ficam nas variáveis da Vercel (só Production) e num `.env.local`, que nunca vai para o repositório.
 
 Estrutura: `src/domain` (núcleo puro), `src/data`, `src/features`, `src/ui`, `src/server`, `src/app`, `supabase/migrations`. Cada pasta tem um `README.md` com o propósito. Detalhes de infraestrutura em `docs/infraestrutura.md`.
