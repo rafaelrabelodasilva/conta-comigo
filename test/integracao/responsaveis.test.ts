@@ -185,36 +185,7 @@ describe.skipIf(!ligado)("Responsáveis no Supabase local", () => {
     // O Realtime pode levar um instante para ligar o postgres_changes depois
     // do SUBSCRIBED: grava de novo a cada 2 s (nome diferente a cada vez)
     // até o evento chegar, para o teste não depender de sorte no tempo.
-    // Diagnóstico: o cliente de serviço ignora o RLS. Se ele recebe e o
-    // usuário não, o problema é de autenticação/RLS; se nenhum recebe, é da
-    // publicação ou do Realtime.
     const statusA: string[] = [];
-    let eventosAdmin = 0;
-    const canalAdmin = admin
-      .channel("teste-responsaveis-admin")
-      .on("postgres_changes", { event: "*", schema: "public", table: "responsaveis" }, () => {
-        eventosAdmin++;
-      })
-      .subscribe();
-
-    // Diagnóstico: mesmo usuário com a chave antiga (JWT `ANON_KEY`).
-    let eventosChaveAntiga = 0;
-    const chaveAntiga = process.env.ANON_KEY;
-    const clienteChaveAntiga = chaveAntiga ? createClient<Database>(url, chaveAntiga, semSessao) : null;
-    if (clienteChaveAntiga) {
-      const { data: sessao } = await clienteChaveAntiga.auth.signInWithPassword({
-        email: a.email,
-        password: a.senha,
-      });
-      clienteChaveAntiga.realtime.setAuth(sessao.session!.access_token);
-      clienteChaveAntiga
-        .channel("teste-responsaveis-chave-antiga")
-        .on("postgres_changes", { event: "*", schema: "public", table: "responsaveis" }, () => {
-          eventosChaveAntiga++;
-        })
-        .subscribe();
-    }
-
     const gravacoes: string[] = [];
     let repetidor: ReturnType<typeof setInterval> | undefined;
     const recebido = new Promise<{ id: string; nome: string; updated_at: string }>((resolver, rejeitar) => {
@@ -222,7 +193,7 @@ describe.skipIf(!ligado)("Responsáveis no Supabase local", () => {
         clearInterval(repetidor);
         rejeitar(
           new Error(
-            `evento não chegou (status do canal: ${statusA.join(", ")}; eventos no cliente de serviço: ${eventosAdmin}; com ANON_KEY: ${clienteChaveAntiga ? eventosChaveAntiga : "sem ANON_KEY"}; gravações: ${gravacoes.join(", ")})`,
+            `evento não chegou (status do canal: ${statusA.join(", ")}; gravações: ${gravacoes.join(", ")})`,
           ),
         );
       }, 25_000);
@@ -273,7 +244,5 @@ describe.skipIf(!ligado)("Responsáveis no Supabase local", () => {
 
     expect(eventosDeB).toEqual([]);
     await b.cliente.removeChannel(canalB);
-    await admin.removeChannel(canalAdmin);
-    if (clienteChaveAntiga) await clienteChaveAntiga.removeAllChannels();
   }, 40_000);
 });
