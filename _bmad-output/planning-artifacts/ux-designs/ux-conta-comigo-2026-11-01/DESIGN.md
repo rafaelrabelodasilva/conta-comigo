@@ -60,7 +60,7 @@ colors:
   status-late-bg-dark: '#7F1D1D66'
   forecast-fg-dark: '#CBD5E1'
   forecast-bg-dark: '#33415566'
-  verify-dark: '#F87171'
+  verify-dark: '#DC2626'      # igual ao claro: texto branco do contador com 4,8:1
   danger-fg-dark: '#FCA5A5'
   danger-bg-dark: '#7F1D1D66'
   alert-warning-bg-dark: '#3A2A0C'

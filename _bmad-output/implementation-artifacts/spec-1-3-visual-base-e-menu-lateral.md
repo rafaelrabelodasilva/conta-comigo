@@ -85,6 +85,7 @@ context:
 ## Implementation Notes
 
 - **Desvio do DESIGN.md (pede aprovação):** branco sobre `verify` no escuro (`#F87171`) dá 2,77:1. Criado o token `--on-verify`: branco no claro (4,83:1) e `#0F1112` no escuro (6,84:1). Só aparece no contador do Revisar, que ainda não recebe número (Épico 3).
+- **Decisão do Rafael (02/11):** o número do contador fica branco nos dois modos. O `verify` do escuro passou a `#DC2626` (igual ao claro; branco 4,83:1, bolinha sobre `surface` 3,62:1) no DESIGN.md e no `globals.css`, e o token `--on-verify` saiu.
 - Tokens derivados além do DESIGN.md: `--on-dark` (branco do toast e do rótulo ativo) e `--nav-active` (branco a 8%). Breakpoint `app` = 700 px.
 - Extras: `Tela.tsx` (título da tela), `app.em_breve` e `ROTULOS` em `mensagens.ts`.
 - Toast com raio `md` (token do DESIGN.md), não pílula.
