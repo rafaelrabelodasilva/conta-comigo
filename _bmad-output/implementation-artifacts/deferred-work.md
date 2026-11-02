@@ -33,3 +33,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-4-cadastrar-responsaveis-com-cor-sincronizados-entre-aparelhos.md`
   summary: Renomear `src/ui/toast.ts` (ou `Toast.tsx`) para nomes que não difiram só em maiúsculas.
   evidence: No macOS (sistema de arquivos sem diferenciar maiúsculas) `tsc` e `vitest` falham ao confundir `src/ui/Toast.tsx` com `src/ui/toast.ts`; no CI (Linux) passa. Vem da 1.3.
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-6-gerenciar-status-e-substituir-cadastros-em-uso.md`
+  summary: Na primeira história com referência que conta uso (Lançamentos, Épico 2) ou jsonb, testar no banco os ramos "em uso" de `contar_usos_cadastro` e `substituir_cadastro` (contagem > 0, `cadastro.em_uso`, troca em jsonb pela RPC) e o reabrir a janela de substituto quando a RPC recusar por uso.
+  evidence: Medium não verificado: hoje `referencias_cadastro()` só tem `configuracoes.status_padrao_id` (coluna, sem uso), então o SQL dinâmico desses ramos nunca rodou; erro de sintaxe passaria no CI.

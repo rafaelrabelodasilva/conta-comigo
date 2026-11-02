@@ -1,7 +1,7 @@
-// Seções de Configurações escolhidas por `?secao=` (Histórias 1.4 e 1.5).
-// Status, Ciclo e Aparência chegam nas Histórias 1.6 e 1.7.
+// Seções de Configurações escolhidas por `?secao=` (Histórias 1.4 a 1.6).
+// Ciclo e Aparência chegam na História 1.7.
 
-export const CHAVES_SECAO = ["responsaveis", "tipos"] as const;
+export const CHAVES_SECAO = ["responsaveis", "tipos", "status"] as const;
 
 export type ChaveSecao = (typeof CHAVES_SECAO)[number];
 

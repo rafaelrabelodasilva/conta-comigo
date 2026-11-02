@@ -62,7 +62,7 @@ jobs:
       - run: npx supabase --version
       - run: npx supabase start
       - run: npx supabase status
-      - name: Testes de integração (Auth, Responsáveis e Tipos com RLS e Realtime)
+      - name: Testes de integração (Auth, Responsáveis, Tipos, Status, Configurações e substituição de cadastros)
         env:
           INTEGRACAO_SUPABASE: "1"
         run: |

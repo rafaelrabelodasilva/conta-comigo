@@ -6,8 +6,12 @@ import {
   ehCodigoConhecido,
   mensagem,
   rotuloAcoesDe,
+  rotuloContaComoPagoDe,
   rotuloCor,
   rotuloCorDe,
+  rotuloRegistros,
+  tituloEmUso,
+  tituloExcluir,
 } from "./mensagens";
 
 describe("mensagem", () => {
@@ -125,5 +129,46 @@ describe("códigos de Tipo (História 1.5)", () => {
   it("os rótulos da seção Tipos", () => {
     expect(ROTULOS.tipos).toBe("Tipos");
     expect(ROTULOS.nome_novo_tipo).toBe("Nome do novo Tipo");
+  });
+});
+
+describe("códigos de Status e de exclusão (História 1.6)", () => {
+  it("tem as mensagens do cadastro de Status", () => {
+    expect(mensagem("status.nome_vazio")).toBe("Preencha o nome.");
+    expect(mensagem("status.nome_longo")).toBe("Use até 30 caracteres.");
+    expect(mensagem("status.nome_repetido")).toBe("Já existe um Status com esse nome.");
+    expect(mensagem("status.nao_arquivado")).toBe("Este Status não está arquivado.");
+    expect(mensagem("status.padrao_nao_arquiva")).toBe(
+      "Escolha outro Status padrão antes de arquivar.",
+    );
+    expect(ehCodigoConhecido("status.lista_vazia")).toBe(true);
+  });
+
+  it("os erros da RPC têm mensagem", () => {
+    for (const codigo of [
+      "cadastro.em_uso",
+      "cadastro.sem_substituto",
+      "cadastro.substituto_invalido",
+      "cadastro.nao_encontrado",
+      "cadastro.invalido",
+    ]) {
+      expect(ehCodigoConhecido(codigo)).toBe(true);
+    }
+  });
+
+  it("os rótulos da seção Status e da exclusão", () => {
+    expect(ROTULOS.status).toBe("Status");
+    expect(ROTULOS.conta_como_pago).toBe("Conta como pago");
+    expect(ROTULOS.status_padrao).toBe("Status padrão das linhas novas");
+    expect(ROTULOS.nenhum_nao_pago).toBe("Nenhum (não pago)");
+    expect(ROTULOS.excluir).toBe("Excluir");
+    expect(ROTULOS.substituir_e_excluir).toBe("Substituir e excluir");
+    expect(rotuloRegistros(0)).toBe("0 registros");
+    expect(rotuloRegistros(1)).toBe("1 registro");
+    expect(rotuloRegistros(3)).toBe("3 registros");
+    expect(tituloEmUso(3, "Pago")).toBe("3 registros usam “Pago”");
+    expect(tituloEmUso(1, "Pago")).toBe("1 registro usa “Pago”");
+    expect(tituloExcluir("Casa")).toBe("Excluir “Casa”?");
+    expect(rotuloContaComoPagoDe("Pago")).toBe("Pago conta como pago");
   });
 });

@@ -160,4 +160,33 @@ describe("gerenciador de Realtime", () => {
     await esperar();
     expect(m.g.linha("novo")?.nome).toBe("Lucas");
   });
+
+  it("remover tira as linhas da memória e avisa as telas; id desconhecido não muda nada", async () => {
+    const m = montar();
+    let avisos = 0;
+    m.g.assinar(() => avisos++);
+    m.responder({
+      data: [
+        { id: "a", updated_at: T1, nome: "Rafael" },
+        { id: "b", updated_at: T1, nome: "Lucas" },
+      ],
+      error: null,
+    });
+    m.status("SUBSCRIBED");
+    await esperar();
+    const antes = avisos;
+
+    m.g.remover(["a"]);
+    expect(m.g.linha("a")).toBeUndefined();
+    expect(m.g.linhas().map((l) => l.id)).toEqual(["b"]);
+    expect(avisos).toBe(antes + 1);
+
+    m.g.remover(["nao-existe"]);
+    expect(avisos).toBe(antes + 1);
+
+    // O DELETE do Realtime que chega depois não muda nada.
+    m.evento({ eventType: "DELETE", new: {}, old: { id: "a" } });
+    expect(m.g.linhas()).toHaveLength(1);
+    expect(avisos).toBe(antes + 1);
+  });
 });

@@ -43,6 +43,18 @@ export const MENSAGENS = {
   "tipo.nome_repetido": "Já existe um Tipo com esse nome.",
   "tipo.nao_arquivado": "Este Tipo não está arquivado.",
   "tipo.lista_vazia": "Crie o primeiro Tipo para classificar seus gastos, como Casa ou Viagem.",
+  "status.nome_vazio": "Preencha o nome.",
+  "status.nome_longo": "Use até 30 caracteres.",
+  "status.nome_repetido": "Já existe um Status com esse nome.",
+  "status.nao_arquivado": "Este Status não está arquivado.",
+  "status.lista_vazia": "Crie os Status das suas contas, como Não pago e Pago.",
+  "status.padrao_nao_arquiva": "Escolha outro Status padrão antes de arquivar.",
+  "cadastro.em_uso": "Está em uso. Escolha um substituto ou arquive.",
+  "cadastro.sem_substituto": "Escolha um substituto.",
+  "cadastro.substituto_invalido": "Escolha um substituto ativo.",
+  "cadastro.nao_encontrado": "Este cadastro não existe mais.",
+  "cadastro.invalido": "Não foi possível excluir. Tente de novo.",
+  "cadastro.excluir_irreversivel": "Esta ação não pode ser desfeita.",
 } as const;
 
 /**
@@ -76,6 +88,15 @@ export const ROTULOS = {
   responsaveis: "Responsáveis",
   nome_novo_tipo: "Nome do novo Tipo",
   tipos: "Tipos",
+  nome_novo_status: "Nome do novo Status",
+  status: "Status",
+  conta_como_pago: "Conta como pago",
+  status_padrao: "Status padrão das linhas novas",
+  nenhum_nao_pago: "Nenhum (não pago)",
+  excluir: "Excluir",
+  substituir_e_excluir: "Substituir e excluir",
+  substituto: "Substituir por",
+  escolha: "Escolha…",
   secoes_configuracoes: "Seções de Configurações",
 } as const;
 
@@ -92,6 +113,26 @@ export function rotuloCorDe(nome: string): string {
 /** Nome acessível de uma cor do seletor; "em uso" quando outro a tem. */
 export function rotuloCor(nomeCor: string, emUso: boolean): string {
   return emUso ? `${nomeCor}, em uso` : nomeCor;
+}
+
+/** Quantos registros usam um cadastro: "1 registro", "3 registros". */
+export function rotuloRegistros(n: number): string {
+  return n === 1 ? "1 registro" : `${n} registros`;
+}
+
+/** Título da janela de exclusão em uso: "3 registros usam “Pago”". */
+export function tituloEmUso(n: number, nome: string): string {
+  return n === 1 ? `1 registro usa “${nome}”` : `${n} registros usam “${nome}”`;
+}
+
+/** Título da confirmação de exclusão sem uso: "Excluir “Pago”?". */
+export function tituloExcluir(nome: string): string {
+  return `Excluir “${nome}”?`;
+}
+
+/** Nome acessível da chave "Conta como pago" de um Status. */
+export function rotuloContaComoPagoDe(nome: string): string {
+  return `${nome} conta como pago`;
 }
 
 export type CodigoMensagem = keyof typeof MENSAGENS;

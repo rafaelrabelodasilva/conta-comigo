@@ -43,6 +43,11 @@ export type Gerenciador<L extends LinhaBase> = {
   aplicarLote(linhas: readonly L[]): void;
   /** Mostra a mudança já; a função devolvida desfaz (se o banco recusar). */
   aplicarOtimista(mudancas: readonly (Partial<L> & { id: string })[]): () => void;
+  /**
+   * Tira da memória linhas que o banco já apagou (ex.: depois da RPC de
+   * exclusão), sem esperar o DELETE do Realtime.
+   */
+  remover(ids: readonly string[]): void;
   /** Relê a tabela inteira; reabre o canal se ele caiu. Usado em "Tentar de novo". */
   recarregar(): Promise<void>;
 };
@@ -165,6 +170,14 @@ export function criarGerenciador<L extends LinhaBase>(opcoes: {
       const r = aplicarOtimista(estado, mudancas);
       mudar(r.estado);
       return () => mudar(desfazerOtimista(estado, r.anteriores));
+    },
+    remover(ids) {
+      let novo = estado;
+      for (const id of ids) {
+        aplicadasDurante.delete(id);
+        novo = aplicarEvento(novo, { tipo: "DELETE", antiga: { id } as Partial<L> & { id: string } });
+      }
+      mudar(novo);
     },
     async recarregar() {
       if (estado.status === "erro") mudar(marcarStatus(estado, "carregando"));
