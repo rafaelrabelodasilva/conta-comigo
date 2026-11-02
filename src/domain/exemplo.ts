@@ -2,9 +2,9 @@
 // `{ ok, valor }` ou `{ ok: false, erro: { codigo, detalhe } }`.
 // Substituir pelas regras reais nas próximas histórias.
 
-export type Resultado<T> =
-  | { ok: true; valor: T }
-  | { ok: false; erro: { codigo: string; detalhe?: string } };
+import type { Resultado } from "./resultado";
+
+export type { Resultado };
 
 const FORA_DO_INTERVALO = {
   ok: false,

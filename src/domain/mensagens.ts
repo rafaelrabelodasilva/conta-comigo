@@ -31,6 +31,13 @@ export const MENSAGENS = {
   "conexao.gravar_sem_conexao":
     "Sem conexão. Tente de novo quando a internet voltar.",
   "acao.desfeita": "Ação desfeita.",
+  "responsavel.nome_vazio": "Preencha o nome.",
+  "responsavel.nome_longo": "Use até 30 caracteres.",
+  "responsavel.nome_repetido": "Já existe um Responsável com esse nome.",
+  "responsavel.sem_cor_livre": "Todas as 8 cores estão em uso.",
+  "responsavel.nao_move": "Não dá para mover nessa direção.",
+  "responsavel.nao_arquivado": "Este Responsável não está arquivado.",
+  "responsavel.lista_vazia": "Cadastre quem divide a fatura com você.",
 } as const;
 
 /**
@@ -51,7 +58,34 @@ export const ROTULOS = {
   cancelar: "Cancelar",
   fechar: "Fechar",
   sair: "Sair",
+  /** O "＋" vai num span `aria-hidden` ao lado: o VoiceOver lê só "Novo". */
+  novo: "Novo",
+  adicionar: "Adicionar",
+  mover_para_cima: "Mover para cima",
+  mover_para_baixo: "Mover para baixo",
+  arquivar: "Arquivar",
+  desarquivar: "Desarquivar",
+  arquivado: "Arquivado",
+  nome: "Nome",
+  nome_novo_responsavel: "Nome do novo Responsável",
+  responsaveis: "Responsáveis",
+  secoes_configuracoes: "Seções de Configurações",
 } as const;
+
+/** Nome acessível do ⋯ de um item, ex.: "Ações de Rafael". */
+export function rotuloAcoesDe(nome: string): string {
+  return `Ações de ${nome}`;
+}
+
+/** Nome acessível do seletor de cor de um Responsável. */
+export function rotuloCorDe(nome: string): string {
+  return `Cor de ${nome}`;
+}
+
+/** Nome acessível de uma cor do seletor; "em uso" quando outro a tem. */
+export function rotuloCor(nomeCor: string, emUso: boolean): string {
+  return emUso ? `${nomeCor}, em uso` : nomeCor;
+}
 
 export type CodigoMensagem = keyof typeof MENSAGENS;
 
