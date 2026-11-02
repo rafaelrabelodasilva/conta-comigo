@@ -112,3 +112,18 @@ describe("textos da seção Responsáveis", () => {
     expect(rotuloCor("Azul", true)).toBe("Azul, em uso");
   });
 });
+
+describe("códigos de Tipo (História 1.5)", () => {
+  it("tem as mensagens do cadastro", () => {
+    expect(mensagem("tipo.nome_vazio")).toBe("Preencha o nome.");
+    expect(mensagem("tipo.nome_longo")).toBe("Use até 30 caracteres.");
+    expect(mensagem("tipo.nome_repetido")).toBe("Já existe um Tipo com esse nome.");
+    expect(mensagem("tipo.nao_arquivado")).toBe("Este Tipo não está arquivado.");
+    expect(mensagem("tipo.lista_vazia")).toMatch(/primeiro Tipo/);
+  });
+
+  it("os rótulos da seção Tipos", () => {
+    expect(ROTULOS.tipos).toBe("Tipos");
+    expect(ROTULOS.nome_novo_tipo).toBe("Nome do novo Tipo");
+  });
+});

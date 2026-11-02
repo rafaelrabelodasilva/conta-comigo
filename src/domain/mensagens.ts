@@ -38,6 +38,11 @@ export const MENSAGENS = {
   "responsavel.nao_move": "Não dá para mover nessa direção.",
   "responsavel.nao_arquivado": "Este Responsável não está arquivado.",
   "responsavel.lista_vazia": "Cadastre quem divide a fatura com você.",
+  "tipo.nome_vazio": "Preencha o nome.",
+  "tipo.nome_longo": "Use até 30 caracteres.",
+  "tipo.nome_repetido": "Já existe um Tipo com esse nome.",
+  "tipo.nao_arquivado": "Este Tipo não está arquivado.",
+  "tipo.lista_vazia": "Crie o primeiro Tipo para classificar seus gastos, como Casa ou Viagem.",
 } as const;
 
 /**
@@ -69,6 +74,8 @@ export const ROTULOS = {
   nome: "Nome",
   nome_novo_responsavel: "Nome do novo Responsável",
   responsaveis: "Responsáveis",
+  nome_novo_tipo: "Nome do novo Tipo",
+  tipos: "Tipos",
   secoes_configuracoes: "Seções de Configurações",
 } as const;
 
