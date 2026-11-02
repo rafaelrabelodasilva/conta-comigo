@@ -74,9 +74,18 @@ jobs:
           npx vitest run test/integracao
       - name: Tipos do banco iguais aos gerados (AD-14)
         run: |
+          # O arquivo vem de `supabase gen types typescript --linked` (produção),
+          # que formata diferente do gerador local e traz a versão do PostgREST.
+          # Compara só o conteúdo: sem espaços, aspas, vírgulas e parênteses,
+          # sem o bloco __InternalSupabase e sem `ComputedFields: never`.
           npx supabase gen types typescript --local > "$RUNNER_TEMP/database.types.ts"
-          if ! diff -u src/data/database.types.ts "$RUNNER_TEMP/database.types.ts"; then
-            echo "src/data/database.types.ts difere do gerado. Copie a saída acima (lado +) para o arquivo."
+          normalizar() {
+            sed -e '/Allows to automatically instantiate/,/^  }$/d' -e '/ComputedFields: never/d' "$1" \
+              | tr -d " \n\t\"',;()|" | fold -w 80
+          }
+          if ! diff -u <(normalizar src/data/database.types.ts) <(normalizar "$RUNNER_TEMP/database.types.ts"); then
+            echo "src/data/database.types.ts difere do schema das migrações."
+            echo "Depois do db push, regere com: npx supabase gen types typescript --linked > src/data/database.types.ts"
             exit 1
           fi
       - name: Logs do Realtime (só em falha)
