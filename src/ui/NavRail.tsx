@@ -121,7 +121,7 @@ export function NavRail({ contadorRevisar = 0 }: { contadorRevisar?: number }) {
             </span>
             {item.rotulo}
             {contador > 0 ? (
-              <span className="absolute top-0.5 right-2 rounded-full bg-verify px-1.25 texto-nav-label font-bold text-on-verify tabular-nums">
+              <span className="absolute top-0.5 right-2 rounded-full bg-verify px-1.25 texto-nav-label font-bold text-on-dark tabular-nums">
                 <span className="sr-only">, </span>
                 {contador}
                 <span className="sr-only"> para revisar</span>

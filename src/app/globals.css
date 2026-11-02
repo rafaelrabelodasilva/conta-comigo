@@ -75,7 +75,6 @@
   /* Derivados dos componentes do DESIGN.md (não são cores próprias). */
   --on-dark: #ffffff; /* texto do toast, da barra de seleção, rótulo ativo do menu */
   --nav-active: #ffffff14; /* fundo do item ativo do menu: branco a 8% */
-  --on-verify: #ffffff; /* texto do contador do Revisar */
 
   /* Sombras dos elementos flutuantes. */
   --sombra-flutuante: 0 6px 18px #0000002e;
@@ -109,7 +108,7 @@
     --status-late-bg: #7f1d1d66;
     --forecast-fg: #cbd5e1;
     --forecast-bg: #33415566;
-    --verify: #f87171;
+    --verify: #dc2626;
     --danger-fg: #fca5a5;
     --danger-bg: #7f1d1d66;
     --alert-warning-bg: #3a2a0c;
@@ -132,9 +131,6 @@
     --person-7-bg: #282b4a;
     --person-8-fg: #fde047;
     --person-8-bg: #352a17;
-
-    /* No escuro o `verify` é claro: branco por cima não chega a 4,5:1. */
-    --on-verify: #0f1112;
   }
 }
 
@@ -155,7 +151,6 @@
   --color-nav-label: var(--nav-label);
   --color-nav-active: var(--nav-active);
   --color-on-dark: var(--on-dark);
-  --color-on-verify: var(--on-verify);
   --color-accent: var(--accent);
   --color-accent-line: var(--accent-line);
   --color-accent-foreground: var(--accent-foreground);

@@ -71,7 +71,7 @@ const PARES_TEXTO: Par[] = [
   { frente: "nav-label", fundo: "nav" },
   { frente: "on-dark", fundo: "nav" },
   { frente: "on-dark", fundo: "nav-active", sobre: "nav" },
-  { frente: "on-verify", fundo: "verify" },
+  { frente: "on-dark", fundo: "verify" },
   { frente: "danger-fg", fundo: "surface" },
   { frente: "danger-fg", fundo: "danger-bg" },
   { frente: "text", fundo: "alert-warning-bg" },
