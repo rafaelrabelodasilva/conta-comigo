@@ -16,6 +16,7 @@ import { Campo } from "@/ui/Campo";
 import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
 import { Esqueleto } from "@/ui/Esqueleto";
 import { useToast } from "@/ui/Toast";
+import { useAvisarRascunho, type PropsSecao } from "./rascunho";
 
 // Configurações → Ciclo do cartão. Lê só pelo gerenciador de Realtime
 // (`config_ciclo`) e grava só pelo repositório, que só insere. O Mês a
@@ -24,7 +25,7 @@ import { useToast } from "@/ui/Toast";
 
 type Rascunho = { fechamento: string; vencimento: string };
 
-export function SecaoCiclo() {
+export function SecaoCiclo({ aoMudarRascunho }: PropsSecao = {}) {
   const { status, linhas } = useLinhas("config_ciclo");
   const toast = useToast();
   // "Hoje" em São Paulo, um só por render: o resumo, os campos e o salvar
@@ -37,10 +38,16 @@ export function SecaoCiclo() {
   const resumo = resumoDoCiclo(hoje, linhas);
   // Os campos começam com os dias que vão valer (a mudança salva, se houver).
   const base = resumo.proxima?.config ?? resumo.atual?.config;
-  const valores: Rascunho = rascunho ?? {
+  const salvos: Rascunho = {
     fechamento: base ? String(base.dia_fechamento) : "",
     vencimento: base ? String(base.dia_vencimento) : "",
   };
+  const valores: Rascunho = rascunho ?? salvos;
+  // Só no Primeiro uso: avisa se os dias digitados diferem dos salvos.
+  useAvisarRascunho(
+    valores.fechamento.trim() !== salvos.fechamento || valores.vencimento.trim() !== salvos.vencimento,
+    aoMudarRascunho,
+  );
 
   function mudar(campo: keyof Rascunho, valor: string) {
     setRascunho({ ...valores, [campo]: valor });

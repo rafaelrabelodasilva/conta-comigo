@@ -14,6 +14,10 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.test.{ts,tsx,mts}", "test/**/*.test.{ts,mts}", "*.test.mts"],
+    // O padrão é `node` (o núcleo não tem DOM). Os testes de componente
+    // pedem jsdom no próprio arquivo (`// @vitest-environment jsdom`);
+    // `dom-preparar.ts` só age neles.
     environment: "node",
+    setupFiles: ["./test/dom-preparar.ts"],
   },
 });

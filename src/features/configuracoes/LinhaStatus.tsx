@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { useAvisarRascunhoDaLinha } from "./rascunho";
 import {
   ROTULOS,
   mensagem,
@@ -27,6 +28,8 @@ export type PropsLinhaStatus = {
   aoArquivar: (id: string) => void;
   aoDesarquivar: (id: string) => void;
   aoExcluir: (id: string) => void;
+  /** Avisa quando o nome tem rascunho não salvo (só no Primeiro uso). */
+  aoMudarRascunho?: (id: string, temRascunho: boolean) => void;
 };
 
 export function LinhaStatus({
@@ -38,6 +41,7 @@ export function LinhaStatus({
   aoArquivar,
   aoDesarquivar,
   aoExcluir,
+  aoMudarRascunho,
 }: PropsLinhaStatus) {
   const { id, nome, arquivado, conta_como_pago: contaComoPago } = status;
   // Enquanto edita, o campo mostra o rascunho; fora disso, o nome da memória
@@ -46,6 +50,7 @@ export function LinhaStatus({
   const [erro, setErro] = useState<string | null>(null);
   const idCampo = useId();
   const idErro = `${idCampo}-erro`;
+  useAvisarRascunhoDaLinha(id, rascunho !== null, aoMudarRascunho);
 
   function confirmarNome() {
     if (rascunho === null) return;

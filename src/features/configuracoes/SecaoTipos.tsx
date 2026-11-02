@@ -13,19 +13,23 @@ import { Esqueleto } from "@/ui/Esqueleto";
 import { EstadoVazio } from "@/ui/EstadoVazio";
 import { useToast } from "@/ui/Toast";
 import { useExcluirCadastro } from "./ExcluirCadastro";
+import { useAvisarRascunho, useRascunhosDasLinhas, type PropsSecao } from "./rascunho";
 import { LinhaTipo } from "./LinhaTipo";
 
 // Configurações → Tipos. Lê só pelo hook do gerenciador de Realtime e grava
 // só pelo repositório; as regras vêm do núcleo. Mudanças feitas em outro
 // aparelho aparecem sozinhas. Lista alfabética, arquivados no fim.
 
-export function SecaoTipos() {
+export function SecaoTipos({ aoMudarRascunho }: PropsSecao = {}) {
   const { status, linhas } = useLinhas("tipos");
   const toast = useToast();
   const [criando, setCriando] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
   const [erroNovo, setErroNovo] = useState<string | null>(null);
   const [salvandoNovo, setSalvandoNovo] = useState(false);
+  // Só no Primeiro uso: avisa se há nome novo digitado ou nome em edição.
+  const rascunhosLinhas = useRascunhosDasLinhas();
+  useAvisarRascunho((criando && nomeNovo.trim() !== "") || rascunhosLinhas.algum, aoMudarRascunho);
 
   const repo = repoTipos();
   const lista = ordenarParaConfiguracoes(linhas);
@@ -102,6 +106,7 @@ export function SecaoTipos() {
             aoRenomear={async (id, nome) => avisarSeFalhou(await repo.atualizar(id, { nome }))}
             aoArquivar={arquivar}
             aoDesarquivar={desarquivar}
+            aoMudarRascunho={aoMudarRascunho ? rascunhosLinhas.mudar : undefined}
             aoExcluir={(id) => void exclusao.pedir({ id, nome: t.nome })}
           />
         ))}
