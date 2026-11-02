@@ -197,13 +197,31 @@ describe.skipIf(!ligado)("Responsáveis no Supabase local", () => {
       })
       .subscribe();
 
+    // Diagnóstico: mesmo usuário com a chave antiga (JWT `ANON_KEY`).
+    let eventosChaveAntiga = 0;
+    const chaveAntiga = process.env.ANON_KEY;
+    const clienteChaveAntiga = chaveAntiga ? createClient<Database>(url, chaveAntiga, semSessao) : null;
+    if (clienteChaveAntiga) {
+      const { data: sessao } = await clienteChaveAntiga.auth.signInWithPassword({
+        email: a.email,
+        password: a.senha,
+      });
+      clienteChaveAntiga.realtime.setAuth(sessao.session!.access_token);
+      clienteChaveAntiga
+        .channel("teste-responsaveis-chave-antiga")
+        .on("postgres_changes", { event: "*", schema: "public", table: "responsaveis" }, () => {
+          eventosChaveAntiga++;
+        })
+        .subscribe();
+    }
+
     let repetidor: ReturnType<typeof setInterval> | undefined;
     const recebido = new Promise<{ id: string; nome: string; updated_at: string }>((resolver, rejeitar) => {
       const limite = setTimeout(() => {
         clearInterval(repetidor);
         rejeitar(
           new Error(
-            `evento não chegou (status do canal: ${statusA.join(", ")}; eventos no cliente de serviço: ${eventosAdmin})`,
+            `evento não chegou (status do canal: ${statusA.join(", ")}; eventos no cliente de serviço: ${eventosAdmin}; com ANON_KEY: ${clienteChaveAntiga ? eventosChaveAntiga : "sem ANON_KEY"})`,
           ),
         );
       }, 25_000);
@@ -253,5 +271,6 @@ describe.skipIf(!ligado)("Responsáveis no Supabase local", () => {
     expect(eventosDeB).toEqual([]);
     await b.cliente.removeChannel(canalB);
     await admin.removeChannel(canalAdmin);
+    if (clienteChaveAntiga) await clienteChaveAntiga.removeAllChannels();
   }, 40_000);
 });

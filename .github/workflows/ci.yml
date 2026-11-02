@@ -85,6 +85,10 @@ jobs:
           docker ps --format '{{.Names}}' | grep -i realtime | while read -r c; do
             echo "== $c"; docker logs --tail 200 "$c" 2>&1
           done
+          db=$(docker ps --format '{{.Names}}' | grep -E '^supabase_db_' | head -1)
+          docker exec "$db" psql -U postgres -c "select * from pg_publication_tables where pubname like 'supabase_realtime%';" \
+            -c "select slot_name, plugin, active from pg_replication_slots;" \
+            -c "select id, subscription_id, entity::regclass, claims_role, created_at from realtime.subscription;" 2>&1 || true
       - name: Parar o Supabase local
         if: always()
         run: npx supabase stop --no-backup
