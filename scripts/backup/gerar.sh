@@ -66,6 +66,13 @@ echo "Schema…" >&2
 npx supabase db dump --db-url "$db_url" -f "$pasta/schema.sql" >&2
 echo "Dados…" >&2
 npx supabase db dump --db-url "$db_url" --data-only --use-copy -f "$pasta/data.sql" >&2
+# Tira os COPY sem nenhuma linha: não restauram nada, e os de tabelas da
+# plataforma (ex.: storage.buckets_vectors) falham por permissão no projeto novo.
+awk '
+  /^COPY .* FROM stdin;$/ { cabecalho = $0; pendente = 1; next }
+  pendente { pendente = 0; if ($0 == "\\.") next; print cabecalho }
+  { print }
+' "$pasta/data.sql" > "$pasta/data.sql.tmp" && mv "$pasta/data.sql.tmp" "$pasta/data.sql"
 
 for f in roles schema data; do
   test -s "$pasta/$f.sql" || { echo "$f.sql saiu vazio." >&2; exit 1; }
