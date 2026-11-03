@@ -14,6 +14,7 @@ import {
 import type { LinhaFatura, LinhaLancamento } from "@/data/faturas-repo";
 import { gerenciador, useLinhas } from "@/data/realtime";
 import { ImportarFatura } from "@/features/importar/ImportarFatura";
+import { TotalAPagar } from "@/features/importar/TotalAPagar";
 import { Botao } from "@/ui/Botao";
 import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
 import { Esqueleto } from "@/ui/Esqueleto";
@@ -78,16 +79,18 @@ export function Painel({ titulo }: { titulo: string }) {
     const linhas = ordenarLancamentos(lancamentos.linhas);
     conteudo = (
       <div className="flex flex-col gap-3">
-        {ordenarFaturas(faturas.linhas).map((f) => (
-          <section key={f.id} className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-4">
-            <h2 className="texto-body-strong">
-              {tituloFaturaImportada(f.mes, f.vencimento, linhas.filter((l) => l.fatura_id === f.id).length)}
-            </h2>
-            <p className="texto-number text-text-muted">
-              {rotuloDespesasCreditos(f.total_despesas_centavos, f.total_creditos_centavos)}
-            </p>
-          </section>
-        ))}
+        {ordenarFaturas(faturas.linhas).map((f) => {
+          const daFatura = linhas.filter((l) => l.fatura_id === f.id);
+          return (
+            <section key={f.id} className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
+              <h2 className="texto-body-strong">{tituloFaturaImportada(f.mes, f.vencimento, daFatura.length)}</h2>
+              <TotalAPagar fatura={f} valoresCentavos={daFatura.map((l) => l.valor_centavos)} />
+              <p className="texto-number text-text-muted">
+                {rotuloDespesasCreditos(f.total_despesas_centavos, f.total_creditos_centavos)}
+              </p>
+            </section>
+          );
+        })}
         <section className="overflow-x-auto rounded-lg border border-border bg-surface p-3">
           <table className="w-full texto-body">
             <caption className="pb-2 text-left texto-body-strong">{C.titulo}</caption>
@@ -111,6 +114,17 @@ export function Painel({ titulo }: { titulo: string }) {
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-border texto-body-strong">
+                <td className="py-1 pr-3" colSpan={3}>
+                  {C.total}
+                </td>
+                <td className="py-1 pr-3 text-right texto-number">
+                  {formatarDinheiro(linhas.reduce((soma, l) => soma + l.valor_centavos, 0))}
+                </td>
+                <td />
+              </tr>
+            </tfoot>
           </table>
         </section>
       </div>

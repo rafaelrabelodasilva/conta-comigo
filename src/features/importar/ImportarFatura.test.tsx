@@ -11,6 +11,7 @@ import {
   TEXTOS_IMPORTAR as T,
   mensagem,
   rotuloDespesasCreditos,
+  rotuloTotalAPagar,
   textoExtracaoIncompleta,
 } from "@/domain/mensagens";
 import extracaoOutubro from "../../../test/fixtures/extracao-2026-10.json";
@@ -112,6 +113,9 @@ describe("ImportarFatura", () => {
     // Sem normalizar: o espaço entre "R$" e o número é inseparável.
     expect(screen.getByText(rotuloDespesasCreditos(832739, 63962), { normalizer: (t) => t })).toBeTruthy();
     expect(screen.getByText("49 lançamentos serão gravados")).toBeTruthy();
+    // O total da fatura do cartão e como os 49 chegam nele.
+    expect(screen.getByText(rotuloTotalAPagar(771367), { normalizer: (t) => t })).toBeTruthy();
+    expect(screen.getByText("✓ Bate com o total a pagar")).toBeTruthy();
 
     expect(falso.lerPdf).toHaveBeenLastCalledWith(expect.any(Uint8Array), "segredo");
     expect(falso.fetch).toHaveBeenCalledTimes(1);

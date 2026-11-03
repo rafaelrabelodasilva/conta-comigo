@@ -254,3 +254,48 @@ export function primeiraDiferenca(
   if (c.diferencaCreditosCentavos !== 0) return { centavos: Math.abs(c.diferencaCreditosCentavos), final: null };
   return null;
 }
+
+/** Os totais lidos que fecham o "Total a pagar" da Fatura. */
+export type TotaisLidosDaFatura = {
+  saldo_anterior_centavos: number | null;
+  pagamentos_centavos: number | null;
+  total_a_pagar_centavos: number | null;
+};
+
+export type ComposicaoTotalAPagar = {
+  /** Soma dos Lançamentos (despesas − créditos). */
+  lancamentosCentavos: number;
+  saldoAnteriorCentavos: number;
+  pagamentosCentavos: number;
+  /** Lançamentos + saldo anterior − pagamentos. */
+  calculadoCentavos: number;
+  /** "Total a pagar" lido da Fatura; null se não foi lido. */
+  lidoCentavos: number | null;
+  /** Calculado − lido; null sem o lido. */
+  diferencaCentavos: number | null;
+};
+
+/**
+ * Como os Lançamentos chegam ao "Total a pagar" da Fatura: a soma deles
+ * (créditos negativos) mais o saldo da fatura anterior menos os pagamentos
+ * recebidos. Saldo e pagamentos não lidos contam como zero. Só mostra; a
+ * Conferência (despesas e créditos) continua em `conferirImportacao`.
+ */
+export function comporTotalAPagar(
+  fatura: TotaisLidosDaFatura,
+  valoresCentavos: readonly number[],
+): ComposicaoTotalAPagar {
+  const lancamentos = valoresCentavos.reduce((soma, v) => soma + v, 0);
+  const saldo = fatura.saldo_anterior_centavos ?? 0;
+  const pagamentos = fatura.pagamentos_centavos ?? 0;
+  const calculado = lancamentos + saldo - pagamentos;
+  const lido = fatura.total_a_pagar_centavos;
+  return {
+    lancamentosCentavos: lancamentos,
+    saldoAnteriorCentavos: saldo,
+    pagamentosCentavos: pagamentos,
+    calculadoCentavos: calculado,
+    lidoCentavos: lido,
+    diferencaCentavos: lido === null ? null : calculado - lido,
+  };
+}

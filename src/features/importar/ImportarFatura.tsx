@@ -30,6 +30,7 @@ import { Campo } from "@/ui/Campo";
 import { Janela } from "@/ui/Janela";
 import { CANCELADO, extrairTexto } from "./extrair";
 import { lerPdf, type PdfLido } from "./ler-pdf";
+import { TotalAPagar } from "./TotalAPagar";
 
 // Janela "Importar fatura" (UX-DR20, História 2.3), em 3 passos: PDF, senha
 // e conferir. O PDF e a senha ficam no aparelho (pdf.js); só o texto sem
@@ -332,6 +333,7 @@ export function ImportarFatura({ aberta, aoMudar }: PropsImportarFatura) {
         <div className="flex flex-col gap-1 rounded-lg border border-border bg-background p-3">
           <p className="texto-label text-text-muted">{T.lido_no_pdf}</p>
           <p className="texto-body-strong">{tituloFaturaLida(f.mes, f.vencimento)}</p>
+          <TotalAPagar fatura={f} valoresCentavos={importacao.lancamentos.map((l) => l.valor_centavos)} />
           <p className="texto-number text-text-muted">
             {rotuloDespesasCreditos(f.total_despesas_centavos, f.total_creditos_centavos)}
           </p>

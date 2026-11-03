@@ -3,6 +3,7 @@ import extracaoOutubro from "../../test/fixtures/extracao-2026-10.json";
 import type { Extracao, LancamentoExtraido } from "./extracao-fatura";
 import {
   ESPERADO_OUTUBRO_2026,
+  comporTotalAPagar,
   conferirImportacao,
   dataDoLancamento,
   formatarParcela,
@@ -265,5 +266,37 @@ describe("aceite de outubro/2026 (extração gravada)", () => {
     const creditos = r.valor.lancamentos.filter((l) => l.valor_centavos < 0);
     expect(creditos.reduce((s, l) => s - l.valor_centavos, 0)).toBe(ESPERADO_OUTUBRO_2026.creditosCentavos);
     expect(r.valor.lancamentos.some((l) => /PAGAMENTO DE FATURA/.test(l.nome))).toBe(false);
+  });
+});
+
+describe("comporTotalAPagar", () => {
+  it("outubro: R$ 7.687,77 + R$ 7.483,11 − R$ 7.457,21 = R$ 7.713,67, igual ao total a pagar lido", () => {
+    const r = prepararImportacao(outubro);
+    if (!r.ok) throw new Error(r.erro.codigo);
+    const c = comporTotalAPagar(r.valor.fatura, r.valor.lancamentos.map((l) => l.valor_centavos));
+    expect(c).toEqual({
+      lancamentosCentavos: 768_777,
+      saldoAnteriorCentavos: 748_311,
+      pagamentosCentavos: 745_721,
+      calculadoCentavos: 771_367,
+      lidoCentavos: 771_367,
+      diferencaCentavos: 0,
+    });
+  });
+
+  it("saldo e pagamentos não lidos contam zero; sem o total lido, a diferença é null", () => {
+    const fatura = { saldo_anterior_centavos: null, pagamentos_centavos: null, total_a_pagar_centavos: null };
+    expect(comporTotalAPagar(fatura, [1000, -8])).toMatchObject({
+      lancamentosCentavos: 992,
+      calculadoCentavos: 992,
+      lidoCentavos: null,
+      diferencaCentavos: null,
+    });
+  });
+
+  it("diferença é calculado − lido", () => {
+    const fatura = { saldo_anterior_centavos: 500, pagamentos_centavos: 500, total_a_pagar_centavos: 1100 };
+    expect(comporTotalAPagar(fatura, [1000]).diferencaCentavos).toBe(-100);
+    expect(comporTotalAPagar(fatura, []).lancamentosCentavos).toBe(0);
   });
 });

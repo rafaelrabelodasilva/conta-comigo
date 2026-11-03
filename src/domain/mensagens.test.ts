@@ -24,8 +24,11 @@ import type { ConferenciaImportacao } from "./importacao-fatura";
 import {
   ETAPAS_IMPORTACAO,
   TEXTOS_IMPORTAR,
+  rotuloComposicaoTotal,
   rotuloConferencia,
+  rotuloConferenciaTotal,
   rotuloDespesasCreditos,
+  rotuloTotalAPagar,
   rotuloPassoImportar,
   rotuloSeraoGravados,
   textoExtracaoIncompleta,
@@ -317,5 +320,36 @@ describe("textos da importação da fatura (História 2.3)", () => {
     expect(ehCodigoConhecido("fatura.mes_mudou")).toBe(true);
     expect(TEXTOS_IMPORTAR.escolher_outro_pdf).toBe("Escolher outro PDF");
     expect(TEXTOS_IMPORTAR.importar_mesmo_assim).toBe("Importar mesmo assim");
+  });
+});
+
+describe("total a pagar da fatura (História 2.3)", () => {
+  const composicao = {
+    lancamentosCentavos: 768777,
+    saldoAnteriorCentavos: 748311,
+    pagamentosCentavos: 745721,
+    calculadoCentavos: 771367,
+    lidoCentavos: 771367,
+    diferencaCentavos: 0,
+  };
+  const r = (texto: string) => texto.replaceAll(ESPACO, " ");
+
+  it("total a pagar lido ou não lido", () => {
+    expect(r(rotuloTotalAPagar(771367))).toBe("Total a pagar R$ 7.713,67");
+    expect(rotuloTotalAPagar(null)).toBe("Total a pagar não lido");
+  });
+
+  it("composição do total: lançamentos + saldo anterior − pagamentos", () => {
+    expect(r(rotuloComposicaoTotal(composicao))).toBe(
+      "Lançamentos R$ 7.687,77 + saldo anterior R$ 7.483,11 − pagamentos R$ 7.457,21 = R$ 7.713,67",
+    );
+  });
+
+  it("bate, diferença ou sem o lido", () => {
+    expect(rotuloConferenciaTotal(composicao)).toBe("✓ Bate com o total a pagar");
+    expect(r(rotuloConferenciaTotal({ ...composicao, diferencaCentavos: -8 }) ?? "")).toBe(
+      "⚠ Diferença de R$ 0,08 para o total a pagar",
+    );
+    expect(rotuloConferenciaTotal({ ...composicao, lidoCentavos: null, diferencaCentavos: null })).toBeNull();
   });
 });
