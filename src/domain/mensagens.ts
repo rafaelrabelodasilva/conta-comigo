@@ -66,6 +66,7 @@ export const MENSAGENS = {
   "ciclo.sem_configuracao": "Informe o dia de fechamento e o de vencimento do cartão.",
   "ciclo.vigente_no_passado": "A mudança do Ciclo não pode valer para um mês que já passou.",
   "dinheiro.invalido": "Valor inválido. Use, por exemplo, 1,50.",
+  "divisao.fracoes_invalidas": "As frações da divisão precisam somar 100%.",
   "ajuste.limite_invalido": "Valor inválido. Use, por exemplo, 1,50.",
   "ajuste.limite_fora": "Use um valor de R$ 0,01 a R$ 10,00.",
   "atraso.tolerancia_invalida": "Use de 0 a 60 dias.",

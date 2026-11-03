@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 11-01-2026 19:39
-last_updated: 11-03-2026 16:35
+last_updated: 11-03-2026 16:53
 project: conta-comigo
 project_key: NOKEY
 tracking_system: file-system
@@ -50,7 +50,7 @@ development_status:
 
   epic-2: in-progress
   2-1-prova-técnica-ler-a-fatura-de-outubro-no-ipad: done
-  2-2-formatos-de-dinheiro-data-e-mês: backlog
+  2-2-formatos-de-dinheiro-data-e-mês: review
   2-3-importar-a-fatura-do-mês: backlog
   2-4-painel-do-mês-com-a-grade-de-lançamentos: backlog
   2-5-conferência-e-marca-verificar: backlog

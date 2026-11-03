@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { removerDadosPessoais } from "@/domain/dados-pessoais";
-import { formatarReais } from "@/domain/dinheiro";
+import { formatarDinheiro } from "@/domain/dinheiro";
 import type { Extracao, ResumoExtracao } from "@/domain/extracao-fatura";
 import { ITENS_QUADRO_PROVA, TEXTOS_PROVA_FATURA as T, mensagem, rotuloCartaoFinal } from "@/domain/mensagens";
 import { formatarSegundos, montarQuadroProva } from "@/domain/prova-fatura";
@@ -60,7 +60,7 @@ async function codigoDaResposta(r: Response): Promise<string> {
 }
 
 function reaisOuNaoLido(centavos: number | null | undefined): string {
-  return typeof centavos === "number" ? formatarReais(centavos) : T.nao_lido;
+  return typeof centavos === "number" ? formatarDinheiro(centavos) : T.nao_lido;
 }
 
 export function ProvaFatura() {
@@ -279,7 +279,7 @@ export function ProvaFatura() {
             <ul className="texto-body">
               {resultado.resposta.resumo.porCartao.map((c) => (
                 <li key={c.final} className={c.diferencaCentavos === 0 ? undefined : "text-danger-fg"}>
-                  {rotuloCartaoFinal(c.final)}: {formatarReais(c.lidoCentavos)} · {formatarReais(c.despesasCentavos)}
+                  {rotuloCartaoFinal(c.final)}: {formatarDinheiro(c.lidoCentavos)} · {formatarDinheiro(c.despesasCentavos)}
                 </li>
               ))}
             </ul>
@@ -309,7 +309,7 @@ export function ProvaFatura() {
                     <td className="py-1 texto-number">
                       {l.parcelaN === null ? "" : `${String(l.parcelaN).padStart(2, "0")}/${String(l.parcelaTotal).padStart(2, "0")}`}
                     </td>
-                    <td className="py-1 text-right texto-number">{formatarReais(l.valorCentavos)}</td>
+                    <td className="py-1 text-right texto-number">{formatarDinheiro(l.valorCentavos)}</td>
                     <td className="py-1 texto-number">{l.finalCartao}</td>
                     <td className="py-1">{l.tipoSugerido ?? ""}</td>
                     <td className="py-1">{l.duvida ? T.duvida_sim : ""}</td>

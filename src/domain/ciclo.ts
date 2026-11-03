@@ -1,5 +1,5 @@
 // Ciclo do cartão e Mês (AD-9, História 1.7). Funções puras: "hoje" entra
-// como parâmetro (ou sai de `hojeEmSaoPaulo(agora)`, que recebe o instante);
+// como parâmetro (ou sai de `hojeEmSaoPaulo(agora)`, em `datas.ts`);
 // o núcleo não lê relógio.
 //
 // - Mês = mês do vencimento da Fatura, no formato `AAAA-MM`.
@@ -9,6 +9,7 @@
 //   com vigente_desde ≤ M; antes da primeira, vale a primeira.
 // - Mês de uma data = o menor M cujo fechamento (pela vigente em M) é ≥ data.
 
+import { dois, lerMes, partesMes } from "./datas";
 import type { Resultado } from "./resultado";
 
 /** Dia de fechamento e de vencimento (1 a 31). */
@@ -23,21 +24,10 @@ export type ConfigCiclo = DiasCiclo & {
   created_at: string;
 };
 
-const MES = /^(\d{4})-(0[1-9]|1[0-2])$/;
 const DATA = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
-const NOMES_MES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-
-const dois = (n: number) => String(n).padStart(2, "0");
-
-function partesMes(mes: string): { ano: number; mes: number } {
-  const m = MES.exec(mes);
-  if (!m) throw new Error(`Mês inválido: ${mes}`);
-  return { ano: Number(m[1]), mes: Number(m[2]) };
-}
-
 export function ehMes(valor: string): boolean {
-  return MES.test(valor);
+  return lerMes(valor) !== null;
 }
 
 /** `AAAA-MM-DD` que existe no calendário (29/02 só em ano bissexto). */
@@ -45,18 +35,6 @@ export function ehData(valor: string): boolean {
   const m = DATA.exec(valor);
   if (!m) return false;
   return Number(m[3]) <= diasNoMes(`${m[1]}-${m[2]}`);
-}
-
-/** "Hoje" (`AAAA-MM-DD`) em America/Sao_Paulo no instante `agora`. */
-export function hojeEmSaoPaulo(agora: Date): string {
-  const partes = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(agora);
-  const parte = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? "";
-  return `${parte("year")}-${parte("month")}-${parte("day")}`;
 }
 
 /** Mês de calendário (`AAAA-MM`) de uma data `AAAA-MM-DD`. */
@@ -81,17 +59,6 @@ export function diasNoMes(mes: string): number {
 /** A data do `dia` dentro de `mes`; dia que não existe vira o último dia. */
 export function diaNoMes(mes: string, dia: number): string {
   return `${mes}-${dois(Math.min(dia, diasNoMes(mes)))}`;
-}
-
-/** "Out/26". */
-export function formatarMes(mes: string): string {
-  const { ano, mes: m } = partesMes(mes);
-  return `${NOMES_MES[m - 1]}/${dois(ano % 100)}`;
-}
-
-/** "02/11/26". */
-export function formatarData(data: string): string {
-  return `${data.slice(8, 10)}/${data.slice(5, 7)}/${data.slice(2, 4)}`;
 }
 
 function comparar(a: ConfigCiclo, b: ConfigCiclo): number {

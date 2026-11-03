@@ -2,7 +2,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { formatarReais } from "@/domain/dinheiro";
+import { formatarDinheiro } from "@/domain/dinheiro";
 import { ROTULOS, mensagem } from "@/domain/mensagens";
 import { ToastProvider } from "@/ui/Toast";
 import { SecaoConferencia } from "./SecaoConferencia";
@@ -58,8 +58,8 @@ describe("SecaoConferencia", () => {
 
   it("sem linha, mostra os padrões (R$ 1,00 e 10 dias)", () => {
     const campos = montar();
-    // `formatarReais` usa espaço não separável entre "R$" e o valor.
-    expect(campos.limite.value).toBe(formatarReais(100));
+    // `formatarDinheiro` usa espaço não separável entre "R$" e o valor.
+    expect(campos.limite.value).toBe(formatarDinheiro(100));
     expect(campos.limite.value.replace(/\s/g, " ")).toBe("R$ 1,00");
     expect(campos.tolerancia.value).toBe("10");
   });
