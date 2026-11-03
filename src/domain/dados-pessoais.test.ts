@@ -79,4 +79,18 @@ describe("removerDadosPessoais", () => {
   it("texto vazio continua vazio", () => {
     expect(removerDadosPessoais("")).toBe("");
   });
+  it('abreviação "R" da rua do Santander e a linha do prédio até o CEP', () => {
+    const texto = ["FULANO DE TAL", "R DAS PALMEIRAS 400", "ED JARDIM DAS FLORES CENTRO", "01234-567 SAO PAULO SP", "fica"].join("\n");
+    expect(removerDadosPessoais(texto)).toBe(["FULANO DE TAL", "fica"].join("\n"));
+  });
+
+  it('"R$" e "Resumo" não são rua', () => {
+    const texto = ["R$ 7.713,67", "Resumo da Fatura", "R$7.713,67"].join("\n");
+    expect(removerDadosPessoais(texto)).toBe(texto);
+  });
+
+  it("Lançamento com dígito de marcação antes da data nunca é descartado", () => {
+    const texto = "2 02/07 LOJA* 12345-678 BAR 03/03 466,00";
+    expect(removerDadosPessoais(texto)).toBe(texto);
+  });
 });

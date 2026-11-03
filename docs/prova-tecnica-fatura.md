@@ -39,27 +39,34 @@ Usa `extrairFatura` do servidor com o texto do fixture e confere os números de 
 
 ## Resultados
 
-> Pendente: preencher depois da leitura no iPad.
+Leitura de 03/11/2026 em produção, com `gemini-3.6-flash`. O PDF de outubro/2026 não tem senha: o campo ficou vazio.
 
-| Item | Esperado | Lido no iPad | Bateu? |
+| Item | Esperado | Mac (Safari 18.6) | iPad Pro (Safari) |
 | --- | --- | --- | --- |
-| Lançamentos | 49 | | |
-| Soma das despesas | R$ 8.327,39 | | |
-| Soma dos créditos | R$ 639,62 | | |
-| Total de despesas da fatura | R$ 8.327,39 | | |
-| Total de créditos da fatura | R$ 639,62 | | |
-| Soma dos cartões = despesas | igual | | |
-| Pagamento da fatura anterior na lista | 0 | | |
-| Lançamentos com dúvida | — | | |
-| Senha errada avisada e nova tentativa sem reescolher o PDF | sim | | |
-| Tempo para abrir o PDF | — | | |
-| Tempo do servidor (sessão, Tipos e Gemini) | — | | |
-| Tempo só do Gemini | — | | |
-| Tempo total | < 60 s | | |
+| Lançamentos | 49 | 49 ✓ | (pendente) |
+| Soma das despesas | R$ 8.327,39 | R$ 8.327,39 ✓ | (pendente) |
+| Soma dos créditos | R$ 639,62 | R$ 639,62 ✓ | (pendente) |
+| Total de despesas da fatura | R$ 8.327,39 | R$ 8.327,39 ✓ | (pendente) |
+| Total de créditos da fatura | R$ 639,62 | R$ 639,62 ✓ | (pendente) |
+| Soma dos cartões = despesas | igual | igual ✓ | (pendente) |
+| Pagamento da fatura anterior na lista | 0 | 0 ✓ | (pendente) |
+| Lançamentos com dúvida | — | 0 | (pendente) |
+| Senha errada avisada e nova tentativa | sim | não se aplica (PDF sem senha) | não se aplica |
+| Tempo para abrir o PDF | — | 0,1 s | (pendente) |
+| Tempo do servidor (sessão, Tipos e Gemini) | — | 35,2 s | (pendente) |
+| Tempo só do Gemini | — | 35,0 s | (pendente) |
+| Tempo total | < 60 s | 36,4 s ✓ | (pendente) |
 
-Diferenças encontradas: (pendente)
+O teste local (`PROVA_GEMINI=1`, com o fixture) também bateu os 49 Lançamentos, as somas, os cartões e o tempo abaixo de 60 s.
 
-Modelo usado (`GEMINI_MODEL`): (pendente)
+Diferenças encontradas no caminho (já corrigidas):
+
+1. **Safari:** o pdf.js 5.6 não lia o texto no Safari 18 (`for await` sobre `ReadableStream` em `getTextContent`). Corrigido com `streamTextContent().getReader()` (PR #21).
+2. **Gemini 503:** o plano gratuito respondeu "alta demanda" nas primeiras leituras. A rota tenta de novo até 2 vezes (PR #22).
+3. **Endereço:** a limpeza não reconhecia a abreviação "R" de rua que o Santander usa, e a linha da rua e a do edifício passaram na primeira leitura (foram ao Gemini). Corrigido: "R" conta como logradouro e o bloco vai até o CEP. O fixture foi revisado à mão e está sem endereço, CPF e número de cartão.
+4. **Senha:** o PDF desta fatura não tem senha, então o aviso "Senha incorreta" com a fatura real não foi testado no aparelho (fica coberto pelos testes automáticos, com o pdf.js simulado).
+
+Modelo usado (`GEMINI_MODEL`): `gemini-3.6-flash` (o `gemini-3.8-flash` respondeu 503 em todas as tentativas de 03/11/2026).
 
 ## Decisão
 
