@@ -39,11 +39,27 @@ done
 echo "Restaurando backup:" >&2
 sed -n '1,4p' "$pasta/info.txt" >&2
 
+# Privilégios padrão do Supabase: toda tabela, função e sequência que o
+# `postgres` cria em `public` já nasce com GRANT para anon, authenticated e
+# service_role. O dump traz só os GRANT/REVOKE em relação ao padrão do Postgres,
+# então sem isto as funções restauradas ganhariam EXECUTE para `anon` (que a
+# origem revogou). Desliga o padrão enquanto o schema é criado e religa depois;
+# a impressão digital confere objetos e padrões (acl_funcao, acl_padrao).
+papeis='anon, authenticated, service_role'
+sem_padrao=""
+com_padrao=""
+for tipo in TABLES FUNCTIONS SEQUENCES; do
+  sem_padrao+="ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON $tipo FROM $papeis; "
+  com_padrao+="ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON $tipo TO $papeis; "
+done
+
 psql -X \
   --single-transaction \
   --variable ON_ERROR_STOP=1 \
   --file "$pasta/roles.sql" \
+  --command "$sem_padrao" \
   --file "$pasta/schema.sql" \
+  --command "$com_padrao" \
   --command 'SET session_replication_role = replica' \
   --file "$pasta/data.sql" \
   --dbname "$db_url" >/dev/null

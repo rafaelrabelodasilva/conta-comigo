@@ -12,6 +12,7 @@
 --   restricao  md5 de cada restrição de `public`
 --   acl_tabela privilégios (GRANT/REVOKE) de cada tabela de `public`
 --   acl_funcao privilégios de cada função de `public`
+--   acl_padrao privilégios padrão (ALTER DEFAULT PRIVILEGES) do postgres
 --   indice     md5 de cada índice de `public`
 --
 -- Uso: psql -X -v ON_ERROR_STOP=1 -d <db-url> -f scripts/backup/impressao-digital.sql
@@ -85,6 +86,13 @@ select secao, chave, valor from (
   select 'acl_funcao', p.oid::regprocedure::text, coalesce(p.proacl::text, '(padrão)')
   from pg_proc p
   where p.pronamespace = 'public'::regnamespace and p.prokind in ('f', 'p')
+  union all
+  select 'acl_padrao', r.rolname || '.' || coalesce(n.nspname, '(todos)') || '.' || d.defaclobjtype,
+         d.defaclacl::text
+  from pg_default_acl d
+  join pg_roles r on r.oid = d.defaclrole
+  left join pg_namespace n on n.oid = d.defaclnamespace
+  where r.rolname = 'postgres'
   union all
   select 'indice', i.tablename || '.' || i.indexname, md5(i.indexdef)
   from pg_indexes i
