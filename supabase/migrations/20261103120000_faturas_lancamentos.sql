@@ -138,8 +138,8 @@ create table public.lancamentos (
   -- Créditos negativos.
   valor_centavos integer not null,
   data date,
-  parcela_n smallint,
-  parcela_total smallint,
+  parcela_n integer,
+  parcela_total integer,
   final_cartao text,
   -- Mês (AAAA-MM) fixado na criação e nunca recalculado (AD-9).
   mes text not null,
@@ -166,11 +166,14 @@ create table public.lancamentos (
     check (char_length(nome_normalizado) between 1 and 200),
   constraint lancamentos_apelido_check
     check (apelido is null or (apelido = btrim(apelido) and char_length(apelido) between 1 and 60)),
+  -- Parcela: as duas colunas juntas (ou nenhuma) e 1 ≤ n ≤ total ≤ 999.
+  -- Sem `between` dentro de `or`: o Postgres reescreve essa forma com outros
+  -- parênteses ao restaurar o backup, e a impressão digital do backup
+  -- (pg_get_constraintdef) deixaria de bater.
+  constraint lancamentos_parcela_par_check
+    check ((parcela_n is null) = (parcela_total is null)),
   constraint lancamentos_parcela_check
-    check (
-      (parcela_n is null and parcela_total is null)
-      or (parcela_n between 1 and parcela_total and parcela_total between 1 and 999)
-    ),
+    check (parcela_n >= 1 and parcela_n <= parcela_total and parcela_total <= 999),
   constraint lancamentos_final_cartao_check check (final_cartao ~ '^\d{4}$'),
   constraint lancamentos_mes_check check (mes ~ '^\d{4}-(0[1-9]|1[0-2])$'),
   constraint lancamentos_ordem_fatura_check check (ordem_fatura >= 1),
@@ -351,8 +354,8 @@ begin
       l ->> 'nome_normalizado',
       (l ->> 'valor_centavos')::integer,
       (l ->> 'data')::date,
-      (l ->> 'parcela_n')::smallint,
-      (l ->> 'parcela_total')::smallint,
+      (l ->> 'parcela_n')::integer,
+      (l ->> 'parcela_total')::integer,
       l ->> 'final_cartao',
       mes_fatura,
       fatura.id,
