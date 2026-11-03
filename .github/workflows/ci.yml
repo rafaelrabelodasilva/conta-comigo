@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# bash com pipefail: `$(script | tail -1)` não esconde a falha do script.
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -104,3 +109,101 @@ jobs:
       - name: Parar o Supabase local
         if: always()
         run: npx supabase stop --no-backup
+
+  backup:
+    name: Backup gera e restaura (Supabase local)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Containers que o teste não usa (mais rápido); iguais nos dois locais.
+      EXCLUIR: studio,imgproxy,edge-runtime,logflare,vector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Instalar age
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
+      - run: psql --version && age --version && bash -n scripts/backup/gerar.sh scripts/backup/restaurar.sh
+      - name: Local 1 (com migrações) e dados de exemplo
+        run: |
+          npx supabase start -x "$EXCLUIR"
+          eval "$(npx supabase status -o env | grep '^DB_URL=')"
+          echo "DB1=$DB_URL" >> "$GITHUB_ENV"
+          psql -X -v ON_ERROR_STOP=1 -d "$DB_URL" -f test/backup/dados-exemplo.sql
+          psql -X -v ON_ERROR_STOP=1 -d "$DB_URL" -f scripts/backup/impressao-digital.sql > "$RUNNER_TEMP/impressao-a.txt"
+          cat "$RUNNER_TEMP/impressao-a.txt"
+      - name: Toda tabela de public tem dados de exemplo
+        run: |
+          if grep -E '^dados\|public\.[^|]+\|0 ' "$RUNNER_TEMP/impressao-a.txt"; then
+            echo "::error::Tabela(s) de public sem linha em test/backup/dados-exemplo.sql. Acrescente dados de exemplo para elas."
+            exit 1
+          fi
+          grep -qE '^dados\|auth\.users\|[1-9]' "$RUNNER_TEMP/impressao-a.txt"
+          grep -qE '^dados\|auth\.identities\|[1-9]' "$RUNNER_TEMP/impressao-a.txt"
+      - name: gerar.sh recusa URL vazia e chave pública ausente
+        run: |
+          echo "# sem chave" > "$RUNNER_TEMP/sem-chave.txt"
+          if erro="$(bash scripts/backup/gerar.sh "" scripts/backup/destinatarios-age.txt "$RUNNER_TEMP/recusa" 2>&1)"; then
+            echo "::error::gerar.sh aceitou URL vazia."; exit 1
+          fi
+          echo "$erro"
+          grep -qF "URL do banco vazia." <<< "$erro" || { echo "::error::Mensagem de URL vazia ausente."; exit 1; }
+          if erro="$(bash scripts/backup/gerar.sh "$DB1" "$RUNNER_TEMP/sem-chave.txt" "$RUNNER_TEMP/recusa" 2>&1)"; then
+            echo "::error::gerar.sh aceitou arquivo sem chave age1…."; exit 1
+          fi
+          echo "$erro"
+          grep -qF "Nenhuma chave pública age1…" <<< "$erro" || { echo "::error::Mensagem de chave ausente ausente."; exit 1; }
+          test -z "$(find "$RUNNER_TEMP/recusa" -type f 2>/dev/null)"
+      - name: Gerar backup com chave descartável
+        run: |
+          # Par de chaves só deste job; nunca a chave de produção.
+          age-keygen -o "$RUNNER_TEMP/chave-descartavel.txt" 2>/dev/null
+          age-keygen -y "$RUNNER_TEMP/chave-descartavel.txt" > "$RUNNER_TEMP/destinatarios.txt"
+          mkdir -p "$RUNNER_TEMP/saida"
+          arquivo="$(bash scripts/backup/gerar.sh "$DB1" "$RUNNER_TEMP/destinatarios.txt" "$RUNNER_TEMP/saida" | tail -1)"
+          ls -l "$RUNNER_TEMP/saida"
+          test "$(find "$RUNNER_TEMP/saida" -type f | wc -l)" -eq 1
+          test -z "$(find "$RUNNER_TEMP/saida" -type f -name '*.sql')"
+          echo "ARQUIVO=$arquivo" >> "$GITHUB_ENV"
+      - name: Parar o local 1
+        run: npx supabase stop --no-backup
+      - name: Local 2 (novo, sem migrações)
+        run: |
+          dir="$RUNNER_TEMP/local2"
+          mkdir -p "$dir/supabase"
+          sed -E 's/^project_id = .*/project_id = "conta-comigo-restauracao"/' supabase/config.toml > "$dir/supabase/config.toml"
+          echo "LOCAL2=$dir" >> "$GITHUB_ENV"
+          npx supabase start --workdir "$dir" -x "$EXCLUIR"
+          eval "$(npx supabase status --workdir "$dir" -o env | grep '^DB_URL=')"
+          echo "DB2=$DB_URL" >> "$GITHUB_ENV"
+          tabelas="$(psql -X -At -d "$DB_URL" -c "select count(*) from pg_tables where schemaname = 'public'")"
+          test "$tabelas" -eq 0 || { echo "::error::O local 2 deveria começar sem tabelas em public."; exit 1; }
+      - name: Decifrar e restaurar no local 2
+        run: |
+          age -d -i "$RUNNER_TEMP/chave-descartavel.txt" -o "$RUNNER_TEMP/backup.tar.gz" "$ARQUIVO"
+          bash scripts/backup/restaurar.sh "$RUNNER_TEMP/backup.tar.gz" "$DB2" 2> "$RUNNER_TEMP/restaurar.log" \
+            || { cat "$RUNNER_TEMP/restaurar.log"; exit 1; }
+          rm -f "$RUNNER_TEMP/backup.tar.gz"
+          cat "$RUNNER_TEMP/restaurar.log"
+          # info.txt precisa listar toda migração do repositório (para o migration repair).
+          for f in supabase/migrations/*.sql; do
+            v="$(basename "$f" | grep -oE '^[0-9]+')"
+            grep -qE "^  $v( |$)" "$RUNNER_TEMP/restaurar.log" \
+              || { echo "::error::Migração $v ausente do info.txt do backup."; exit 1; }
+          done
+      - name: Impressões digitais iguais
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -d "$DB2" -f scripts/backup/impressao-digital.sql > "$RUNNER_TEMP/impressao-b.txt"
+          if ! diff -u "$RUNNER_TEMP/impressao-a.txt" "$RUNNER_TEMP/impressao-b.txt"; then
+            echo "::error::O banco restaurado difere do original (diff acima: - original, + restaurado)."
+            exit 1
+          fi
+          echo "Restauração idêntica: $(wc -l < "$RUNNER_TEMP/impressao-a.txt") itens conferidos."
+      - name: Parar os Supabase locais
+        if: always()
+        run: |
+          npx supabase stop --no-backup || true
+          if [ -n "${LOCAL2:-}" ]; then npx supabase stop --workdir "$LOCAL2" --no-backup || true; fi

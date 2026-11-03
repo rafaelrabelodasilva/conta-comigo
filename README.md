@@ -39,3 +39,5 @@ Login: Supabase Auth com e-mail e senha (sem cadastro público). Sem as variáve
 Variáveis de ambiente: veja `.env.example` (só nomes). Os valores ficam nas variáveis da Vercel (só Production) e num `.env.local`, que nunca vai para o repositório.
 
 Estrutura: `src/domain` (núcleo puro), `src/data`, `src/features`, `src/ui`, `src/server`, `src/app`, `supabase/migrations`. Cada pasta tem um `README.md` com o propósito. Detalhes de infraestrutura em `docs/infraestrutura.md`.
+
+Backup semanal criptografado do banco e como restaurar: `docs/backup.md`.

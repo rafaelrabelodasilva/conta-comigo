@@ -1,0 +1,3 @@
+# Chave pública age do Rafael (só a pública; a privada nunca entra no repositório).
+# O backup é cifrado para cada linha `age1…` deste arquivo. Ver docs/backup.md.
+age1zegppqylhcjwfpf0dkxdt95wuh7a42g3wpgtjvr898735fm6jcvqsc4ukw

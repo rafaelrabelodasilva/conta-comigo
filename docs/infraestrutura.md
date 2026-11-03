@@ -21,6 +21,12 @@ Nenhum segredo fica neste arquivo. As chaves ficam só nas variáveis de ambient
 - `.env.example` lista só os nomes das variáveis; `.env*` locais ficam no `.gitignore`
 - Log no servidor: `src/server/log.ts` (uma linha JSON, só evento, código e campos da lista permitida)
 
+## Backup (História 1.10)
+- Workflow `Backup` (`.github/workflows/backup.yml`): domingo 06:00 UTC e manual; `supabase db dump` cifrado com `age`, artifact de 90 dias
+- Segredo do GitHub `SUPABASE_DB_URL` (URI do Session pooler, porta 5432); chave pública em `scripts/backup/destinatarios-age.txt`; a privada fica só com o Rafael
+- Restauração testada em todo PR pelo job `backup` do CI (dois Supabase locais, nunca produção)
+- Passo a passo (preparar, baixar, decifrar, restaurar, limites): `docs/backup.md`
+
 ## Variáveis de ambiente da Vercel
 - Configuradas na História 1.1 (2026-11-01), **só em Production**: `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (plain), `SUPABASE_SECRET_KEY` (sensitive, cadastrada pelo Rafael). Preview e Development não têm nenhuma.
 - **Pendente antes do primeiro uso real:** trocar a senha do usuário do Rafael no Supabase Auth (apareceu numa conversa com o agente na 1.2), pelo próprio "Esqueci a senha" do app, por uma senha forte.

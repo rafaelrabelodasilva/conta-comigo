@@ -1,0 +1,73 @@
+name: Backup
+
+# Backup semanal do banco de produção fora do Supabase (História 1.10, AD-17).
+# `supabase db dump` (papéis, schema e dados) → tar.gz → cifrado com `age`
+# para a chave pública de scripts/backup/destinatarios-age.txt. Só o `.age`
+# sai do runner, como artifact de 90 dias. Passo a passo em docs/backup.md.
+
+on:
+  schedule:
+    # Domingo 06:00 UTC = 03:00 em São Paulo.
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# bash com pipefail: `$(script | tail -1)` não esconde a falha do script.
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Backup cifrado do banco de produção
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Segredo SUPABASE_DB_URL cadastrado
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::Segredo SUPABASE_DB_URL não cadastrado. Cadastre em Settings → Secrets and variables → Actions (URI do Session pooler, porta 5432). Veja docs/backup.md."
+            exit 1
+          fi
+      - name: Chave pública age presente
+        run: |
+          if ! grep -qE '^age1[0-9a-z]+$' scripts/backup/destinatarios-age.txt 2>/dev/null; then
+            echo "::error::scripts/backup/destinatarios-age.txt não tem uma chave pública age1…. Veja docs/backup.md (Gerar o par de chaves)."
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Instalar age
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
+      - name: Gerar backup cifrado
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/saida"
+          arquivo="$(bash scripts/backup/gerar.sh "$SUPABASE_DB_URL" scripts/backup/destinatarios-age.txt "$RUNNER_TEMP/saida" | tail -1)"
+          test -s "$arquivo" || { echo "::error::Backup não gerado."; exit 1; }
+          # Só o .age pode estar na pasta que vira artifact.
+          if find "$RUNNER_TEMP/saida" -type f ! -name '*.tar.gz.age' | grep -q .; then
+            echo "::error::Arquivo inesperado na pasta do artifact."
+            exit 1
+          fi
+          echo "Arquivo: $(basename "$arquivo") ($(stat -c %s "$arquivo") bytes)"
+          echo "NOME_ARTIFACT=$(basename "$arquivo" .tar.gz.age)" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NOME_ARTIFACT }}
+          path: ${{ runner.temp }}/saida/*.tar.gz.age
+          retention-days: 90
+          if-no-files-found: error
