@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { converterExtracao, resumirExtracao } from "@/domain/extracao-fatura";
-import { ESPERADO_OUTUBRO_2026 } from "@/domain/prova-fatura";
+import { ESPERADO_OUTUBRO_2026 } from "@/domain/importacao-fatura";
 import { extrairFatura } from "@/server/gemini";
 
 // Chamada de verdade ao Gemini com o fixture de outubro/2026. Só roda local:

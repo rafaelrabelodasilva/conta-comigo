@@ -34,8 +34,8 @@
   summary: Renomear `src/ui/toast.ts` (ou `Toast.tsx`) para nomes que não difiram só em maiúsculas.
   evidence: No macOS (sistema de arquivos sem diferenciar maiúsculas) `tsc` e `vitest` falham ao confundir `src/ui/Toast.tsx` com `src/ui/toast.ts`; no CI (Linux) passa. Vem da 1.3.
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-6-gerenciar-status-e-substituir-cadastros-em-uso.md`
-  summary: Na primeira história com referência que conta uso (Lançamentos, Épico 2) ou jsonb, testar no banco os ramos "em uso" de `contar_usos_cadastro` e `substituir_cadastro` (contagem > 0, `cadastro.em_uso`, troca em jsonb pela RPC) e o reabrir a janela de substituto quando a RPC recusar por uso.
-  evidence: Medium não verificado: hoje `referencias_cadastro()` só tem `configuracoes.status_padrao_id` (coluna, sem uso), então o SQL dinâmico desses ramos nunca rodou; erro de sintaxe passaria no CI.
+  summary: Na primeira história com referência jsonb (Fórmulas, Regras, Divisões), testar no banco a troca em jsonb de `substituir_cadastro` e a contagem jsonb de `contar_usos_cadastro`; e testar o reabrir da janela de substituto quando a RPC recusar por uso.
+  evidence: A 2.3 fechou os ramos "em uso" por coluna (Responsável, Tipo e Status de `lancamentos`, em `test/integracao/substituir-cadastro.test.ts`); `REFERENCIAS_JSONB` continua vazia, então o SQL dinâmico da forma jsonb ainda não rodou.
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-7-configurar-o-ciclo-do-cartao-e-a-aparencia.md`
   summary: Testes de componente (jsdom) para `SecaoCiclo`, `SecaoConferencia` e `SecaoAparencia`: dias passados na ordem certa a `planejarMudancaCiclo`, nada gravado com plano `null`, mensagem no campo e rascunho mantido após recusa.
   evidence: Medium não verificado: nenhuma seção tem teste de componente (Vitest em `node`); um erro de fiação inseriria uma linha errada em `config_ciclo`, que só pode ser superada, nunca corrigida.
@@ -48,9 +48,14 @@
   summary: Antes da 2.3, avaliar subir o `pdfjs-dist` para a 6.x (a arquitetura fixa 5.6.x) e conferir se o `getTextContent` volta a funcionar no Safari.
   evidence: `npm audit` acusa GHSA-hq66-cqwq-w95j (alta) na 5.6.x, corrigido na 6.2.108; só afeta `enableScripting` do visualizador, que não é usado. A 5.6 também exigiu ler o texto por `getReader()` no Safari 18 (PR #21).
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-1-prova-tecnica-ler-a-fatura-de-outubro-no-ipad.md`
-  summary: Na 2.3, decidir se o nome do titular (e o final da conta do débito automático) também sai do texto antes do Gemini.
-  evidence: A 2.1 remove só CPF, endereço e número de cartão, como pede a história; o nome aparece no texto enviado e no fixture. O endereço com a abreviação "R" passou na primeira leitura (corrigido no PR #23), então vale revisar a limpeza com outras faturas.
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-1-prova-tecnica-ler-a-fatura-de-outubro-no-ipad.md`
   summary: O plano gratuito do Gemini respondeu 503 ("alta demanda") várias vezes em 03/11/2026; acompanhar na 2.3 e, se continuar, considerar a chave paga (AD-7 item 7) ou outro modelo.
   evidence: `gemini-3.8-flash` deu 503 em todas as tentativas; `gemini-3.6-flash` alternou. A rota já tenta de novo até 2 vezes (PR #22).
-
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-importar-a-fatura-do-mes.md`
+  summary: Decidir o ano das parcelas compradas há mais de 12 meses, hoje gravadas com o ano do fechamento (ou do vencimento) ou o anterior.
+  evidence: A regra da 2.3 (`dataDoLancamento`) só conhece DD/MM e o corte (fechamento, senão vencimento): a "SHOPEE *CELLSOLUTIONS 12/12" de 01/10 já vai para 2025-10-01, mas uma parcela 13/18 comprada há mais de um ano fica com o ano errado. Afeta só a exibição da data e, no Épico 3, a chave da Série (`mes_primeira_parcela` pode ser calculada pela parcela e pelo Mês, sem a data).
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-importar-a-fatura-do-mes.md`
+  summary: Testar o ramo `unique_violation` de `importar_fatura` (duas importações do mesmo Mês ao mesmo tempo devolvem `fatura.mes_ja_importado`).
+  evidence: Low, não verificado: a trava `pg_advisory_xact_lock` já serializa as importações do mesmo dono e Mês, mas um erro no nome da restrição em `sqlerrm like '%faturas_owner_id_mes_key%'` passaria no CI; falta um teste de integração com duas chamadas em paralelo.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-importar-a-fatura-do-mes.md`
+  summary: Ler os Lançamentos por Mês (ou paginado) no gerenciador de Realtime antes de passar de ~1000 linhas.
+  evidence: Medium: `criarGerenciador` relê com `select("*")`, e o PostgREST corta em 1000 linhas por padrão; com ~50 Lançamentos por Mês isso chega em ~20 meses e deixa o Painel e o `updated_at` do Mês incompletos (falso `fatura.mes_mudou`). O AD-4 já pede reler o Mês aberto (História 2.4).

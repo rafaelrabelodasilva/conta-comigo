@@ -16,9 +16,12 @@ describe("referências", () => {
     expect(CADASTROS).toEqual(["responsavel", "tipo", "status"]);
   });
 
-  it("hoje a única referência é o Status padrão, que não conta uso", () => {
+  it("o Status padrão não conta uso; Responsável, Tipo e Status dos Lançamentos contam", () => {
     expect(REFERENCIAS_COLUNAS).toEqual([
       { cadastro: "status", tabela: "configuracoes", coluna: "status_padrao_id", contaUso: false },
+      { cadastro: "responsavel", tabela: "lancamentos", coluna: "responsavel_id", contaUso: true },
+      { cadastro: "tipo", tabela: "lancamentos", coluna: "tipo_id", contaUso: true },
+      { cadastro: "status", tabela: "lancamentos", coluna: "status_id", contaUso: true },
     ]);
     expect(REFERENCIAS_JSONB).toEqual([]);
   });

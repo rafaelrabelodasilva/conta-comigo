@@ -35,6 +35,9 @@ export type Referencia = {
 /** Colunas `uuid` que guardam o id de um cadastro. */
 export const REFERENCIAS_COLUNAS: readonly Referencia[] = [
   { cadastro: "status", tabela: "configuracoes", coluna: "status_padrao_id", contaUso: false },
+  { cadastro: "responsavel", tabela: "lancamentos", coluna: "responsavel_id", contaUso: true },
+  { cadastro: "tipo", tabela: "lancamentos", coluna: "tipo_id", contaUso: true },
+  { cadastro: "status", tabela: "lancamentos", coluna: "status_id", contaUso: true },
 ];
 
 /** Colunas `jsonb` em que o id aparece como texto (valor ou chave, em qualquer nível). */

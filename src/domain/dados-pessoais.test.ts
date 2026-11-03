@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { removerDadosPessoais } from "./dados-pessoais";
+import { TITULAR, removerDadosPessoais } from "./dados-pessoais";
 
 describe("removerDadosPessoais", () => {
   it("tira CPF, CEP e a linha de endereço; o cartão vira o final", () => {
@@ -92,5 +92,89 @@ describe("removerDadosPessoais", () => {
   it("Lançamento com dígito de marcação antes da data nunca é descartado", () => {
     const texto = "2 02/07 LOJA* 12345-678 BAR 03/03 466,00";
     expect(removerDadosPessoais(texto)).toBe(texto);
+  });
+
+  it("o nome do titular (saudação e cabeçalho) e dos adicionais vira TITULAR", () => {
+    const texto = [
+      "Olá, Fulana! Esta é a fatura do seu cartão SANTANDER",
+      "FULANA DE SOUZA LIMA - final 8175",
+      "Cartão Parcela Redução",
+      "FULANA D SOUZA LI 8175 R$50,00",
+      "@ BELTRANO DE SOUZA - final 3967",
+      "BELTRANO",
+      "06/09 FULANA MODAS 02/12 1.140,74",
+    ].join("\n");
+    expect(removerDadosPessoais(texto)).toBe(
+      [
+        `Olá, ${TITULAR}! Esta é a fatura do seu cartão SANTANDER`,
+        `${TITULAR} - final 8175`,
+        "Cartão Parcela Redução",
+        // Abreviado diferente do cabeçalho: sai até onde bate ("FULANA D").
+        `${TITULAR} SOUZA LI 8175 R$50,00`,
+        `@ ${TITULAR} - final 3967`,
+        TITULAR,
+        // Linha de Lançamento nunca muda.
+        "06/09 FULANA MODAS 02/12 1.140,74",
+      ].join("\n"),
+    );
+  });
+
+  it("nome cortado depois da primeira palavra também sai (\"RAFAEL R DA SIL\")", () => {
+    const texto = ["FULANA DE SOUZA - final 1111", "FULANA DE SOU 1111 R$0,00", "FULANA DESTA LOJA"].join("\n");
+    expect(removerDadosPessoais(texto)).toBe(
+      [`${TITULAR} - final 1111`, `${TITULAR} 1111 R$0,00`, `${TITULAR} DESTA LOJA`].join("\n"),
+    );
+  });
+
+  it("o nome mais longo vence quando um começa igual ao outro", () => {
+    const texto = ["FULANA S LIMA - final 1111", "FULANA SOUZA LIMA - final 2222", "FULANA SOUZA LIMA"].join("\n");
+    expect(removerDadosPessoais(texto)).toBe(
+      [`${TITULAR} - final 1111`, `${TITULAR} - final 2222`, TITULAR].join("\n"),
+    );
+  });
+
+  it("nome não é trocado dentro de outra palavra", () => {
+    const texto = ["Olá, Ana!", "BANANA ANA ANAIS"].join("\n");
+    expect(removerDadosPessoais(texto)).toBe([`Olá, ${TITULAR}!`, `BANANA ${TITULAR} ANAIS`].join("\n"));
+  });
+
+  it("o cabeçalho do cartão mascarado vira final e o nome sai", () => {
+    expect(removerDadosPessoais("FULANA DE TAL - 4220 XXXX XXXX 8175")).toBe(`${TITULAR} - final 8175`);
+  });
+
+  it("tira a linha do final da conta do bloco do débito automático, e só ela", () => {
+    const texto = [
+      "DEMONSTRATIVO PARA SIMPLES CONFERÊNCIA - DÉBITO AUTOMÁTICO",
+      "Esta fatura será considerada quitada após o débito.",
+      "  final 0530 ",
+      "FULANA DE TAL - final 3967",
+      "1/4",
+      "final 1111",
+      "@ FULANA DE TAL - final 3967",
+    ].join("\n");
+    expect(removerDadosPessoais(texto)).toBe(
+      [
+        "DEMONSTRATIVO PARA SIMPLES CONFERÊNCIA - DÉBITO AUTOMÁTICO",
+        "Esta fatura será considerada quitada após o débito.",
+        // Cabeçalho de cartão dentro do bloco mantém o final do cartão.
+        `${TITULAR} - final 3967`,
+        "1/4",
+        // Fora do bloco, nada sai.
+        "final 1111",
+        `@ ${TITULAR} - final 3967`,
+      ].join("\n"),
+    );
+  });
+
+  it("cabeçalho com uma palavra só (\"TOTAL - final 1234\") não vira nome", () => {
+    const texto = ["TOTAL - final 1234", "Total de despesas 10,00", "VALOR TOTAL 10,00"].join("\n");
+    expect(removerDadosPessoais(texto)).toBe(texto);
+  });
+
+  it("limpar de novo não muda nada", () => {
+    const texto = ["Olá, Fulana!", "FULANA DE TAL - final 8175", "DÉBITO AUTOMÁTICO", "final 0530", "", "fim"].join("\n");
+    const uma = removerDadosPessoais(texto);
+    expect(removerDadosPessoais(uma)).toBe(uma);
+    expect(uma).not.toMatch(/FULANA|0530/i);
   });
 });

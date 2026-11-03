@@ -1,22 +1,21 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { mensagem } from "@/domain/mensagens";
 import { deveAbrirPrimeiroUso } from "@/domain/primeiro-uso";
 import type { Database } from "@/data/database.types";
 import { lerEstadoPrimeiroUso } from "@/data/estado-primeiro-uso";
 import { criarClienteServidor, temSessao } from "@/data/supabase/servidor";
+import { Painel } from "@/features/painel/Painel";
 import { log } from "@/server/log";
-import { EstadoVazio } from "@/ui/EstadoVazio";
 import { itemDaRota } from "@/ui/navegacao";
-import { Tela } from "@/ui/Tela";
 
 const item = itemDaRota("/");
 
 export const metadata: Metadata = { title: `${item.titulo} · Conta Comigo` };
 
-// Painel provisório: o conteúdo chega nas próximas histórias. Enquanto isso,
-// o estado vazio chama para importar a primeira fatura.
+// Painel: o servidor decide o Primeiro uso; o conteúdo (Faturas importadas,
+// Lançamentos e a janela "Importar fatura") é o componente cliente, que lê
+// dos gerenciadores de Realtime. Provisório até a grade da 2.4.
 export default async function PaginaPainel() {
   // Confere a sessão aqui também, sem depender só do proxy.
   if (!(await temSessao())) redirect("/entrar");
@@ -30,9 +29,5 @@ export default async function PaginaPainel() {
   }
   if (leitura?.ok && deveAbrirPrimeiroUso(leitura.estado)) redirect("/primeiro-uso");
 
-  return (
-    <Tela titulo={item.titulo}>
-      <EstadoVazio texto={mensagem("painel.vazio")} />
-    </Tela>
-  );
+  return <Painel titulo={item.titulo} />;
 }

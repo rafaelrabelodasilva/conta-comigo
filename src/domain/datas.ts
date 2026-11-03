@@ -51,6 +51,11 @@ export function formatarMes(mes: string): string {
   return `${NOMES_MES[m - 1]}/${dois(ano % 100)}`;
 }
 
+/** "outubro": só o nome do mês, por extenso e minúsculo. */
+export function formatarNomeDoMes(mes: string): string {
+  return NOMES_MES_EXTENSO[partesMes(mes).mes - 1];
+}
+
 /** "outubro/26". */
 export function formatarMesExtenso(mes: string): string {
   const { ano, mes: m } = partesMes(mes);

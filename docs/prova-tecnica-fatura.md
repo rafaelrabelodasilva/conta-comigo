@@ -2,13 +2,15 @@
 
 Valida o caminho do AD-7 antes de construir a importação: o PDF abre com a senha no Safari do iPad (pdf.js legacy), o texto é limpo de dados pessoais no aparelho e uma chamada ao Gemini lê a fatura inteira, certa e em menos de 1 minuto. Nenhum segredo fica neste arquivo.
 
-## Como funciona
+> **Desde a História 2.3** a página `/prova-fatura` não existe mais: virou a janela **＋ Importar fatura** do Painel (PDF, senha e conferir), que reaproveita a mesma leitura (`src/features/importar/ler-pdf.ts`), a limpeza e a rota, e grava pela RPC `importar_fatura`. As seções abaixo descrevem a prova como foi feita na 2.1. A limpeza também troca o nome do titular e dos adicionais por `TITULAR` e tira o final da conta do débito automático; o fixture `test/fixtures/fatura-2026-10.txt` foi regerado assim, e a extração de outubro gravada com o Gemini (`test/fixtures/extracao-2026-10.json`, já em centavos) deixa o aceite da 2.3 rodar no CI sem chamar o Gemini.
 
-- Página `/prova-fatura` (protegida, fora do menu): escolher o PDF, digitar a senha e tocar em **Ler fatura**.
-- O navegador abre o PDF com `pdfjs-dist` 5.6.205 (build legacy, import dinâmico, worker servido pelo próprio app em `/_next/static`), extrai o texto de todas as páginas e roda `removerDadosPessoais` do núcleo (CPF, CEP e linhas de endereço somem; o cartão vira `final NNNN`). O PDF e a senha nunca saem do aparelho.
-- Só o texto limpo vai para `POST /api/fatura/extrair` (Node, `maxDuration = 60`, sessão obrigatória). A rota lê os Tipos ativos, faz **uma** chamada `generateContent` com `responseJsonSchema = z.toJSONSchema(ESQUEMA_EXTRACAO)` e valida a resposta com o mesmo schema. Não grava nada; o log leva só código, status, duração e quantidade.
-- A página mostra o quadro **esperado × lido** (49 Lançamentos; despesas R$ 8.327,39; créditos R$ 639,62; soma dos cartões = despesas; nenhum pagamento da fatura anterior; total < 60 s), os tempos (abrir o PDF, servidor, só o Gemini, total), os dados lidos da fatura (vencimento, fechamento, saldo anterior, pagamentos, total a pagar), os Lançamentos com dúvida, a soma por cartão e a lista lida.
-- **Baixar texto sem dados pessoais** salva o texto exatamente como foi mandado à rota. É daí que nasce o fixture.
+## Como funcionava (2.1)
+
+- A página `/prova-fatura` (protegida, fora do menu; removida na 2.3, quando virou a janela **Importar fatura** do Painel) pedia o PDF e a senha, e a leitura começava em **Ler fatura**.
+- O navegador abria o PDF com `pdfjs-dist` 5.6.205 (build legacy, import dinâmico, worker servido pelo próprio app em `/_next/static`), extraía o texto de todas as páginas e rodava `removerDadosPessoais` do núcleo (CPF, CEP e linhas de endereço somem; o cartão vira `final NNNN`). O PDF e a senha nunca saíam do aparelho.
+- Só o texto limpo ia (e continua indo, pela janela) para `POST /api/fatura/extrair` (Node, `maxDuration = 60`, sessão obrigatória). A rota lê os Tipos ativos, faz **uma** chamada `generateContent` com `responseJsonSchema = z.toJSONSchema(ESQUEMA_EXTRACAO)` e valida a resposta com o mesmo schema. Não grava nada; o log leva só código, status, duração e quantidade.
+- A página mostrava o quadro **esperado × lido** (49 Lançamentos; despesas R$ 8.327,39; créditos R$ 639,62; soma dos cartões = despesas; nenhum pagamento da fatura anterior; total < 60 s), os tempos (abrir o PDF, servidor, só o Gemini, total), os dados lidos da fatura (vencimento, fechamento, saldo anterior, pagamentos, total a pagar), os Lançamentos com dúvida, a soma por cartão e a lista lida.
+- **Baixar texto sem dados pessoais** salvava o texto exatamente como foi mandado à rota. Foi daí que nasceu o fixture.
 
 ## Preparar (uma vez, Rafael)
 
@@ -18,7 +20,7 @@ Valida o caminho do AD-7 antes de construir a importação: o PDF abre com a sen
 
 Sem a chave, a rota responde 503 `fatura.leitura_indisponivel` e a página mostra "A leitura de faturas está indisponível agora." (o texto limpo ainda pode ser baixado).
 
-## Roteiro no iPad Pro (produção)
+## Roteiro no iPad Pro (produção, feito na 2.1)
 
 1. Abrir o app instalado (ou o Safari), entrar e ir para `/prova-fatura` digitando o endereço.
 2. Escolher o PDF da fatura de outubro/2026 (vence 06/10/26).
@@ -78,8 +80,8 @@ Decidido em 03/11/2026: **seguir**. O caminho pdf.js (no aparelho) + Gemini leu 
 
 ## Riscos conhecidos
 
-- `pdfjs-dist` 5.6.x tem o alerta GHSA-hq66-cqwq-w95j (execução de JavaScript de um PDF malicioso quando `enableScripting` está ligado no visualizador, corrigido na 6.2.108). Aqui só se usa `getDocument` + `streamTextContent`, sem o visualizador (`pdf_viewer`), com `isEvalSupported: false`, e só se abre a fatura do próprio Santander. A arquitetura fixa 5.6.x; avaliar a 6.x antes da 2.3.
-- O nome do titular não é removido do texto: a intenção pede só CPF, endereço e número do cartão. Ele vai ao Gemini e ao fixture (revisar antes do commit se deve sair).
+- `pdfjs-dist` 5.6.x tem o alerta GHSA-hq66-cqwq-w95j (execução de JavaScript de um PDF malicioso quando `enableScripting` está ligado no visualizador, corrigido na 6.2.108). Aqui só se usa `getDocument` + `streamTextContent`, sem o visualizador (`pdf_viewer`), com `isEvalSupported: false`, e só se abre a fatura do próprio Santander. A arquitetura fixa 5.6.x; na 2.3, por decisão do Rafael, a troca para a 6.x ficou adiada (a 2.3 não mexe no pdf.js).
+- Até a 2.2, o nome do titular ia ao Gemini e ao fixture. Desde a 2.3 ele (e o dos adicionais) vira `TITULAR`, e o final da conta do débito automático sai do texto; a leitura local com o fixture novo continuou batendo os 49 Lançamentos e as somas (03/11/2026).
 - A rota roda `removerDadosPessoais` de novo no texto recebido (segunda barreira) e dá ao Gemini só o tempo que sobra dos 55 s.
 - **Safari 18 (Mac e iPad):** o `getTextContent()` do pdf.js 5.6 percorre o texto com `for await` sobre `ReadableStream`, que o Safari não suporta (o PDF abria e a leitura falhava como "Não foi possível abrir este PDF."). O texto é lido por `streamTextContent().getReader()` (PR #21).
 - **Gemini gratuito com "alta demanda" (503):** em 03/11/2026 o `gemini-3.8-flash` respondeu 503 em todas as tentativas e o `gemini-3.6-flash` alternou entre responder e 503. A rota refaz a mesma chamada até 2 vezes (esperas de 2 s e 4 s) enquanto sobrar tempo; se continuar 503, a página mostra "A leitura está sobrecarregada agora. Tente de novo em alguns minutos." Modelo escolhido: `gemini-3.6-flash`.

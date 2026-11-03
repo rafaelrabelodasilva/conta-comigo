@@ -5,11 +5,11 @@
 // constantes do núcleo: história que criar referência e não acrescentá-la
 // às duas listas quebra este teste.
 //
-// O caminho "em uso" (recusa sem substituto, contagem > 0) só tem teste no
-// núcleo e no repositório: hoje nenhuma referência conta uso. O teste de
-// integração dele chega com a primeira (Lançamentos, Épico 2).
+// O caminho "em uso" (recusa sem substituto, contagem > 0) usa Lançamentos
+// (História 2.3): Responsável, Tipo e Status de um Lançamento contam uso.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { REFERENCIAS_COLUNAS, REFERENCIAS_JSONB, type Referencia } from "../../src/domain/cadastros";
+import type { Json } from "../../src/data/database.types";
 import { esperarEvento, ligado, supabaseLocal, type Usuario } from "./apoio";
 
 describe.skipIf(!ligado)("substituir_cadastro no Supabase local", () => {
@@ -126,7 +126,7 @@ describe.skipIf(!ligado)("substituir_cadastro no Supabase local", () => {
     }
   });
 
-  it("contar_usos_cadastro devolve 0 para cada item (nada conta uso ainda)", async () => {
+  it("contar_usos_cadastro devolve 0 para item sem uso", async () => {
     const id = await criar(a, "tipos", "Gatos");
     const { data, error } = await a.cliente.rpc("contar_usos_cadastro", { cadastro: "tipo" });
     expect(error).toBeNull();
@@ -232,6 +232,118 @@ describe.skipIf(!ligado)("substituir_cadastro no Supabase local", () => {
       aninhado: { fundo: [{ id: para, nome: "x" }], [outro]: para },
       outro,
       parecido: `${de}-sufixo`,
+    });
+  });
+
+  describe("cadastro em uso por Lançamentos", () => {
+    // Uma Fatura de 2 linhas no Mês dado, gravada pela RPC (Status padrão aplicado).
+    async function importar(u: Usuario, mes: string) {
+      const linha = {
+        nome: "LOJA",
+        nome_normalizado: "LOJA",
+        data: `${mes}-01`,
+        parcela_n: null,
+        parcela_total: null,
+        final_cartao: "1234",
+        duvida_extracao: false,
+      };
+      const { data, error } = await u.cliente.rpc("importar_fatura", {
+        dados_fatura: {
+          mes,
+          vencimento: `${mes}-06`,
+          fechamento: null,
+          total_despesas_centavos: 1500,
+          total_creditos_centavos: 0,
+          saldo_anterior_centavos: null,
+          pagamentos_centavos: null,
+          total_a_pagar_centavos: null,
+        },
+        dados_cartoes: [{ final: "1234", total_centavos: 1500 }],
+        dados_lancamentos: [
+          { ...linha, valor_centavos: 1000, ordem_fatura: 1 },
+          { ...linha, valor_centavos: 500, ordem_fatura: 2 },
+        ] as unknown as Json,
+      });
+      expect(error).toBeNull();
+      return (data as unknown as { lancamentos: { id: string }[] }).lancamentos.map((l) => l.id);
+    }
+
+    async function colunaDe(ids: string[], coluna: "status_id" | "tipo_id" | "responsavel_id") {
+      const { data } = await local.admin.from("lancamentos").select(coluna).in("id", ids);
+      return (data ?? []).map((l) => (l as Record<string, string | null>)[coluna]);
+    }
+
+    async function usos(u: Usuario, cadastro: "status" | "tipo" | "responsavel", id: string) {
+      const { data, error } = await u.cliente.rpc("contar_usos_cadastro", { cadastro });
+      expect(error).toBeNull();
+      return Number((data ?? []).find((l) => l.id === id)?.usos ?? 0);
+    }
+
+    it("Status dos Lançamentos: conta uso, recusa sem substituto e troca com substituto", async () => {
+      const emUso = await criar(a, "status", "Em uso");
+      const novo = await criar(a, "status", "Novo");
+      await definirPadrao(a, emUso);
+      const ids = await importar(a, "2026-05");
+      expect(await colunaDe(ids, "status_id")).toEqual([emUso, emUso]);
+      expect(await usos(a, "status", emUso)).toBe(2);
+      // A contagem é do dono: B não vê os usos de A.
+      const { data: deB } = await b.cliente.rpc("contar_usos_cadastro", { cadastro: "status" });
+      expect((deB ?? []).some((l) => l.id === emUso)).toBe(false);
+
+      const { error } = await a.cliente.rpc("substituir_cadastro", { cadastro: "status", de_id: emUso });
+      expect(error?.message).toBe("cadastro.em_uso");
+      expect(await existe("status", emUso)).toBe(true);
+
+      const { error: erroTroca } = await a.cliente.rpc("substituir_cadastro", {
+        cadastro: "status",
+        de_id: emUso,
+        para_id: novo,
+      });
+      expect(erroTroca).toBeNull();
+      expect(await existe("status", emUso)).toBe(false);
+      expect(await colunaDe(ids, "status_id")).toEqual([novo, novo]);
+      expect(await padraoDe(a)).toBe(novo);
+      expect(await usos(a, "status", novo)).toBe(2);
+    });
+
+    it("Tipo e Responsável dos Lançamentos também contam uso", async () => {
+      await definirPadrao(a, null);
+      const ids = await importar(a, "2026-04");
+      const tipo = await criar(a, "tipos", "Mercado");
+      const outroTipo = await criar(a, "tipos", "Feira");
+      const { data: resp } = await a.cliente.from("responsaveis").insert({ nome: "Mãe", cor: 5, ordem: 5 }).select().single();
+      const { data: outroResp } = await a.cliente
+        .from("responsaveis")
+        .insert({ nome: "Casal", cor: 6, ordem: 6 })
+        .select()
+        .single();
+      const { error: erroClassificar } = await a.cliente
+        .from("lancamentos")
+        .update({ tipo_id: tipo, responsavel_id: resp!.id })
+        .eq("id", ids[0]);
+      expect(erroClassificar).toBeNull();
+
+      expect(await usos(a, "tipo", tipo)).toBe(1);
+      expect(await usos(a, "responsavel", resp!.id)).toBe(1);
+      for (const [cadastro, de] of [
+        ["tipo", tipo],
+        ["responsavel", resp!.id],
+      ] as const) {
+        const { error } = await a.cliente.rpc("substituir_cadastro", { cadastro, de_id: de });
+        expect(error?.message).toBe("cadastro.em_uso");
+      }
+
+      for (const [cadastro, de, para] of [
+        ["tipo", tipo, outroTipo],
+        ["responsavel", resp!.id, outroResp!.id],
+      ] as const) {
+        const { error } = await a.cliente.rpc("substituir_cadastro", { cadastro, de_id: de, para_id: para });
+        expect(error).toBeNull();
+      }
+      expect(await colunaDe([ids[0]], "tipo_id")).toEqual([outroTipo]);
+      expect(await colunaDe([ids[0]], "responsavel_id")).toEqual([outroResp!.id]);
+      expect(await existe("tipos", tipo)).toBe(false);
+      expect(await existe("responsaveis", resp!.id)).toBe(false);
     });
   });
 });

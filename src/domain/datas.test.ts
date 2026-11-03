@@ -5,6 +5,7 @@ import {
   formatarHora,
   formatarMes,
   formatarMesExtenso,
+  formatarNomeDoMes,
   hojeEmSaoPaulo,
   lerMes,
   partesMes,
@@ -32,11 +33,14 @@ describe("formatarMes e formatarMesExtenso", () => {
     expect(formatarMesExtenso("2026-10")).toBe("outubro/26");
     expect(formatarMesExtenso("2026-03")).toBe("março/26");
     expect(formatarMesExtenso("2030-12")).toBe("dezembro/30");
+    expect(formatarNomeDoMes("2026-10")).toBe("outubro");
+    expect(formatarNomeDoMes("2026-03")).toBe("março");
   });
 
   it("recusa Mês fora de AAAA-MM", () => {
     expect(() => formatarMes("2026-13")).toThrow();
     expect(() => formatarMesExtenso("10/26")).toThrow();
+    expect(() => formatarNomeDoMes("2026-00")).toThrow();
   });
 });
 
