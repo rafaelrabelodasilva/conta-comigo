@@ -19,6 +19,19 @@ import {
   tituloExcluir,
 } from "./mensagens";
 import { PASSOS_PRIMEIRO_USO } from "./primeiro-uso";
+import { ESPACO } from "./dinheiro";
+import type { ConferenciaImportacao } from "./importacao-fatura";
+import {
+  ETAPAS_IMPORTACAO,
+  TEXTOS_IMPORTAR,
+  rotuloConferencia,
+  rotuloDespesasCreditos,
+  rotuloPassoImportar,
+  rotuloSeraoGravados,
+  textoExtracaoIncompleta,
+  tituloFaturaImportada,
+  tituloFaturaLida,
+} from "./mensagens";
 
 describe("mensagem", () => {
   it("devolve o texto do código", () => {
@@ -244,5 +257,65 @@ describe("textos do Primeiro uso (História 1.8)", () => {
     expect(ROTULOS.retomar_primeiro_uso).toBe("Retomar o Primeiro uso");
     expect(mensagem("rascunho.nao_salvo")).toBe("Você digitou algo que não foi salvo.");
     expect([ROTULOS.voltar_para_salvar, ROTULOS.descartar]).toEqual(["Voltar para salvar", "Descartar"]);
+  });
+});
+
+describe("textos da importação da fatura (História 2.3)", () => {
+  const conferencia = (extra: Partial<ConferenciaImportacao> = {}): ConferenciaImportacao => ({
+    quantidade: 49,
+    despesasCentavos: 832739,
+    creditosCentavos: 63962,
+    totalDespesasLidoCentavos: 832739,
+    totalCreditosLidoCentavos: 63962,
+    diferencaDespesasCentavos: 0,
+    diferencaCreditosCentavos: 0,
+    porCartao: [{ final: "8673", lidoCentavos: 100, despesasCentavos: 100, diferencaCentavos: 0 }],
+    conferido: true,
+    incompleta: false,
+    ...extra,
+  });
+
+  it("título do passo 3 e do cartão do Painel", () => {
+    expect(tituloFaturaLida("2026-10", "2026-10-06")).toBe("Fatura de outubro · vence 06/10/26");
+    expect(tituloFaturaImportada("2026-10", "2026-10-06", 49)).toBe(
+      "Fatura de outubro/26 · vence 06/10/26 · 49 lançamentos",
+    );
+    expect(tituloFaturaImportada("2026-10", "2026-10-06", 1)).toContain("· 1 lançamento");
+    expect(rotuloDespesasCreditos(832739, 63962)).toBe(`Despesas R$${ESPACO}8.327,39 · Créditos R$${ESPACO}639,62`);
+  });
+
+  it("passos, quantos serão gravados e as etapas do progresso", () => {
+    expect(rotuloPassoImportar(3)).toBe("Passo 3 de 3 · Conferir");
+    expect(rotuloPassoImportar(1)).toBe("Passo 1 de 3 · Escolher o PDF");
+    expect(rotuloSeraoGravados(49)).toBe("49 lançamentos serão gravados");
+    expect(rotuloSeraoGravados(1)).toBe("1 lançamento será gravado");
+    expect(Object.values(ETAPAS_IMPORTACAO)).toEqual(["Abrindo PDF", "Lendo lançamentos", "Conferindo", "Classificando"]);
+  });
+
+  it("selo da Conferência: conferido, diferença no cartão ou no total", () => {
+    expect(rotuloConferencia(conferencia())).toBe("✓ Conferido");
+    expect(
+      rotuloConferencia(
+        conferencia({
+          conferido: false,
+          porCartao: [{ final: "8673", lidoCentavos: 100, despesasCentavos: 92, diferencaCentavos: -8 }],
+        }),
+      ),
+    ).toBe(`⚠ Diferença de R$${ESPACO}0,08 no cartão final 8673`);
+    expect(rotuloConferencia(conferencia({ conferido: false, diferencaCreditosCentavos: 2590 }))).toBe(
+      `⚠ Diferença de R$${ESPACO}25,90`,
+    );
+  });
+
+  it("estados da janela com os textos do EXPERIENCE.md", () => {
+    expect(textoExtracaoIncompleta(41)).toBe(
+      "Não conseguimos ler todos os lançamentos (lemos 41). Você pode importar mesmo assim e corrigir à mão, ou cancelar",
+    );
+    expect(mensagem("fatura.nao_santander")).toBe("Este PDF não parece ser uma fatura do Santander. Confira o arquivo");
+    expect(mensagem("fatura.conexao_caiu")).toBe("A conexão caiu. Nada foi gravado. Tente de novo.");
+    expect(ehCodigoConhecido("fatura.mes_ja_importado")).toBe(true);
+    expect(ehCodigoConhecido("fatura.mes_mudou")).toBe(true);
+    expect(TEXTOS_IMPORTAR.escolher_outro_pdf).toBe("Escolher outro PDF");
+    expect(TEXTOS_IMPORTAR.importar_mesmo_assim).toBe("Importar mesmo assim");
   });
 });

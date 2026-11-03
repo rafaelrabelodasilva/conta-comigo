@@ -69,4 +69,38 @@ insert into public.config_ciclo (id, owner_id, dia_fechamento, dia_vencimento, v
   ('b0000000-0000-4000-8000-000000000501', 'b0000000-0000-4000-8000-000000000001', 3, 10,
    to_char(now() at time zone 'America/Sao_Paulo', 'YYYY-MM'));
 
+-- Fatura de outubro/2026 com um cartão e dois Lançamentos (uma parcela
+-- classificada e o crédito de centavos, negativo), mais um Lançamento manual
+-- excluído logicamente.
+insert into public.faturas (
+  id, owner_id, mes, vencimento, fechamento, total_despesas_centavos, total_creditos_centavos,
+  saldo_anterior_centavos, pagamentos_centavos, total_a_pagar_centavos, alerta_dispensado_em
+) values (
+  'b0000000-0000-4000-8000-000000000601', 'b0000000-0000-4000-8000-000000000001',
+  '2026-10', '2026-10-06', '2026-09-29', 114074, 8, 748311, 745721, 771367, null
+);
+
+insert into public.fatura_cartoes (id, owner_id, fatura_id, final, total_centavos) values
+  ('b0000000-0000-4000-8000-000000000701', 'b0000000-0000-4000-8000-000000000001',
+   'b0000000-0000-4000-8000-000000000601', '5061', 114074);
+
+insert into public.lancamentos (
+  id, owner_id, nome, nome_normalizado, apelido, valor_centavos, data, parcela_n, parcela_total,
+  final_cartao, mes, fatura_id, ordem_fatura, duvida_extracao, lancado_por,
+  responsavel_id, tipo_id, status_id, observacao, editado_em, excluido_em
+) values
+  ('b0000000-0000-4000-8000-000000000801', 'b0000000-0000-4000-8000-000000000001',
+   'MSC CRUZEIROS', 'MSC CRUZEIROS', 'Cruzeiro 🚢', 114074, '2026-09-04', 2, 12,
+   '5061', '2026-10', 'b0000000-0000-4000-8000-000000000601', 1, false, 'fatura',
+   'b0000000-0000-4000-8000-000000000102', 'b0000000-0000-4000-8000-000000000201',
+   'b0000000-0000-4000-8000-000000000302', 'Viagem à Bahia', '2026-11-03 12:00:00+00', null),
+  ('b0000000-0000-4000-8000-000000000802', 'b0000000-0000-4000-8000-000000000001',
+   'MSC CRUZEIROS', 'MSC CRUZEIROS', null, -8, '2026-09-04', null, null,
+   '5061', '2026-10', 'b0000000-0000-4000-8000-000000000601', 2, true, 'fatura',
+   null, null, null, null, null, null),
+  ('b0000000-0000-4000-8000-000000000803', 'b0000000-0000-4000-8000-000000000001',
+   'Ótica São José', 'OTICA SAO JOSE', null, 15000, null, null, null,
+   null, '2026-11', null, null, false, 'manual',
+   null, null, null, null, null, '2026-11-03 13:00:00+00');
+
 commit;

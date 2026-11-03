@@ -20,7 +20,7 @@ const MENSAGEM_NUCLEO =
 
 // AD-2 / NFR4: dinheiro, datas e horas só saem pelos formatadores do núcleo.
 const MENSAGEM_FORMATOS =
-  "Formate só pelo núcleo: formatarDinheiro/arredondar (src/domain/dinheiro.ts) ou formatarData/formatarHora/formatarMes/formatarMesExtenso (src/domain/datas.ts). Veja AD-2.";
+  "Formate só pelo núcleo: formatarDinheiro/arredondar (src/domain/dinheiro.ts) ou formatarData/formatarHora/formatarMes/formatarMesExtenso/formatarNomeDoMes (src/domain/datas.ts). Veja AD-2.";
 const FORMATOS_PROIBIDOS = [
   { object: "Intl", property: "NumberFormat", message: MENSAGEM_FORMATOS },
   { object: "Intl", property: "DateTimeFormat", message: MENSAGEM_FORMATOS },

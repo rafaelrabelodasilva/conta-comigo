@@ -6,7 +6,9 @@
 // para a pessoa e podem mudar. Erro de login nunca diz qual campo errou.
 
 import type { PassoPrimeiroUso } from "./primeiro-uso";
-import type { ItemQuadro } from "./prova-fatura";
+import { formatarData, formatarMesExtenso, formatarNomeDoMes } from "./datas";
+import { formatarDinheiro } from "./dinheiro";
+import { primeiraDiferenca, type ConferenciaImportacao } from "./importacao-fatura";
 
 export const MENSAGENS = {
   "auth.campos_vazios": "Preencha o e-mail e a senha.",
@@ -81,65 +83,97 @@ export const MENSAGENS = {
   "fatura.tempo_esgotado": "A leitura demorou demais. Tente de novo.",
   "fatura.leitura_ocupada": "A leitura está sobrecarregada agora. Tente de novo em alguns minutos.",
   "fatura.conexao_caiu": "A conexão caiu. Nada foi gravado. Tente de novo.",
+  "fatura.nao_santander": "Este PDF não parece ser uma fatura do Santander. Confira o arquivo",
+  "fatura.mes_ja_importado": "A fatura deste Mês já foi importada. Nada foi gravado.",
+  "fatura.mes_mudou":
+    "Os lançamentos deste Mês mudaram em outro aparelho. Nada foi gravado. Tente de novo.",
 } as const;
 
-/**
- * Textos da página de prova técnica da fatura (História 2.1, `/prova-fatura`,
- * fora do menu). A página some na 2.3.
- */
-export const TEXTOS_PROVA_FATURA = {
-  titulo: "Prova técnica da fatura",
-  explicacao:
-    "Abre o PDF com a senha neste aparelho, tira CPF, endereço e número do cartão, e manda só o texto para a leitura. Nada é gravado.",
+/** Textos da janela "Importar fatura" (UX-DR20, mockup `importar.html`). */
+export const TEXTOS_IMPORTAR = {
+  titulo: "Importar fatura",
+  /** O "＋" vai num span `aria-hidden` ao lado: o VoiceOver lê "Importar fatura". */
+  botao: "Importar fatura",
+  passo_arquivo: "Escolher o PDF",
+  passo_senha: "Senha",
+  passo_conferir: "Conferir",
   arquivo: "PDF da fatura",
   senha: "Senha do PDF",
-  ler: "Ler fatura",
-  abrindo: "Abrindo PDF…",
-  lendo: "Lendo lançamentos…",
-  baixar_texto: "Baixar texto sem dados pessoais",
-  quadro: "Esperado × lido",
-  coluna_item: "Item",
-  coluna_esperado: "Esperado",
-  coluna_lido: "Lido",
-  coluna_ok: "Bateu?",
-  bateu: "Sim",
-  nao_bateu: "Não",
-  tempos: "Tempos",
-  tempo_abrir: "Abrir o PDF",
-  tempo_servidor: "Servidor",
-  tempo_gemini: "Gemini",
-  tempo_total: "Total",
-  dados_fatura: "Dados lidos da fatura",
-  vencimento: "Vencimento",
-  fechamento: "Fechamento",
-  saldo_anterior: "Saldo anterior",
-  pagamentos: "Pagamentos",
-  total_a_pagar: "Total a pagar",
-  com_duvida: "Lançamentos com dúvida",
-  nao_lido: "não lido",
-  por_cartao: "Por cartão",
-  lista: "Lançamentos lidos",
-  coluna_nome: "Nome",
-  coluna_data: "Data",
-  coluna_parcela: "Parcela",
-  coluna_valor: "Valor",
-  coluna_cartao: "Cartão",
-  coluna_tipo: "Tipo sugerido",
-  coluna_duvida: "Dúvida",
-  duvida_sim: "Sim",
+  continuar: "Continuar",
+  lido_no_pdf: "Lido no PDF",
+  importar: "Importar",
+  importar_mesmo_assim: "Importar mesmo assim",
+  escolher_outro_pdf: "Escolher outro PDF",
+  gravando: "Gravando…",
+  progresso: "Progresso da importação",
 } as const;
 
-/** Rótulo de cada linha do quadro da prova; uma linha nova sem texto é erro de tipo. */
-export const ITENS_QUADRO_PROVA = {
-  quantidade: "Lançamentos",
-  despesas: "Soma das despesas",
-  creditos: "Soma dos créditos",
-  total_despesas_lido: "Total de despesas da fatura",
-  total_creditos_lido: "Total de créditos da fatura",
-  cartoes: "Soma dos cartões = despesas",
-  sem_pagamento_anterior: "Pagamento da fatura anterior na lista",
-  tempo_total: "Tempo total",
-} as const satisfies Record<ItemQuadro, string>;
+/** Etapas da barra de progresso da importação, na ordem. */
+export const ETAPAS_IMPORTACAO = {
+  abrindo: "Abrindo PDF",
+  lendo: "Lendo lançamentos",
+  conferindo: "Conferindo",
+  classificando: "Classificando",
+} as const;
+
+export type EtapaImportacao = keyof typeof ETAPAS_IMPORTACAO;
+
+/** "Passo 3 de 3 · Conferir". */
+export function rotuloPassoImportar(numero: 1 | 2 | 3): string {
+  const secao = [TEXTOS_IMPORTAR.passo_arquivo, TEXTOS_IMPORTAR.passo_senha, TEXTOS_IMPORTAR.passo_conferir][numero - 1];
+  return rotuloPasso(numero, 3, secao);
+}
+
+/** "1 lançamento", "49 lançamentos". */
+export function rotuloLancamentos(n: number): string {
+  return n === 1 ? "1 lançamento" : `${n} lançamentos`;
+}
+
+/** Passo 3: "Fatura de outubro · vence 06/10/26". */
+export function tituloFaturaLida(mes: string, vencimento: string): string {
+  return `Fatura de ${formatarNomeDoMes(mes)} · vence ${formatarData(vencimento)}`;
+}
+
+/** Cartão do Painel: "Fatura de outubro/26 · vence 06/10/26 · 49 lançamentos". */
+export function tituloFaturaImportada(mes: string, vencimento: string, quantidade: number): string {
+  return `Fatura de ${formatarMesExtenso(mes)} · vence ${formatarData(vencimento)} · ${rotuloLancamentos(quantidade)}`;
+}
+
+/** "Despesas R$ 8.327,39 · Créditos R$ 639,62". */
+export function rotuloDespesasCreditos(despesasCentavos: number, creditosCentavos: number): string {
+  return `Despesas ${formatarDinheiro(despesasCentavos)} · Créditos ${formatarDinheiro(creditosCentavos)}`;
+}
+
+/** "49 lançamentos serão gravados" (um: "1 lançamento será gravado"). */
+export function rotuloSeraoGravados(n: number): string {
+  return n === 1 ? "1 lançamento será gravado" : `${n} lançamentos serão gravados`;
+}
+
+/**
+ * Selo da Conferência: "✓ Conferido" ou "⚠ Diferença de R$ 0,08 no cartão
+ * final 8673" (sem cartão com diferença, só o total).
+ */
+export function rotuloConferencia(c: ConferenciaImportacao): string {
+  const d = primeiraDiferenca(c);
+  if (!d) return "✓ Conferido";
+  const valor = `⚠ Diferença de ${formatarDinheiro(d.centavos)}`;
+  return d.final ? `${valor} no cartão final ${d.final}` : valor;
+}
+
+/** Extração incompleta (EXPERIENCE.md): "Não conseguimos ler todos os lançamentos (lemos 41)…". */
+export function textoExtracaoIncompleta(lidos: number): string {
+  return `Não conseguimos ler todos os lançamentos (lemos ${lidos}). Você pode importar mesmo assim e corrigir à mão, ou cancelar`;
+}
+
+/** Colunas da lista provisória de Lançamentos do Painel (até a grade da 2.4). */
+export const COLUNAS_LANCAMENTOS = {
+  titulo: "Lançamentos",
+  data: "Data",
+  nome: "Nome",
+  parcela: "Parcela",
+  valor: "Valor",
+  cartao: "Cartão",
+} as const;
 
 /** "Cartão final 9012". */
 export function rotuloCartaoFinal(final: string): string {

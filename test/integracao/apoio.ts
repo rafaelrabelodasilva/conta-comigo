@@ -1,4 +1,4 @@
-// Apoio aos testes de integração (Histórias 1.6 e 1.7) (Supabase local): clientes,
+// Apoio aos testes de integração (Histórias 1.6, 1.7 e 2.3) (Supabase local): clientes,
 // usuários de teste com limpeza e espera de um evento do Realtime.
 // Só usado com INTEGRACAO_SUPABASE=1 e as chaves de `supabase status -o env`.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -53,6 +53,9 @@ export function supabaseLocal(prefixo: string) {
 
   async function limpar() {
     for (const u of usuarios) {
+      await admin.from("lancamentos").delete().eq("owner_id", u.id);
+      await admin.from("fatura_cartoes").delete().eq("owner_id", u.id);
+      await admin.from("faturas").delete().eq("owner_id", u.id);
       await admin.from("config_ciclo").delete().eq("owner_id", u.id);
       await admin.from("configuracoes").delete().eq("owner_id", u.id);
       await admin.from("status").delete().eq("owner_id", u.id);
@@ -75,7 +78,7 @@ export function supabaseLocal(prefixo: string) {
  */
 export async function esperarEvento<T>(
   ouvinte: Cliente,
-  tabela: "status" | "configuracoes" | "config_ciclo",
+  tabela: "status" | "configuracoes" | "config_ciclo" | "faturas" | "fatura_cartoes" | "lancamentos",
   evento: "INSERT" | "UPDATE" | "DELETE",
   aceita: (linha: T) => boolean,
   gravar: (tentativa: number) => PromiseLike<unknown>,

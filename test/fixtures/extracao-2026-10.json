@@ -1,0 +1,525 @@
+{
+  "lancamentos": [
+    {
+      "nome": "EST ANUIDADE DIFERENCIADA T",
+      "data": "09/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": -2500,
+      "finalCartao": "8175",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "EST ANUIDADE DIFERENCIADA T",
+      "data": "09/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": -2500,
+      "finalCartao": "8175",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "EST ANUIDADE DIFERENCIADA T",
+      "data": "09/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": -2500,
+      "finalCartao": "8175",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "CASHBACK ESFERA - 314835478",
+      "data": "27/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": -51282,
+      "finalCartao": "8175",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "ANUIDADE DIFERENCIADA",
+      "data": "29/09",
+      "parcelaN": 9,
+      "parcelaTotal": 12,
+      "valorCentavos": 0,
+      "finalCartao": "8175",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "SHOPEE *CELLSOLUTIONS",
+      "data": "01/10",
+      "parcelaN": 12,
+      "parcelaTotal": 12,
+      "valorCentavos": 52366,
+      "finalCartao": "3967",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "AMAZON MUSIC",
+      "data": "17/08",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": -2590,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "AMAZON PRIME BR",
+      "data": "28/11",
+      "parcelaN": 11,
+      "parcelaTotal": 12,
+      "valorCentavos": 1390,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "SH JOIAS EM *SAMIRI",
+      "data": "03/12",
+      "parcelaN": 10,
+      "parcelaTotal": 12,
+      "valorCentavos": 10916,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "OTICAS EXATA",
+      "data": "15/12",
+      "parcelaN": 10,
+      "parcelaTotal": 10,
+      "valorCentavos": 27000,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "PETLOVE*CLUBE NCENPF7",
+      "data": "03/02",
+      "parcelaN": 8,
+      "parcelaTotal": 12,
+      "valorCentavos": 999,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "LITE *VIVOEASYANUAL",
+      "data": "19/03",
+      "parcelaN": 7,
+      "parcelaTotal": 12,
+      "valorCentavos": 3000,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "OTICA QOCULOS",
+      "data": "18/04",
+      "parcelaN": 6,
+      "parcelaTotal": 10,
+      "valorCentavos": 15360,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "OTICA QOCULOS",
+      "data": "20/04",
+      "parcelaN": 6,
+      "parcelaTotal": 9,
+      "valorCentavos": 7977,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "KOLINA PREMIER VEICUL",
+      "data": "30/04",
+      "parcelaN": 5,
+      "parcelaTotal": 10,
+      "valorCentavos": 67000,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "MAGALU *MAGALU",
+      "data": "03/05",
+      "parcelaN": 5,
+      "parcelaTotal": 10,
+      "valorCentavos": 44589,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "AMAZON BR",
+      "data": "12/05",
+      "parcelaN": 5,
+      "parcelaTotal": 10,
+      "valorCentavos": 57750,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "AMAZONMKTPLC*FRANCASTE",
+      "data": "18/05",
+      "parcelaN": 5,
+      "parcelaTotal": 12,
+      "valorCentavos": 6286,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "AMAZONMKTPLC*BAISMOVEI",
+      "data": "19/05",
+      "parcelaN": 5,
+      "parcelaTotal": 12,
+      "valorCentavos": 47328,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "BELLA PIETRA ROCHAS E",
+      "data": "30/06",
+      "parcelaN": 3,
+      "parcelaTotal": 4,
+      "valorCentavos": 80000,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "JIM COM* 57653822 BAR",
+      "data": "02/07",
+      "parcelaN": 3,
+      "parcelaTotal": 3,
+      "valorCentavos": 46600,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "MERCADO*LIQUIDAEMELI",
+      "data": "08/08",
+      "parcelaN": 2,
+      "parcelaTotal": 4,
+      "valorCentavos": 10375,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "MERCADOLIVRE*MERCADOL",
+      "data": "12/08",
+      "parcelaN": 2,
+      "parcelaTotal": 10,
+      "valorCentavos": 9499,
+      "finalCartao": "8673",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "AMAZON BR *AMAZON BR",
+      "data": "17/09",
+      "parcelaN": 1,
+      "parcelaTotal": 6,
+      "valorCentavos": 4900,
+      "finalCartao": "9277",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "AMAZONMKTPLC*KABUMSA",
+      "data": "17/09",
+      "parcelaN": 1,
+      "parcelaTotal": 12,
+      "valorCentavos": 17510,
+      "finalCartao": "9277",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "00354 SH NACOES CRICI",
+      "data": "19/09",
+      "parcelaN": 1,
+      "parcelaTotal": 3,
+      "valorCentavos": 5328,
+      "finalCartao": "9277",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "PANVEL FILIAL 385",
+      "data": "19/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 1999,
+      "finalCartao": "9277",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "COBASI CRICIUMA",
+      "data": "19/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 14557,
+      "finalCartao": "9277",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "DELTAPG*ALIBA IMPORT",
+      "data": "19/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 8597,
+      "finalCartao": "9277",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "OUTBACK STEAKHOUSE",
+      "data": "19/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 23649,
+      "finalCartao": "9277",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "APPLE COM/BILL",
+      "data": "21/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 1990,
+      "finalCartao": "9277",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "MERCADO*MERCADOLIVRE",
+      "data": "22/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 3099,
+      "finalCartao": "9277",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "AMAZON PRIME ALUGUEL",
+      "data": "25/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 990,
+      "finalCartao": "9277",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "DM*SPOTIFY P4750",
+      "data": "26/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 4090,
+      "finalCartao": "9277",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "BELLA PIETRA ROCHAS E",
+      "data": "25/08",
+      "parcelaN": 2,
+      "parcelaTotal": 5,
+      "valorCentavos": 56000,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "GISLANE MEZARI",
+      "data": "03/09",
+      "parcelaN": 1,
+      "parcelaTotal": 3,
+      "valorCentavos": 16668,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "MSC CRUZEIROS",
+      "data": "04/09",
+      "parcelaN": 1,
+      "parcelaTotal": 12,
+      "valorCentavos": 114074,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "MERCADOLIVRE*RELOGIO",
+      "data": "30/08",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 4180,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "SHOPEE *YOFIECOMMERCE",
+      "data": "03/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 2331,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "JIM COM* YGOR BORNHAU",
+      "data": "04/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 8000,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "APPLE COM/BILL",
+      "data": "08/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 1990,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "SHOPEE *HUANCAPASEPELI",
+      "data": "10/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 3499,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "AMAZONMKTPLC*IBLFBELEZ",
+      "data": "10/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 15956,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "GRASSO FARMACIA LTDA",
+      "data": "12/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 14739,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "SHOPEE *TESHOPVENTION",
+      "data": "12/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 6970,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "SHOPEE*STARHOUSE MEGA",
+      "data": "13/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 7808,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "SHOPEE*AGUIA REAL COME",
+      "data": "17/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 2790,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "AMAZON MUSIC",
+      "data": "17/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": 2590,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    },
+    {
+      "nome": "AMAZON MUSIC",
+      "data": "17/09",
+      "parcelaN": null,
+      "parcelaTotal": null,
+      "valorCentavos": -2590,
+      "finalCartao": "5061",
+      "tipoSugerido": null,
+      "duvida": false
+    }
+  ],
+  "fatura": {
+    "vencimento": "06/10/2026",
+    "fechamento": "29/09/2026",
+    "totalDespesasCentavos": 832739,
+    "totalCreditosCentavos": 63962,
+    "saldoAnteriorCentavos": 748311,
+    "pagamentosCentavos": 745721,
+    "totalAPagarCentavos": 771367
+  },
+  "cartoes": [
+    {
+      "final": "8175",
+      "valorTotalCentavos": 0
+    },
+    {
+      "final": "3967",
+      "valorTotalCentavos": 52366
+    },
+    {
+      "final": "8673",
+      "valorTotalCentavos": 436069
+    },
+    {
+      "final": "9277",
+      "valorTotalCentavos": 86709
+    },
+    {
+      "final": "5061",
+      "valorTotalCentavos": 257595
+    }
+  ]
+}

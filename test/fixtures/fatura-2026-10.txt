@@ -1,4 +1,4 @@
-Olá, Rafael! Esta é a fatura do seu cartão SANTANDER
+Olá, TITULAR! Esta é a fatura do seu cartão SANTANDER
 ELITE MASTERCARD contendo compras e pagamentos
 realizados até 29/09.
 Opções de Pagamento até a Data de Vencimento
@@ -13,7 +13,7 @@ Pagando esse valor, a diferença entre o pagamento mínimo e pagamento total da
 fatura será lançada na próxima fatura com o acréscimo de juros no valor de R$
 6.942,31. Juros: 16,19% a.m. + IOF: 0,246% a.m. + IOF adicional: 0,38% (CET:
 582,71% a.a.).
-RAFAEL RABELO DA SILVA - final 8175
+TITULAR - final 8175
 Total a Pagar
 R$ 7.713,67
 Vencimento
@@ -38,7 +38,7 @@ Limite utilizado R$0,00
 Limite disponível R$0,00
 ANUIDADE Entenda como é calculada
 Cartão Parcela Redução Mês Vigente Valor a pagar
-RAFAEL R DA SIL 8175 R$50,00 100,00% - Negociação Comercial R$0,00
+TITULAR 8175 R$50,00 100,00% - Negociação Comercial R$0,00
 TOTAL R$0,00
 DEMONSTRATIVO PARA SIMPLES CONFERÊNCIA - DÉBITO AUTOMÁTICO
 Esta fatura será considerada quitada após a efetivação do débito em conta corrente, do valor
@@ -46,8 +46,7 @@ correspondente entre o pagamento mínimo e o pagamento total desta fatura.
 Para parcelar esta fatura, entre em contato com a Central de Atendimento Santander até 1 dia útil
 antes do vencimento.
 IMPORTANTE: o débito em conta corrente será visualizado no dia posterior ao pagamento.
-final 0530
-RAFAEL RABELO DA SILVA
+TITULAR
 1/4
 
 2/4
@@ -59,7 +58,7 @@ CUMPRINDO OS CRITERIOS DE ISENCAO MANTER R$ 2 MIL EM COMPRAS NO
 CARTAO E TENHA PACOTE DE SERVICOS (EXCETO FREE) SAIBA MAIS:
 SANTANDER.COM.BR/ELITE
 Detalhamento da Fatura
-RAFAEL R DA SILVA - final 8175
+TITULAR - final 8175
 Pagamento e Demais Créditos
 Compra Data Descrição Parcela R$ US$
 04/09 PAGAMENTO DE FATURA-INTERNET -7.457,21
@@ -71,12 +70,12 @@ Despesas
 Compra Data Descrição Parcela R$ US$
 29/09 ANUIDADE DIFERENCIADA 09/12 0,00
 VALOR TOTAL 0,00 0,00
-@ RAFAEL R DA SILVA - final 3967
+@ TITULAR - final 3967
 Parcelamentos
 Compra Data Descrição Parcela R$ US$
 01/10 SHOPEE *CELLSOLUTIONS 12/12 523,66
 VALOR TOTAL 523,66 0,00
-@ RAFAEL R DA SILVA - final 8673
+@ TITULAR - final 8673
 Pagamento e Demais Créditos
 Compra Data Descrição Parcela R$ US$
 17/08 AMAZON MUSIC -25,90
@@ -99,7 +98,7 @@ Compra Data Descrição Parcela R$ US$
 08/08 MERCADO*LIQUIDAEMELI 02/04 103,75
 12/08 MERCADOLIVRE*MERCADOL 02/10 94,99
 VALOR TOTAL 4.360,69 0,00
-@ RAFAEL R DA SILVA - final 9277
+@ TITULAR - final 9277
 Parcelamentos
 Compra Data Descrição Parcela R$ US$
 17/09 AMAZON BR *AMAZON BR 01/06 49,00
@@ -116,7 +115,7 @@ Compra Data Descrição Parcela R$ US$
 25/09 AMAZON PRIME ALUGUEL 9,90
 26/09 DM*SPOTIFY P4750 40,90
 VALOR TOTAL 867,09 0,00
-@ RAFAEL R DA SILVA - final 5061
+@ TITULAR - final 5061
 Parcelamentos
 Compra Data Descrição Parcela R$ US$
 2 25/08 BELLA PIETRA ROCHAS E 02/05 560,00

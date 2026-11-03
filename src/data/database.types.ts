@@ -113,6 +113,199 @@ export type Database = {
           },
         ]
       }
+      fatura_cartoes: {
+        Row: {
+          created_at: string
+          fatura_id: string
+          final: string
+          id: string
+          owner_id: string
+          total_centavos: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          fatura_id: string
+          final: string
+          id?: string
+          owner_id?: string
+          total_centavos: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          fatura_id?: string
+          final?: string
+          id?: string
+          owner_id?: string
+          total_centavos?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fatura_cartoes_fatura_fkey"
+            columns: ["owner_id", "fatura_id"]
+            isOneToOne: false
+            referencedRelation: "faturas"
+            referencedColumns: ["owner_id", "id"]
+          },
+        ]
+      }
+      faturas: {
+        Row: {
+          alerta_dispensado_em: string | null
+          created_at: string
+          fechamento: string | null
+          id: string
+          mes: string
+          owner_id: string
+          pagamentos_centavos: number | null
+          saldo_anterior_centavos: number | null
+          total_a_pagar_centavos: number | null
+          total_creditos_centavos: number
+          total_despesas_centavos: number
+          updated_at: string
+          vencimento: string
+        }
+        Insert: {
+          alerta_dispensado_em?: string | null
+          created_at?: string
+          fechamento?: string | null
+          id?: string
+          mes: string
+          owner_id?: string
+          pagamentos_centavos?: number | null
+          saldo_anterior_centavos?: number | null
+          total_a_pagar_centavos?: number | null
+          total_creditos_centavos: number
+          total_despesas_centavos: number
+          updated_at?: string
+          vencimento: string
+        }
+        Update: {
+          alerta_dispensado_em?: string | null
+          created_at?: string
+          fechamento?: string | null
+          id?: string
+          mes?: string
+          owner_id?: string
+          pagamentos_centavos?: number | null
+          saldo_anterior_centavos?: number | null
+          total_a_pagar_centavos?: number | null
+          total_creditos_centavos?: number
+          total_despesas_centavos?: number
+          updated_at?: string
+          vencimento?: string
+        }
+        Relationships: []
+      }
+      lancamentos: {
+        Row: {
+          apelido: string | null
+          created_at: string
+          data: string | null
+          duvida_extracao: boolean
+          editado_em: string | null
+          excluido_em: string | null
+          fatura_id: string | null
+          final_cartao: string | null
+          id: string
+          lancado_por: Database["public"]["Enums"]["lancado_por"]
+          mes: string
+          nome: string
+          nome_normalizado: string
+          observacao: string | null
+          ordem_fatura: number | null
+          owner_id: string
+          parcela_n: number | null
+          parcela_total: number | null
+          responsavel_id: string | null
+          status_id: string | null
+          tipo_id: string | null
+          updated_at: string
+          valor_centavos: number
+        }
+        Insert: {
+          apelido?: string | null
+          created_at?: string
+          data?: string | null
+          duvida_extracao?: boolean
+          editado_em?: string | null
+          excluido_em?: string | null
+          fatura_id?: string | null
+          final_cartao?: string | null
+          id?: string
+          lancado_por: Database["public"]["Enums"]["lancado_por"]
+          mes: string
+          nome: string
+          nome_normalizado: string
+          observacao?: string | null
+          ordem_fatura?: number | null
+          owner_id?: string
+          parcela_n?: number | null
+          parcela_total?: number | null
+          responsavel_id?: string | null
+          status_id?: string | null
+          tipo_id?: string | null
+          updated_at?: string
+          valor_centavos: number
+        }
+        Update: {
+          apelido?: string | null
+          created_at?: string
+          data?: string | null
+          duvida_extracao?: boolean
+          editado_em?: string | null
+          excluido_em?: string | null
+          fatura_id?: string | null
+          final_cartao?: string | null
+          id?: string
+          lancado_por?: Database["public"]["Enums"]["lancado_por"]
+          mes?: string
+          nome?: string
+          nome_normalizado?: string
+          observacao?: string | null
+          ordem_fatura?: number | null
+          owner_id?: string
+          parcela_n?: number | null
+          parcela_total?: number | null
+          responsavel_id?: string | null
+          status_id?: string | null
+          tipo_id?: string | null
+          updated_at?: string
+          valor_centavos?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lancamentos_fatura_fkey"
+            columns: ["owner_id", "fatura_id"]
+            isOneToOne: false
+            referencedRelation: "faturas"
+            referencedColumns: ["owner_id", "id"]
+          },
+          {
+            foreignKeyName: "lancamentos_responsavel_fkey"
+            columns: ["owner_id", "responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "responsaveis"
+            referencedColumns: ["owner_id", "id"]
+          },
+          {
+            foreignKeyName: "lancamentos_status_fkey"
+            columns: ["owner_id", "status_id"]
+            isOneToOne: false
+            referencedRelation: "status"
+            referencedColumns: ["owner_id", "id"]
+          },
+          {
+            foreignKeyName: "lancamentos_tipo_fkey"
+            columns: ["owner_id", "tipo_id"]
+            isOneToOne: false
+            referencedRelation: "tipos"
+            referencedColumns: ["owner_id", "id"]
+          },
+        ]
+      }
       responsaveis: {
         Row: {
           arquivado: boolean
@@ -215,6 +408,15 @@ export type Database = {
           usos: number
         }[]
       }
+      importar_fatura: {
+        Args: {
+          dados_cartoes: Json
+          dados_fatura: Json
+          dados_lancamentos: Json
+          lancamentos_atualizados_em?: string
+        }
+        Returns: Json
+      }
       referencias_cadastro: {
         Args: never
         Returns: {
@@ -261,7 +463,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      lancado_por: "fatura" | "sistema" | "manual" | "historico"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -391,6 +593,8 @@ export const Constants = {
     Enums: {},
   },
   public: {
-    Enums: {},
+    Enums: {
+      lancado_por: ["fatura", "sistema", "manual", "historico"],
+    },
   },
 } as const
