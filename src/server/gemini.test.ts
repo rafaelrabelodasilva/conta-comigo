@@ -13,7 +13,7 @@ vi.mock("@google/genai", () => ({
   },
 }));
 
-const { extrairFatura, MODELO_PADRAO } = await import("./gemini");
+const { ESPERAS_503_MS, extrairFatura, MODELO_PADRAO } = await import("./gemini");
 
 const valida = {
   lancamentos: [
@@ -111,5 +111,43 @@ describe("extrairFatura", () => {
     );
     const r = await extrairFatura("t", [], { tempoLimiteMs: 10 });
     expect(r).toEqual({ ok: false, erro: { codigo: "fatura.tempo_esgotado" } });
+  });
+  describe("503 (alta demanda)", () => {
+    const ocupado = () => Object.assign(new Error("high demand"), { status: 503 });
+
+    it("tenta de novo depois de esperar e devolve a leitura", async () => {
+      const esperas: number[] = [];
+      falso.generateContent
+        .mockRejectedValueOnce(ocupado())
+        .mockRejectedValueOnce(ocupado())
+        .mockResolvedValueOnce({ text: JSON.stringify(valida) });
+      const r = await extrairFatura("t", [], { esperar: async (ms) => void esperas.push(ms) });
+      expect(r).toEqual({ ok: true, valor: valida });
+      expect(falso.generateContent).toHaveBeenCalledTimes(3);
+      expect(esperas).toEqual([...ESPERAS_503_MS]);
+      expect(falso.opcoesCliente).toHaveLength(1);
+    });
+
+    it("três 503 seguidos: leitura ocupada, sem mais tentativas", async () => {
+      falso.generateContent.mockRejectedValue(ocupado());
+      const r = await extrairFatura("t", [], { esperar: async () => {} });
+      expect(r).toEqual({ ok: false, erro: { codigo: "fatura.leitura_ocupada", detalhe: "http_503_x3" } });
+      expect(falso.generateContent).toHaveBeenCalledTimes(3);
+    });
+
+    it("sem tempo para outra tentativa: para no primeiro 503", async () => {
+      falso.generateContent.mockRejectedValue(ocupado());
+      const esperar = vi.fn(async () => {});
+      const r = await extrairFatura("t", [], { tempoLimiteMs: 5_000, esperar });
+      expect(r).toEqual({ ok: false, erro: { codigo: "fatura.leitura_ocupada", detalhe: "http_503_x1" } });
+      expect(falso.generateContent).toHaveBeenCalledTimes(1);
+      expect(esperar).not.toHaveBeenCalled();
+    });
+
+    it("outros erros não tentam de novo", async () => {
+      falso.generateContent.mockRejectedValue(Object.assign(new Error("quota"), { status: 429 }));
+      await extrairFatura("t", [], { esperar: async () => {} });
+      expect(falso.generateContent).toHaveBeenCalledTimes(1);
+    });
   });
 });

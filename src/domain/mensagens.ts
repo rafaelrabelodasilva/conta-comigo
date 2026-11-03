@@ -78,6 +78,7 @@ export const MENSAGENS = {
   "fatura.leitura_indisponivel": "A leitura de faturas está indisponível agora.",
   "fatura.leitura_falhou": "Não conseguimos ler os lançamentos da fatura. Tente de novo.",
   "fatura.tempo_esgotado": "A leitura demorou demais. Tente de novo.",
+  "fatura.leitura_ocupada": "A leitura está sobrecarregada agora. Tente de novo em alguns minutos.",
   "fatura.conexao_caiu": "A conexão caiu. Nada foi gravado. Tente de novo.",
 } as const;
 
