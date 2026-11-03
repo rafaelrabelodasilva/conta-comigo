@@ -22,11 +22,25 @@ class PasswordException extends Error {
   }
 }
 
+/** Stream sem iterador assíncrono, como no Safari 18: só `getReader()`. */
+function streamEmPedacos(itens: { str?: string; hasEOL?: boolean }[]) {
+  const pedacos = [itens.slice(0, 1), itens.slice(1)];
+  const stream = new ReadableStream({
+    start(c) {
+      for (const items of pedacos) c.enqueue({ items });
+      c.close();
+    },
+  });
+  Object.defineProperty(stream, Symbol.asyncIterator, { value: undefined });
+  return stream;
+}
+
 function documento(paginas: { str?: string; hasEOL?: boolean }[][]) {
   return {
     numPages: paginas.length,
     getPage: async (n: number) => ({
-      getTextContent: async () => ({ items: paginas[n - 1] }),
+      // Só o stream: `getTextContent` (for await) quebra no Safari 18.
+      streamTextContent: () => streamEmPedacos(paginas[n - 1]),
       cleanup: vi.fn(),
     }),
   };

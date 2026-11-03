@@ -36,6 +36,26 @@ export function textoDaPagina(itens: readonly ItemTexto[]): string {
   return texto.replace(/[ \t]+\n/g, "\n").trimEnd();
 }
 
+type PaginaComTexto = {
+  streamTextContent(): ReadableStream<{ items: readonly unknown[] }>;
+};
+
+/**
+ * Itens de texto da página, lidos pelo `getReader()` do stream. Não usa
+ * `getTextContent()`: ele percorre o stream com `for await`, que o Safari 18
+ * (Mac e iPad) não suporta em `ReadableStream` (TypeError).
+ */
+export async function itensDaPagina(pagina: PaginaComTexto): Promise<ItemTexto[]> {
+  const leitor = pagina.streamTextContent().getReader();
+  const itens: ItemTexto[] = [];
+  for (;;) {
+    const { done, value } = await leitor.read();
+    if (done) break;
+    itens.push(...(value.items as ItemTexto[]));
+  }
+  return itens;
+}
+
 /**
  * Abre o PDF com a senha e devolve o texto de todas as páginas (separadas
  * por uma linha em branco) e quanto tempo levou.
@@ -66,8 +86,7 @@ export async function lerPdf(
     const paginas: string[] = [];
     for (let n = 1; n <= doc.numPages; n++) {
       const pagina = await doc.getPage(n);
-      const conteudo = await pagina.getTextContent();
-      paginas.push(textoDaPagina(conteudo.items as ItemTexto[]));
+      paginas.push(textoDaPagina(await itensDaPagina(pagina)));
       pagina.cleanup();
     }
     const texto = paginas.join("\n\n").trim();
