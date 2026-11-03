@@ -27,7 +27,7 @@ describe.skipIf(!existe)("fixture fatura-2026-10.txt", () => {
   });
 
   it("nenhuma linha começa com logradouro", () => {
-    const logradouro = /^\s*(?:RUA|AV\.?|AVENIDA|ALAMEDA|TRAVESSA|ESTRADA|RODOVIA|PRA[CÇ]A)(?=[\s.:,]|$)/i;
+    const logradouro = /^\s*(?:RUA|R\.?|AV\.?|AVENIDA|ALAMEDA|TRAVESSA|ESTRADA|RODOVIA|PRA[CÇ]A)(?=[\s.:,]|$)/i;
     const linhas = texto.split(/\r?\n/).filter((l) => logradouro.test(l));
     expect(linhas).toEqual([]);
   });

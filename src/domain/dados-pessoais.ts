@@ -10,16 +10,18 @@ const CPF_ROTULADO = /\bCPF\b\s*:?\s*\d{11}(?!\d)/gi;
 // CEP "01234-567" ou "01.234-567"; sem traço só depois do rótulo ("CEP 01234567").
 const CEP = /(?<!\d)\d{2}\.?\d{3}-\d{3}(?!\d)/;
 const CEP_ROTULADO = /\bCEP\b\s*:?\s*\d{2}\.?\d{3}-?\d{3}(?!\d)/i;
-// Linha de Lançamento: começa com a data "DD/MM". Nunca é descartada.
-const LANCAMENTO = /^\s*\d{2}\/\d{2}(?!\d)/;
+// Linha de Lançamento: começa com a data "DD/MM", às vezes depois de um
+// dígito de marcação ("2 28/11 AMAZON PRIME BR"). Nunca é descartada.
+const LANCAMENTO = /^\s*(?:\d\s+)?\d{2}\/\d{2}(?!\d)/;
 // Quantas linhas depois do logradouro o endereço pode seguir até o CEP.
 const LINHAS_ATE_CEP = 4;
 // Número de cartão em 4 grupos de 4 (dígitos, X, * ou •), com ou sem
 // separador. O último grupo precisa ser de dígitos: é o final que fica.
 const CARTAO = /(?<![\dX*•])(?:[\dX*•]{4}[ .-]?){3}(\d{4})(?![\dX*•])/gi;
-// Começo de linha de endereço (logradouros).
+// Começo de linha de endereço (logradouros). "R" sozinho é a abreviação de
+// rua que o Santander usa ("R NOME DA RUA 400"); "R$" não casa.
 const LOGRADOURO =
-  /^\s*(?:RUA|R\.|AV\.?|AVENIDA|ALAMEDA|AL\.?|TRAVESSA|TV\.?|ESTRADA|ESTR\.?|RODOVIA|ROD\.?|PRA[CÇ]A|P[CÇ]A\.?|LARGO|VIELA|QUADRA|QD\.?|SETOR|CONDOM[IÍ]NIO|BAIRRO|ENDERE[CÇ]O)(?=[\s.:,]|$)/i;
+  /^\s*(?:RUA|R\.?|AV\.?|AVENIDA|ALAMEDA|AL\.?|TRAVESSA|TV\.?|ESTRADA|ESTR\.?|RODOVIA|ROD\.?|PRA[CÇ]A|P[CÇ]A\.?|LARGO|VIELA|QUADRA|QD\.?|SETOR|CONDOM[IÍ]NIO|BAIRRO|ENDERE[CÇ]O)(?=[\s.:,]|$)/i;
 
 function temCep(linha: string): boolean {
   return CEP.test(linha) || CEP_ROTULADO.test(linha);
