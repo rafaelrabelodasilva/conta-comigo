@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ESPACO, formatarReais, lerReais } from "./dinheiro";
+import { ESPACO, ehValorDeFatura, formatarReais, lerReais, paraCentavos } from "./dinheiro";
 
 const e = (texto: string) => texto.replace(/ /g, ESPACO);
 
@@ -51,5 +51,30 @@ describe("lerReais", () => {
     for (const texto of ["", "abc", "1,505", "1,", ",50", "1.5.0", "1.50,00", "R$", "1 ,50x", "--1"]) {
       expect(lerReais(texto), texto).toEqual({ ok: false, erro: { codigo: "dinheiro.invalido" } });
     }
+  });
+});
+
+describe("paraCentavos", () => {
+  it("lê o formato da Fatura", () => {
+    expect(paraCentavos("1.140,74")).toEqual({ ok: true, valor: 114074 });
+    expect(paraCentavos("8.327,39")).toEqual({ ok: true, valor: 832739 });
+    expect(paraCentavos("8327,39")).toEqual({ ok: true, valor: 832739 });
+    expect(paraCentavos("0,08")).toEqual({ ok: true, valor: 8 });
+    expect(paraCentavos("1.234.567,89")).toEqual({ ok: true, valor: 123456789 });
+    expect(paraCentavos(" 639,62 ")).toEqual({ ok: true, valor: 63962 });
+  });
+
+  it("crédito com `-` vira negativo; -0,00 é zero", () => {
+    expect(paraCentavos("-0,08")).toEqual({ ok: true, valor: -8 });
+    expect(paraCentavos("-1.140,74")).toEqual({ ok: true, valor: -114074 });
+    expect(paraCentavos("-0,00")).toEqual({ ok: true, valor: 0 });
+  });
+
+  it("é estrito: recusa o que lerReais aceitaria", () => {
+    for (const texto of ["", "1", "1,5", "1.50", "R$ 1,50", "1.140,7", "1,505", "11.40,74", "1.1400,74", "- 0,08", "--1,00", "+1,00", "1,00-", "abc"]) {
+      expect(paraCentavos(texto), texto).toEqual({ ok: false, erro: { codigo: "dinheiro.invalido" } });
+      expect(ehValorDeFatura(texto), texto).toBe(false);
+    }
+    expect(ehValorDeFatura("1.140,74")).toBe(true);
   });
 });

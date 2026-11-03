@@ -51,6 +51,17 @@ describe("decidirAcesso", () => {
     ).toEqual({ tipo: "redirecionar", destino: "/" });
   });
 
+  it("sem sessão, rotas /api/ seguem (a rota responde 401)", () => {
+    for (const tinhaCookieAuth of [false, true]) {
+      expect(
+        decidirAcesso({ caminho: "/api/fatura/extrair", autenticado: false, tinhaCookieAuth }),
+      ).toEqual({ tipo: "seguir" });
+    }
+    expect(
+      decidirAcesso({ caminho: "/apis", autenticado: false, tinhaCookieAuth: false }).tipo,
+    ).toBe("redirecionar");
+  });
+
   it("sem sessão, /entrar e /auth/confirmar abrem", () => {
     for (const caminho of ["/entrar", "/auth/confirmar"]) {
       expect(
