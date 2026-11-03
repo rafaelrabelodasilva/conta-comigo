@@ -87,7 +87,7 @@ select secao, chave, valor from (
   from pg_proc p
   where p.pronamespace = 'public'::regnamespace and p.prokind in ('f', 'p')
   union all
-  select 'acl_padrao', r.rolname || '.' || coalesce(n.nspname, '(todos)') || '.' || d.defaclobjtype,
+  select 'acl_padrao', r.rolname || '.' || coalesce(n.nspname, '(todos)') || '.' || d.defaclobjtype::text,
          d.defaclacl::text
   from pg_default_acl d
   join pg_roles r on r.oid = d.defaclrole
