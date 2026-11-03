@@ -28,3 +28,19 @@ supabase/.env
 # debug
 npm-debug.log*
 *.pem
+
+# backup (História 1.10): nunca commitar chave privada age nem backup
+# (a chave pública fica em scripts/backup/destinatarios-age.txt)
+*.age
+*.agekey
+age-key*.txt
+chave-age*
+chave-privada*
+keys.txt
+backup-*.tar.gz
+backup-*/
+/backup/
+/restauracao/
+/roles.sql
+/schema.sql
+/data.sql
