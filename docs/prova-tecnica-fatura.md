@@ -43,21 +43,21 @@ Leitura de 03/11/2026 em produção, com `gemini-3.6-flash`. O PDF de outubro/20
 
 | Item | Esperado | Mac (Safari 18.6) | iPad Pro (Safari) |
 | --- | --- | --- | --- |
-| Lançamentos | 49 | 49 ✓ | (pendente) |
-| Soma das despesas | R$ 8.327,39 | R$ 8.327,39 ✓ | (pendente) |
-| Soma dos créditos | R$ 639,62 | R$ 639,62 ✓ | (pendente) |
-| Total de despesas da fatura | R$ 8.327,39 | R$ 8.327,39 ✓ | (pendente) |
-| Total de créditos da fatura | R$ 639,62 | R$ 639,62 ✓ | (pendente) |
-| Soma dos cartões = despesas | igual | igual ✓ | (pendente) |
-| Pagamento da fatura anterior na lista | 0 | 0 ✓ | (pendente) |
-| Lançamentos com dúvida | — | 0 | (pendente) |
+| Lançamentos | 49 | 49 ✓ | 49 ✓ |
+| Soma das despesas | R$ 8.327,39 | R$ 8.327,39 ✓ | R$ 8.327,39 ✓ |
+| Soma dos créditos | R$ 639,62 | R$ 639,62 ✓ | R$ 639,62 ✓ |
+| Total de despesas da fatura | R$ 8.327,39 | R$ 8.327,39 ✓ | R$ 8.327,39 ✓ |
+| Total de créditos da fatura | R$ 639,62 | R$ 639,62 ✓ | R$ 639,62 ✓ |
+| Soma dos cartões = despesas | igual | igual ✓ | igual ✓ |
+| Pagamento da fatura anterior na lista | 0 | 0 ✓ | 0 ✓ |
+| Lançamentos com dúvida | — | 0 | não anotado |
 | Senha errada avisada e nova tentativa | sim | não se aplica (PDF sem senha) | não se aplica |
-| Tempo para abrir o PDF | — | 0,1 s | (pendente) |
-| Tempo do servidor (sessão, Tipos e Gemini) | — | 35,2 s | (pendente) |
-| Tempo só do Gemini | — | 35,0 s | (pendente) |
-| Tempo total | < 60 s | 36,4 s ✓ | (pendente) |
+| Tempo para abrir o PDF | — | 0,1 s | não anotado |
+| Tempo do servidor (sessão, Tipos e Gemini) | — | 35,2 s | não anotado |
+| Tempo só do Gemini | — | 35,0 s | não anotado |
+| Tempo total | < 60 s | 36,4 s ✓ | < 60 s ✓ |
 
-O teste local (`PROVA_GEMINI=1`, com o fixture) também bateu os 49 Lançamentos, as somas, os cartões e o tempo abaixo de 60 s.
+No iPad Pro todas as linhas do quadro deram "Sim" (os tempos parciais não foram anotados; o total ficou abaixo de 60 s). O teste local (`PROVA_GEMINI=1`, com o fixture) também bateu os 49 Lançamentos, as somas, os cartões e o tempo abaixo de 60 s.
 
 Diferenças encontradas no caminho (já corrigidas):
 
@@ -70,9 +70,9 @@ Modelo usado (`GEMINI_MODEL`): `gemini-3.6-flash` (o `gemini-3.8-flash` responde
 
 ## Decisão
 
-> Pendente: escolher uma depois dos resultados.
+Decidido em 03/11/2026: **seguir**. O caminho pdf.js (no aparelho) + Gemini leu a fatura de outubro inteira e certa no Mac e no iPad Pro, em menos de 1 minuto.
 
-- [ ] **Seguir:** tudo bateu e o total ficou abaixo de 1 minuto. A 2.3 reaproveita o schema, `removerDadosPessoais`, `paraCentavos` e a rota.
+- [x] **Seguir:** tudo bateu e o total ficou abaixo de 1 minuto. A 2.3 reaproveita o schema, `removerDadosPessoais`, `paraCentavos` e a rota.
 - [ ] **Ajustar o prompt:** a leitura é quase certa; ajustar `src/server/prompt-extracao.ts` com o fixture e o teste local até bater, e repetir no iPad.
 - [ ] **Plano B:** a leitura não é confiável ou é lenta demais; leitor próprio do PDF (AD-7, "Deferred").
 
