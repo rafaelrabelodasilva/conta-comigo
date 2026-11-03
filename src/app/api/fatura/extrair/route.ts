@@ -19,6 +19,7 @@ const STATUS_DO_ERRO: Record<string, number> = {
   "fatura.leitura_indisponivel": 503,
   "fatura.tempo_esgotado": 504,
   "fatura.leitura_falhou": 502,
+  "fatura.leitura_ocupada": 503,
 };
 
 function responder(status: number, corpo: unknown, inicio: number, codigo?: string, quantidade?: number) {

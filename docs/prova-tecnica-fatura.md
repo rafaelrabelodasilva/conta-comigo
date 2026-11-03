@@ -71,7 +71,9 @@ Modelo usado (`GEMINI_MODEL`): (pendente)
 
 ## Riscos conhecidos
 
-- `pdfjs-dist` 5.6.x tem o alerta GHSA-hq66-cqwq-w95j (execução de JavaScript de um PDF malicioso quando `enableScripting` está ligado no visualizador, corrigido na 6.2.108). Aqui só se usa `getDocument` + `getTextContent`, sem o visualizador (`pdf_viewer`), com `isEvalSupported: false`, e só se abre a fatura do próprio Santander. A arquitetura fixa 5.6.x; avaliar a 6.x antes da 2.3.
+- `pdfjs-dist` 5.6.x tem o alerta GHSA-hq66-cqwq-w95j (execução de JavaScript de um PDF malicioso quando `enableScripting` está ligado no visualizador, corrigido na 6.2.108). Aqui só se usa `getDocument` + `streamTextContent`, sem o visualizador (`pdf_viewer`), com `isEvalSupported: false`, e só se abre a fatura do próprio Santander. A arquitetura fixa 5.6.x; avaliar a 6.x antes da 2.3.
 - O nome do titular não é removido do texto: a intenção pede só CPF, endereço e número do cartão. Ele vai ao Gemini e ao fixture (revisar antes do commit se deve sair).
 - A rota roda `removerDadosPessoais` de novo no texto recebido (segunda barreira) e dá ao Gemini só o tempo que sobra dos 55 s.
+- **Safari 18 (Mac e iPad):** o `getTextContent()` do pdf.js 5.6 percorre o texto com `for await` sobre `ReadableStream`, que o Safari não suporta (o PDF abria e a leitura falhava como "Não foi possível abrir este PDF."). O texto é lido por `streamTextContent().getReader()` (PR #21).
+- **Gemini gratuito com "alta demanda" (503):** em 03/11/2026 o `gemini-3.8-flash` respondeu 503 em todas as tentativas e o `gemini-3.6-flash` alternou entre responder e 503. A rota refaz a mesma chamada até 2 vezes (esperas de 2 s e 4 s) enquanto sobrar tempo; se continuar 503, a página mostra "A leitura está sobrecarregada agora. Tente de novo em alguns minutos." Modelo escolhido: `gemini-3.6-flash`.
 - O tempo do Gemini Flash depende do modelo e do "pensamento" ligado por padrão. Se o total passar de 1 minuto, testar outro `GEMINI_MODEL` antes de mexer no código.

@@ -126,6 +126,7 @@ describe("POST /api/fatura/extrair", () => {
     ["fatura.leitura_indisponivel", 503],
     ["fatura.leitura_falhou", 502],
     ["fatura.tempo_esgotado", 504],
+    ["fatura.leitura_ocupada", 503],
   ])("%s → %i, log sem texto", async (codigo, status) => {
     mocks.extrairFatura.mockResolvedValue({ ok: false, erro: { codigo, detalhe: "sem_chave" } });
     const r = await POST(pedido({ texto: TEXTO }));
