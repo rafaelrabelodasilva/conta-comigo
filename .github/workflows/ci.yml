@@ -40,15 +40,22 @@ jobs:
       - run: npm test
       - name: Build com segredo-isca no ambiente
         env:
-          # Isca: se o código vazar a chave secreta para o cliente, o grep acha.
+          # Iscas: se o código vazar uma chave secreta para o cliente, o grep acha.
           SUPABASE_SECRET_KEY: sb_secret_ci_canary
+          GEMINI_API_KEY: gemini_ci_canary
         run: npm run build
+      - name: Worker do pdf.js emitido pelo build (AD-7)
+        run: |
+          if [ -z "$(find .next/static -name 'pdf.worker*.mjs')" ]; then
+            echo "O worker do pdf.js não foi emitido em .next/static."
+            exit 1
+          fi
       - name: Nenhum segredo no bundle do cliente (AD-12)
         run: |
           test -d .next/static || { echo ".next/static não existe."; exit 1; }
           # Procura o valor da isca, não o prefixo `sb_secret_`: o supabase-js
           # do navegador traz esse prefixo numa checagem de formato de chave.
-          if grep -rnE "SUPABASE_SECRET_KEY|sb_secret_ci_canary" .next/static; then
+          if grep -rnE "SUPABASE_SECRET_KEY|sb_secret_ci_canary|GEMINI_API_KEY|gemini_ci_canary" .next/static; then
             echo "Segredo encontrado nos arquivos do cliente."
             exit 1
           fi

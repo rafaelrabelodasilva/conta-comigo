@@ -67,6 +67,9 @@ export function decidirAcesso({
       : { tipo: "seguir" };
   }
   if (ehPublica(caminho) || autenticado) return { tipo: "seguir" };
+  // Rotas de API seguem: cada uma confere a sessão sozinha e responde 401
+  // (um redirect para Entrar não serve a um `fetch`).
+  if (caminho.startsWith("/api/")) return { tipo: "seguir" };
 
   // Sem sessão de recuperação, o link do e-mail não serve mais. Sem `next`:
   // um login normal não deve cair no formulário de nova senha.

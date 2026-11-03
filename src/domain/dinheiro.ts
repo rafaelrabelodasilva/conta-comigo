@@ -54,3 +54,26 @@ export function lerReais(texto: string): Resultado<number> {
   if (!Number.isSafeInteger(centavos)) return { ok: false, erro: { codigo: "dinheiro.invalido" } };
   return { ok: true, valor: negativo && centavos !== 0 ? -centavos : centavos };
 }
+
+// Valor como a Fatura escreve: sempre 2 casas com vírgula, milhar com ponto
+// opcional e `-` opcional na frente ("1.140,74", "-0,08", "8327,39").
+const VALOR_FATURA = /^(-)?(\d{1,3}(?:\.\d{3})+|\d+),(\d{2})$/;
+
+/** Diz se o texto está no formato estrito de valor da Fatura (`paraCentavos`). */
+export function ehValorDeFatura(texto: string): boolean {
+  return VALOR_FATURA.test(texto.trim());
+}
+
+/**
+ * Converte um valor no formato estrito da Fatura em centavos. Diferente de
+ * `lerReais` (campo digitado), não aceita "R$", ponto decimal nem casas
+ * faltando: o que vem da extração tem de estar exatamente assim.
+ */
+export function paraCentavos(texto: string): Resultado<number> {
+  const partes = VALOR_FATURA.exec(texto.trim());
+  if (!partes) return { ok: false, erro: { codigo: "dinheiro.invalido" } };
+  const [, sinal, inteiro, fracao] = partes;
+  const centavos = Number(inteiro.replace(/\./g, "")) * 100 + Number(fracao);
+  if (!Number.isSafeInteger(centavos)) return { ok: false, erro: { codigo: "dinheiro.invalido" } };
+  return { ok: true, valor: sinal && centavos !== 0 ? -centavos : centavos };
+}

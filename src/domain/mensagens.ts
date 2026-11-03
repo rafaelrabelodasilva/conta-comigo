@@ -6,6 +6,7 @@
 // para a pessoa e podem mudar. Erro de login nunca diz qual campo errou.
 
 import type { PassoPrimeiroUso } from "./primeiro-uso";
+import type { ItemQuadro } from "./prova-fatura";
 
 export const MENSAGENS = {
   "auth.campos_vazios": "Preencha o e-mail e a senha.",
@@ -68,7 +69,80 @@ export const MENSAGENS = {
   "ajuste.limite_invalido": "Valor inválido. Use, por exemplo, 1,50.",
   "ajuste.limite_fora": "Use um valor de R$ 0,01 a R$ 10,00.",
   "atraso.tolerancia_invalida": "Use de 0 a 60 dias.",
+  "fatura.sem_arquivo": "Escolha o PDF da fatura.",
+  "fatura.senha_vazia": "Digite a senha do PDF.",
+  "fatura.senha_incorreta": "Senha incorreta",
+  "fatura.pdf_invalido": "Não foi possível abrir este PDF.",
+  "fatura.sem_texto": "Este PDF não tem texto para ler. Confira o arquivo.",
+  "fatura.requisicao_invalida": "Não foi possível enviar o texto da fatura. Tente de novo.",
+  "fatura.leitura_indisponivel": "A leitura de faturas está indisponível agora.",
+  "fatura.leitura_falhou": "Não conseguimos ler os lançamentos da fatura. Tente de novo.",
+  "fatura.tempo_esgotado": "A leitura demorou demais. Tente de novo.",
+  "fatura.conexao_caiu": "A conexão caiu. Nada foi gravado. Tente de novo.",
 } as const;
+
+/**
+ * Textos da página de prova técnica da fatura (História 2.1, `/prova-fatura`,
+ * fora do menu). A página some na 2.3.
+ */
+export const TEXTOS_PROVA_FATURA = {
+  titulo: "Prova técnica da fatura",
+  explicacao:
+    "Abre o PDF com a senha neste aparelho, tira CPF, endereço e número do cartão, e manda só o texto para a leitura. Nada é gravado.",
+  arquivo: "PDF da fatura",
+  senha: "Senha do PDF",
+  ler: "Ler fatura",
+  abrindo: "Abrindo PDF…",
+  lendo: "Lendo lançamentos…",
+  baixar_texto: "Baixar texto sem dados pessoais",
+  quadro: "Esperado × lido",
+  coluna_item: "Item",
+  coluna_esperado: "Esperado",
+  coluna_lido: "Lido",
+  coluna_ok: "Bateu?",
+  bateu: "Sim",
+  nao_bateu: "Não",
+  tempos: "Tempos",
+  tempo_abrir: "Abrir o PDF",
+  tempo_servidor: "Servidor",
+  tempo_gemini: "Gemini",
+  tempo_total: "Total",
+  dados_fatura: "Dados lidos da fatura",
+  vencimento: "Vencimento",
+  fechamento: "Fechamento",
+  saldo_anterior: "Saldo anterior",
+  pagamentos: "Pagamentos",
+  total_a_pagar: "Total a pagar",
+  com_duvida: "Lançamentos com dúvida",
+  nao_lido: "não lido",
+  por_cartao: "Por cartão",
+  lista: "Lançamentos lidos",
+  coluna_nome: "Nome",
+  coluna_data: "Data",
+  coluna_parcela: "Parcela",
+  coluna_valor: "Valor",
+  coluna_cartao: "Cartão",
+  coluna_tipo: "Tipo sugerido",
+  coluna_duvida: "Dúvida",
+  duvida_sim: "Sim",
+} as const;
+
+/** Rótulo de cada linha do quadro da prova; uma linha nova sem texto é erro de tipo. */
+export const ITENS_QUADRO_PROVA = {
+  quantidade: "Lançamentos",
+  despesas: "Soma das despesas",
+  creditos: "Soma dos créditos",
+  total_despesas_lido: "Total de despesas da fatura",
+  total_creditos_lido: "Total de créditos da fatura",
+  cartoes: "Soma dos cartões = despesas",
+  sem_pagamento_anterior: "Pagamento da fatura anterior na lista",
+  tempo_total: "Tempo total",
+} as const satisfies Record<ItemQuadro, string>;
+
+/** "Cartão final 9012". */
+export function rotuloCartaoFinal(final: string): string {
+  return `Cartão final ${final}`;
+}
 
 /**
  * As duas respostas de toda pergunta do app (EXPERIENCE.md). Constantes
