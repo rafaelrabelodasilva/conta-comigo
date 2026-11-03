@@ -185,7 +185,7 @@ jobs:
         run: |
           age -d -i "$RUNNER_TEMP/chave-descartavel.txt" -o "$RUNNER_TEMP/backup.tar.gz" "$ARQUIVO"
           bash scripts/backup/restaurar.sh "$RUNNER_TEMP/backup.tar.gz" "$DB2" 2> "$RUNNER_TEMP/restaurar.log" \
-            || { cat "$RUNNER_TEMP/restaurar.log"; exit 1; }
+            || { cat "$RUNNER_TEMP/restaurar.log"; echo "== roles.sql (dados de exemplo, sem senhas)"; tar -xzOf "$RUNNER_TEMP/backup.tar.gz" backup/roles.sql | cat -n; exit 1; }
           rm -f "$RUNNER_TEMP/backup.tar.gz"
           cat "$RUNNER_TEMP/restaurar.log"
           # info.txt precisa listar toda migração do repositório (para o migration repair).
