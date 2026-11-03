@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { criarRepoConfiguracoes, type LinhaConfiguracoes } from "./configuracoes-repo";
 import type { Database } from "./database.types";
 import { criarGerenciador } from "./realtime";
@@ -98,24 +98,24 @@ describe("repositório de Configurações", () => {
     await pronto(m);
     const gravacao = m.repo.definirStatusPadrao("outro");
     expect(m.memoria.linha("cfg")?.status_padrao_id).toBe("outro"); // otimista
-    expect(await gravacao).toEqual({ ok: false });
+    expect(await gravacao).toEqual({ ok: false, codigo: "salvar.falhou" });
     expect(m.memoria.linha("cfg")?.status_padrao_id).toBe("pago");
   });
 
   it("sem linha, recusa ou exceção não criam nada", async () => {
     const recusa = montar([], () => ({ data: null, error: { code: "42501" } }));
     await pronto(recusa);
-    expect(await recusa.repo.definirStatusPadrao("pago")).toEqual({ ok: false });
+    expect(await recusa.repo.definirStatusPadrao("pago")).toEqual({ ok: false, codigo: "salvar.falhou" });
     expect(recusa.memoria.linhas()).toEqual([]);
 
     const excecao = montar([], () => {
       throw new Error("rede caiu");
     });
     await pronto(excecao);
-    expect(await excecao.repo.definirStatusPadrao("pago")).toEqual({ ok: false });
+    expect(await excecao.repo.definirStatusPadrao("pago")).toEqual({ ok: false, codigo: "salvar.falhou" });
 
     const semCliente = criarRepoConfiguracoes({ obterCliente: () => null, memoria: recusa.memoria });
-    expect(await semCliente.definirStatusPadrao("pago")).toEqual({ ok: false });
+    expect(await semCliente.definirStatusPadrao("pago")).toEqual({ ok: false, codigo: "salvar.falhou" });
   });
 
   it("Aparência e Conferência gravam só as colunas alteradas", async () => {
@@ -165,7 +165,7 @@ describe("repositório de Configurações", () => {
 
     const gravacao = m.repo.definirConferencia({ limite_ajuste_centavos: 5000, tolerancia_atraso_dias: 20 });
     expect(m.memoria.linha("cfg")).toMatchObject({ limite_ajuste_centavos: 5000, tolerancia_atraso_dias: 20 }); // otimista
-    expect(await gravacao).toEqual({ ok: false });
+    expect(await gravacao).toEqual({ ok: false, codigo: "salvar.falhou" });
     // Um só desfazer: as duas colunas voltam juntas.
     expect(m.memoria.linha("cfg")).toMatchObject({ limite_ajuste_centavos: 100, tolerancia_atraso_dias: 10 });
     expect(m.chamadas).toHaveLength(1);
@@ -193,7 +193,28 @@ describe("repositório de Configurações", () => {
 
     const recusa = montar([linha()], () => ({ data: null, error: { code: "42501" } }));
     await pronto(recusa);
-    expect(await recusa.repo.concluirPrimeiroUso()).toEqual({ ok: false });
+    expect(await recusa.repo.concluirPrimeiroUso()).toEqual({ ok: false, codigo: "salvar.falhou" });
     expect(recusa.memoria.linha("cfg")?.primeiro_uso_em).toBeNull();
+  });
+});
+
+describe("Configurações sem conexão", () => {
+  it("com ou sem linha, nada é gravado nem mostrado", async () => {
+    for (const iniciais of [[], [linha()]]) {
+      const m = montar(iniciais, () => ({ data: null, error: null }));
+      await pronto(m);
+      const obterCliente = vi.fn();
+      const offline = criarRepoConfiguracoes({ obterCliente, memoria: m.memoria, online: () => false });
+      const antes = m.memoria.retrato().linhas;
+      expect(await offline.definirAparencia("escuro")).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+      expect(await offline.definirStatusPadrao("pago")).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+      expect(
+        await offline.definirConferencia({ limite_ajuste_centavos: 200, tolerancia_atraso_dias: 5 }),
+      ).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+      expect(await offline.concluirPrimeiroUso()).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+      expect(obterCliente).not.toHaveBeenCalled();
+      expect(m.chamadas).toEqual([]);
+      expect(m.memoria.retrato().linhas).toBe(antes);
+    }
   });
 });

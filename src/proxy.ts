@@ -81,8 +81,9 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Tudo, menos estáticos do Next, otimização de imagem, favicon e arquivos
-    // de imagem/fonte/manifesto.
-    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|txt|xml|webmanifest)$).*)",
+    // Tudo, menos estáticos do Next, otimização de imagem, favicon, arquivos
+    // de imagem/fonte/manifesto e o casco do app instalado (service worker,
+    // ícones gerados). `sessao.ts` também os trata como públicos.
+    "/((?!_next/static|_next/image|favicon\\.ico|sw\\.js$|icon(?:/|$)|apple-icon(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|txt|xml|webmanifest)$).*)",
   ],
 };

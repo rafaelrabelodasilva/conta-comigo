@@ -59,6 +59,31 @@ describe("decidirAcesso", () => {
     }
   });
 
+  it("sem sessão, o casco do app instalado abre", () => {
+    for (const caminho of [
+      "/sem-conexao",
+      "/sw.js",
+      "/manifest.webmanifest",
+      "/icon/192",
+      "/icon/512",
+      "/apple-icon",
+    ]) {
+      expect(
+        decidirAcesso({ caminho, autenticado: false, tinhaCookieAuth: true }),
+        caminho,
+      ).toEqual({ tipo: "seguir" });
+    }
+  });
+
+  it("nomes parecidos com o casco continuam exigindo sessão", () => {
+    for (const caminho of ["/iconografia", "/sw.jsx", "/sem-conexao-x"]) {
+      expect(
+        decidirAcesso({ caminho, autenticado: false, tinhaCookieAuth: false }).tipo,
+        caminho,
+      ).toBe("redirecionar");
+    }
+  });
+
   it("/redefinir-senha exige sessão (de recuperação)", () => {
     expect(
       decidirAcesso({

@@ -35,7 +35,7 @@ export function SecaoTipos({ aoMudarRascunho }: PropsSecao = {}) {
   const lista = ordenarParaConfiguracoes(linhas);
 
   function avisarSeFalhou(r: ResultadoGravacao) {
-    if (!r.ok) toast.mostrar({ texto: mensagem("salvar.falhou") });
+    if (!r.ok) toast.mostrar({ texto: mensagem(r.codigo) });
   }
 
   async function arquivar(id: string) {

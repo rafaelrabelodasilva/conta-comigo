@@ -6,7 +6,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
-import { FALHOU, OK, gravarComOtimismo as gravarOtimista, type ResultadoGravacao } from "./gravacao";
+import { estaOnline } from "./conexao";
+import {
+  FALHOU,
+  OK,
+  gravarComOtimismo as gravarOtimista,
+  semConexao,
+  type Online,
+  type ResultadoGravacao,
+} from "./gravacao";
 import { colunasAlteradas } from "./realtime-estado";
 import { criarClienteNavegador } from "./supabase/navegador";
 
@@ -22,18 +30,22 @@ export type { ResultadoGravacao };
 export function criarRepoResponsaveis(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
   memoria: Gerenciador<LinhaResponsavel>;
+  /** Há conexão? Padrão: o detector único (`conexao.ts`). */
+  online?: Online;
 }) {
-  const { obterCliente, memoria } = deps;
+  const { obterCliente, memoria, online = estaOnline } = deps;
 
   function gravarComOtimismo(
     mudancas: readonly (MudancaResponsavel & { id: string })[],
     gravar: (cliente: SupabaseClient<Database>) => Promise<LinhaResponsavel[] | null>,
   ): Promise<ResultadoGravacao> {
-    return gravarOtimista(obterCliente, memoria, mudancas, gravar);
+    return gravarOtimista(obterCliente, memoria, mudancas, gravar, online);
   }
 
   /** Grava só as colunas que mudaram em relação à memória. */
   async function atualizar(id: string, mudanca: MudancaResponsavel): Promise<ResultadoGravacao> {
+    const bloqueio = semConexao(online);
+    if (bloqueio) return bloqueio;
     const atual = memoria.linha(id);
     if (!atual) return FALHOU;
     const corpo = colunasAlteradas<MudancaResponsavel>(atual, mudanca);
@@ -52,6 +64,8 @@ export function criarRepoResponsaveis(deps: {
   return {
     /** Cria e aplica a linha devolvida (sem otimismo: o id vem do banco). */
     async criar(novo: NovoResponsavel): Promise<ResultadoGravacao> {
+      const bloqueio = semConexao(online);
+      if (bloqueio) return bloqueio;
       const cliente = obterCliente();
       if (!cliente) return FALHOU;
       try {
@@ -81,6 +95,8 @@ export function criarRepoResponsaveis(deps: {
 
     /** Ids na ordem nova; a RPC grava numa transação e devolve as linhas mudadas. */
     async reordenar(ids: readonly string[]): Promise<ResultadoGravacao> {
+      const bloqueio = semConexao(online);
+      if (bloqueio) return bloqueio;
       const mudancas = ids
         .map((id, i) => ({ id, ordem: i + 1 }))
         .filter((m) => memoria.linha(m.id)?.ordem !== m.ordem);

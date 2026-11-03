@@ -7,7 +7,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
-import { FALHOU, OK, gravarComOtimismo, type ResultadoGravacao } from "./gravacao";
+import { estaOnline } from "./conexao";
+import {
+  FALHOU,
+  OK,
+  gravarComOtimismo,
+  semConexao,
+  type Online,
+  type ResultadoGravacao,
+} from "./gravacao";
 import { colunasAlteradas } from "./realtime-estado";
 import { criarClienteNavegador } from "./supabase/navegador";
 
@@ -23,11 +31,15 @@ export type { ResultadoGravacao };
 export function criarRepoStatus(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
   memoria: Gerenciador<LinhaStatus>;
+  /** Há conexão? Padrão: o detector único (`conexao.ts`). */
+  online?: Online;
 }) {
-  const { obterCliente, memoria } = deps;
+  const { obterCliente, memoria, online = estaOnline } = deps;
 
   /** Grava só as colunas que mudaram em relação à memória, com otimismo. */
   async function atualizar(id: string, mudanca: MudancaStatus): Promise<ResultadoGravacao> {
+    const bloqueio = semConexao(online);
+    if (bloqueio) return bloqueio;
     const atual = memoria.linha(id);
     if (!atual) return FALHOU;
     const corpo = colunasAlteradas<MudancaStatus>(atual, mudanca);
@@ -40,12 +52,14 @@ export function criarRepoStatus(deps: {
         .select()
         .single();
       return error || !data ? null : [data];
-    });
+    }, online);
   }
 
   return {
     /** Cria (com "conta como pago" desligado) e aplica a linha devolvida. */
     async criar(novo: NovoStatus): Promise<ResultadoGravacao> {
+      const bloqueio = semConexao(online);
+      if (bloqueio) return bloqueio;
       const cliente = obterCliente();
       if (!cliente) return FALHOU;
       try {

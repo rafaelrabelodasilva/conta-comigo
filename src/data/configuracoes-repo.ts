@@ -7,7 +7,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Aparencia } from "@/domain/configuracoes";
 import type { Database } from "./database.types";
 import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
-import { FALHOU, OK, gravarComOtimismo, type ResultadoGravacao } from "./gravacao";
+import { estaOnline } from "./conexao";
+import {
+  FALHOU,
+  OK,
+  gravarComOtimismo,
+  semConexao,
+  type Online,
+  type ResultadoGravacao,
+} from "./gravacao";
 import { colunasAlteradas } from "./realtime-estado";
 import { criarClienteNavegador } from "./supabase/navegador";
 
@@ -39,8 +47,10 @@ export function criarRepoConfiguracoes(deps: {
   memoria: Gerenciador<LinhaConfiguracoes>;
   /** Relógio de quem grava a marca do Primeiro uso; nos testes, fixo. */
   agora?: () => Date;
+  /** Há conexão? Padrão: o detector único (`conexao.ts`). */
+  online?: Online;
 }) {
-  const { obterCliente, memoria, agora = () => new Date() } = deps;
+  const { obterCliente, memoria, agora = () => new Date(), online = estaOnline } = deps;
 
   /** Upsert em `owner_id` só com as colunas dadas (cria a linha se faltar). */
   async function upsertParcial(
@@ -60,12 +70,18 @@ export function criarRepoConfiguracoes(deps: {
    * (desfeito se o banco recusar); sem ela, cria por upsert e aplica a resposta.
    */
   async function definir(mudanca: MudancaConfiguracoes): Promise<ResultadoGravacao> {
+    const bloqueio = semConexao(online);
+    if (bloqueio) return bloqueio;
     const atual = configuracoesDoDono(memoria.linhas());
     if (atual) {
       const corpo = colunasAlteradas<MudancaConfiguracoes>(atual, mudanca);
       if (Object.keys(corpo).length === 0) return OK;
-      return gravarComOtimismo(obterCliente, memoria, [{ id: atual.id, ...corpo }], (cliente) =>
-        upsertParcial(cliente, corpo),
+      return gravarComOtimismo(
+        obterCliente,
+        memoria,
+        [{ id: atual.id, ...corpo }],
+        (cliente) => upsertParcial(cliente, corpo),
+        online,
       );
     }
     const corpo = colunasAlteradas<MudancaConfiguracoes>({}, mudanca);

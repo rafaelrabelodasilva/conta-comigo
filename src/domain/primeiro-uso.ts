@@ -25,6 +25,12 @@ export function proximoPasso(passo: PassoPrimeiroUso): PassoPrimeiroUso | null {
   return PASSOS_PRIMEIRO_USO[PASSOS_PRIMEIRO_USO.indexOf(passo) + 1] ?? null;
 }
 
+/** O passo anterior; `null` no primeiro (ali não há "Voltar"). */
+export function passoAnterior(passo: PassoPrimeiroUso): PassoPrimeiroUso | null {
+  const i = PASSOS_PRIMEIRO_USO.indexOf(passo);
+  return i > 0 ? PASSOS_PRIMEIRO_USO[i - 1] : null;
+}
+
 /** Os passos que ainda vêm depois deste, na ordem. */
 export function passosSeguintes(passo: PassoPrimeiroUso): PassoPrimeiroUso[] {
   return PASSOS_PRIMEIRO_USO.slice(PASSOS_PRIMEIRO_USO.indexOf(passo) + 1);

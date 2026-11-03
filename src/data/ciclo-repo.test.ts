@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { criarRepoCiclo, type LinhaConfigCiclo } from "./ciclo-repo";
 import type { Database } from "./database.types";
 import { criarGerenciador } from "./realtime";
@@ -104,5 +104,20 @@ describe("repositório do Ciclo", () => {
     expect(
       await semCliente.inserir({ dia_fechamento: 5, dia_vencimento: 15, vigente_desde: "2027-01" }),
     ).toEqual({ ok: false, codigo: "salvar.falhou" });
+  });
+});
+
+describe("Ciclo sem conexão", () => {
+  it("inserir não chama o cliente", async () => {
+    const m = montar([], () => ({ data: null, error: null }));
+    await pronto(m);
+    const obterCliente = vi.fn();
+    const offline = criarRepoCiclo({ obterCliente, memoria: m.memoria, online: () => false });
+    expect(
+      await offline.inserir({ dia_fechamento: 28, dia_vencimento: 6, vigente_desde: "2026-12" }),
+    ).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(obterCliente).not.toHaveBeenCalled();
+    expect(m.chamadas).toEqual([]);
+    expect(m.memoria.linhas()).toEqual([]);
   });
 });

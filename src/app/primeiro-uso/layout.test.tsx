@@ -4,6 +4,7 @@ import { mensagem } from "@/domain/mensagens";
 
 // O tema usa o gerenciador de Realtime; aqui só importa que é montado.
 vi.mock("@/features/configuracoes/AplicarTema", () => ({ AplicarTema: () => <i data-teste="tema" /> }));
+vi.mock("@/features/conexao/FaixaSemConexao", () => ({ FaixaSemConexao: () => <b data-teste="faixa" /> }));
 // Se o layout montasse o menu, o marcador apareceria.
 vi.mock("@/ui/NavRail", () => ({ NavRail: () => <nav data-teste="menu" /> }));
 
@@ -20,7 +21,7 @@ describe("layout do Primeiro uso", () => {
     expect(html).not.toContain('data-teste="menu"');
     expect(html).toContain('<i data-teste="tema"></i>');
     expect(html).toMatch(/aria-live="polite"/);
-    expect(html).toMatch(/<div class="hidden h-dvh app:flex"><main[^>]*><p>passo<\/p><\/main><\/div>/);
+    expect(html).toMatch(/<div class="hidden h-dvh app:flex"><div[^>]*><b data-teste="faixa"><\/b><main[^>]*><p>passo<\/p><\/main><\/div><\/div>/);
   });
 
   it("abaixo de 700 px mostra o aviso de tela pequena", () => {

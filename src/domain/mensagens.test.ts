@@ -88,6 +88,7 @@ describe("códigos das telas comuns (História 1.3)", () => {
   it("os rótulos comuns dizem o que fazem", () => {
     expect(ROTULOS.tentar_de_novo).toBe("Tentar de novo");
     expect(ROTULOS.desfazer).toBe("Desfazer");
+    expect(ROTULOS.voltar).toBe("Voltar");
   });
 });
 

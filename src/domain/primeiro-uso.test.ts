@@ -5,6 +5,7 @@ import {
   numeroDoPasso,
   passoEscolhido,
   passosSeguintes,
+  passoAnterior,
   proximoPasso,
 } from "./primeiro-uso";
 
@@ -19,6 +20,13 @@ describe("passos do Primeiro uso", () => {
     expect(proximoPasso("tipos")).toBe("status");
     expect(proximoPasso("status")).toBe("ciclo");
     expect(proximoPasso("ciclo")).toBeNull();
+  });
+
+  it("o passo anterior anda um para trás; no primeiro não há anterior", () => {
+    expect(passoAnterior("responsaveis")).toBeNull();
+    expect(passoAnterior("tipos")).toBe("responsaveis");
+    expect(passoAnterior("status")).toBe("tipos");
+    expect(passoAnterior("ciclo")).toBe("status");
   });
 
   it("os passos seguintes são os que ainda faltam", () => {
