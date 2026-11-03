@@ -5,7 +5,8 @@
 // do Ciclo chegando a outro aparelho do mesmo dono.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { TablesInsert } from "../../src/data/database.types";
-import { hojeEmSaoPaulo, mesDaData, somarMeses } from "../../src/domain/ciclo";
+import { mesDaData, somarMeses } from "../../src/domain/ciclo";
+import { hojeEmSaoPaulo } from "../../src/domain/datas";
 import { esperarEvento, ligado, supabaseLocal, type Usuario } from "./apoio";
 
 describe.skipIf(!ligado)("Ciclo do cartão e Aparência no Supabase local", () => {

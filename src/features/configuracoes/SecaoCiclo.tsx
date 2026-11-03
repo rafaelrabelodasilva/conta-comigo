@@ -1,13 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import {
-  formatarMes,
-  hojeEmSaoPaulo,
-  planejarMudancaCiclo,
-  resumoDoCiclo,
-  validarDia,
-} from "@/domain/ciclo";
+import { planejarMudancaCiclo, resumoDoCiclo, validarDia } from "@/domain/ciclo";
+import { formatarMes, hojeEmSaoPaulo } from "@/domain/datas";
 import { ROTULOS, mensagem, rotuloCicloAtual, rotuloProximoCiclo } from "@/domain/mensagens";
 import { repoCiclo } from "@/data/ciclo-repo";
 import { gerenciador, useLinhas } from "@/data/realtime";

@@ -2,7 +2,7 @@
 // outubro/2026 (vence 06/10/26). Os números esperados são os do aceite do
 // Épico 2. A página de teste e o teste local com o Gemini usam este quadro.
 
-import { formatarReais } from "./dinheiro";
+import { formatarDinheiro } from "./dinheiro";
 import type { ResumoExtracao } from "./extracao-fatura";
 
 export const ESPERADO_OUTUBRO_2026 = {
@@ -39,8 +39,8 @@ export function montarQuadroProva(
   esperado: { quantidade: number; despesasCentavos: number; creditosCentavos: number } = ESPERADO_OUTUBRO_2026,
 ): LinhaQuadro[] {
   const reais = (centavos: number, alvo: number) => ({
-    esperado: formatarReais(alvo),
-    lido: formatarReais(centavos),
+    esperado: formatarDinheiro(alvo),
+    lido: formatarDinheiro(centavos),
     ok: centavos === alvo,
   });
   return [

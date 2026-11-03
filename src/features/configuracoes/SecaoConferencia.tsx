@@ -7,7 +7,7 @@ import {
   validarLimiteAjuste,
   validarToleranciaAtraso,
 } from "@/domain/configuracoes";
-import { formatarReais } from "@/domain/dinheiro";
+import { formatarDinheiro } from "@/domain/dinheiro";
 import { ROTULOS, mensagem } from "@/domain/mensagens";
 import { configuracoesDoDono, repoConfiguracoes } from "@/data/configuracoes-repo";
 import { gerenciador, useLinhas } from "@/data/realtime";
@@ -33,7 +33,7 @@ export function SecaoConferencia() {
 
   const atual = configuracoesDoDono(linhas);
   const valores: Rascunho = rascunho ?? {
-    limite: formatarReais(atual?.limite_ajuste_centavos ?? LIMITE_AJUSTE_PADRAO_CENTAVOS),
+    limite: formatarDinheiro(atual?.limite_ajuste_centavos ?? LIMITE_AJUSTE_PADRAO_CENTAVOS),
     tolerancia: String(atual?.tolerancia_atraso_dias ?? TOLERANCIA_ATRASO_PADRAO_DIAS),
   };
 

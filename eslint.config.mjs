@@ -18,6 +18,19 @@ const REGEX_PROIBIDOS = `/^(${PROIBIDOS.join("|")})/`;
 const MENSAGEM_NUCLEO =
   "src/domain é puro: só imports relativos do próprio núcleo; nada de @/, outras camadas, Next, React ou Supabase. Veja AD-1.";
 
+// AD-2 / NFR4: dinheiro, datas e horas só saem pelos formatadores do núcleo.
+const MENSAGEM_FORMATOS =
+  "Formate só pelo núcleo: formatarDinheiro/arredondar (src/domain/dinheiro.ts) ou formatarData/formatarHora/formatarMes/formatarMesExtenso (src/domain/datas.ts). Veja AD-2.";
+const FORMATOS_PROIBIDOS = [
+  { object: "Intl", property: "NumberFormat", message: MENSAGEM_FORMATOS },
+  { object: "Intl", property: "DateTimeFormat", message: MENSAGEM_FORMATOS },
+  { object: "globalThis", property: "Intl", message: MENSAGEM_FORMATOS },
+  ...["toLocaleString", "toLocaleDateString", "toLocaleTimeString", "toFixed", "toPrecision", "toExponential"].map((property) => ({
+    property,
+    message: MENSAGEM_FORMATOS,
+  })),
+];
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -71,6 +84,14 @@ const eslintConfig = defineConfig([
           message: MENSAGEM_NUCLEO,
         },
       ],
+    },
+  },
+  // AD-2: formatação de dinheiro e data só nos formatadores do núcleo.
+  {
+    files: ["src/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}"],
+    ignores: ["src/domain/dinheiro.ts", "src/domain/datas.ts"],
+    rules: {
+      "no-restricted-properties": ["error", ...FORMATOS_PROIBIDOS],
     },
   },
   // Override default ignores of eslint-config-next.
