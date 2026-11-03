@@ -49,10 +49,17 @@ describe("SecaoAparencia", () => {
   });
 
   it("recusa do banco mostra o toast", async () => {
-    falso.definirAparencia.mockResolvedValue({ ok: false });
+    falso.definirAparencia.mockResolvedValue({ ok: false, codigo: "salvar.falhou" });
     const seletor = montar();
     await userEvent.setup().selectOptions(seletor, ROTULOS.aparencia_claro);
     expect(falso.definirAparencia).toHaveBeenCalledWith("claro");
     expect(await screen.findByText(mensagem("salvar.falhou"))).toBeTruthy();
+  });
+
+  it("sem conexão mostra o aviso próprio", async () => {
+    falso.definirAparencia.mockResolvedValue({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    const seletor = montar();
+    await userEvent.setup().selectOptions(seletor, ROTULOS.aparencia_claro);
+    expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
   });
 });

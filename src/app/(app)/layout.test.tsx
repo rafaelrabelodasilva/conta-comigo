@@ -9,6 +9,8 @@ import { mensagem } from "@/domain/mensagens";
 vi.mock("@/ui/NavRail", () => ({ NavRail: () => <nav data-teste="menu" /> }));
 // O tema usa o gerenciador de Realtime; aqui só importa que é montado.
 vi.mock("@/features/configuracoes/AplicarTema", () => ({ AplicarTema: () => <i data-teste="tema" /> }));
+// A faixa lê o detector de conexão; aqui só importa onde ela fica.
+vi.mock("@/features/conexao/FaixaSemConexao", () => ({ FaixaSemConexao: () => <b data-teste="faixa" /> }));
 
 const { default: LayoutApp } = await import("./layout");
 
@@ -30,7 +32,7 @@ describe("layout das telas autenticadas", () => {
     );
     expect(css).toMatch(/--breakpoint-app:\s*700px/);
     // O app (menu + conteúdo) fica escondido até o ponto `app`…
-    expect(html).toMatch(/<div class="hidden h-dvh app:flex"><nav data-teste="menu"><\/nav><main[^>]*><p>conteúdo<\/p><\/main><\/div>/);
+    expect(html).toMatch(/<div class="hidden h-dvh app:flex"><nav data-teste="menu"><\/nav><div[^>]*><b data-teste="faixa"><\/b><main[^>]*><p>conteúdo<\/p><\/main><\/div><\/div>/);
     // …e o aviso some a partir dele.
     expect(html).toContain(
       `<div class="flex min-h-dvh items-center justify-center p-6 text-center app:hidden"><p role="status" class="max-w-xs texto-title">${mensagem("app.tela_pequena")}</p></div>`,

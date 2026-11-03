@@ -5,6 +5,8 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
+import { estaOnline } from "./conexao";
+import { SEM_CONEXAO, type Online } from "./gravacao";
 import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
 import { criarClienteNavegador } from "./supabase/navegador";
 
@@ -12,7 +14,10 @@ export type LinhaConfigCiclo = LinhaDe<"config_ciclo">;
 
 export type NovaConfigCiclo = Pick<LinhaConfigCiclo, "dia_fechamento" | "dia_vencimento" | "vigente_desde">;
 
-/** `codigo` vem do mapa de mensagens: `ciclo.vigente_no_passado` do gatilho ou `salvar.falhou`. */
+/**
+ * `codigo` vem do mapa de mensagens: `ciclo.vigente_no_passado` do gatilho,
+ * `conexao.gravar_sem_conexao` (sem internet, nada tentado) ou `salvar.falhou`.
+ */
 export type ResultadoInsercaoCiclo = { ok: true } | { ok: false; codigo: string };
 
 const FALHOU: ResultadoInsercaoCiclo = { ok: false, codigo: "salvar.falhou" };
@@ -24,12 +29,15 @@ function codigoDoErro(erro: { message?: string }): string {
 export function criarRepoCiclo(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
   memoria: Gerenciador<LinhaConfigCiclo>;
+  /** Há conexão? Padrão: o detector único (`conexao.ts`). */
+  online?: Online;
 }) {
-  const { obterCliente, memoria } = deps;
+  const { obterCliente, memoria, online = estaOnline } = deps;
 
   return {
     /** Insere (sem otimismo: id e `created_at` vêm do banco) e aplica a linha devolvida. */
     async inserir(nova: NovaConfigCiclo): Promise<ResultadoInsercaoCiclo> {
+      if (!online()) return SEM_CONEXAO;
       const cliente = obterCliente();
       if (!cliente) return FALHOU;
       try {

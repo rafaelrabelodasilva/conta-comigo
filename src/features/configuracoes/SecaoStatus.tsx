@@ -71,7 +71,7 @@ export function SecaoStatus({ aoMudarRascunho }: PropsSecao = {}) {
   }, []);
 
   function avisarSeFalhou(r: ResultadoGravacao) {
-    if (!r.ok) toast.mostrar({ texto: mensagem("salvar.falhou") });
+    if (!r.ok) toast.mostrar({ texto: mensagem(r.codigo) });
   }
 
   async function adicionar() {

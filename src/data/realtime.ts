@@ -9,6 +9,8 @@
 //   mostrar a mudança antes com `aplicarOtimista`, que devolve o "desfazer".
 //
 // O canal abre quando a primeira tela assina e fica aberto (um por tabela).
+// Quando a conexão volta (detector `conexao.ts`), todos os gerenciadores
+// já criados releem (`recarregarTodos`).
 
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { useSyncExternalStore } from "react";
@@ -26,6 +28,7 @@ import {
   type LinhaBase,
   type StatusTabela,
 } from "./realtime-estado";
+import { aoVoltar } from "./conexao";
 import { criarClienteNavegador } from "./supabase/navegador";
 
 export type TabelaRealtime = keyof Database["public"]["Tables"];
@@ -204,11 +207,21 @@ export function criarGerenciador<L extends LinhaBase>(opcoes: {
 }
 
 const gerenciadores = new Map<string, Gerenciador<LinhaBase>>();
+let ligadoAoDetector = false;
+
+/** Relê todos os gerenciadores já criados (a conexão voltou). */
+export async function recarregarTodos(): Promise<void> {
+  await Promise.all([...gerenciadores.values()].map((g) => g.recarregar()));
+}
 
 /** O gerenciador único da tabela (criado na primeira chamada). */
 export function gerenciador<T extends TabelaRealtime>(tabela: T): Gerenciador<LinhaDe<T>> {
   let g = gerenciadores.get(tabela);
   if (!g) {
+    if (!ligadoAoDetector) {
+      ligadoAoDetector = true;
+      aoVoltar(() => void recarregarTodos());
+    }
     g = criarGerenciador<LinhaBase>({ tabela, obterCliente: criarClienteNavegador });
     gerenciadores.set(tabela, g);
   }

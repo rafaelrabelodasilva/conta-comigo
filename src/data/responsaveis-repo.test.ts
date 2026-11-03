@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Database } from "./database.types";
 import { criarGerenciador } from "./realtime";
 import { criarRepoResponsaveis, type LinhaResponsavel } from "./responsaveis-repo";
@@ -109,7 +109,7 @@ describe("repositório de Responsáveis", () => {
     await pronto(m);
     const gravacao = m.repo.atualizar("a", { nome: "Rafa" });
     expect(m.memoria.linha("a")?.nome).toBe("Rafa"); // otimista
-    expect(await gravacao).toEqual({ ok: false });
+    expect(await gravacao).toEqual({ ok: false, codigo: "salvar.falhou" });
     expect(m.memoria.linha("a")?.nome).toBe("Rafael");
   });
 
@@ -135,5 +135,26 @@ describe("repositório de Responsáveis", () => {
     await pronto(m);
     await m.repo.desarquivar("a", 5);
     expect(m.chamadas[0].corpo).toEqual({ arquivado: false, ordem: 5 });
+  });
+});
+
+describe("Responsáveis sem conexão", () => {
+  it("nenhuma gravação começa: sem otimismo, sem chamar o cliente", async () => {
+    const m = montar([linha("a", { nome: "Rafael", ordem: 1 }), linha("b", { nome: "Ana", ordem: 2 })], () => ({
+      data: null,
+      error: null,
+    }));
+    await pronto(m);
+    const obterCliente = vi.fn();
+    const offline = criarRepoResponsaveis({ obterCliente, memoria: m.memoria, online: () => false });
+    const antes = m.memoria.retrato().linhas;
+    expect(await offline.criar({ nome: "Bia", cor: 2, ordem: 3 })).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await offline.atualizar("a", { nome: "Rafa" })).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await offline.arquivar("a")).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await offline.desarquivar("a", 3)).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await offline.reordenar(["b", "a"])).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(obterCliente).not.toHaveBeenCalled();
+    expect(m.chamadas).toEqual([]);
+    expect(m.memoria.retrato().linhas).toBe(antes);
   });
 });

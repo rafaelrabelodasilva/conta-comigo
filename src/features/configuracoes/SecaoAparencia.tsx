@@ -43,7 +43,7 @@ export function SecaoAparencia() {
           value={aparencia}
           onChange={async (e) => {
             const r = await repoConfiguracoes().definirAparencia(aparenciaDe(e.target.value));
-            if (!r.ok) toast.mostrar({ texto: mensagem("salvar.falhou") });
+            if (!r.ok) toast.mostrar({ texto: mensagem(r.codigo) });
           }}
           opcoes={APARENCIAS.map((a) => ({ valor: a, rotulo: ROTULO_APARENCIA[a] }))}
         />

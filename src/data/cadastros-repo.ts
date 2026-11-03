@@ -7,15 +7,28 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Cadastro } from "@/domain/cadastros";
 import { ehCodigoConhecido } from "@/domain/mensagens";
+import { estaOnline } from "./conexao";
 import type { Database } from "./database.types";
+import { SEM_CONEXAO, type Online } from "./gravacao";
 import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
 import type { LinhaBase } from "./realtime-estado";
 import { criarClienteNavegador } from "./supabase/navegador";
 
-/** `codigo` vem do mapa de mensagens: `cadastro.*` da RPC ou `salvar.falhou`. */
+/**
+ * `codigo` vem do mapa de mensagens: `cadastro.*` da RPC,
+ * `conexao.gravar_sem_conexao` (sem internet, nada tentado) ou `salvar.falhou`.
+ */
 export type ResultadoExclusao = { ok: true } | { ok: false; codigo: string };
 
-export type ResultadoContagem = { ok: true; valor: ReadonlyMap<string, number> } | { ok: false };
+/**
+ * A contagem é a busca antes de excluir: sem internet, avisa como uma
+ * gravação (`conexao.gravar_sem_conexao`); outra falha, `carregar.falhou`.
+ */
+export type ResultadoContagem =
+  | { ok: true; valor: ReadonlyMap<string, number> }
+  | { ok: false; codigo: "carregar.falhou" | "conexao.gravar_sem_conexao" };
+
+const CONTAGEM_FALHOU = { ok: false, codigo: "carregar.falhou" } as const satisfies ResultadoContagem;
 
 /** Código da RPC (`raise exception 'cadastro.em_uso'`) ou o genérico. */
 function codigoDoErro(erro: { message?: string } | null | undefined): string {
@@ -27,20 +40,23 @@ export function criarRepoCadastros(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
   memorias: Record<Cadastro, Gerenciador<LinhaBase>>;
   configuracoes: Gerenciador<LinhaDe<"configuracoes">>;
+  /** Há conexão? Padrão: o detector único (`conexao.ts`). */
+  online?: Online;
 }) {
-  const { obterCliente, memorias, configuracoes } = deps;
+  const { obterCliente, memorias, configuracoes, online = estaOnline } = deps;
 
   return {
     /** Quantos registros usam cada item do cadastro (itens sem uso: 0 ou ausentes). */
     async contarUsos(cadastro: Cadastro): Promise<ResultadoContagem> {
+      if (!online()) return SEM_CONEXAO;
       const cliente = obterCliente();
-      if (!cliente) return { ok: false };
+      if (!cliente) return CONTAGEM_FALHOU;
       try {
         const { data, error } = await cliente.rpc("contar_usos_cadastro", { cadastro });
-        if (error || !data) return { ok: false };
+        if (error || !data) return CONTAGEM_FALHOU;
         return { ok: true, valor: new Map(data.map((l) => [l.id, Number(l.usos)])) };
       } catch {
-        return { ok: false };
+        return CONTAGEM_FALHOU;
       }
     },
 
@@ -49,6 +65,7 @@ export function criarRepoCadastros(deps: {
      * só se não estiver em uso). A tela confere antes com `validarExclusao`.
      */
     async excluir(cadastro: Cadastro, deId: string, paraId: string | null): Promise<ResultadoExclusao> {
+      if (!online()) return SEM_CONEXAO;
       const cliente = obterCliente();
       if (!cliente) return { ok: false, codigo: "salvar.falhou" };
       try {

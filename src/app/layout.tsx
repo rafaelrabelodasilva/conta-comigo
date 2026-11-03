@@ -1,12 +1,17 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import type { ReactNode } from "react";
+import { RegistrarServiceWorker } from "@/features/conexao/RegistrarServiceWorker";
 import { aparenciaDoCookie, atributoTema, COOKIE_TEMA, esquemaDeCor } from "@/features/configuracoes/tema";
+import { NOME_APP } from "./marca";
 import "./globals.css";
 
+// `appleWebApp`: instalado pela tela inicial do iPad, abre em tela cheia com
+// o nome do app e a barra de status sobre o fundo escuro do menu.
 export const metadata: Metadata = {
-  title: "Conta Comigo",
+  title: NOME_APP,
   description: "Divida a fatura do cartão de crédito entre quem comprou.",
+  appleWebApp: { capable: true, title: NOME_APP, statusBarStyle: "black" },
 };
 
 // O tema segue o sistema ou a Aparência fixada em Configurações. O cookie
@@ -26,7 +31,10 @@ export default async function RootLayout({
   const tema = atributoTema(await aparenciaPedida());
   return (
     <html lang="pt-BR" className="h-full antialiased" data-tema={tema}>
-      <body className="flex min-h-full flex-col bg-background text-text">{children}</body>
+      <body className="flex min-h-full flex-col bg-background text-text">
+        {children}
+        <RegistrarServiceWorker />
+      </body>
     </html>
   );
 }

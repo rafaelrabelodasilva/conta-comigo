@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Database } from "./database.types";
 import { criarGerenciador } from "./realtime";
 import { criarRepoStatus, type LinhaStatus } from "./status-repo";
@@ -108,7 +108,7 @@ describe("repositório de Status", () => {
     await pronto(m);
     const gravacao = m.repo.definirContaComoPago("p", true);
     expect(m.memoria.linha("p")?.conta_como_pago).toBe(true); // otimista
-    expect(await gravacao).toEqual({ ok: false });
+    expect(await gravacao).toEqual({ ok: false, codigo: "salvar.falhou" });
     expect(m.memoria.linha("p")?.conta_como_pago).toBe(false);
   });
 
@@ -116,9 +116,27 @@ describe("repositório de Status", () => {
     const m = montar([linha("p")], () => ({ data: null, error: null }));
     await pronto(m);
     const semCliente = criarRepoStatus({ obterCliente: () => null, memoria: m.memoria });
-    expect(await semCliente.criar({ nome: "Pago" })).toEqual({ ok: false });
-    expect(await semCliente.definirContaComoPago("p", true)).toEqual({ ok: false });
+    expect(await semCliente.criar({ nome: "Pago" })).toEqual({ ok: false, codigo: "salvar.falhou" });
+    expect(await semCliente.definirContaComoPago("p", true)).toEqual({ ok: false, codigo: "salvar.falhou" });
     expect(m.memoria.linha("p")?.conta_como_pago).toBe(false);
     expect(m.chamadas).toEqual([]);
+  });
+});
+
+describe("sem conexão", () => {
+  it("nenhuma gravação começa: sem otimismo, sem chamar o cliente", async () => {
+    const m = montar([linha("a", { nome: "Pago" })], () => ({ data: null, error: null }));
+    await pronto(m);
+    const obterCliente = vi.fn();
+    const offline = criarRepoStatus({ obterCliente, memoria: m.memoria, online: () => false });
+    const antes = m.memoria.retrato().linhas;
+    expect(await offline.criar({ nome: "Pendente" })).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await offline.atualizar("a", { nome: "Outro" })).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await offline.arquivar("a")).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await offline.desarquivar("a")).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await offline.definirContaComoPago("a", true)).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(obterCliente).not.toHaveBeenCalled();
+    expect(m.chamadas).toEqual([]);
+    expect(m.memoria.retrato().linhas).toBe(antes);
   });
 });

@@ -6,6 +6,7 @@ import { ROTULOS, TEXTOS_PASSO, mensagem, rotuloPasso, rotuloProximosPassos } fr
 import {
   PASSOS_PRIMEIRO_USO,
   numeroDoPasso,
+  passoAnterior,
   passosSeguintes,
   proximoPasso,
   type PassoPrimeiroUso,
@@ -25,8 +26,10 @@ import { useToast } from "@/ui/Toast";
 // Os dois só avançam: o que grava é a própria seção. No último passo,
 // "Continuar" vira "Concluir"; Concluir ou Pular ali grava a marca
 // `primeiro_uso_em` e vai para o Painel. Se a gravação falhar, toast e
-// continua no passo. Se a seção avisar que há algo digitado e não salvo,
-// os três botões perguntam antes ("Voltar para salvar" ou "Descartar").
+// continua no passo. "Voltar" (a partir do passo 2) volta um passo sem
+// gravar. Se a seção avisar que há algo digitado e não salvo, Voltar, Pular,
+// Continuar e Concluir perguntam antes ("Voltar para salvar" ou "Descartar",
+// que faz a ação pedida).
 
 // Uma seção por passo (faltar uma é erro de tipo).
 const SECAO_DO_PASSO: Record<PassoPrimeiroUso, (props: PropsSecao) => React.JSX.Element> = {
@@ -45,7 +48,8 @@ export function PassoAPasso({ passoInicial }: { passoInicial: PassoPrimeiroUso }
   const primeiraPintura = useRef(true);
   // A seção do passo avisa o rascunho; a ref é lida no clique (sem esperar render).
   const temRascunho = useRef(false);
-  const [perguntando, setPerguntando] = useState(false);
+  // A ação que espera a resposta da janela de rascunho (`null` = fechada).
+  const [pendente, setPendente] = useState<"avancar" | "voltar" | null>(null);
   const aoMudarRascunho = useCallback((tem: boolean) => {
     temRascunho.current = tem;
   }, []);
@@ -62,35 +66,49 @@ export function PassoAPasso({ passoInicial }: { passoInicial: PassoPrimeiroUso }
   const textos = TEXTOS_PASSO[passo];
   const seguintes = passosSeguintes(passo);
   const proximo = proximoPasso(passo);
+  const anterior = passoAnterior(passo);
   const Secao = SECAO_DO_PASSO[passo];
 
-  /** Pular, Continuar e Concluir: com rascunho, pergunta antes. */
-  function pedirAvanco() {
+  /** Voltar, Pular, Continuar e Concluir: com rascunho, pergunta antes. */
+  function pedir(acao: "avancar" | "voltar") {
     if (temRascunho.current) {
-      setPerguntando(true);
+      setPendente(acao);
+      return;
+    }
+    executar(acao);
+  }
+
+  function descartar() {
+    const acao = pendente;
+    setPendente(null);
+    temRascunho.current = false;
+    if (acao) executar(acao);
+  }
+
+  function executar(acao: "avancar" | "voltar") {
+    if (acao === "voltar") {
+      if (anterior) irPara(anterior);
       return;
     }
     void avancar();
   }
 
-  function descartar() {
-    setPerguntando(false);
-    temRascunho.current = false;
-    void avancar();
+  function irPara(novo: PassoPrimeiroUso) {
+    setPasso(novo);
+    // Mantém `?passo=` em dia sem recarregar (integra com o roteador do Next).
+    window.history.replaceState(null, "", `?passo=${novo}`);
   }
 
   async function avancar() {
     if (proximo) {
-      setPasso(proximo);
-      // Mantém `?passo=` em dia sem recarregar (integra com o roteador do Next).
-      window.history.replaceState(null, "", `?passo=${proximo}`);
+      irPara(proximo);
       return;
     }
     setConcluindo(true);
     const r = await repoConfiguracoes().concluirPrimeiroUso();
     if (!r.ok) {
       setConcluindo(false);
-      toast.mostrar({ texto: mensagem("salvar.falhou") });
+      toast.mostrar({ texto: mensagem(r.codigo) });
       return;
     }
     router.replace("/");
@@ -114,24 +132,31 @@ export function PassoAPasso({ passoInicial }: { passoInicial: PassoPrimeiroUso }
         </p>
       ) : null}
       <div className="flex items-center gap-3">
-        <Botao variante="secundario" disabled={concluindo} onClick={pedirAvanco}>
+        {anterior ? (
+          <Botao variante="secundario" disabled={concluindo} onClick={() => pedir("voltar")}>
+            {ROTULOS.voltar}
+          </Botao>
+        ) : null}
+        <Botao variante="secundario" disabled={concluindo} onClick={() => pedir("avancar")}>
           {ROTULOS.pular}
         </Botao>
         <span className="flex-1" />
-        <Botao variante="primario" disabled={concluindo} onClick={pedirAvanco}>
+        <Botao variante="primario" disabled={concluindo} onClick={() => pedir("avancar")}>
           {proximo ? ROTULOS.continuar : ROTULOS.concluir}
         </Botao>
       </div>
       <Janela
-        aberta={perguntando}
-        aoMudar={setPerguntando}
+        aberta={pendente !== null}
+        aoMudar={(aberta) => {
+          if (!aberta) setPendente(null);
+        }}
         titulo={mensagem("rascunho.nao_salvo")}
         rodape={
           <>
             <Botao variante="secundario" onClick={descartar}>
               {ROTULOS.descartar}
             </Botao>
-            <Botao variante="primario" onClick={() => setPerguntando(false)}>
+            <Botao variante="primario" onClick={() => setPendente(null)}>
               {ROTULOS.voltar_para_salvar}
             </Botao>
           </>

@@ -38,7 +38,7 @@ export function useExcluirCadastro({ cadastro, opcoes, aoArquivar, aoExcluir }: 
   async function pedir(item: Item) {
     const contagem = await repoCadastros().contarUsos(cadastro);
     if (!contagem.ok) {
-      toast.mostrar({ texto: mensagem("carregar.falhou") });
+      toast.mostrar({ texto: mensagem(contagem.codigo) });
       return;
     }
     setPedido({ ...item, usos: contagem.valor.get(item.id) ?? 0 });

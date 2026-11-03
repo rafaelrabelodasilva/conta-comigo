@@ -46,7 +46,7 @@ export function SecaoResponsaveis({ aoMudarRascunho }: PropsSecao = {}) {
   const semCor = !cor.ok;
 
   function avisarSeFalhou(r: ResultadoGravacao) {
-    if (!r.ok) toast.mostrar({ texto: mensagem("salvar.falhou") });
+    if (!r.ok) toast.mostrar({ texto: mensagem(r.codigo) });
   }
 
   async function arquivar(id: string) {

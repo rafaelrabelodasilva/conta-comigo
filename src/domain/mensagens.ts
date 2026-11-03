@@ -128,6 +128,7 @@ export const ROTULOS = {
   pular: "Pular",
   continuar: "Continuar",
   concluir: "Concluir",
+  voltar: "Voltar",
   voltar_para_salvar: "Voltar para salvar",
   descartar: "Descartar",
 } as const;

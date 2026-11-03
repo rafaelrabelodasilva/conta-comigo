@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { criarRepoCadastros } from "./cadastros-repo";
 import type { LinhaConfiguracoes } from "./configuracoes-repo";
 import type { Database } from "./database.types";
@@ -74,17 +74,17 @@ describe("repositório de exclusão de cadastros", () => {
 
   it("contarUsos falha com erro, exceção ou sem cliente", async () => {
     const erro = montar({}, () => ({ data: null, error: { message: "x" } }));
-    expect(await erro.repo.contarUsos("tipo")).toEqual({ ok: false });
+    expect(await erro.repo.contarUsos("tipo")).toEqual({ ok: false, codigo: "carregar.falhou" });
     const excecao = montar({}, () => {
       throw new Error("rede caiu");
     });
-    expect(await excecao.repo.contarUsos("tipo")).toEqual({ ok: false });
+    expect(await excecao.repo.contarUsos("tipo")).toEqual({ ok: false, codigo: "carregar.falhou" });
     const semCliente = criarRepoCadastros({
       obterCliente: () => null,
       memorias: erro.memorias,
       configuracoes: erro.configuracoes,
     });
-    expect(await semCliente.contarUsos("tipo")).toEqual({ ok: false });
+    expect(await semCliente.contarUsos("tipo")).toEqual({ ok: false, codigo: "carregar.falhou" });
   });
 
   it("excluir sem substituto chama a RPC sem para_id e tira da memória", async () => {
@@ -149,5 +149,24 @@ describe("repositório de exclusão de cadastros", () => {
       configuracoes: m.configuracoes,
     });
     expect(await semCliente.excluir("tipo", "a", null)).toEqual({ ok: false, codigo: "salvar.falhou" });
+  });
+});
+
+describe("exclusão sem conexão", () => {
+  it("contarUsos e excluir avisam sem chamar o cliente", async () => {
+    const m = montar({ tipos: [item("a")] }, () => ({ data: null, error: null }));
+    await pronto(m);
+    const obterCliente = vi.fn();
+    const offline = criarRepoCadastros({
+      obterCliente,
+      memorias: m.memorias,
+      configuracoes: m.configuracoes,
+      online: () => false,
+    });
+    expect(await offline.contarUsos("tipo")).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await offline.excluir("tipo", "a", null)).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(obterCliente).not.toHaveBeenCalled();
+    expect(m.chamadas).toEqual([]);
+    expect(m.memorias.tipo.linha("a")).toBeDefined();
   });
 });

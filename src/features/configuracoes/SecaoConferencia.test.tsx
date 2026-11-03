@@ -84,11 +84,19 @@ describe("SecaoConferencia", () => {
   });
 
   it("recusa do banco: toast e os campos mantidos", async () => {
-    falso.definirConferencia.mockResolvedValue({ ok: false });
+    falso.definirConferencia.mockResolvedValue({ ok: false, codigo: "salvar.falhou" });
     const campos = montar();
     await preencher(campos, "2,00", "20");
     expect(await screen.findByText(mensagem("salvar.falhou"))).toBeTruthy();
     expect(campos.limite.value).toBe("2,00");
     expect(campos.tolerancia.value).toBe("20");
+  });
+
+  it("sem conexão mostra o aviso próprio e mantém os campos", async () => {
+    falso.definirConferencia.mockResolvedValue({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    const campos = montar();
+    await preencher(campos, "2,00", "20");
+    expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
+    expect(campos.limite.value).toBe("2,00");
   });
 });

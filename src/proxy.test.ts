@@ -21,7 +21,7 @@ vi.mock("@supabase/ssr", () => ({ createServerClient: mocks.createServerClient }
 vi.mock("@/data/supabase/config", () => ({ configSupabase: mocks.configSupabase }));
 vi.mock("@/server/log", () => ({ log: vi.fn() }));
 
-import { proxy } from "./proxy";
+import { config, proxy } from "./proxy";
 
 const CACHE = { "Cache-Control": "private, no-cache, no-store, must-revalidate, max-age=0" };
 
@@ -96,5 +96,23 @@ describe("proxy", () => {
     const resposta = await proxy(requisicao("/"));
     expect(resposta.status).toBe(307);
     expect(new URL(resposta.headers.get("location")!).pathname).toBe("/entrar");
+  });
+});
+
+describe("matcher do proxy", () => {
+  // O matcher é uma regex no formato do Next (`/(...)`); aqui, ancorada.
+  const passaPeloProxy = (caminho: string) =>
+    config.matcher.some((m) => new RegExp(`^${m}$`).test(caminho));
+
+  it("o casco do app instalado não passa pelo proxy", () => {
+    for (const caminho of ["/sw.js", "/manifest.webmanifest", "/icon/192", "/icon/512", "/apple-icon", "/favicon.ico"]) {
+      expect(passaPeloProxy(caminho), caminho).toBe(false);
+    }
+  });
+
+  it("as páginas passam (inclusive /sem-conexao e nomes parecidos com o casco)", () => {
+    for (const caminho of ["/", "/configuracoes", "/sem-conexao", "/iconografia", "/sw.jsx"]) {
+      expect(passaPeloProxy(caminho), caminho).toBe(true);
+    }
   });
 });

@@ -60,7 +60,7 @@ export function SecaoConferencia() {
     });
     setSalvando(false);
     if (!r.ok) {
-      toast.mostrar({ texto: mensagem("salvar.falhou") });
+      toast.mostrar({ texto: mensagem(r.codigo) });
       return;
     }
     setRascunho(null);

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Database } from "./database.types";
 import { criarGerenciador } from "./realtime";
 import { criarRepoTipos, type LinhaTipo } from "./tipos-repo";
@@ -75,7 +75,7 @@ describe("repositório de Tipos", () => {
   it("criar recusado não muda a memória", async () => {
     const m = montar([], () => ({ data: null, error: { code: "23514" } }));
     await pronto(m);
-    expect(await m.repo.criar({ nome: "Casa" })).toEqual({ ok: false });
+    expect(await m.repo.criar({ nome: "Casa" })).toEqual({ ok: false, codigo: "salvar.falhou" });
     expect(m.memoria.linhas()).toEqual([]);
   });
 
@@ -116,7 +116,7 @@ describe("repositório de Tipos", () => {
     await pronto(m);
     const gravacao = m.repo.arquivar("a");
     expect(m.memoria.linha("a")?.arquivado).toBe(true); // otimista
-    expect(await gravacao).toEqual({ ok: false });
+    expect(await gravacao).toEqual({ ok: false, codigo: "salvar.falhou" });
     expect(m.memoria.linha("a")?.arquivado).toBe(false);
   });
 
@@ -124,8 +124,8 @@ describe("repositório de Tipos", () => {
     const m = montar([linha("a", { nome: "Casa" })], () => ({ data: null, error: null }));
     await pronto(m);
     const semCliente = criarRepoTipos({ obterCliente: () => null, memoria: m.memoria });
-    expect(await semCliente.criar({ nome: "Gatos" })).toEqual({ ok: false });
-    expect(await semCliente.atualizar("a", { nome: "Lar" })).toEqual({ ok: false });
+    expect(await semCliente.criar({ nome: "Gatos" })).toEqual({ ok: false, codigo: "salvar.falhou" });
+    expect(await semCliente.atualizar("a", { nome: "Lar" })).toEqual({ ok: false, codigo: "salvar.falhou" });
     expect(m.memoria.linha("a")?.nome).toBe("Casa");
     expect(m.memoria.linhas()).toHaveLength(1);
     expect(m.chamadas).toEqual([]);
@@ -134,7 +134,7 @@ describe("repositório de Tipos", () => {
   it("atualizar id fora da memória falha sem chamar o banco", async () => {
     const m = montar([linha("a")], () => ({ data: null, error: null }));
     await pronto(m);
-    expect(await m.repo.atualizar("nao-existe", { nome: "Lar" })).toEqual({ ok: false });
+    expect(await m.repo.atualizar("nao-existe", { nome: "Lar" })).toEqual({ ok: false, codigo: "salvar.falhou" });
     expect(m.chamadas).toEqual([]);
   });
 
@@ -145,9 +145,26 @@ describe("repositório de Tipos", () => {
     await pronto(m);
     const gravacao = m.repo.atualizar("a", { nome: "Lar" });
     expect(m.memoria.linha("a")?.nome).toBe("Lar"); // otimista
-    expect(await gravacao).toEqual({ ok: false });
+    expect(await gravacao).toEqual({ ok: false, codigo: "salvar.falhou" });
     expect(m.memoria.linha("a")?.nome).toBe("Casa");
-    expect(await m.repo.criar({ nome: "Gatos" })).toEqual({ ok: false });
+    expect(await m.repo.criar({ nome: "Gatos" })).toEqual({ ok: false, codigo: "salvar.falhou" });
     expect(m.memoria.linhas()).toHaveLength(1);
+  });
+});
+
+describe("sem conexão", () => {
+  it("nenhuma gravação começa: sem otimismo, sem chamar o cliente", async () => {
+    const m = montar([linha("a", { nome: "Casa" })], () => ({ data: null, error: null }));
+    await pronto(m);
+    const obterCliente = vi.fn();
+    const offline = criarRepoTipos({ obterCliente, memoria: m.memoria, online: () => false });
+    const antes = m.memoria.retrato().linhas;
+    expect(await offline.criar({ nome: "Lar" })).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await offline.atualizar("a", { nome: "Outro" })).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await offline.arquivar("a")).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await offline.desarquivar("a")).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(obterCliente).not.toHaveBeenCalled();
+    expect(m.chamadas).toEqual([]);
+    expect(m.memoria.retrato().linhas).toBe(antes);
   });
 });

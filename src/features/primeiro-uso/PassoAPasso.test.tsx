@@ -121,7 +121,7 @@ describe("PassoAPasso", () => {
   });
 
   it("recusa: toast e continua no passo", async () => {
-    falso.concluirPrimeiroUso.mockResolvedValue({ ok: false });
+    falso.concluirPrimeiroUso.mockResolvedValue({ ok: false, codigo: "salvar.falhou" });
     montar("ciclo");
     await userEvent.setup().click(botao(ROTULOS.concluir));
     expect(await screen.findByText(mensagem("salvar.falhou"))).toBeTruthy();
@@ -129,6 +129,38 @@ describe("PassoAPasso", () => {
     expect(passoNaTela().secao).toBe("ciclo");
     // Os botões voltam a funcionar para tentar de novo.
     expect((botao(ROTULOS.concluir) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("sem conexão, Concluir avisa e fica no passo", async () => {
+    falso.concluirPrimeiroUso.mockResolvedValue({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    montar("ciclo");
+    await userEvent.setup().click(botao(ROTULOS.concluir));
+    expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
+    expect(falso.replace).not.toHaveBeenCalled();
+    expect(passoNaTela().secao).toBe("ciclo");
+  });
+
+  describe("Voltar", () => {
+    it("não aparece no passo 1", () => {
+      montar();
+      expect(screen.queryByRole("button", { name: ROTULOS.voltar })).toBeNull();
+    });
+
+    it("volta um passo sem gravar e atualiza ?passo=", async () => {
+      montar("status");
+      await userEvent.setup().click(botao(ROTULOS.voltar));
+      expect(passoNaTela()).toEqual({ secao: "tipos", cabecalho: "Passo 2 de 4 · Tipos" });
+      expect(window.location.search).toBe("?passo=tipos");
+      expect(falso.concluirPrimeiroUso).not.toHaveBeenCalled();
+      expect(falso.replace).not.toHaveBeenCalled();
+    });
+
+    it("do passo 2, volta ao 1 e o Voltar some", async () => {
+      montar("tipos");
+      await userEvent.setup().click(botao(ROTULOS.voltar));
+      expect(passoNaTela().secao).toBe("responsaveis");
+      expect(screen.queryByRole("button", { name: ROTULOS.voltar })).toBeNull();
+    });
   });
 
   describe("rascunho não salvo", () => {
@@ -153,6 +185,29 @@ describe("PassoAPasso", () => {
       await usuario.click(botao(ROTULOS.descartar));
       expect(janela()).toBeNull();
       expect(passoNaTela().secao).toBe("status");
+      expect(falso.concluirPrimeiroUso).not.toHaveBeenCalled();
+    });
+
+    it("Voltar com rascunho abre a janela; Voltar para salvar fica no passo", async () => {
+      const usuario = userEvent.setup();
+      montar("tipos");
+      await usuario.click(botao("digitar sem salvar"));
+      await usuario.click(botao(ROTULOS.voltar));
+      expect(janela()).not.toBeNull();
+      await usuario.click(botao(ROTULOS.voltar_para_salvar));
+      expect(janela()).toBeNull();
+      expect(passoNaTela().secao).toBe("tipos");
+    });
+
+    it("Voltar com rascunho e Descartar volta ao passo anterior", async () => {
+      const usuario = userEvent.setup();
+      montar("tipos");
+      await usuario.click(botao("digitar sem salvar"));
+      await usuario.click(botao(ROTULOS.voltar));
+      await usuario.click(botao(ROTULOS.descartar));
+      expect(janela()).toBeNull();
+      expect(passoNaTela().secao).toBe("responsaveis");
+      expect(window.location.search).toBe("?passo=responsaveis");
       expect(falso.concluirPrimeiroUso).not.toHaveBeenCalled();
     });
 

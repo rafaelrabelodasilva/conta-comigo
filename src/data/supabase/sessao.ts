@@ -24,8 +24,20 @@ export function codigoDoMotivo(motivo: unknown): CodigoMensagem | undefined {
     : undefined;
 }
 
-// Rotas que abrem sem sessão. Todas as outras exigem sessão.
-const ROTAS_PUBLICAS: readonly string[] = [PAGINA_ENTRAR, "/auth/confirmar"];
+export const PAGINA_SEM_CONEXAO = "/sem-conexao";
+
+// Rotas que abrem sem sessão. Todas as outras exigem sessão. O casco do app
+// instalado (service worker, manifest, ícones e a página sem conexão) não
+// tem dados e precisa abrir sem sessão.
+const ROTAS_PUBLICAS: readonly string[] = [
+  PAGINA_ENTRAR,
+  "/auth/confirmar",
+  PAGINA_SEM_CONEXAO,
+  "/sw.js",
+  "/manifest.webmanifest",
+  "/icon",
+  "/apple-icon",
+];
 
 export type EntradaAcesso = {
   caminho: string;
