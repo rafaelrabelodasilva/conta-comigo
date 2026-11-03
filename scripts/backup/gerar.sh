@@ -58,6 +58,10 @@ mkdir "$pasta"
 
 echo "Papéis…" >&2
 npx supabase db dump --db-url "$db_url" --role-only -f "$pasta/roles.sql" >&2
+# Permissões de parâmetro (ex.: `GRANT SET ON PARAMETER "log_min_messages" TO
+# "supabase_realtime_admin"`) são da plataforma: o projeto novo já as tem e o
+# `postgres` não pode concedê-las. A CLI não as filtra; ficam comentadas.
+sed -i.orig -E 's/^GRANT .+ ON PARAMETER .+/-- &/' "$pasta/roles.sql" && rm -f "$pasta/roles.sql.orig"
 echo "Schema…" >&2
 npx supabase db dump --db-url "$db_url" -f "$pasta/schema.sql" >&2
 echo "Dados…" >&2
