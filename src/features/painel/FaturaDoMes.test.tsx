@@ -2,7 +2,9 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { TEXTOS_IMPORTAR, TEXTOS_PAINEL } from "@/domain/mensagens";
+import { conferir, type Conferencia } from "@/domain/conferencia";
+import { formatarDinheiro } from "@/domain/dinheiro";
+import { TEXTOS_CONFERENCIA, TEXTOS_IMPORTAR, TEXTOS_PAINEL } from "@/domain/mensagens";
 import { distribuicaoPorResponsavel, type FiltroResponsavel } from "@/domain/painel";
 import { FaturaDoMes, type FaturaHero } from "./FaturaDoMes";
 
@@ -26,9 +28,11 @@ function montar(opcoes: {
   valores?: number[];
   linhas?: { responsavel_id: string | null; valor_centavos: number }[];
   filtro?: FiltroResponsavel;
+  conferencia?: Conferencia | null;
 }) {
   const aoFiltrar = vi.fn();
   const aoImportar = vi.fn();
+  const aoVerificar = vi.fn();
   render(
     <FaturaDoMes
       mes="2026-10"
@@ -39,9 +43,11 @@ function montar(opcoes: {
       filtro={opcoes.filtro}
       aoFiltrar={aoFiltrar}
       aoImportar={aoImportar}
+      conferencia={opcoes.conferencia}
+      aoVerificar={aoVerificar}
     />,
   );
-  return { aoFiltrar, aoImportar, u: userEvent.setup() };
+  return { aoFiltrar, aoImportar, aoVerificar, u: userEvent.setup() };
 }
 
 describe("FaturaDoMes (invoice-hero)", () => {
@@ -119,5 +125,38 @@ describe("FaturaDoMes (invoice-hero)", () => {
     expect(screen.queryByRole("group", { name: TEXTOS_PAINEL.distribuicao })).toBeNull();
     await u.click(screen.getByRole("button", { name: TEXTOS_IMPORTAR.botao }));
     expect(aoImportar).toHaveBeenCalledOnce();
+  });
+
+  describe("selo da Conferência (História 2.5)", () => {
+    const fatura = { id: "f10", total_despesas_centavos: 90_000, total_creditos_centavos: 0 };
+    const cartoes = [{ fatura_id: "f10", final: "8673", total_centavos: 90_000 }];
+    const linha = (valor: number) => ({ fatura_id: "f10", valor_centavos: valor, final_cartao: "8673", excluido_em: null });
+
+    it("'✓ Conferido · N lançamentos' em text-accent; a conta e o Bate ficam embaixo, menores", () => {
+      montar({ conferencia: conferir(fatura, cartoes, [linha(90_000)]) });
+      const selo = screen.getByText(TEXTOS_CONFERENCIA.conferido);
+      expect(selo.className).toContain("text-accent");
+      expect(selo.tagName).toBe("SPAN");
+      expect(sem(selo.parentElement?.textContent)).toBe("✓ Conferido·1 lançamento");
+      const bate = screen.getByText("✓ Bate com o total a pagar");
+      expect(bate.className).toContain("texto-caption");
+      expect(screen.getByText(/^Lançamentos /).className).toContain("texto-caption");
+    });
+
+    it("'⚠ Diferença de R$ X' é um botão âmbar que liga o filtro Verificar", async () => {
+      const { aoVerificar, u } = montar({ conferencia: conferir(fatura, cartoes, [linha(18_000)]) });
+      const selo = screen.getByRole("button", {
+        name: `Diferença de ${formatarDinheiro(72_000)}, ver lançamentos para verificar`,
+      });
+      expect(selo.className).toContain("bg-alert-warning-bg");
+      expect(selo.className).toContain("rounded-full");
+      await u.click(selo);
+      expect(aoVerificar).toHaveBeenCalledOnce();
+    });
+
+    it("sem Conferência, sem selo", () => {
+      montar({});
+      expect(screen.queryByText(/Conferido/)).toBeNull();
+    });
   });
 });

@@ -8,7 +8,9 @@ import {
   filtrarPorResponsavel,
   mesAtual,
   mesesDaLista,
+  ehOrdemPadrao,
   nomeExibido,
+  ordenarGrade,
   ordenarLancamentos,
   rotuloLinhaAcessivel,
   somarValores,
@@ -28,6 +30,9 @@ const lanc = (id: string, extra: Partial<LancamentoGrade> = {}): LancamentoGrade
   status_id: null,
   lancado_por: "fatura",
   ordem_fatura: null,
+  final_cartao: "5061",
+  fatura_id: "f10",
+  duvida_extracao: false,
   ...extra,
 });
 
@@ -190,7 +195,50 @@ describe("distribuicaoPorResponsavel", () => {
   });
 });
 
+describe("ordenarGrade", () => {
+  const linhas = [
+    lanc("a", { ordem_fatura: 1, nome: "B" }),
+    lanc("b", { ordem_fatura: 2, nome: "A", duvida_extracao: true }),
+    lanc("c", { ordem_fatura: 3, nome: "C" }),
+    lanc("d", { ordem_fatura: 4, nome: "D", duvida_extracao: true }),
+  ];
+
+  it("com Verificar e a ordem padrão: dúvidas primeiro, depois a ordem da fatura", () => {
+    expect(ids(ordenarGrade(linhas, ORDEM_PADRAO, nomes, true))).toEqual(["b", "d", "a", "c"]);
+  });
+
+  it("sem Verificar, a ordem da fatura; com coluna ordenada, vale a coluna", () => {
+    expect(ids(ordenarGrade(linhas, ORDEM_PADRAO, nomes, false))).toEqual(["a", "b", "c", "d"]);
+    expect(ids(ordenarGrade(linhas, { coluna: "nome", sentido: "crescente" }, nomes, true))).toEqual([
+      "b",
+      "a",
+      "c",
+      "d",
+    ]);
+  });
+
+  it("ehOrdemPadrao", () => {
+    expect(ehOrdemPadrao(ORDEM_PADRAO)).toBe(true);
+    expect(ehOrdemPadrao({ coluna: "fatura", sentido: "decrescente" })).toBe(false);
+    expect(ehOrdemPadrao({ coluna: "valor", sentido: "crescente" })).toBe(false);
+  });
+});
+
 describe("rotuloLinhaAcessivel", () => {
+  it("linha marcada termina com 'verificar este lançamento'", () => {
+    expect(
+      rotuloLinhaAcessivel({
+        nome: "BELLA PIETRA",
+        valorCentavos: 8000,
+        parcelaN: 3,
+        parcelaTotal: 4,
+        responsavel: "Casal",
+        status: "Não pago",
+        verificar: true,
+      }),
+    ).toBe(`BELLA PIETRA, R$${ESPACO}80,00, parcela 3 de 4, Casal, Não pago, verificar este lançamento`);
+  });
+
   it("Nome, Valor, Parcela, Responsável, Status", () => {
     expect(
       rotuloLinhaAcessivel({

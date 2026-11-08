@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { conferir, linhasParaVerificar } from "@/domain/conferencia";
 import { hojeEmSaoPaulo } from "@/domain/datas";
 import {
+  TEXTOS_CONFERENCIA,
   TEXTOS_IMPORTAR,
   TEXTOS_PAINEL as T,
   mensagem,
@@ -20,12 +22,16 @@ import {
   type FiltroResponsavel,
   type Ordem,
 } from "@/domain/painel";
+import { repoFaturas } from "@/data/faturas-repo";
 import { gerenciador, useLinhas } from "@/data/realtime";
 import { ImportarFatura } from "@/features/importar/ImportarFatura";
 import { Botao } from "@/ui/Botao";
 import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
 import { Esqueleto } from "@/ui/Esqueleto";
 import { Tela } from "@/ui/Tela";
+import { useToast } from "@/ui/Toast";
+import { cn } from "@/ui/cn";
+import { FaixaConferencia } from "./FaixaConferencia";
 import { FaturaDoMes } from "./FaturaDoMes";
 import { GradeLancamentos, type CadastrosGrade } from "./GradeLancamentos";
 import { SeletorMes } from "./SeletorMes";
@@ -37,8 +43,15 @@ import { SeletorMes } from "./SeletorMes";
 // gerenciador de `lancamentos` guarda só o Mês aberto (AD-4): trocar de Mês
 // mostra o esqueleto enquanto ele relê. O filtro de Responsável continua
 // ao trocar de Mês. Depois de importar, o Painel abre o Mês importado.
+//
+// Conferência (História 2.5, FR-6): o núcleo confere a Fatura do Mês com os
+// cartões lidos (`fatura_cartoes`) e os Lançamentos dela (`conferir`); o
+// hero mostra o selo, a faixa âmbar avisa a diferença (até bater ou ser
+// dispensada) e a pílula "Verificar" mostra só as linhas marcadas, junto
+// com o filtro de Responsável. Tudo derivado; só "Dispensar" grava. O filtro
+// "Verificar" também continua ao trocar de Mês.
 
-const TABELAS = ["faturas", "lancamentos", "responsaveis", "tipos", "status"] as const;
+const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status"] as const;
 
 function EsqueletoPainel() {
   return (
@@ -71,8 +84,11 @@ export function Painel({ titulo }: { titulo: string }) {
   const [filtro, setFiltro] = useState<FiltroResponsavel>(undefined);
   const [ordem, setOrdem] = useState<Ordem>(ORDEM_PADRAO);
   const [importando, setImportando] = useState(false);
+  const [verificar, setVerificar] = useState(false);
+  const toast = useToast();
 
   const faturas = useLinhas("faturas");
+  const cartoes = useLinhas("fatura_cartoes");
   const lancamentos = useLinhas("lancamentos");
   const responsaveis = useLinhas("responsaveis");
   const tipos = useLinhas("tipos");
@@ -100,7 +116,7 @@ export function Painel({ titulo }: { titulo: string }) {
   const meses = mesesDaLista([...mesesComFatura], atual, mesAberto);
   const fatura = faturas.linhas.find((f) => f.mes === mesAberto) ?? null;
 
-  const retratos = [faturas, lancamentos, responsaveis, tipos, status];
+  const retratos = [faturas, cartoes, lancamentos, responsaveis, tipos, status];
   const erro = retratos.some((r) => r.status === "erro");
   // A memória ainda é de outro Mês até o gerenciador abrir este.
   const carregando =
@@ -108,6 +124,25 @@ export function Painel({ titulo }: { titulo: string }) {
 
   const abrirImportar = () => setImportando(true);
   const filtrar = (id: string | null) => setFiltro((atualFiltro) => alternarFiltroResponsavel(atualFiltro, id));
+  const ligarVerificar = () => setVerificar(true);
+
+  async function dispensar(faturaId: string) {
+    const r = await repoFaturas().dispensarAlerta(faturaId);
+    if (!r.ok) {
+      toast.mostrar({ texto: mensagem(r.codigo) });
+      return;
+    }
+    toast.mostrar({
+      texto: TEXTOS_CONFERENCIA.alerta_dispensado,
+      aoDesfazer: () => {
+        void repoFaturas()
+          .desfazerDispensa(faturaId)
+          .then((d) => {
+            if (!d.ok) toast.mostrar({ texto: mensagem(d.codigo) });
+          });
+      },
+    });
+  }
 
   let conteudo;
   if (erro) {
@@ -123,6 +158,11 @@ export function Painel({ titulo }: { titulo: string }) {
   } else {
     const doMes = lancamentos.linhas.filter((l) => l.mes === mesAberto && l.excluido_em === null);
     const daFatura = fatura ? doMes.filter((l) => l.fatura_id === fatura.id) : [];
+    const conferencia = fatura ? conferir(fatura, cartoes.linhas, doMes) : null;
+    // Sem Fatura não há o que verificar (nem a pílula): o filtro fica guardado.
+    const verificando = verificar && conferencia !== null;
+    const naGrade = filtrarPorResponsavel(verificando ? linhasParaVerificar(doMes, conferencia) : doMes, filtro);
+    const mostrarFaixa = fatura !== null && conferencia !== null && !conferencia.conferido && fatura.alerta_dispensado_em === null;
     const nomeDoFiltro =
       filtro === undefined
         ? null
@@ -142,34 +182,63 @@ export function Painel({ titulo }: { titulo: string }) {
             filtro={filtro}
             aoFiltrar={filtrar}
             aoImportar={abrirImportar}
+            conferencia={conferencia}
+            aoVerificar={ligarVerificar}
           />
         </div>
-        {nomeDoFiltro !== null ? (
-          <div>
-            <button
-              type="button"
-              aria-label={`${rotuloFiltroResponsavel(nomeDoFiltro)}, ${T.limpar_filtro}`}
-              onClick={() => setFiltro(undefined)}
-              className="inline-flex min-h-toque cursor-pointer items-center gap-2 rounded-full border border-accent-line bg-selection px-3 texto-label text-text"
-            >
-              {rotuloFiltroResponsavel(nomeDoFiltro)}
-              <span aria-hidden>✕</span>
-            </button>
+        {mostrarFaixa ? (
+          <FaixaConferencia
+            conferencia={conferencia}
+            aoVerLancamentos={ligarVerificar}
+            aoDispensar={() => void dispensar(fatura.id)}
+          />
+        ) : null}
+        {fatura !== null || nomeDoFiltro !== null ? (
+          <div className="flex flex-wrap gap-2">
+            {fatura !== null ? (
+              <button
+                type="button"
+                aria-pressed={verificar}
+                onClick={() => setVerificar((v) => !v)}
+                className={cn(
+                  "inline-flex min-h-toque cursor-pointer items-center gap-2 rounded-full border px-3 texto-label text-text",
+                  verificar ? "border-accent-line bg-selection" : "border-border bg-surface",
+                )}
+              >
+                {TEXTOS_CONFERENCIA.verificar}
+                {verificar ? <span aria-hidden>✕</span> : null}
+              </button>
+            ) : null}
+            {nomeDoFiltro !== null ? (
+              <button
+                type="button"
+                aria-label={`${rotuloFiltroResponsavel(nomeDoFiltro)}, ${T.limpar_filtro}`}
+                onClick={() => setFiltro(undefined)}
+                className="inline-flex min-h-toque cursor-pointer items-center gap-2 rounded-full border border-accent-line bg-selection px-3 texto-label text-text"
+              >
+                {rotuloFiltroResponsavel(nomeDoFiltro)}
+                <span aria-hidden>✕</span>
+              </button>
+            ) : null}
           </div>
         ) : null}
         <GradeLancamentos
-          linhas={filtrarPorResponsavel(doMes, filtro)}
+          linhas={naGrade}
           cadastros={cadastros}
           ordem={ordem}
           aoOrdenar={(coluna) => setOrdem((o) => alternarOrdem(o, coluna))}
           filtro={filtro}
           aoFiltrar={filtrar}
+          conferencia={conferencia}
+          verificando={verificando}
           vazio={
-            nomeDoFiltro !== null && doMes.length > 0
-              ? rotuloSemLancamentosDe(filtro === null ? null : nomeDoFiltro)
-              : faturas.linhas.length === 0
-                ? mensagem("painel.vazio")
-                : T.sem_lancamentos
+            verificando
+              ? TEXTOS_CONFERENCIA.sem_para_verificar
+              : nomeDoFiltro !== null && doMes.length > 0
+                ? rotuloSemLancamentosDe(filtro === null ? null : nomeDoFiltro)
+                : faturas.linhas.length === 0
+                  ? mensagem("painel.vazio")
+                  : T.sem_lancamentos
           }
         />
       </div>

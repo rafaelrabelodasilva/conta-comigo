@@ -4,8 +4,9 @@
 // "hoje" entra como parâmetro (a tela lê o relógio).
 
 import { mesDaData, somarMeses } from "./ciclo";
+import { ordenarDuvidasPrimeiro } from "./conferencia";
 import { formatarDinheiro } from "./dinheiro";
-import { rotuloParcelaFalada } from "./mensagens";
+import { TEXTOS_CONFERENCIA, rotuloParcelaFalada } from "./mensagens";
 
 /** O que a grade usa de um Lançamento (as colunas da tabela `lancamentos`). */
 export type LancamentoGrade = {
@@ -20,6 +21,11 @@ export type LancamentoGrade = {
   status_id: string | null;
   lancado_por: LancadoPor;
   ordem_fatura: number | null;
+  /** Conferência por cartão e marca "verificar" (História 2.5). */
+  final_cartao: string | null;
+  fatura_id: string | null;
+  /** A leitura ficou incerta: só põe a linha primeiro no filtro "Verificar". */
+  duvida_extracao: boolean;
 };
 
 export type LancadoPor = "fatura" | "sistema" | "manual" | "historico";
@@ -133,6 +139,25 @@ export function ordenarLancamentos<L extends LancamentoGrade>(
   });
 }
 
+/** É a ordem padrão (a da fatura, crescente)? */
+export function ehOrdemPadrao(ordem: Ordem): boolean {
+  return ordem.coluna === ORDEM_PADRAO.coluna && ordem.sentido === ORDEM_PADRAO.sentido;
+}
+
+/**
+ * A ordem da grade. Com o filtro "Verificar" e a ordem padrão, as linhas
+ * de `duvida_extracao` vêm primeiro e depois a ordem da fatura; com uma
+ * coluna ordenada, vale a coluna.
+ */
+export function ordenarGrade<L extends LancamentoGrade>(
+  linhas: readonly L[],
+  ordem: Ordem,
+  nomes: NomesCadastros,
+  verificando: boolean,
+): L[] {
+  return verificando && ehOrdemPadrao(ordem) ? ordenarDuvidasPrimeiro(linhas) : ordenarLancamentos(linhas, ordem, nomes);
+}
+
 /**
  * Filtro de Responsável da grade: `undefined` é sem filtro; `null` filtra
  * os Lançamentos sem Responsável.
@@ -194,7 +219,8 @@ export function distribuicaoPorResponsavel(
 
 /**
  * Nome acessível da linha (VoiceOver): "Nome, Valor, Parcela, Responsável,
- * Status". Partes vazias (à vista, sem Status) ficam de fora.
+ * Status" e, na linha marcada, "verificar este lançamento" no fim. Partes
+ * vazias (à vista, sem Status) ficam de fora.
  */
 export function rotuloLinhaAcessivel(partes: {
   nome: string;
@@ -203,6 +229,7 @@ export function rotuloLinhaAcessivel(partes: {
   parcelaTotal: number | null;
   responsavel: string;
   status: string | null;
+  verificar?: boolean;
 }): string {
   return [
     partes.nome,
@@ -210,6 +237,7 @@ export function rotuloLinhaAcessivel(partes: {
     rotuloParcelaFalada(partes.parcelaN, partes.parcelaTotal),
     partes.responsavel,
     partes.status ?? "",
+    partes.verificar ? TEXTOS_CONFERENCIA.verificar_lancamento : "",
   ]
     .filter((p) => p !== "")
     .join(", ");

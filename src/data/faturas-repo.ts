@@ -1,17 +1,21 @@
-// Repositório da importação da Fatura (História 2.3, AD-3/4/7). Única porta
-// de gravação de `faturas`, `fatura_cartoes` e `lancamentos` nesta
-// história: chama a RPC atômica `importar_fatura` com o que o núcleo
-// preparou (`prepararImportacao`) e o `updated_at` mais novo dos
-// Lançamentos do Mês importado, e aplica as linhas devolvidas nos três
-// gerenciadores de Realtime, sem esperar os eventos. O `updated_at` vem da
-// memória quando o Mês importado é o Mês aberto e já carregou; senão, de
-// uma leitura do banco só daquele Mês (a memória guarda só o Mês aberto).
+// Repositório da Fatura (Histórias 2.3 e 2.5, AD-3/4/7). Única porta de
+// gravação de `faturas`, `fatura_cartoes` e `lancamentos` nestas histórias.
+//
+// - Importação: chama a RPC atômica `importar_fatura` com o que o núcleo
+//   preparou (`prepararImportacao`) e o `updated_at` mais novo dos
+//   Lançamentos do Mês importado, e aplica as linhas devolvidas nos três
+//   gerenciadores de Realtime, sem esperar os eventos. O `updated_at` vem
+//   da memória quando o Mês importado é o Mês aberto e já carregou; senão,
+//   de uma leitura do banco só daquele Mês (a memória guarda só o Mês
+//   aberto).
+// - "Dispensar" o alerta da Conferência (e o "Desfazer"): grava só
+//   `faturas.alerta_dispensado_em`, com otimismo.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Importacao } from "@/domain/importacao-fatura";
 import { estaOnline } from "./conexao";
 import type { Database, Json } from "./database.types";
-import { FALHOU, SEM_CONEXAO, type Online } from "./gravacao";
+import { FALHOU, SEM_CONEXAO, gravarComOtimismo, type Online, type ResultadoGravacao } from "./gravacao";
 import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
 import { ehMaisNovo } from "./realtime-estado";
 import { criarClienteNavegador } from "./supabase/navegador";
@@ -105,7 +109,37 @@ export function criarRepoFaturas(deps: {
     return { ok: true, valor: data[0]?.updated_at ?? null };
   }
 
+  /**
+   * Grava só `alerta_dispensado_em` da Fatura, com otimismo (AD-3/AD-4):
+   * a faixa some já; se o banco recusar, volta. Sem conexão, nada muda.
+   */
+  function gravarAlerta(faturaId: string, valor: string | null): Promise<ResultadoGravacao> {
+    if (!online()) return Promise.resolve(SEM_CONEXAO);
+    if (!faturas.linha(faturaId)) return Promise.resolve(FALHOU);
+    const corpo = { alerta_dispensado_em: valor };
+    return gravarComOtimismo(
+      obterCliente,
+      faturas,
+      [{ id: faturaId, ...corpo }],
+      async (cliente) => {
+        const { data, error } = await cliente.from("faturas").update(corpo).eq("id", faturaId).select().single();
+        return error || !data ? null : [data];
+      },
+      online,
+    );
+  }
+
   return {
+    /** "Dispensar" a faixa de diferença da Fatura: grava o momento (`agora`, padrão o relógio). */
+    dispensarAlerta(faturaId: string, agora: Date = new Date()): Promise<ResultadoGravacao> {
+      return gravarAlerta(faturaId, agora.toISOString());
+    },
+
+    /** "Desfazer" do toast: a faixa volta (`alerta_dispensado_em = null`). */
+    desfazerDispensa(faturaId: string): Promise<ResultadoGravacao> {
+      return gravarAlerta(faturaId, null);
+    },
+
     /** Grava tudo ou nada pela RPC e aplica as linhas devolvidas na memória. */
     async importar(importacao: Importacao): Promise<ResultadoImportacao> {
       if (!online()) return SEM_CONEXAO;

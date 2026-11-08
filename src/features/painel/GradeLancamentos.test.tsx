@@ -3,8 +3,10 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { COLUNAS_GRADE, TEXTOS_PAINEL } from "@/domain/mensagens";
+import { conferir } from "@/domain/conferencia";
+import { COLUNAS_GRADE, TEXTOS_CONFERENCIA, TEXTOS_PAINEL } from "@/domain/mensagens";
 import { ORDEM_PADRAO, alternarOrdem, type LancamentoGrade, type Ordem } from "@/domain/painel";
+import type { Conferencia } from "@/domain/conferencia";
 import { GradeLancamentos, type CadastrosGrade } from "./GradeLancamentos";
 
 const sem = (t: string | null | undefined) => (t ?? "").replaceAll(" ", " ");
@@ -30,6 +32,9 @@ const lanc = (id: string, extra: Partial<LancamentoGrade> = {}): LancamentoGrade
   status_id: null,
   lancado_por: "fatura",
   ordem_fatura: null,
+  final_cartao: "5061",
+  fatura_id: "f10",
+  duvida_extracao: false,
   ...extra,
 });
 
@@ -48,7 +53,17 @@ const LINHAS = [
   lanc("z", { ordem_fatura: 3, nome: "MAGALU MAGALU", apelido: "Lava e seca", valor_centavos: 0 }),
 ];
 
-function Montar({ linhas = LINHAS, aoFiltrar = () => {} }: { linhas?: LancamentoGrade[]; aoFiltrar?: (id: string | null) => void }) {
+function Montar({
+  linhas = LINHAS,
+  aoFiltrar = () => {},
+  conferencia = null,
+  verificando = false,
+}: {
+  linhas?: LancamentoGrade[];
+  aoFiltrar?: (id: string | null) => void;
+  conferencia?: Conferencia | null;
+  verificando?: boolean;
+}) {
   const [ordem, setOrdem] = useState<Ordem>(ORDEM_PADRAO);
   return (
     <GradeLancamentos
@@ -59,6 +74,8 @@ function Montar({ linhas = LINHAS, aoFiltrar = () => {} }: { linhas?: Lancamento
       filtro={undefined}
       aoFiltrar={aoFiltrar}
       vazio={TEXTOS_PAINEL.sem_lancamentos}
+      conferencia={conferencia}
+      verificando={verificando}
     />
   );
 }
@@ -68,7 +85,11 @@ function corpo() {
   return within(tbody).getAllByRole("row");
 }
 
-const celulas = (linha: HTMLElement) => within(linha).getAllByRole("cell").map((c) => sem(c.textContent));
+/** O texto visível de cada célula (na do Nome, sem o resumo oculto). */
+const celulas = (linha: HTMLElement) =>
+  within(linha)
+    .getAllByRole("cell")
+    .map((c) => sem((c.querySelector("[data-nome]") ?? c).textContent));
 
 describe("GradeLancamentos", () => {
   it("colunas na ordem da UX-DR10 e linhas na ordem da fatura", () => {
@@ -148,5 +169,67 @@ describe("GradeLancamentos", () => {
     render(<Montar aoFiltrar={aoFiltrar} />);
     await userEvent.setup().click(screen.getByRole("button", { name: "Filtrar por Casal" }));
     expect(aoFiltrar).toHaveBeenCalledWith("r-casal");
+  });
+
+  it("VoiceOver: a célula do Nome leva o resumo oculto da linha; o Nome visível fica aria-hidden", () => {
+    render(<Montar />);
+    const [a] = corpo();
+    const nome = within(a).getAllByRole("cell")[1];
+    const resumo = nome.querySelector(".sr-only");
+    expect(sem(resumo?.textContent)).toBe(sem(a.getAttribute("aria-label")));
+    expect(nome.querySelector("[data-nome]")?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  describe("marca verificar", () => {
+    // Cartão 8673 com R$ 720,00 a menos; 5061 bate.
+    const linhas = [
+      lanc("p", { ordem_fatura: 1, nome: "PADARIA", final_cartao: "5061", valor_centavos: 1000 }),
+      lanc("b", { ordem_fatura: 2, nome: "BELLA PIETRA", final_cartao: "8673", valor_centavos: 8000 }),
+      lanc("d", { ordem_fatura: 3, nome: "DUVIDA", final_cartao: "8673", valor_centavos: 500, duvida_extracao: true }),
+    ];
+    const conferencia = conferir(
+      { id: "f10", total_despesas_centavos: 81500, total_creditos_centavos: 0 },
+      [
+        { fatura_id: "f10", final: "5061", total_centavos: 1000 },
+        { fatura_id: "f10", final: "8673", total_centavos: 80500 },
+      ],
+      linhas.map((l) => ({ ...l, excluido_em: null })),
+    );
+
+    it("bolinha verify antes do Nome e 'verificar este lançamento' no fim do nome acessível", () => {
+      render(<Montar linhas={linhas} conferencia={conferencia} />);
+      const [p, b, d] = corpo();
+      expect(p.querySelector(".bg-verify")).toBeNull();
+      expect(sem(p.getAttribute("aria-label"))).toBe("PADARIA, R$ 10,00, Sem responsável");
+      for (const linha of [b, d]) {
+        const bolinha = within(linha).getAllByRole("cell")[1].querySelector(".bg-verify");
+        expect(bolinha?.className).toContain("size-2");
+        expect(bolinha?.closest("[data-nome]")).toBeTruthy();
+        expect(linha.getAttribute("aria-label")?.endsWith(`, ${TEXTOS_CONFERENCIA.verificar_lancamento}`)).toBe(true);
+      }
+      expect(sem(within(b).getAllByRole("cell")[1].querySelector(".sr-only")?.textContent)).toBe(
+        `BELLA PIETRA, R$ 80,00, Sem responsável, ${TEXTOS_CONFERENCIA.verificar_lancamento}`,
+      );
+    });
+
+    it("duvida_extracao sozinho não marca", () => {
+      const conferido = conferir(
+        { id: "f10", total_despesas_centavos: 9500, total_creditos_centavos: 0 },
+        [
+          { fatura_id: "f10", final: "5061", total_centavos: 1000 },
+          { fatura_id: "f10", final: "8673", total_centavos: 8500 },
+        ],
+        linhas.map((l) => ({ ...l, excluido_em: null })),
+      );
+      render(<Montar linhas={linhas} conferencia={conferido} />);
+      expect(document.querySelector(".bg-verify")).toBeNull();
+    });
+
+    it("verificando na ordem padrão: dúvidas primeiro; ordenar por coluna vale a coluna", async () => {
+      render(<Montar linhas={linhas.slice(1)} conferencia={conferencia} verificando />);
+      expect(corpo().map((l) => celulas(l)[1])).toEqual(["DUVIDA", "BELLA PIETRA"]);
+      await userEvent.setup().click(screen.getByRole("button", { name: "Nome" }));
+      expect(corpo().map((l) => celulas(l)[1])).toEqual(["BELLA PIETRA", "DUVIDA"]);
+    });
   });
 });

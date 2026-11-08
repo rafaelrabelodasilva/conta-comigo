@@ -3,8 +3,9 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatarDinheiro } from "@/domain/dinheiro";
-import { TEXTOS_IMPORTAR, TEXTOS_PAINEL, mensagem } from "@/domain/mensagens";
+import { TEXTOS_CONFERENCIA, TEXTOS_IMPORTAR, TEXTOS_PAINEL, mensagem } from "@/domain/mensagens";
 import type { LinhaFatura, LinhaLancamento } from "@/data/faturas-repo";
+import { ToastProvider } from "@/ui/Toast";
 import { Painel } from "./Painel";
 
 // O gerenciador de Realtime é falso: um "banco" por tabela e, para
@@ -66,6 +67,16 @@ vi.mock("@/data/realtime", async () => {
     avisar,
   };
 });
+// O repositório de Faturas é falso: "Dispensar" e "Desfazer" só registram a
+// chamada e respondem o que o teste mandar.
+const repo = vi.hoisted(() => {
+  type Gravar = (faturaId: string) => Promise<{ ok: boolean; codigo?: string }>;
+  return {
+    dispensarAlerta: vi.fn<Gravar>(async () => ({ ok: true })),
+    desfazerDispensa: vi.fn<Gravar>(async () => ({ ok: true })),
+  };
+});
+vi.mock("@/data/faturas-repo", () => ({ repoFaturas: () => repo }));
 vi.mock("@/features/importar/ImportarFatura", () => ({
   ImportarFatura: ({ aberta, aoImportar }: { aberta: boolean; aoImportar: (mes: string) => void }) => {
     falso.importarMes = aoImportar;
@@ -84,6 +95,7 @@ const outubro = {
   saldo_anterior_centavos: 748311,
   pagamentos_centavos: 745721,
   total_a_pagar_centavos: 771367,
+  alerta_dispensado_em: null,
   updated_at: "2026-11-03T12:00:00+00:00",
 } as LinhaFatura;
 
@@ -92,7 +104,9 @@ const novembro = {
   id: "f11",
   mes: "2026-11",
   vencimento: "2026-11-06",
-  saldo_anterior_centavos: 0,
+  total_despesas_centavos: 739454,
+  total_creditos_centavos: 4322,
+  saldo_anterior_centavos: 10,
   pagamentos_centavos: 0,
   total_a_pagar_centavos: 735142,
 } as LinhaFatura;
@@ -116,6 +130,7 @@ const lanc = (mes: string, extra: Partial<LinhaLancamento> = {}) => {
     responsavel_id: null,
     status_id: "s-nao",
     lancado_por: "fatura",
+    duvida_extracao: false,
     excluido_em: null,
     updated_at: "2026-11-03T12:00:00+00:00",
     ...extra,
@@ -129,6 +144,25 @@ function lancamentosQueSomam(mes: string, n: number, total: number) {
   return linhas;
 }
 
+/**
+ * `n` Lançamentos da Fatura que batem com os totais dela: um crédito, uma
+ * despesa grande e o resto de R$ 1,00, todos no cartão 5061.
+ */
+function faturaQueBate(f: LinhaFatura, n: number) {
+  const linhas = Array.from({ length: n - 2 }, () => lanc(f.mes, { valor_centavos: 100 }));
+  linhas.push(lanc(f.mes, { valor_centavos: -f.total_creditos_centavos }));
+  linhas.push(lanc(f.mes, { valor_centavos: f.total_despesas_centavos - 100 * (n - 2) }));
+  return linhas;
+}
+
+const cartao = (f: LinhaFatura, final = "5061", total = f.total_despesas_centavos) => ({
+  id: `c-${f.id}-${final}`,
+  fatura_id: f.id,
+  final,
+  total_centavos: total,
+  updated_at: "2026-11-03T12:00:00+00:00",
+});
+
 const responsaveis = [
   { id: "r-rafael", nome: "Rafael", cor: 1, ordem: 1 },
   { id: "r-casal", nome: "Casal", cor: 2, ordem: 2 },
@@ -138,11 +172,18 @@ const status = [
   { id: "s-pago", nome: "Pago", conta_como_pago: true },
 ];
 
-function definir(dados: { faturas?: unknown[]; lancamentos?: unknown[] }, st = "pronto") {
-  falso.banco = { faturas: [], lancamentos: [], responsaveis, tipos: [], status, ...dados };
+function definir(
+  dados: { faturas?: unknown[]; lancamentos?: unknown[]; fatura_cartoes?: unknown[] },
+  st = "pronto",
+) {
+  falso.banco = { faturas: [], fatura_cartoes: [], lancamentos: [], responsaveis, tipos: [], status, ...dados };
   falso.status = st;
   falso.versao++;
 }
+
+/** O Nome que a grade mostra na linha (sem o resumo oculto do VoiceOver). */
+const nomeVisivel = (linha: HTMLElement) =>
+  sem(within(linha).getAllByRole("cell")[1].querySelector("[data-nome]")?.textContent);
 
 /** Linhas do corpo da grade (sem a de "vazio"). */
 function linhasDaGrade() {
@@ -150,6 +191,10 @@ function linhasDaGrade() {
   return within(corpo)
     .queryAllByRole("row")
     .filter((r) => r.getAttribute("aria-label"));
+}
+
+function renderizar() {
+  return render(<Painel titulo="Painel" />, { wrapper: ToastProvider });
 }
 
 function rodape() {
@@ -175,16 +220,20 @@ afterEach(() => {
 
 describe("Painel do Mês", () => {
   it("abre no Mês atual (08/11/26 → novembro/26)", () => {
-    render(<Painel titulo="Painel" />);
+    renderizar();
     expect(falso.abrirMes).toHaveBeenCalledWith("2026-11");
     expect(screen.getByRole("button", { name: "novembro/26, escolher o Mês" }).textContent).toBe("Nov/26");
   });
 
   it("outubro: hero, conta do total, 49 linhas e selo Fechado; ▶ mostra novembro separado", async () => {
-    const out = lancamentosQueSomam("2026-10", 49, 768777);
-    const nov = lancamentosQueSomam("2026-11", 46, 735142);
-    definir({ faturas: [outubro, novembro], lancamentos: [...out, ...nov] });
-    render(<Painel titulo="Painel" />);
+    const out = faturaQueBate(outubro, 49);
+    const nov = faturaQueBate(novembro, 46);
+    definir({
+      faturas: [outubro, novembro],
+      fatura_cartoes: [cartao(outubro), cartao(novembro)],
+      lancamentos: [...out, ...nov],
+    });
+    renderizar();
     const u = userEvent.setup();
 
     await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
@@ -193,6 +242,13 @@ describe("Painel do Mês", () => {
     expect(within(hero).getByText("Fatura de outubro · vence 06/10/26").className).toContain("texto-eyebrow");
     expect(sem(hero.querySelector(".texto-hero-value")?.textContent)).toBe("Total a pagar R$ 7.713,67");
     expect(within(hero).getByText("✓ Bate com o total a pagar")).toBeTruthy();
+    // Conferência: "✓ Conferido · 49 lançamentos", sem faixa nem bolinha.
+    const conferido = within(hero).getByText(TEXTOS_CONFERENCIA.conferido);
+    expect(conferido.className).toContain("text-accent");
+    expect(sem(conferido.parentElement?.textContent)).toBe("✓ Conferido·49 lançamentos");
+    expect(screen.queryByRole("region", { name: TEXTOS_CONFERENCIA.faixa })).toBeNull();
+    expect(document.querySelector(".bg-verify")).toBeNull();
+    expect(screen.getByRole("button", { name: TEXTOS_CONFERENCIA.verificar }).getAttribute("aria-pressed")).toBe("false");
     expect(linhasDaGrade()).toHaveLength(49);
     expect(rodape()).toContain("R$ 7.687,77");
     expect(screen.getAllByText(TEXTOS_PAINEL.fechado).length).toBeGreaterThan(0);
@@ -201,16 +257,21 @@ describe("Painel do Mês", () => {
     const heroNov = screen.getByRole("region", { name: "Fatura de novembro · vence 06/11/26" });
     expect(sem(heroNov.querySelector(".texto-hero-value")?.textContent)).toBe("Total a pagar R$ 7.351,42");
     expect(within(heroNov).getByText("✓ Bate com o total a pagar")).toBeTruthy();
+    expect(within(heroNov).getByText(TEXTOS_CONFERENCIA.conferido)).toBeTruthy();
     const linhas = linhasDaGrade();
     expect(linhas).toHaveLength(46);
     const idsOutubro = new Set(out.map((l) => l.nome));
-    expect(linhas.some((r) => idsOutubro.has(within(r).getAllByRole("cell")[1].textContent ?? ""))).toBe(false);
+    expect(linhas.some((r) => idsOutubro.has(nomeVisivel(r)))).toBe(false);
   });
 
   it("Mês sem Fatura: 'Fatura ainda não importada' com Importar fatura, grade vazia e sem selo", async () => {
     definir({ faturas: [outubro], lancamentos: [lanc("2026-10")] });
-    render(<Painel titulo="Painel" />);
+    renderizar();
     expect(screen.getByText(TEXTOS_PAINEL.sem_fatura)).toBeTruthy();
+    // Sem selo da Conferência, sem faixa e sem a pílula "Verificar".
+    expect(screen.queryByText(/Conferido|Diferença/)).toBeNull();
+    expect(screen.queryByRole("region", { name: TEXTOS_CONFERENCIA.faixa })).toBeNull();
+    expect(screen.queryByRole("button", { name: TEXTOS_CONFERENCIA.verificar })).toBeNull();
     expect(screen.queryByText(TEXTOS_PAINEL.fechado)).toBeNull();
     expect(linhasDaGrade()).toHaveLength(0);
     expect(screen.getByText(TEXTOS_PAINEL.sem_lancamentos)).toBeTruthy();
@@ -223,27 +284,27 @@ describe("Painel do Mês", () => {
   });
 
   it("sem nenhuma Fatura, a grade vazia chama para importar a primeira", () => {
-    render(<Painel titulo="Painel" />);
+    renderizar();
     expect(screen.getByText(mensagem("painel.vazio"))).toBeTruthy();
   });
 
   it("carregando: esqueleto, nunca tela branca; erro: Tentar de novo relê as tabelas", async () => {
     definir({}, "carregando");
-    const { unmount } = render(<Painel titulo="Painel" />);
+    const { unmount } = renderizar();
     expect(screen.getByRole("status").getAttribute("aria-busy")).toBe("true");
     expect(screen.queryByRole("table")).toBeNull();
     unmount();
 
     definir({}, "erro");
-    render(<Painel titulo="Painel" />);
+    renderizar();
     expect(screen.getByText(mensagem("carregar.falhou"))).toBeTruthy();
     await userEvent.setup().click(screen.getByRole("button", { name: "Tentar de novo" }));
-    expect(falso.recarregar).toHaveBeenCalledTimes(5);
+    expect(falso.recarregar).toHaveBeenCalledTimes(6);
   });
 
   it("trocar de Mês mostra o esqueleto enquanto o Mês novo carrega", async () => {
     definir({ faturas: [novembro], lancamentos: [lanc("2026-11")] });
-    render(<Painel titulo="Painel" />);
+    renderizar();
     expect(linhasDaGrade()).toHaveLength(1);
     falso.statusLancamentos = "carregando";
     await userEvent.setup().click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
@@ -255,7 +316,7 @@ describe("Painel do Mês", () => {
     definir({ faturas: [outubro], lancamentos: [lanc("2026-10")] });
     falso.mes = "2026-10";
     falso.congelarMes = true;
-    render(<Painel titulo="Painel" />);
+    renderizar();
     expect(falso.abrirMes).toHaveBeenCalledWith("2026-11");
     expect(screen.getByRole("status").getAttribute("aria-busy")).toBe("true");
     expect(screen.queryByRole("table")).toBeNull();
@@ -266,7 +327,7 @@ describe("Painel do Mês", () => {
     const out = lancamentosQueSomam("2026-10", 49, 768777);
     const excluido = lanc("2026-10", { valor_centavos: 5000, responsavel_id: "r-casal", excluido_em: "2026-11-05T12:00:00+00:00" });
     definir({ faturas: [outubro], lancamentos: [...out, excluido] });
-    render(<Painel titulo="Painel" />);
+    renderizar();
     await userEvent.setup().click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
     expect(linhasDaGrade()).toHaveLength(49);
     expect(screen.queryByText(excluido.nome)).toBeNull();
@@ -284,7 +345,7 @@ describe("Painel do Mês", () => {
       faturas: [outubro, novembro],
       lancamentos: [lanc("2026-11", { responsavel_id: "r-rafael" }), lanc("2026-10", { responsavel_id: "r-casal" })],
     });
-    render(<Painel titulo="Painel" />);
+    renderizar();
     const u = userEvent.setup();
     const [segmento] = within(screen.getByRole("group", { name: TEXTOS_PAINEL.distribuicao })).getAllByRole("button");
     await u.click(segmento);
@@ -296,7 +357,7 @@ describe("Painel do Mês", () => {
 
   it("Lançamentos sem Responsável: segmento e legenda 'Sem responsável'; a tag mostra —", () => {
     definir({ faturas: [novembro], lancamentos: [lanc("2026-11", { valor_centavos: 5000 })] });
-    render(<Painel titulo="Painel" />);
+    renderizar();
     const barra = screen.getByRole("group", { name: TEXTOS_PAINEL.distribuicao });
     const [segmento] = within(barra).getAllByRole("button");
     expect(segmento.getAttribute("aria-label")).toBe("Filtrar por Sem responsável");
@@ -317,7 +378,7 @@ describe("Painel do Mês", () => {
         lanc("2026-10", { responsavel_id: "r-casal", valor_centavos: 900 }),
       ],
     });
-    render(<Painel titulo="Painel" />);
+    renderizar();
     const u = userEvent.setup();
     const barra = screen.getByRole("group", { name: TEXTOS_PAINEL.distribuicao });
     // Ordem dos Responsáveis; largura proporcional à soma.
@@ -348,9 +409,165 @@ describe("Painel do Mês", () => {
 
   it("importar outro Mês: o Painel abre o Mês importado", () => {
     definir({ faturas: [novembro], lancamentos: [] });
-    render(<Painel titulo="Painel" />);
+    renderizar();
     act(() => falso.importarMes?.("2026-12"));
     expect(falso.abrirMes).toHaveBeenLastCalledWith("2026-12");
     expect(screen.getByRole("button", { name: "dezembro/26, escolher o Mês" })).toBeTruthy();
+  });
+});
+
+describe("Conferência e marca verificar (História 2.5)", () => {
+  /**
+   * Novembro com BELLA PIETRA lida R$ 80,00 em vez de R$ 800,00 no cartão
+   * 8673 (diferença de R$ 720,00); o 5061 bate.
+   */
+  function comDiferenca(extraFatura: Partial<LinhaFatura> = {}) {
+    const f = { ...novembro, total_despesas_centavos: 100_000, total_creditos_centavos: 0, saldo_anterior_centavos: 0, total_a_pagar_centavos: 28_000, ...extraFatura } as LinhaFatura;
+    const linhas = [
+      lanc("2026-11", { nome: "PADARIA", final_cartao: "5061", valor_centavos: 10_000, responsavel_id: "r-rafael" }),
+      lanc("2026-11", { nome: "BELLA PIETRA", final_cartao: "8673", valor_centavos: 8_000, responsavel_id: "r-casal" }),
+      lanc("2026-11", { nome: "MERCADO", final_cartao: "8673", valor_centavos: 10_000, responsavel_id: "r-rafael", duvida_extracao: true }),
+    ];
+    definir({
+      faturas: [f, outubro],
+      fatura_cartoes: [cartao(f, "5061", 10_000), cartao(f, "8673", 90_000)],
+      lancamentos: linhas,
+    });
+    return linhas;
+  }
+  // O nome acessível leva o espaço inseparável do formatador.
+  const DIFERENCA_720 = `Diferença de ${formatarDinheiro(72_000)}, ver lançamentos para verificar`;
+  const pilula = () => screen.getByRole("button", { name: TEXTOS_CONFERENCIA.verificar });
+  const faixa = () => screen.queryByRole("region", { name: TEXTOS_CONFERENCIA.faixa });
+
+  it("selo, faixa e bolinhas nas linhas do cartão com diferença", () => {
+    comDiferenca();
+    renderizar();
+    const hero = screen.getByRole("region", { name: "Fatura de novembro · vence 06/11/26" });
+    const selo = within(hero).getByRole("button", { name: DIFERENCA_720 });
+    expect(selo.className).toContain("bg-alert-warning-bg");
+    expect(sem(selo.parentElement?.textContent)).toBe("⚠ Diferença de R$ 720,00·3 lançamentos");
+    // A conta do total continua igual, embaixo.
+    expect(within(hero).getByText("✓ Bate com o total a pagar")).toBeTruthy();
+
+    expect(faixa()?.className).toContain("bg-alert-warning-bg");
+    expect(sem(faixa()?.textContent)).toContain("A soma dos lançamentos ficou R$ 720,00 abaixo do total da fatura.");
+    expect(sem(faixa()?.textContent)).toContain("A diferença está no cartão final 8673.");
+
+    const [padaria, bella, mercado] = linhasDaGrade();
+    expect(padaria.querySelector(".bg-verify")).toBeNull();
+    expect(bella.querySelector(".bg-verify")).toBeTruthy();
+    expect(mercado.querySelector(".bg-verify")).toBeTruthy();
+    expect(bella.getAttribute("aria-label")?.endsWith("verificar este lançamento")).toBe(true);
+  });
+
+  it("tocar no selo liga Verificar: só as marcadas, dúvidas primeiro; rodapé soma a grade; a pílula desliga", async () => {
+    comDiferenca();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: DIFERENCA_720 }));
+    expect(pilula().getAttribute("aria-pressed")).toBe("true");
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["MERCADO", "BELLA PIETRA"]);
+    expect(rodape()).toContain("R$ 180,00");
+    // Com coluna ordenada, vale a coluna.
+    await u.click(screen.getByRole("button", { name: "Nome" }));
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["BELLA PIETRA", "MERCADO"]);
+    await u.click(pilula());
+    expect(pilula().getAttribute("aria-pressed")).toBe("false");
+    expect(linhasDaGrade()).toHaveLength(3);
+  });
+
+  it("Ver lançamentos liga o filtro; combina com Responsável por E; vazio; vale ao trocar de Mês", async () => {
+    comDiferenca();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: TEXTOS_CONFERENCIA.ver_lancamentos }));
+    expect(pilula().getAttribute("aria-pressed")).toBe("true");
+    const barra = screen.getByRole("group", { name: TEXTOS_PAINEL.distribuicao });
+    await u.click(within(barra).getByRole("button", { name: "Filtrar por Rafael" }));
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["MERCADO"]);
+    await u.click(within(barra).getByRole("button", { name: "Filtrar por Casal" }));
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["BELLA PIETRA"]);
+
+    // Outubro (sem Lançamentos aqui) mantém o filtro ligado.
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
+    expect(pilula().getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText(TEXTOS_CONFERENCIA.sem_para_verificar)).toBeTruthy();
+  });
+
+  it("Dispensar: grava pelo repositório e mostra 'Alerta dispensado · Desfazer'; Desfazer grava null", async () => {
+    comDiferenca();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: TEXTOS_CONFERENCIA.dispensar }));
+    expect(repo.dispensarAlerta).toHaveBeenCalledWith("f11");
+    expect(screen.getByText(TEXTOS_CONFERENCIA.alerta_dispensado)).toBeTruthy();
+    await u.click(screen.getByRole("button", { name: "Desfazer" }));
+    expect(repo.desfazerDispensa).toHaveBeenCalledWith("f11");
+  });
+
+  it("Desfazer que falha (sem conexão): mostra a mensagem do código", async () => {
+    comDiferenca();
+    repo.desfazerDispensa.mockResolvedValueOnce({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: TEXTOS_CONFERENCIA.dispensar }));
+    await u.click(screen.getByRole("button", { name: "Desfazer" }));
+    expect(repo.desfazerDispensa).toHaveBeenCalledWith("f11");
+    expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
+  });
+
+  it("Verificar fica guardado num Mês sem Fatura (sem pílula, grade sem filtro) e volta ligado", async () => {
+    comDiferenca();
+    falso.banco.lancamentos.push(lanc("2026-12", { nome: "DEZEMBRO" }));
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(pilula());
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["MERCADO", "BELLA PIETRA"]);
+
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.proximo_mes }));
+    expect(screen.queryByRole("button", { name: TEXTOS_CONFERENCIA.verificar })).toBeNull();
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["DEZEMBRO"]);
+
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
+    expect(pilula().getAttribute("aria-pressed")).toBe("true");
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["MERCADO", "BELLA PIETRA"]);
+    for (const linha of linhasDaGrade()) expect(linha.querySelector(".bg-verify")).toBeTruthy();
+  });
+
+  it("dispensada: sem faixa; selo e bolinhas continuam", () => {
+    comDiferenca({ alerta_dispensado_em: "2026-11-08T15:00:00+00:00" });
+    renderizar();
+    expect(faixa()).toBeNull();
+    expect(screen.getByRole("button", { name: DIFERENCA_720 })).toBeTruthy();
+    expect(document.querySelectorAll(".bg-verify")).toHaveLength(2);
+  });
+
+  it("Dispensar sem conexão: mensagem de conexao.gravar_sem_conexao e a faixa fica", async () => {
+    comDiferenca();
+    repo.dispensarAlerta.mockResolvedValueOnce({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    renderizar();
+    await userEvent.setup().click(screen.getByRole("button", { name: TEXTOS_CONFERENCIA.dispensar }));
+    expect(screen.getByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
+    expect(screen.queryByText(TEXTOS_CONFERENCIA.alerta_dispensado)).toBeNull();
+    expect(faixa()).toBeTruthy();
+  });
+
+  it("só créditos: faixa dos créditos e bolinha nos créditos", () => {
+    const f = { ...novembro, total_despesas_centavos: 10_000, total_creditos_centavos: 1_000 } as LinhaFatura;
+    definir({
+      faturas: [f],
+      fatura_cartoes: [cartao(f, "5061", 10_000)],
+      lancamentos: [
+        lanc("2026-11", { nome: "PADARIA", valor_centavos: 10_000 }),
+        lanc("2026-11", { nome: "ESTORNO", valor_centavos: -500 }),
+      ],
+    });
+    renderizar();
+    expect(screen.getByRole("button", { name: `Diferença de ${formatarDinheiro(500)}, ver lançamentos para verificar` })).toBeTruthy();
+    expect(sem(faixa()?.textContent)).toContain("A soma dos créditos ficou R$ 5,00 abaixo do total de créditos da fatura.");
+    const [padaria, estorno] = linhasDaGrade();
+    expect(padaria.querySelector(".bg-verify")).toBeNull();
+    expect(estorno.querySelector(".bg-verify")).toBeTruthy();
   });
 });
