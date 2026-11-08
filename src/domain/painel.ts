@@ -1,5 +1,5 @@
 // Regras do Painel do Mês (História 2.4, FR-21, FR-22, UX-DR10): o Mês
-// atual, os Meses da lista do seletor, a ordenação e o filtro da grade, a
+// atual, os Meses da lista do seletor, a ordenação da grade, a
 // distribuição por Responsável da barra e o nome acessível da linha. Puro:
 // "hoje" entra como parâmetro (a tela lê o relógio).
 
@@ -156,25 +156,6 @@ export function ordenarGrade<L extends LancamentoGrade>(
   verificando: boolean,
 ): L[] {
   return verificando && ehOrdemPadrao(ordem) ? ordenarDuvidasPrimeiro(linhas) : ordenarLancamentos(linhas, ordem, nomes);
-}
-
-/**
- * Filtro de Responsável da grade: `undefined` é sem filtro; `null` filtra
- * os Lançamentos sem Responsável.
- */
-export type FiltroResponsavel = string | null | undefined;
-
-export function filtrarPorResponsavel<L extends Pick<LancamentoGrade, "responsavel_id">>(
-  linhas: readonly L[],
-  filtro: FiltroResponsavel,
-): L[] {
-  if (filtro === undefined) return [...linhas];
-  return linhas.filter((l) => l.responsavel_id === filtro);
-}
-
-/** Toque no mesmo Responsável do filtro limpa; em outro, troca. */
-export function alternarFiltroResponsavel(atual: FiltroResponsavel, responsavelId: string | null): FiltroResponsavel {
-  return atual === responsavelId ? undefined : responsavelId;
 }
 
 /** Soma dos valores (créditos negativos). */

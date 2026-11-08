@@ -203,7 +203,6 @@ export const TEXTOS_PAINEL = {
   distribuicao: "Distribuição por Responsável",
   grade: "Lançamentos do Mês",
   total: "Total dos lançamentos",
-  limpar_filtro: "Limpar filtro",
   sem_lancamentos: "Nenhum lançamento neste Mês",
   total_a_pagar: "Total a pagar",
   carregando: "Carregando…",
@@ -305,24 +304,64 @@ export function rotuloFiltrarPor(nome: string): string {
   return `Filtrar por ${nome}`;
 }
 
-/** Filtro ativo acima da grade: "Responsável: Rafael". */
-export function rotuloFiltroResponsavel(nome: string): string {
-  return `${COLUNAS_GRADE.responsavel}: ${nome}`;
-}
-
 /** A Parcela lida pelo VoiceOver: "parcela 2 de 12"; à vista, vazio. */
 export function rotuloParcelaFalada(n: number | null, total: number | null): string {
   return n === null || total === null ? "" : `parcela ${n} de ${total}`;
 }
 
-/** Grade vazia porque o filtro esconde tudo: "Nenhum lançamento de Rafael neste Mês". */
-export function rotuloSemLancamentosDe(nome: string | null): string {
-  return nome === null ? "Nenhum lançamento sem responsável neste Mês" : `Nenhum lançamento de ${nome} neste Mês`;
-}
-
 /** "Cartão final 9012". */
 export function rotuloCartaoFinal(final: string): string {
   return `Cartão final ${final}`;
+}
+
+/** Textos da barra de filtros (História 2.6, `filter-bar`, UX-DR9). */
+export const TEXTOS_FILTROS = {
+  /** Nome acessível da barra. */
+  barra: "Filtros da grade",
+  buscar: "Buscar nome ou apelido",
+  limpar_filtros: "Limpar filtros",
+  limpar: "Limpar",
+  aplicar: "Aplicar",
+  mais: "Mais",
+  sem_resultado: "Nenhum lançamento com esses filtros",
+  sem_tipo: "Sem tipo",
+  sem_status: "Sem status",
+  sem_cartao: "Sem cartão",
+  a_vista: "À vista",
+  parcelado: "Parcelado",
+  ultima_parcela: "Última parcela",
+  /** Popover de uma coluna sem nenhum valor (Cartão num Mês sem Lançamentos). */
+  sem_opcoes: "Nenhum valor neste Mês",
+} as const;
+
+/** Nome de cada coluna que filtra, na ordem da barra. */
+export const COLUNAS_FILTRO = {
+  responsavel: COLUNAS_GRADE.responsavel,
+  tipo: COLUNAS_GRADE.tipo,
+  status: COLUNAS_GRADE.status,
+  lancado_por: COLUNAS_GRADE.lancado_por,
+  parcela: COLUNAS_GRADE.parcela,
+  cartao: "Cartão",
+} as const;
+
+/** Título do popover: "Responsável (pode marcar vários)". */
+export function tituloPopoverFiltro(coluna: string): string {
+  return `${coluna} (pode marcar vários)`;
+}
+
+/** Pílula: "Responsável" sem escolha; "Responsável: Casal, Rangel" com (o "▾" vai à parte). */
+export function rotuloPilulaFiltro(coluna: string, valores: readonly string[]): string {
+  return valores.length === 0 ? coluna : `${coluna}: ${valores.join(", ")}`;
+}
+
+/** Pílula "Mais": "Mais" ou, guardando filtros ativos, "Mais (1)". */
+export function rotuloMaisFiltros(ativos: number): string {
+  return ativos === 0 ? TEXTOS_FILTROS.mais : `${TEXTOS_FILTROS.mais} (${ativos})`;
+}
+
+/** Nome acessível de uma caixa do popover: "Casal, 3 lançamentos". */
+export function rotuloValorFiltro(rotulo: string, contagem: number): string {
+  return `${rotulo}, ${rotuloLancamentos(contagem)}`;
 }
 
 /**

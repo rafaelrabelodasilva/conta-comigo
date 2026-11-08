@@ -15,7 +15,8 @@ import {
   rotuloTotalAPagar,
   sobrelinhaFatura,
 } from "@/domain/mensagens";
-import type { DistribuicaoPorResponsavel, FiltroResponsavel } from "@/domain/painel";
+import type { ValorFiltro } from "@/domain/filtros-grade";
+import type { DistribuicaoPorResponsavel } from "@/domain/painel";
 import { Botao } from "@/ui/Botao";
 import { cn } from "@/ui/cn";
 import { classesPessoa } from "@/ui/cores-pessoa";
@@ -23,9 +24,11 @@ import { classesPessoa } from "@/ui/cores-pessoa";
 // Cartão da fatura do Mês aberto (`invoice-hero`, DESIGN.md): sobrelinha
 // "FATURA DE OUTUBRO · VENCE 06/10/26", total a pagar em `hero-value`, a
 // conta da 2.3 que chega nele (`comporTotalAPagar`) e a barra por
-// Responsável. Tocar num segmento (ou na legenda) filtra a grade; tocar de
-// novo limpa. Mês sem Fatura: "Fatura ainda não importada" com "Importar
-// fatura". "Recebido no mês" e "Falta receber" chegam com os Recebimentos.
+// Responsável. Tocar num segmento (ou na legenda) escreve na coluna
+// Responsável da barra de filtros (História 2.6): se o filtro já é só ele,
+// limpa; senão, passa a ser só ele. Fica marcado quem está entre os
+// escolhidos; os outros segmentos se apagam. Mês sem Fatura: "Fatura
+// ainda não importada" com "Importar fatura". "Recebido no mês" e "Falta receber" chegam com os Recebimentos.
 // Selo da Conferência (História 2.5) na linha da quantidade: "✓ Conferido
 // · 49 lançamentos" ou "⚠ Diferença de R$ X" (toque liga o filtro
 // "Verificar"); a conta do total e o "Bate" ficam embaixo, menores.
@@ -41,7 +44,8 @@ export type PropsFaturaDoMes = {
   valoresDaFaturaCentavos: readonly number[];
   distribuicao: DistribuicaoPorResponsavel;
   responsaveis: ReadonlyMap<string, ResponsavelHero>;
-  filtro: FiltroResponsavel;
+  /** Os escolhidos na coluna Responsável da barra de filtros (vazio: sem filtro). */
+  escolhidos: readonly ValorFiltro[];
   aoFiltrar: (responsavelId: string | null) => void;
   aoImportar: () => void;
   /** Conferência da Fatura (`conferir`); sem ela, sem selo. */
@@ -54,14 +58,15 @@ type Fatia = { id: string | null; nome: string; centavos: number; fundo: string 
 
 function BarraPorResponsavel({
   fatias,
-  filtro,
+  escolhidos,
   aoFiltrar,
 }: {
   fatias: readonly Fatia[];
-  filtro: FiltroResponsavel;
+  escolhidos: readonly ValorFiltro[];
   aoFiltrar: (id: string | null) => void;
 }) {
-  const filtrando = filtro !== undefined;
+  const filtrando = escolhidos.length > 0;
+  const marcado = (id: string | null) => escolhidos.includes(id);
   return (
     <div className="flex flex-col gap-1">
       {/* Sem overflow-hidden: a área de toque de 44 pt passa da barra de 8 px. */}
@@ -71,12 +76,12 @@ function BarraPorResponsavel({
             key={f.id ?? "sem"}
             type="button"
             aria-label={rotuloFiltrarPor(f.nome)}
-            aria-pressed={filtro === f.id}
+            aria-pressed={marcado(f.id)}
             onClick={() => aoFiltrar(f.id)}
             className={cn(
               "area-toque h-full min-w-1 basis-0 cursor-pointer first:rounded-l-full last:rounded-r-full",
               f.fundo,
-              filtrando && filtro !== f.id && "opacity-40",
+              filtrando && !marcado(f.id) && "opacity-40",
             )}
             style={{ flexGrow: f.centavos }}
           />
@@ -87,11 +92,11 @@ function BarraPorResponsavel({
           <li key={f.id ?? "sem"}>
             <button
               type="button"
-              aria-pressed={filtro === f.id}
+              aria-pressed={marcado(f.id)}
               onClick={() => aoFiltrar(f.id)}
               className={cn(
                 "inline-flex min-h-toque cursor-pointer items-center gap-1 texto-label text-text-muted",
-                filtro === f.id && "text-text",
+                marcado(f.id) && "text-text",
               )}
             >
               <span aria-hidden className={cn("inline-block size-2 rounded-full", f.fundo)} />
@@ -125,7 +130,7 @@ export function FaturaDoMes({
   valoresDaFaturaCentavos,
   distribuicao,
   responsaveis,
-  filtro,
+  escolhidos,
   aoFiltrar,
   aoImportar,
   conferencia = null,
@@ -145,7 +150,7 @@ export function FaturaDoMes({
     fatias.push({ id: null, nome: T.sem_responsavel, centavos: distribuicao.semResponsavelCentavos, fundo: "bg-text-muted" });
   }
   const barra =
-    fatias.length > 0 ? <BarraPorResponsavel fatias={fatias} filtro={filtro} aoFiltrar={aoFiltrar} /> : null;
+    fatias.length > 0 ? <BarraPorResponsavel fatias={fatias} escolhidos={escolhidos} aoFiltrar={aoFiltrar} /> : null;
 
   if (!fatura) {
     return (

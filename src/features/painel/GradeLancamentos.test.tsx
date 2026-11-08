@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { conferir } from "@/domain/conferencia";
-import { COLUNAS_GRADE, TEXTOS_CONFERENCIA, TEXTOS_PAINEL } from "@/domain/mensagens";
+import { TEXTOS_FILTROS, COLUNAS_GRADE, TEXTOS_CONFERENCIA, TEXTOS_PAINEL } from "@/domain/mensagens";
 import { ORDEM_PADRAO, alternarOrdem, type LancamentoGrade, type Ordem } from "@/domain/painel";
 import type { Conferencia } from "@/domain/conferencia";
 import { GradeLancamentos, type CadastrosGrade } from "./GradeLancamentos";
@@ -13,7 +13,10 @@ const sem = (t: string | null | undefined) => (t ?? "").replaceAll(" ", " ");
 
 const cadastros: CadastrosGrade = {
   tipos: new Map([["t-viagem", "Viagem"]]),
-  responsaveis: new Map([["r-casal", { nome: "Casal", cor: 2 }]]),
+  responsaveis: new Map([
+    ["r-casal", { nome: "Casal", cor: 2 }],
+    ["r-rafael", { nome: "Rafael", cor: 1 }],
+  ]),
   status: new Map([
     ["s-nao", { nome: "Não pago", conta_como_pago: false }],
     ["s-pago", { nome: "Pago", conta_como_pago: true }],
@@ -58,9 +61,15 @@ function Montar({
   aoFiltrar = () => {},
   conferencia = null,
   verificando = false,
+  escolhidos = [],
+  aoLimparFiltros,
+  vazio = TEXTOS_PAINEL.sem_lancamentos,
 }: {
   linhas?: LancamentoGrade[];
   aoFiltrar?: (id: string | null) => void;
+  escolhidos?: (string | null)[];
+  aoLimparFiltros?: () => void;
+  vazio?: string;
   conferencia?: Conferencia | null;
   verificando?: boolean;
 }) {
@@ -71,9 +80,10 @@ function Montar({
       cadastros={cadastros}
       ordem={ordem}
       aoOrdenar={(c) => setOrdem((o) => alternarOrdem(o, c))}
-      filtro={undefined}
+      escolhidos={escolhidos}
+      aoLimparFiltros={aoLimparFiltros}
       aoFiltrar={aoFiltrar}
-      vazio={TEXTOS_PAINEL.sem_lancamentos}
+      vazio={vazio}
       conferencia={conferencia}
       verificando={verificando}
     />
@@ -169,6 +179,22 @@ describe("GradeLancamentos", () => {
     render(<Montar aoFiltrar={aoFiltrar} />);
     await userEvent.setup().click(screen.getByRole("button", { name: "Filtrar por Casal" }));
     expect(aoFiltrar).toHaveBeenCalledWith("r-casal");
+  });
+
+  it("person-tag com aria-pressed quando o Responsável está entre os escolhidos", () => {
+    render(<Montar linhas={[...LINHAS, lanc("rafa", { responsavel_id: "r-rafael" })]} escolhidos={["r-casal"]} />);
+    const casal = screen.getAllByRole("button", { name: "Filtrar por Casal" });
+    expect(casal.length).toBeGreaterThan(0);
+    for (const tag of casal) expect(tag.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Filtrar por Rafael" }).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("vazio pelos filtros: o texto e o botão Limpar filtros", async () => {
+    const aoLimparFiltros = vi.fn();
+    render(<Montar linhas={[]} aoLimparFiltros={aoLimparFiltros} vazio={TEXTOS_FILTROS.sem_resultado} />);
+    expect(screen.getByText(TEXTOS_FILTROS.sem_resultado)).toBeTruthy();
+    await userEvent.setup().click(screen.getByRole("button", { name: TEXTOS_FILTROS.limpar_filtros }));
+    expect(aoLimparFiltros).toHaveBeenCalled();
   });
 
   it("VoiceOver: a célula do Nome leva o resumo oculto da linha; o Nome visível fica aria-hidden", () => {

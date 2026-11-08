@@ -1,11 +1,13 @@
 "use client";
 
 import { precisaVerificar, type Conferencia } from "@/domain/conferencia";
+import type { ValorFiltro } from "@/domain/filtros-grade";
 import { formatarDinheiro } from "@/domain/dinheiro";
 import { formatarParcela } from "@/domain/importacao-fatura";
 import {
   COLUNAS_GRADE as C,
   ROTULOS_LANCADO_POR,
+  TEXTOS_FILTROS,
   TEXTOS_PAINEL as T,
   rotuloFiltrarPor,
 } from "@/domain/mensagens";
@@ -15,11 +17,11 @@ import {
   rotuloLinhaAcessivel,
   somarValores,
   type ColunaOrdem,
-  type FiltroResponsavel,
   type LancamentoGrade,
   type NomesCadastros,
   type Ordem,
 } from "@/domain/painel";
+import { Botao } from "@/ui/Botao";
 import { cn } from "@/ui/cn";
 import { classesPessoa } from "@/ui/cores-pessoa";
 
@@ -52,10 +54,13 @@ export type PropsGradeLancamentos = {
   cadastros: CadastrosGrade;
   ordem: Ordem;
   aoOrdenar: (coluna: ColunaOrdem) => void;
-  filtro: FiltroResponsavel;
+  /** Os escolhidos na coluna Responsável da barra de filtros: a `person-tag` fica marcada. */
+  escolhidos: readonly ValorFiltro[];
   aoFiltrar: (responsavelId: string | null) => void;
   /** Texto da grade vazia. */
   vazio: string;
+  /** Grade vazia pelos filtros: mostra "Limpar filtros" junto do texto. */
+  aoLimparFiltros?: () => void;
   /** Conferência da Fatura do Mês: marca "verificar". Sem ela, nenhuma linha marcada. */
   conferencia?: Conferencia | null;
   /** Filtro "Verificar" ligado: na ordem padrão, dúvidas de extração primeiro. */
@@ -143,9 +148,10 @@ export function GradeLancamentos({
   cadastros,
   ordem,
   aoOrdenar,
-  filtro,
+  escolhidos,
   aoFiltrar,
   vazio,
+  aoLimparFiltros,
   conferencia = null,
   verificando = false,
 }: PropsGradeLancamentos) {
@@ -161,7 +167,10 @@ export function GradeLancamentos({
           {ordenadas.length === 0 ? (
             <tr>
               <td colSpan={8} className="p-6 text-center texto-body text-text-muted">
-                {vazio}
+                <div className="flex flex-col items-center gap-3">
+                  <span>{vazio}</span>
+                  {aoLimparFiltros ? <Botao onClick={aoLimparFiltros}>{TEXTOS_FILTROS.limpar_filtros}</Botao> : null}
+                </div>
               </td>
             </tr>
           ) : null}
@@ -209,7 +218,7 @@ export function GradeLancamentos({
                     <button
                       type="button"
                       aria-label={rotuloFiltrarPor(responsavel.nome)}
-                      aria-pressed={filtro === l.responsavel_id}
+                      aria-pressed={escolhidos.includes(l.responsavel_id)}
                       onClick={() => aoFiltrar(l.responsavel_id)}
                       className={cn(
                         "area-toque inline-flex cursor-pointer items-center rounded-full px-2 texto-label",
