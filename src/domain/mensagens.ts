@@ -8,7 +8,11 @@
 import type { PassoPrimeiroUso } from "./primeiro-uso";
 import { formatarData, formatarMesExtenso, formatarNomeDoMes } from "./datas";
 import { formatarDinheiro } from "./dinheiro";
-import { primeiraDiferenca, type ConferenciaImportacao } from "./importacao-fatura";
+import {
+  primeiraDiferenca,
+  type ComposicaoTotalAPagar,
+  type ConferenciaImportacao,
+} from "./importacao-fatura";
 
 export const MENSAGENS = {
   "auth.campos_vazios": "Preencha o e-mail e a senha.",
@@ -140,6 +144,31 @@ export function tituloFaturaImportada(mes: string, vencimento: string, quantidad
 }
 
 /** "Despesas R$ 8.327,39 · Créditos R$ 639,62". */
+/** "Total a pagar R$ 7.713,67" (sem o total lido: "Total a pagar não lido"). */
+export function rotuloTotalAPagar(lidoCentavos: number | null): string {
+  return lidoCentavos === null ? "Total a pagar não lido" : `Total a pagar ${formatarDinheiro(lidoCentavos)}`;
+}
+
+/**
+ * Como os Lançamentos chegam ao total: "Lançamentos R$ 7.687,77 + saldo
+ * anterior R$ 7.483,11 − pagamentos R$ 7.457,21 = R$ 7.713,67".
+ */
+export function rotuloComposicaoTotal(c: ComposicaoTotalAPagar): string {
+  return (
+    `Lançamentos ${formatarDinheiro(c.lancamentosCentavos)}` +
+    ` + saldo anterior ${formatarDinheiro(c.saldoAnteriorCentavos)}` +
+    ` − pagamentos ${formatarDinheiro(c.pagamentosCentavos)}` +
+    ` = ${formatarDinheiro(c.calculadoCentavos)}`
+  );
+}
+
+/** "✓ Bate com o total a pagar" ou "⚠ Diferença de R$ 0,08 para o total a pagar"; sem o lido, null. */
+export function rotuloConferenciaTotal(c: ComposicaoTotalAPagar): string | null {
+  if (c.diferencaCentavos === null) return null;
+  if (c.diferencaCentavos === 0) return "✓ Bate com o total a pagar";
+  return `⚠ Diferença de ${formatarDinheiro(Math.abs(c.diferencaCentavos))} para o total a pagar`;
+}
+
 export function rotuloDespesasCreditos(despesasCentavos: number, creditosCentavos: number): string {
   return `Despesas ${formatarDinheiro(despesasCentavos)} · Créditos ${formatarDinheiro(creditosCentavos)}`;
 }
@@ -173,6 +202,7 @@ export const COLUNAS_LANCAMENTOS = {
   parcela: "Parcela",
   valor: "Valor",
   cartao: "Cartão",
+  total: "Total dos lançamentos",
 } as const;
 
 /** "Cartão final 9012". */

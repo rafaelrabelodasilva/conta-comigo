@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { formatarDinheiro } from "@/domain/dinheiro";
-import { TEXTOS_IMPORTAR, mensagem, rotuloDespesasCreditos } from "@/domain/mensagens";
+import { COLUNAS_LANCAMENTOS, TEXTOS_IMPORTAR, mensagem, rotuloDespesasCreditos } from "@/domain/mensagens";
 import type { LinhaFatura, LinhaLancamento } from "@/data/faturas-repo";
 import { Painel } from "./Painel";
 
@@ -27,6 +27,9 @@ const fatura = {
   vencimento: "2026-10-06",
   total_despesas_centavos: 832739,
   total_creditos_centavos: 63962,
+  saldo_anterior_centavos: 748311,
+  pagamentos_centavos: 745721,
+  total_a_pagar_centavos: 771367,
   updated_at: "2026-11-03T12:00:00+00:00",
 } as LinhaFatura;
 
@@ -98,11 +101,35 @@ describe("Painel provisório", () => {
     expect(screen.getByRole("heading", { name: "Fatura de outubro/26 · vence 06/10/26 · 2 lançamentos" })).toBeTruthy();
     expect(screen.getByText(rotuloDespesasCreditos(832739, 63962), { normalizer: (t) => t })).toBeTruthy();
 
-    const linhas = screen.getAllByRole("row").slice(1);
+    const [, corpo, rodape] = screen.getAllByRole("rowgroup");
+    const linhas = within(corpo).getAllByRole("row");
     expect(linhas).toHaveLength(2);
     const [primeira, segunda] = linhas.map((l) => within(l).getAllByRole("cell").map((c) => c.textContent));
     expect(primeira).toEqual(["04/09/26", "MSC CRUZEIROS", "02/12", formatarDinheiro(114074), "5061"]);
     expect(segunda).toEqual(["04/09/26", "MSC CRUZEIROS", "", formatarDinheiro(-8), "5061"]);
     expect(screen.queryByText("LOJA c")).toBeNull();
+    // Total da lista: só as não excluídas (R$ 1.140,74 − R$ 0,08).
+    expect(within(rodape).getAllByRole("cell").map((c) => c.textContent)).toEqual([
+      COLUNAS_LANCAMENTOS.total,
+      formatarDinheiro(114066),
+      "",
+    ]);
+  });
+
+  it("cartão da Fatura: total a pagar lido, a conta que chega nele e se bate", () => {
+    // Soma 7.687,77 + saldo 7.483,11 − pagamentos 7.457,21 = 7.713,67 (outubro).
+    definir([fatura], [lanc("a", 1, { valor_centavos: 768777 })]);
+    render(<Painel titulo="Painel" />);
+    const sem = (t: string) => t.replaceAll("\u00a0", " ");
+    expect(screen.getByText((_, e) => e?.tagName === "P" && sem(e.textContent ?? "") === "Total a pagar R$ 7.713,67")).toBeTruthy();
+    expect(
+      screen.getByText(
+        (_, e) =>
+          e?.tagName === "P" &&
+          sem(e.textContent ?? "") ===
+            "Lançamentos R$ 7.687,77 + saldo anterior R$ 7.483,11 − pagamentos R$ 7.457,21 = R$ 7.713,67",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("✓ Bate com o total a pagar")).toBeTruthy();
   });
 });

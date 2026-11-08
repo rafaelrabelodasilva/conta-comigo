@@ -92,6 +92,7 @@ context:
 - Fixture `test/fixtures/extracao-2026-10.json` gravado com o Gemini real sobre o fixture de texto novo (49; 832739 / 63962). Na verificação final, o teste `PROVA_GEMINI=1` deu 49, R$ 8.327,39, R$ 639,62, cartões = despesas, 44 s.
 - O crédito que parece pagamento da fatura anterior sai no núcleo (`lancamentosDaFatura`), mesmo se a leitura o trouxer.
 - Não rodou aqui (sem Docker): migração, RPC, integração, comparação dos tipos e backup. Ficam com o CI.
+- Depois do merge, a pedido do Rafael (03/11/2026): o passo 3 e o cartão do Painel mostram o "Total a pagar" lido e a conta `comporTotalAPagar` (soma dos Lançamentos + saldo anterior − pagamentos, com "✓ Bate" ou a diferença), e a lista do Painel ganhou a linha "Total dos lançamentos". Outubro: R$ 7.687,77 + R$ 7.483,11 − R$ 7.457,21 = R$ 7.713,67.
 
 ## Spec Change Log
 
