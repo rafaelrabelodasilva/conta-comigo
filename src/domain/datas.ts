@@ -8,9 +8,12 @@ const FUSO = "America/Sao_Paulo";
 
 const MES = /^(\d{4})-(0[1-9]|1[0-2])$/;
 const DATA = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
-// Instante com fuso explícito no fim ("Z" ou "±HH:MM"): sem ele, o horário
-// dependeria do fuso do aparelho.
-const INSTANTE_COM_FUSO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+// Instante com fuso explícito no fim ("Z", "±HH:MM", "±HHMM" ou "±HH"): sem
+// ele, o horário dependeria do fuso do aparelho. Aceita o formato do
+// PostgREST ("2026-11-02T12:00:00.123456+00:00") e o do Realtime
+// ("2026-11-02 12:00:00.123456+00").
+const INSTANTE_COM_FUSO =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}(?::?\d{2})?)$/;
 
 const NOMES_MES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -83,12 +86,33 @@ function partesEmSaoPaulo(instante: Date): (tipo: string) => string {
 }
 
 /**
- * Instante ISO com fuso ("2026-11-07T00:14:00Z" ou "…-03:00") → "21:14" em
- * America/Sao_Paulo. Sem `Z` nem `±HH:MM` no fim, lança.
+ * Microssegundos desde 1970 de um instante com fuso (os formatos de
+ * `INSTANTE_COM_FUSO`). O `Date` só guarda milissegundos; o banco guarda
+ * microssegundos. Formato desconhecido → `NaN`.
  */
-export function formatarHora(instanteISO: string): string {
-  if (!INSTANTE_COM_FUSO.test(instanteISO)) throw new Error(`Instante sem fuso: ${instanteISO}`);
-  const parte = partesEmSaoPaulo(new Date(instanteISO));
+export function instanteEmMicros(valor: string): number {
+  const m = INSTANTE_COM_FUSO.exec(valor.trim());
+  if (!m) return NaN;
+  const [, ano, mes, dia, hora, min, seg = "0", fracao = "", fuso] = m;
+  let deslocamentoMin = 0;
+  if (fuso !== "Z") {
+    const sinal = fuso[0] === "-" ? -1 : 1;
+    const digitos = fuso.slice(1).replace(":", "");
+    deslocamentoMin = sinal * (Number(digitos.slice(0, 2)) * 60 + Number(digitos.slice(2, 4) || 0));
+  }
+  const ms = Date.UTC(+ano, +mes - 1, +dia, +hora, +min, +seg) - deslocamentoMin * 60_000;
+  return ms * 1000 + Number(fracao.slice(0, 6).padEnd(6, "0"));
+}
+
+/**
+ * Instante com fuso ("2026-11-07T00:14:00Z", "…-03:00" ou o formato do
+ * Realtime, "2026-11-07 00:14:00.123456+00") → "21:14" em
+ * America/Sao_Paulo. Sem fuso no fim, lança.
+ */
+export function formatarHora(instante: string): string {
+  const micros = instanteEmMicros(instante);
+  if (Number.isNaN(micros)) throw new Error(`Instante sem fuso: ${instante}`);
+  const parte = partesEmSaoPaulo(new Date(Math.floor(micros / 1000)));
   return `${parte("hour")}:${parte("minute")}`;
 }
 

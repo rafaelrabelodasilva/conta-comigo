@@ -14,6 +14,10 @@ import { cn } from "@/ui/cn";
 // linha de 44 pt por valor (caixa, etiqueta e contagem) e o rodapé "Limpar"
 // (zera a coluna e fecha) e "Aplicar" (aplica o rascunho e fecha). Fechar de
 // outro jeito (Esc, toque fora) descarta o rascunho.
+//
+// Tempo real com o popover aberto (História 2.7): o rascunho não se perde, as
+// contagens se atualizam ao vivo e um valor marcado que sumiu do Mês continua
+// na lista, com contagem 0 (`listar` com os valores do rascunho).
 
 /** Classes da pílula da barra (`filter-chip`), ativa ou não. */
 export function classesPilula(ativa: boolean): string {
@@ -31,17 +35,24 @@ export type PropsPopoverFiltro = {
   filtros: FiltrosGrade;
   /** A lista do popover (`valoresDaColuna`). */
   opcoes: readonly OpcaoFiltro[];
+  /**
+   * A lista com os valores marcados no rascunho mantidos (`valoresDaColuna`
+   * com `extras`). Sem ela, vale `opcoes`.
+   */
+  listar?: (extras: readonly ValorFiltro[]) => readonly OpcaoFiltro[];
   aoAplicar: (valores: ValorFiltro[]) => void;
 };
 
 const chave = (v: ValorFiltro) => v ?? "∅";
 
-export function PopoverFiltro({ coluna, filtros, opcoes, aoAplicar }: PropsPopoverFiltro) {
+export function PopoverFiltro({ coluna, filtros, opcoes, listar, aoAplicar }: PropsPopoverFiltro) {
   const [aberto, setAberto] = useState(false);
   const [rascunho, setRascunho] = useState<readonly ValorFiltro[]>([]);
   const idTitulo = useId();
   const escolhidos = filtros.colunas[coluna];
   const titulo = tituloPopoverFiltro(COLUNAS_FILTRO[coluna]);
+  // Aberto, a lista mantém o que está marcado no rascunho.
+  const lista = aberto && listar ? listar(rascunho) : opcoes;
 
   function mudar(abrir: boolean) {
     // Abre com o que está aplicado; fechar sem "Aplicar" descarta o rascunho.
@@ -51,9 +62,13 @@ export function PopoverFiltro({ coluna, filtros, opcoes, aoAplicar }: PropsPopov
 
   function alternar(valor: ValorFiltro) {
     setRascunho((r) => {
-      const marcados = new Set(r.includes(valor) ? r.filter((v) => v !== valor) : [...r, valor]);
-      // Na ordem da lista.
-      return opcoes.map((o) => o.valor).filter((v) => marcados.has(v));
+      const marcados = r.includes(valor) ? r.filter((v) => v !== valor) : [...r, valor];
+      // Na ordem da lista; um valor que não está nela (sumiu do Mês) não se perde.
+      const posicao = (v: ValorFiltro) => {
+        const i = lista.findIndex((o) => o.valor === v);
+        return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+      };
+      return [...marcados].sort((a, b) => posicao(a) - posicao(b));
     });
   }
 
@@ -79,11 +94,11 @@ export function PopoverFiltro({ coluna, filtros, opcoes, aoAplicar }: PropsPopov
           <p id={idTitulo} className="px-3 py-2 texto-label text-text-muted">
             {titulo}
           </p>
-          {opcoes.length === 0 ? (
+          {lista.length === 0 ? (
             <p className="px-3 py-2 texto-body text-text-muted">{TEXTOS_FILTROS.sem_opcoes}</p>
           ) : null}
           <ul className="flex flex-col overflow-y-auto">
-            {opcoes.map((o) => (
+            {lista.map((o) => (
               <li key={chave(o.valor)}>
                 <label className="flex min-h-toque cursor-pointer items-center gap-3 rounded-sm px-3 texto-body">
                   <input

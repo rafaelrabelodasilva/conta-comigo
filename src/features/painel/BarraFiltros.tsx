@@ -7,6 +7,7 @@ import {
   type ColunaFiltro,
   type FiltrosGrade,
   type OpcaoFiltro,
+  type ValorFiltro,
 } from "@/domain/filtros-grade";
 import { TEXTOS_CONFERENCIA, TEXTOS_FILTROS, rotuloMaisFiltros } from "@/domain/mensagens";
 import { cn } from "@/ui/cn";
@@ -30,6 +31,8 @@ export type PropsBarraFiltros = {
   aoMudar: (atualizar: (f: FiltrosGrade) => FiltrosGrade) => void;
   /** A lista de cada coluna (`valoresDaColuna`). */
   opcoes: Readonly<Record<ColunaFiltro, readonly OpcaoFiltro[]>>;
+  /** A lista de uma coluna mantendo os valores do rascunho do popover aberto (História 2.7). */
+  listar?: (coluna: ColunaFiltro, extras: readonly ValorFiltro[]) => readonly OpcaoFiltro[];
   /** O Mês tem Fatura: mostra "Verificar". */
   comVerificar: boolean;
   /** Mostra "Limpar filtros" (há busca, filtro, "Verificar" ou ordem fora da padrão). */
@@ -37,13 +40,22 @@ export type PropsBarraFiltros = {
   aoLimparTudo: () => void;
 };
 
-export function BarraFiltros({ filtros, aoMudar, opcoes, comVerificar, mostrarLimpar, aoLimparTudo }: PropsBarraFiltros) {
+export function BarraFiltros({
+  filtros,
+  aoMudar,
+  opcoes,
+  listar,
+  comVerificar,
+  mostrarLimpar,
+  aoLimparTudo,
+}: PropsBarraFiltros) {
   const pilula = (coluna: ColunaFiltro) => (
     <PopoverFiltro
       key={coluna}
       coluna={coluna}
       filtros={filtros}
       opcoes={opcoes[coluna]}
+      listar={listar ? (extras) => listar(coluna, extras) : undefined}
       aoAplicar={(valores) => aoMudar((f) => definirColuna(f, coluna, valores))}
     />
   );

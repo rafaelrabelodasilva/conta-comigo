@@ -52,6 +52,14 @@ import {
   rotuloPilulaFiltro,
   rotuloValorFiltro,
   tituloPopoverFiltro,
+  TEXTOS_LANCAMENTO,
+  descricaoExcluirLancamento,
+  rotuloAlteradoEmOutroAparelho,
+  rotuloConferenciaDiferenca,
+  rotuloDetalhesLancamento,
+  rotuloIncluidoEm,
+  rotuloSalvoAs,
+  rotuloSelecionar,
 } from "./mensagens";
 import type { Conferencia } from "./conferencia";
 
@@ -396,6 +404,7 @@ describe("textos do Painel do Mês", () => {
       "Responsável",
       "Lançado por",
       "Status",
+      "Ações",
     ]);
     expect(ROTULOS_LANCADO_POR).toEqual({ fatura: "Fatura", sistema: "Sistema", manual: "Manual", historico: "Histórico" });
     expect(TEXTOS_PAINEL.total).toBe("Total dos lançamentos");
@@ -500,5 +509,36 @@ describe("Barra de filtros (História 2.6)", () => {
     expect(TEXTOS_FILTROS.limpar_filtros).toBe("Limpar filtros");
     expect(TEXTOS_FILTROS.sem_resultado).toBe("Nenhum lançamento com esses filtros");
     expect(Object.values(COLUNAS_FILTRO)).toEqual(["Responsável", "Tipo", "Status", "Lançado por", "Parcela", "Cartão"]);
+  });
+});
+
+describe("painel do Lançamento (História 2.7)", () => {
+  it("códigos lancamento.* com mensagem no tom do EXPERIENCE.md", () => {
+    expect(mensagem("lancamento.nome_vazio")).toBe("Preencha o nome.");
+    expect(mensagem("lancamento.valor_vazio")).toBe("Preencha o valor.");
+    expect(mensagem("lancamento.valor_zero")).toBe("O valor não pode ser zero.");
+    expect(mensagem("lancamento.apelido_longo")).toBe("Use até 60 caracteres.");
+    expect(mensagem("lancamento.observacao_longa")).toBe("Use até 500 caracteres.");
+    expect(mensagem("lancamento.sem_cartao")).toBe("Escolha o cartão");
+  });
+
+  it("indicador, Conferência, faixa, toast e linha só de leitura", () => {
+    expect(TEXTOS_LANCAMENTO.salvando).toBe("Salvando…");
+    expect(rotuloSalvoAs("21:14")).toBe("Salvo às 21:14");
+    expect(TEXTOS_LANCAMENTO.tentando).toBe("Não salvo, tentando de novo");
+    expect(TEXTOS_LANCAMENTO.conferencia_ok).toBe("Conferência: ✓");
+    expect(rotuloConferenciaDiferenca(72000)).toBe(`Conferência: diferença de R$${ESPACO}720,00`);
+    expect(rotuloAlteradoEmOutroAparelho("21:30")).toBe("Este lançamento foi alterado em outro aparelho às 21:30");
+    expect(TEXTOS_LANCAMENTO.excluido_em_outro_aparelho).toBe("Este lançamento foi excluído em outro aparelho");
+    expect(rotuloIncluidoEm("2026-12")).toBe("Lançamento incluído em dezembro/26");
+    expect(rotuloDetalhesLancamento("05/10", "8673", "Fatura")).toBe("Parcela 05/10 · cartão final 8673 · Lançado por Fatura");
+    expect(rotuloDetalhesLancamento("", null, "Manual")).toBe("Lançado por Manual");
+    expect(rotuloSelecionar("MSC CRUZEIROS")).toBe("Selecionar MSC CRUZEIROS");
+    expect(TEXTOS_LANCAMENTO.selecionar_todos).toBe("Selecionar todos");
+    expect(TEXTOS_LANCAMENTO.confirmar_excluir).toBe("Excluir lançamento");
+    expect(descricaoExcluirLancamento("PADARIA", true)).toBe(
+      "“PADARIA” sai da grade e da Conferência. Dá para desfazer logo depois.",
+    );
+    expect(descricaoExcluirLancamento("PADARIA", false)).toBe("“PADARIA” sai da grade. Dá para desfazer logo depois.");
   });
 });

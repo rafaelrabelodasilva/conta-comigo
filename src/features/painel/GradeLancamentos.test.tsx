@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { conferir } from "@/domain/conferencia";
 import { TEXTOS_FILTROS, COLUNAS_GRADE, TEXTOS_CONFERENCIA, TEXTOS_PAINEL } from "@/domain/mensagens";
 import { ORDEM_PADRAO, alternarOrdem, type LancamentoGrade, type Ordem } from "@/domain/painel";
+import { alternarSelecao, alternarTodos } from "@/domain/lancamento";
 import type { Conferencia } from "@/domain/conferencia";
 import { GradeLancamentos, type CadastrosGrade } from "./GradeLancamentos";
 
@@ -107,10 +108,10 @@ describe("GradeLancamentos", () => {
     const cabecalhos = screen.getAllByRole("columnheader").map((c) => c.textContent);
     expect(cabecalhos).toEqual(Object.values(COLUNAS_GRADE));
     const [a, b, z] = corpo();
-    expect(celulas(a)).toEqual(["", "MSC CRUZEIROS", "02/12", "R$ 1.140,74", "Viagem", "Casal", "Fatura", "Não pago"]);
-    expect(celulas(b)).toEqual(["", "MSC CRUZEIROS", "", "- R$ 0,08", "—", "—", "Manual", "Pago"]);
+    expect(celulas(a)).toEqual(["", "MSC CRUZEIROS", "02/12", "R$ 1.140,74", "Viagem", "Casal", "Fatura", "Não pago", "⋯"]);
+    expect(celulas(b)).toEqual(["", "MSC CRUZEIROS", "", "- R$ 0,08", "—", "—", "Manual", "Pago", "⋯"]);
     // Apelido em negrito e o Nome em cinza; R$ 0,00 aparece normalmente.
-    expect(celulas(z)).toEqual(["", "Lava e seca · MAGALU MAGALU", "", "R$ 0,00", "—", "—", "Fatura", "—"]);
+    expect(celulas(z)).toEqual(["", "Lava e seca · MAGALU MAGALU", "", "R$ 0,00", "—", "—", "Fatura", "—", "⋯"]);
     expect(within(z).getByText("Lava e seca").className).toContain("texto-body-strong");
     expect(within(z).getByText("· MAGALU MAGALU").className).toContain("text-text-muted");
   });
@@ -157,7 +158,7 @@ describe("GradeLancamentos", () => {
     const [caixa, nome] = within(corpo()[0]).getAllByRole("cell");
     expect(caixa.className).toMatch(/sticky.*left-0|left-0.*sticky/);
     expect(nome.className).toMatch(/sticky.*left-11|left-11.*sticky/);
-    expect(screen.getAllByRole("columnheader")).toHaveLength(8);
+    expect(screen.getAllByRole("columnheader")).toHaveLength(9);
   });
 
   it("rodapé soma o que está na grade; vazia mostra o texto", () => {
@@ -257,5 +258,132 @@ describe("GradeLancamentos", () => {
       await userEvent.setup().click(screen.getByRole("button", { name: "Nome" }));
       expect(corpo().map((l) => celulas(l)[1])).toEqual(["BELLA PIETRA", "DUVIDA"]);
     });
+  });
+});
+
+describe("painel do Lançamento e seleção (História 2.7)", () => {
+  function MontarSelecao({
+    aoAbrir = () => {},
+    aoExcluir = () => {},
+    aoFiltrar = () => {},
+    abertoId = null,
+    linhaFixa = null,
+    linhas = LINHAS,
+  }: {
+    aoAbrir?: (id: string) => void;
+    aoExcluir?: (id: string) => void;
+    aoFiltrar?: (id: string | null) => void;
+    abertoId?: string | null;
+    linhaFixa?: LancamentoGrade | null;
+    linhas?: LancamentoGrade[];
+  }) {
+    const [selecao, setSelecao] = useState<ReadonlySet<string>>(new Set());
+    return (
+      <GradeLancamentos
+        linhas={linhas}
+        cadastros={cadastros}
+        ordem={ORDEM_PADRAO}
+        aoOrdenar={() => {}}
+        escolhidos={[]}
+        aoFiltrar={aoFiltrar}
+        vazio=""
+        selecao={selecao}
+        aoSelecionar={(id) => setSelecao((s) => alternarSelecao(s, id))}
+        aoSelecionarTodos={() => setSelecao((s) => alternarTodos(s, linhas.map((l) => l.id)))}
+        abertoId={abertoId}
+        aoAbrir={aoAbrir}
+        aoExcluir={aoExcluir}
+        linhaFixa={linhaFixa}
+      />
+    );
+  }
+
+  it("tocar no corpo da linha abre o painel; a caixa só seleciona; a person-tag só filtra", async () => {
+    const aoAbrir = vi.fn();
+    const aoFiltrar = vi.fn();
+    render(<MontarSelecao aoAbrir={aoAbrir} aoFiltrar={aoFiltrar} />);
+    const u = userEvent.setup();
+    const [a] = corpo();
+    await u.click(within(a).getAllByRole("cell")[3]);
+    expect(aoAbrir).toHaveBeenLastCalledWith("a");
+
+    aoAbrir.mockClear();
+    const caixa = within(a).getByRole("checkbox", { name: "Selecionar MSC CRUZEIROS" });
+    await u.click(caixa);
+    expect((caixa as HTMLInputElement).checked).toBe(true);
+    expect(aoAbrir).not.toHaveBeenCalled();
+    expect(a.className).toContain("bg-selection");
+    // O nome acessível da linha fica como na 2.5 (a caixa diz se está marcada).
+    expect(a.getAttribute("aria-selected")).toBeNull();
+
+    await u.click(within(a).getByRole("button", { name: "Filtrar por Casal" }));
+    expect(aoFiltrar).toHaveBeenCalledWith("r-casal");
+    expect(aoAbrir).not.toHaveBeenCalled();
+  });
+
+  it("o corpo é um botão com o nome da linha (VoiceOver); Enter abre", async () => {
+    const aoAbrir = vi.fn();
+    render(<MontarSelecao aoAbrir={aoAbrir} />);
+    const [a] = corpo();
+    const botao = within(a).getByRole("button", { name: a.getAttribute("aria-label")! });
+    expect(botao.hasAttribute("data-corpo")).toBe(true);
+    botao.focus();
+    await userEvent.setup().keyboard("{Enter}");
+    expect(aoAbrir).toHaveBeenCalledWith("a");
+  });
+
+  it("⋯ abre o menu Abrir / Excluir", async () => {
+    const aoAbrir = vi.fn();
+    const aoExcluir = vi.fn();
+    render(<MontarSelecao aoAbrir={aoAbrir} aoExcluir={aoExcluir} />);
+    const u = userEvent.setup();
+    await u.click(within(corpo()[0]).getByRole("button", { name: "Ações de MSC CRUZEIROS" }));
+    await u.click(screen.getByRole("menuitem", { name: "Excluir" }));
+    expect(aoExcluir).toHaveBeenCalledWith("a");
+    expect(aoAbrir).not.toHaveBeenCalled();
+    await u.click(within(corpo()[0]).getByRole("button", { name: "Ações de MSC CRUZEIROS" }));
+    await u.click(screen.getByRole("menuitem", { name: "Abrir" }));
+    expect(aoAbrir).toHaveBeenCalledWith("a");
+  });
+
+  it("clique direito (ou toque longo) no corpo abre o menu Abrir / Excluir sem abrir o painel", () => {
+    const aoAbrir = vi.fn();
+    render(<MontarSelecao aoAbrir={aoAbrir} />);
+    fireEvent.contextMenu(within(corpo()[0]).getAllByRole("cell")[3]);
+    expect(screen.getByRole("menuitem", { name: "Abrir" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Excluir" })).toBeTruthy();
+    expect(aoAbrir).not.toHaveBeenCalled();
+  });
+
+  it("caixa do cabeçalho: Selecionar todos, parcial e desmarcar", async () => {
+    render(<MontarSelecao />);
+    const u = userEvent.setup();
+    const todos = screen.getByRole("checkbox", { name: "Selecionar todos" }) as HTMLInputElement;
+    await u.click(within(corpo()[0]).getByRole("checkbox"));
+    expect(todos.indeterminate).toBe(true);
+    expect(todos.checked).toBe(false);
+    await u.click(todos);
+    expect(todos.checked).toBe(true);
+    expect(todos.indeterminate).toBe(false);
+    expect(corpo().every((l) => (within(l).getByRole("checkbox") as HTMLInputElement).checked)).toBe(true);
+    await u.click(todos);
+    expect(corpo().some((l) => (within(l).getByRole("checkbox") as HTMLInputElement).checked)).toBe(false);
+  });
+
+  it("linha aberta: borda accent-line à esquerda, sem o fundo de seleção", () => {
+    render(<MontarSelecao abertoId="a" />);
+    const [a, b] = corpo();
+    expect(a.getAttribute("data-aberta")).toBe("true");
+    expect(within(a).getAllByRole("cell")[0].className).toContain("--color-accent-line");
+    expect(a.className).not.toContain("bg-selection");
+    expect(b.getAttribute("data-aberta")).toBeNull();
+  });
+
+  it("linha fixa (aberta, fora do filtro) aparece, mas fica fora do total", () => {
+    const fixa = lanc("x", { ordem_fatura: 9, nome: "FORA DO FILTRO", valor_centavos: 99900 });
+    render(<MontarSelecao linhas={LINHAS} linhaFixa={fixa} abertoId="x" />);
+    expect(corpo().map((l) => celulas(l)[1])).toContain("FORA DO FILTRO");
+    const [, , pe] = screen.getAllByRole("rowgroup");
+    expect(sem(within(pe).getAllByRole("cell")[2].textContent)).toBe("R$ 1.140,66");
   });
 });

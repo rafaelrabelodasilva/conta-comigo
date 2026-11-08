@@ -250,7 +250,12 @@ export type ResumoExtracao = {
 };
 
 /** O que a soma por cartão usa de um Lançamento (extraído ou gravado). */
-export type ValorNoCartao = { valorCentavos: number; finalCartao: string };
+/**
+ * Valor e final de um Lançamento na soma. Final `null` (correção à mão sem
+ * cartão, ou linha gravada sem final): entra nos totais gerais, em nenhum
+ * cartão. A importação sempre manda o final.
+ */
+export type ValorNoCartao = { valorCentavos: number; finalCartao: string | null };
 
 /** O que a soma por cartão usa da Fatura e dos cartões lidos. */
 export type TotaisLidos = { totalDespesasCentavos: number; totalCreditosCentavos: number };
@@ -289,7 +294,9 @@ export function somarConferencia(
   for (const l of lancamentos) {
     if (l.valorCentavos >= 0) {
       despesas += l.valorCentavos;
-      despesasPorCartao.set(l.finalCartao, (despesasPorCartao.get(l.finalCartao) ?? 0) + l.valorCentavos);
+      if (l.finalCartao !== null) {
+        despesasPorCartao.set(l.finalCartao, (despesasPorCartao.get(l.finalCartao) ?? 0) + l.valorCentavos);
+      }
     } else {
       creditos += -l.valorCentavos;
     }

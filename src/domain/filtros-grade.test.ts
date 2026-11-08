@@ -254,6 +254,35 @@ describe("valoresDaColuna", () => {
   });
 });
 
+describe("valoresDaColuna com o rascunho do popover (História 2.7)", () => {
+  it("um valor marcado que sumiu do Mês continua na lista, com contagem 0", () => {
+    // O único Lançamento do cartão 3967 mudou de cartão em outro aparelho.
+    const linhas = [lanc("a", { final_cartao: "5061" })];
+    const r = valoresDaColuna("cartao", linhas, FILTROS_VAZIOS, null, cadastros, ["3967"]);
+    expect(r.map((o) => [o.valor, o.contagem])).toEqual([
+      ["3967", 0],
+      ["5061", 1],
+    ]);
+    const semCartao = valoresDaColuna("cartao", linhas, FILTROS_VAZIOS, null, cadastros, [null]);
+    expect(semCartao.at(-1)).toMatchObject({ valor: null, rotulo: "Sem cartão", contagem: 0 });
+    // Arquivado que deixou de ser usado também fica.
+    const tipos = valoresDaColuna("tipo", [lanc("b")], FILTROS_VAZIOS, null, cadastros, ["t-velho"]);
+    expect(tipos.map((o) => [o.rotulo, o.contagem])).toEqual([
+      ["Casa", 0],
+      ["Viagem", 0],
+      ["Velho", 0],
+      ["Sem tipo", 1],
+    ]);
+  });
+
+  it("sem extras, a lista é a mesma da 2.6", () => {
+    const linhas = [lanc("a", { final_cartao: "5061" })];
+    expect(valoresDaColuna("cartao", linhas, FILTROS_VAZIOS, null, cadastros, [])).toEqual(
+      valoresDaColuna("cartao", linhas, FILTROS_VAZIOS, null, cadastros),
+    );
+  });
+});
+
 describe("pílula, hero e estado", () => {
   it("pílula: inativa só a coluna; ativa com os valores na ordem da lista", () => {
     const f = com({ colunas: { responsavel: ["r-rangel", "r-casal"] } });

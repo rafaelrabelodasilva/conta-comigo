@@ -92,6 +92,16 @@ export const MENSAGENS = {
   "fatura.mes_ja_importado": "A fatura deste Mês já foi importada. Nada foi gravado.",
   "fatura.mes_mudou":
     "Os lançamentos deste Mês mudaram em outro aparelho. Nada foi gravado. Tente de novo.",
+  "lancamento.nome_vazio": "Preencha o nome.",
+  "lancamento.nome_longo": "Use até 200 caracteres.",
+  "lancamento.valor_vazio": "Preencha o valor.",
+  "lancamento.valor_invalido": "Valor inválido. Use, por exemplo, 1,50.",
+  "lancamento.valor_zero": "O valor não pode ser zero.",
+  "lancamento.data_invalida": "Data inválida.",
+  "lancamento.data_da_fatura": "Um lançamento da fatura precisa de data.",
+  "lancamento.apelido_longo": "Use até 60 caracteres.",
+  "lancamento.observacao_longa": "Use até 500 caracteres.",
+  "lancamento.sem_cartao": "Escolha o cartão",
 } as const;
 
 /** Textos da janela "Importar fatura" (UX-DR20, mockup `importar.html`). */
@@ -274,6 +284,8 @@ export const COLUNAS_GRADE = {
   responsavel: "Responsável",
   lancado_por: "Lançado por",
   status: "Status",
+  /** A coluna do ⋯ (História 2.7). */
+  acoes: "Ações",
 } as const;
 
 /** Rótulos de `lancado_por` (AD-6). */
@@ -362,6 +374,86 @@ export function rotuloMaisFiltros(ativos: number): string {
 /** Nome acessível de uma caixa do popover: "Casal, 3 lançamentos". */
 export function rotuloValorFiltro(rotulo: string, contagem: number): string {
   return `${rotulo}, ${rotuloLancamentos(contagem)}`;
+}
+
+/** Textos do painel do Lançamento (História 2.7, `side-panel`, UX-DR14) e da seleção da grade. */
+export const TEXTOS_LANCAMENTO = {
+  /** "＋ Lançamento" no topo do Painel: o "＋" vai num span `aria-hidden`. */
+  botao_novo: "Lançamento",
+  /** Nome acessível do "＋ Lançamento" (contém o texto visível). */
+  rotulo_novo: "Novo lançamento",
+  titulo_novo: "Novo lançamento",
+  /** Nome acessível do painel lateral. */
+  painel: "Painel do lançamento",
+  nome: "Nome",
+  valor: "Valor",
+  data: "Data da compra",
+  apelido: "Apelido",
+  responsavel: "Responsável",
+  tipo: "Tipo",
+  status: "Status",
+  observacao: "Observação",
+  cartao: "Cartão",
+  escolha_cartao: "Escolha…",
+  corrige_fatura: "Corrige a leitura da fatura",
+  sem_tipo: "Sem tipo",
+  /** Status vazio vale "não pago" (AD-10). */
+  sem_status: "Sem status (não pago)",
+  nome_na_fatura: "Nome na fatura:",
+  nao_editavel: "· não editável",
+  salvando: "Salvando…",
+  tentando: "Não salvo, tentando de novo",
+  conferencia_ok: "Conferência: ✓",
+  incluir: "Incluir",
+  excluir: "Excluir",
+  abrir: "Abrir",
+  excluido: "Excluído",
+  excluido_em_outro_aparelho: "Este lançamento foi excluído em outro aparelho",
+  confirmar_excluir_titulo: "Excluir lançamento?",
+  confirmar_excluir: "Excluir lançamento",
+  selecionar_todos: "Selecionar todos",
+} as const;
+
+/** "Salvo às 21:14". */
+export function rotuloSalvoAs(hora: string): string {
+  return `Salvo às ${hora}`;
+}
+
+/** "Conferência: diferença de R$ 720,00". */
+export function rotuloConferenciaDiferenca(centavos: number): string {
+  return `Conferência: diferença de ${formatarDinheiro(centavos)}`;
+}
+
+/** "Este lançamento foi alterado em outro aparelho às 21:30". */
+export function rotuloAlteradoEmOutroAparelho(hora: string): string {
+  return `Este lançamento foi alterado em outro aparelho às ${hora}`;
+}
+
+/** Toast de "＋ Lançamento" que caiu em outro Mês: "Lançamento incluído em dezembro/26". */
+export function rotuloIncluidoEm(mes: string): string {
+  return `Lançamento incluído em ${formatarMesExtenso(mes)}`;
+}
+
+/** Caixa de uma linha da grade: "Selecionar MSC CRUZEIROS". */
+export function rotuloSelecionar(nome: string): string {
+  return `Selecionar ${nome}`;
+}
+
+/** Texto da confirmação de exclusão de um Lançamento; só um da Fatura (`daFatura`) sai da Conferência. */
+export function descricaoExcluirLancamento(nome: string, daFatura: boolean): string {
+  return `“${nome}” sai da grade${daFatura ? " e da Conferência" : ""}. Dá para desfazer logo depois.`;
+}
+
+/**
+ * A linha só de leitura do painel: "Parcela 05/10 · cartão final 8673 ·
+ * Lançado por Fatura" (sem Parcela ou sem cartão, a parte some).
+ */
+export function rotuloDetalhesLancamento(parcela: string, finalCartao: string | null, lancadoPor: string): string {
+  const partes: string[] = [];
+  if (parcela) partes.push(`Parcela ${parcela}`);
+  if (finalCartao) partes.push(`cartão final ${finalCartao}`);
+  partes.push(`Lançado por ${lancadoPor}`);
+  return partes.join(" · ");
 }
 
 /**

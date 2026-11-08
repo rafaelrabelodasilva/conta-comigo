@@ -1,9 +1,16 @@
 // @vitest-environment jsdom
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatarDinheiro } from "@/domain/dinheiro";
-import { TEXTOS_CONFERENCIA, TEXTOS_FILTROS, TEXTOS_IMPORTAR, TEXTOS_PAINEL, mensagem } from "@/domain/mensagens";
+import {
+  TEXTOS_CONFERENCIA,
+  TEXTOS_FILTROS,
+  TEXTOS_IMPORTAR,
+  TEXTOS_LANCAMENTO,
+  TEXTOS_PAINEL,
+  mensagem,
+} from "@/domain/mensagens";
 import type { LinhaFatura, LinhaLancamento } from "@/data/faturas-repo";
 import { ToastProvider } from "@/ui/Toast";
 import { Painel } from "./Painel";
@@ -17,6 +24,8 @@ const falso = vi.hoisted(() => ({
   status: "pronto" as string,
   /** Status só de `lancamentos` (os outros seguem `status`). */
   statusLancamentos: null as string | null,
+  /** Status de uma tabela (os outros seguem `status`). */
+  statusTabelas: {} as Record<string, string>,
   mes: null as string | null,
   ouvintes: new Set<() => void>(),
   versao: 0,
@@ -49,7 +58,7 @@ vi.mock("@/data/realtime", async () => {
             linhas: linhas.filter((l) => (l as { mes: string }).mes === falso.mes),
             mes: falso.mes,
           }
-        : { status: falso.status, linhas };
+        : { status: falso.statusTabelas[tabela] ?? falso.status, linhas };
     cache.set(tabela, { versao: falso.versao, retrato: novo });
     return novo;
   };
@@ -77,6 +86,23 @@ const repo = vi.hoisted(() => {
   };
 });
 vi.mock("@/data/faturas-repo", () => ({ repoFaturas: () => repo }));
+// O repositório de Lançamentos é falso: grava no "banco" do gerenciador
+// falso e avisa as telas, como o de verdade faz com o otimismo e a resposta.
+const repoL = vi.hoisted(() => {
+  type Linha = Record<string, unknown> & { id: string };
+  type Res = Promise<{ ok: true; linha: Linha } | { ok: false; codigo: string }>;
+  return {
+    gravar: null as ((id: string, corpo: Record<string, unknown>) => Linha) | null,
+    atualizar: vi.fn<(id: string, m: Record<string, unknown>) => Res>(),
+    incluir: vi.fn<(novo: Record<string, unknown>) => Res>(),
+    excluir: vi.fn<(id: string) => Res>(),
+    restaurar: vi.fn<(id: string) => Res>(),
+  };
+});
+vi.mock("@/data/lancamentos-repo", () => ({
+  repoLancamentos: () => repoL,
+  mudancaDaColuna: (m: { coluna: string; valor: unknown }) => ({ [m.coluna]: m.valor }),
+}));
 vi.mock("@/features/importar/ImportarFatura", () => ({
   ImportarFatura: ({ aberta, aoImportar }: { aberta: boolean; aoImportar: (mes: string) => void }) => {
     falso.importarMes = aoImportar;
@@ -202,13 +228,47 @@ function rodape() {
   return within(pe).getAllByRole("cell").map((c) => sem(c.textContent));
 }
 
+/** Muda o "banco" do gerenciador falso e avisa as telas (um evento do Realtime). */
+function mudarBanco(tabela: string, mudar: (linhas: unknown[]) => unknown[]) {
+  act(() => {
+    falso.banco = { ...falso.banco, [tabela]: mudar(falso.banco[tabela] ?? []) };
+    falso.versao++;
+    for (const o of falso.ouvintes) o();
+  });
+}
+
+let versaoGravada = 0;
+function gravarNoBanco(id: string, corpo: Record<string, unknown>) {
+  versaoGravada++;
+  let gravada: Record<string, unknown> & { id: string } = { id };
+  mudarBanco("lancamentos", (ls) =>
+    ls.map((l) => {
+      const linha = l as { id: string };
+      if (linha.id !== id) return l;
+      gravada = { ...linha, ...corpo, updated_at: `2026-11-08T00:14:00.00000${versaoGravada}+00:00` };
+      return gravada;
+    }),
+  );
+  return gravada;
+}
+
 beforeEach(() => {
+  versaoGravada = 0;
+  repoL.atualizar.mockImplementation(async (id, m) => ({ ok: true, linha: gravarNoBanco(id, m) }));
+  repoL.excluir.mockImplementation(async (id) => ({ ok: true, linha: gravarNoBanco(id, { excluido_em: "2026-11-08T00:14:00Z" }) }));
+  repoL.restaurar.mockImplementation(async (id) => ({ ok: true, linha: gravarNoBanco(id, { excluido_em: null }) }));
+  repoL.incluir.mockImplementation(async (novo) => {
+    const linha = { ...lanc(novo.mes as string), ...novo, id: "novo" };
+    if (novo.mes === falso.mes) mudarBanco("lancamentos", (ls) => [...ls, linha]);
+    return { ok: true, linha };
+  });
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-11-08T15:00:00Z"));
   vi.clearAllMocks();
   seq = 0;
   falso.mes = null;
   falso.statusLancamentos = null;
+  falso.statusTabelas = {};
   falso.congelarMes = false;
   falso.ouvintes.clear();
   definir({});
@@ -675,14 +735,15 @@ describe("Barra de filtros e busca (História 2.6)", () => {
     expect(linhasDaGrade()).toHaveLength(49);
     expect(screen.queryByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toBeNull();
     await u.click(pilula("Responsável"));
-    expect(screen.getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
+    // As caixas do popover (a grade também tem as suas, de seleção).
+    expect(within(screen.getByRole("dialog")).getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
       "Rafael, 0 lançamentos",
       "Casal, 0 lançamentos",
       "Sem responsável, 49 lançamentos",
     ]);
     await u.keyboard("{Escape}");
     await u.click(pilula("Status"));
-    expect(screen.getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
+    expect(within(screen.getByRole("dialog")).getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
       "Não pago, 0 lançamentos",
       "Pago, 0 lançamentos",
       "Sem status, 49 lançamentos",
@@ -762,5 +823,242 @@ describe("Barra de filtros e busca (História 2.6)", () => {
     await u.click(screen.getByRole("button", { name: TEXTOS_FILTROS.limpar_filtros }));
     expect(linhasDaGrade().map(nomeVisivel)).toEqual(["B", "A"]);
     expect(screen.queryByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toBeNull();
+  });
+});
+
+describe("Painel do Lançamento (História 2.7)", () => {
+  const painelLateral = () => screen.queryByRole("complementary");
+  const linhaPorNome = (nome: string) => linhasDaGrade().find((r) => nomeVisivel(r) === nome)!;
+  const corpoDa = (linha: HTMLElement) => within(linha).getAllByRole("cell")[3];
+
+  it("tocar no corpo abre o painel; outra linha troca; ✕ e Esc fecham; o conteúdo reserva 400 px", async () => {
+    definir({ faturas: [novembro], lancamentos: [lanc("2026-11"), lanc("2026-11")] });
+    const { container } = renderizar();
+    const u = userEvent.setup();
+    expect(painelLateral()).toBeNull();
+    await u.click(corpoDa(linhaPorNome("LOJA 1")));
+    expect(within(painelLateral()!).getByRole("heading", { name: "LOJA 1" })).toBeTruthy();
+    expect((container.firstElementChild as HTMLElement).className).toContain("lg:pr-painel-lateral");
+    expect(linhaPorNome("LOJA 1").getAttribute("data-aberta")).toBe("true");
+    await u.click(corpoDa(linhaPorNome("LOJA 2")));
+    expect(within(painelLateral()!).getByRole("heading", { name: "LOJA 2" })).toBeTruthy();
+    await u.click(within(painelLateral()!).getByRole("button", { name: "Fechar" }));
+    expect(painelLateral()).toBeNull();
+    expect((container.firstElementChild as HTMLElement).className).not.toContain("lg:pr-painel-lateral");
+    await u.click(corpoDa(linhaPorNome("LOJA 1")));
+    await u.keyboard("{Escape}");
+    expect(painelLateral()).toBeNull();
+  });
+
+  it("com o painel aberto, tocar na caixa de outra linha seleciona e o painel não muda", async () => {
+    definir({ faturas: [novembro], lancamentos: [lanc("2026-11"), lanc("2026-11")] });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(corpoDa(linhaPorNome("LOJA 1")));
+    await u.click(within(linhaPorNome("LOJA 2")).getByRole("checkbox", { name: "Selecionar LOJA 2" }));
+    expect(within(painelLateral()!).getByRole("heading", { name: "LOJA 1" })).toBeTruthy();
+    expect(linhaPorNome("LOJA 2").className).toContain("bg-selection");
+    expect(linhaPorNome("LOJA 1").className).not.toContain("bg-selection");
+  });
+
+  it("classificar no painel: grava, a barra do hero muda e a linha aberta fica na grade fora do filtro (opção A)", async () => {
+    definir({
+      faturas: [novembro],
+      lancamentos: [lanc("2026-11", { valor_centavos: 1000 }), lanc("2026-11", { valor_centavos: 2000 })],
+    });
+    renderizar();
+    const u = userEvent.setup();
+    // Filtra "Sem responsável" pela barra do hero.
+    await u.click(within(screen.getByRole("group", { name: TEXTOS_PAINEL.distribuicao })).getAllByRole("button")[0]);
+    expect(linhasDaGrade()).toHaveLength(2);
+    await u.click(corpoDa(linhaPorNome("LOJA 1")));
+    await u.selectOptions(within(painelLateral()!).getByLabelText("Responsável"), "r-casal");
+    expect(repoL.atualizar).toHaveBeenCalledWith("l1", { responsavel_id: "r-casal" });
+    // A barra do hero já mostra Casal.
+    const barra = screen.getByRole("group", { name: TEXTOS_PAINEL.distribuicao });
+    expect(within(barra).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toContain("Filtrar por Casal");
+    // A linha aberta continua na grade; o total e o anúncio seguem o filtro.
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["LOJA 1", "LOJA 2"]);
+    expect(rodape()).toContain(sem(formatarDinheiro(2000)));
+    expect(screen.getByText("1 lançamento")).toBeTruthy();
+    // Fechar o painel tira a linha.
+    await u.click(within(painelLateral()!).getByRole("button", { name: "Fechar" }));
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["LOJA 2"]);
+  });
+
+  it("Excluir pelo ⋯: confirma, grava, o painel fecha e 'Excluído · Desfazer' restaura o mesmo id", async () => {
+    definir({ faturas: [novembro], lancamentos: [lanc("2026-11"), lanc("2026-11")] });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(corpoDa(linhaPorNome("LOJA 1")));
+    await u.click(within(linhaPorNome("LOJA 1")).getByRole("checkbox"));
+    await u.click(within(linhaPorNome("LOJA 1")).getByRole("button", { name: "Ações de LOJA 1" }));
+    await u.click(screen.getByRole("menuitem", { name: "Excluir" }));
+    const confirmar = screen.getByRole("alertdialog", { name: "Excluir lançamento?" });
+    await u.click(within(confirmar).getByRole("button", { name: "Excluir lançamento" }));
+    expect(repoL.excluir).toHaveBeenCalledWith("l1");
+    expect(painelLateral()).toBeNull();
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["LOJA 2"]);
+    expect(screen.getByText("Excluído")).toBeTruthy();
+    await u.click(screen.getByRole("button", { name: "Desfazer" }));
+    expect(repoL.restaurar).toHaveBeenCalledWith("l1");
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["LOJA 1", "LOJA 2"]);
+    // Saiu da seleção.
+    expect((within(linhaPorNome("LOJA 1")).getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("Excluir pelo rodapé do painel; falha mostra salvar.falhou", async () => {
+    repoL.excluir.mockImplementation(async () => ({ ok: false, codigo: "salvar.falhou" }));
+    definir({ faturas: [novembro], lancamentos: [lanc("2026-11")] });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(corpoDa(linhaPorNome("LOJA 1")));
+    await u.click(within(painelLateral()!).getByRole("button", { name: "Excluir" }));
+    await u.click(screen.getByRole("button", { name: "Excluir lançamento" }));
+    expect(screen.getByText(mensagem("salvar.falhou"))).toBeTruthy();
+    expect(linhasDaGrade()).toHaveLength(1);
+  });
+
+  it("excluído em outro aparelho: o painel fecha com o aviso", async () => {
+    definir({ faturas: [novembro], lancamentos: [lanc("2026-11")] });
+    renderizar();
+    await userEvent.setup().click(corpoDa(linhaPorNome("LOJA 1")));
+    mudarBanco("lancamentos", (ls) =>
+      ls.map((l) => ({ ...(l as object), excluido_em: "2026-11-08T00:30:00+00:00", updated_at: "2026-11-08T00:30:00+00:00" })),
+    );
+    expect(painelLateral()).toBeNull();
+    expect(screen.getByText(TEXTOS_LANCAMENTO.excluido_em_outro_aparelho)).toBeTruthy();
+  });
+
+  it("＋ Lançamento ao lado de Importar fatura: incluído no Mês aberto abre o painel dele", async () => {
+    definir({ faturas: [novembro], fatura_cartoes: [cartao(novembro)], lancamentos: [lanc("2026-11")] });
+    renderizar();
+    const u = userEvent.setup();
+    const novo = screen.getByRole("button", { name: TEXTOS_LANCAMENTO.rotulo_novo });
+    expect(novo.nextElementSibling?.textContent).toContain(TEXTOS_IMPORTAR.botao);
+    await u.click(novo);
+    const painel = painelLateral()!;
+    expect(within(painel).getByRole("heading", { name: "Novo lançamento" })).toBeTruthy();
+    await u.type(within(painel).getByLabelText("Nome"), "PADARIA");
+    await u.type(within(painel).getByLabelText("Valor"), "12,50");
+    await u.click(within(painel).getByRole("checkbox", { name: "Corrige a leitura da fatura" }));
+    await u.selectOptions(within(painel).getByLabelText("Cartão"), "5061");
+    await u.click(within(painel).getByRole("button", { name: "Incluir" }));
+    expect(repoL.incluir).toHaveBeenCalledWith(
+      expect.objectContaining({ nome: "PADARIA", mes: "2026-11", fatura_id: "f11", final_cartao: "5061", lancado_por: "manual" }),
+    );
+    expect(within(painelLateral()!).getByRole("heading", { name: "PADARIA" })).toBeTruthy();
+    expect(linhasDaGrade().map(nomeVisivel)).toContain("PADARIA");
+  });
+
+  it("＋ Lançamento com data de outro Mês: toast 'Lançamento incluído em dezembro/26'", async () => {
+    definir({ faturas: [novembro], lancamentos: [] });
+    falso.banco.config_ciclo = [
+      { id: "c1", dia_fechamento: 29, dia_vencimento: 6, vigente_desde: "2026-01", created_at: "2026-01-01T00:00:00Z" },
+    ];
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: TEXTOS_LANCAMENTO.rotulo_novo }));
+    const painel = painelLateral()!;
+    await u.type(within(painel).getByLabelText("Nome"), "MERCADO");
+    await u.type(within(painel).getByLabelText("Valor"), "50");
+    fireEvent.change(within(painel).getByLabelText("Data da compra"), { target: { value: "2026-11-20" } });
+    await u.click(within(painel).getByRole("button", { name: "Incluir" }));
+    expect(repoL.incluir).toHaveBeenCalledWith(expect.objectContaining({ mes: "2026-12", fatura_id: null, final_cartao: null }));
+    expect(painelLateral()).toBeNull();
+    expect(screen.getByText("Lançamento incluído em dezembro/26")).toBeTruthy();
+  });
+
+  it("trocar de Mês limpa a seleção e fecha o painel", async () => {
+    definir({ faturas: [outubro, novembro], lancamentos: [lanc("2026-11"), lanc("2026-10")] });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhaPorNome("LOJA 1")).getByRole("checkbox"));
+    await u.click(corpoDa(linhaPorNome("LOJA 1")));
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
+    expect(painelLateral()).toBeNull();
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.proximo_mes }));
+    expect((within(linhaPorNome("LOJA 1")).getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("＋ Lançamento desligado até config_ciclo e configuracoes carregarem", () => {
+    definir({ faturas: [novembro], lancamentos: [] });
+    falso.statusTabelas = { config_ciclo: "carregando" };
+    const { unmount } = renderizar();
+    expect((screen.getByRole("button", { name: TEXTOS_LANCAMENTO.rotulo_novo }) as HTMLButtonElement).disabled).toBe(true);
+    unmount();
+    falso.statusTabelas = { configuracoes: "carregando" };
+    falso.versao++;
+    const { unmount: fechar } = renderizar();
+    expect((screen.getByRole("button", { name: TEXTOS_LANCAMENTO.rotulo_novo }) as HTMLButtonElement).disabled).toBe(true);
+    fechar();
+    falso.statusTabelas = {};
+    falso.versao++;
+    renderizar();
+    expect((screen.getByRole("button", { name: TEXTOS_LANCAMENTO.rotulo_novo }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("＋ Lançamento: o Status começa no status_padrao_id de configuracoes", async () => {
+    definir({ faturas: [novembro], lancamentos: [] });
+    falso.banco.configuracoes = [{ id: "cfg", status_padrao_id: "s-pago" }];
+    renderizar();
+    await userEvent.setup().click(screen.getByRole("button", { name: TEXTOS_LANCAMENTO.rotulo_novo }));
+    expect((within(painelLateral()!).getByLabelText("Status") as HTMLSelectElement).value).toBe("s-pago");
+  });
+
+  it("com filtro, Selecionar todos marca só a grade: ao limpar o filtro, as de fora ficam desmarcadas", async () => {
+    definir({
+      faturas: [novembro],
+      lancamentos: [lanc("2026-11", { responsavel_id: "r-casal" }), lanc("2026-11"), lanc("2026-11", { responsavel_id: "r-casal" })],
+    });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhaPorNome("LOJA 1")).getByRole("button", { name: "Filtrar por Casal" }));
+    expect(linhasDaGrade()).toHaveLength(2);
+    await u.click(screen.getByRole("checkbox", { name: "Selecionar todos" }));
+    await u.click(screen.getByRole("button", { name: TEXTOS_FILTROS.limpar_filtros }));
+    const marcada = (nome: string) => (within(linhaPorNome(nome)).getByRole("checkbox") as HTMLInputElement).checked;
+    expect([marcada("LOJA 1"), marcada("LOJA 2"), marcada("LOJA 3")]).toEqual([true, false, true]);
+    expect((screen.getByRole("checkbox", { name: "Selecionar todos" }) as HTMLInputElement).indeterminate).toBe(true);
+  });
+
+  it("Esc na confirmação de exclusão fecha só a confirmação; o painel fica", async () => {
+    definir({ faturas: [novembro], lancamentos: [lanc("2026-11")] });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(corpoDa(linhaPorNome("LOJA 1")));
+    await u.click(within(painelLateral()!).getByRole("button", { name: "Excluir" }));
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+    await u.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(painelLateral()).toBeTruthy();
+    expect(repoL.excluir).not.toHaveBeenCalled();
+  });
+
+  it("Desfazer que falha mostra a mensagem do código", async () => {
+    repoL.restaurar.mockImplementation(async () => ({ ok: false, codigo: "conexao.gravar_sem_conexao" }));
+    definir({ faturas: [novembro], lancamentos: [lanc("2026-11"), lanc("2026-11")] });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhaPorNome("LOJA 1")).getByRole("button", { name: "Ações de LOJA 1" }));
+    await u.click(screen.getByRole("menuitem", { name: "Excluir" }));
+    await u.click(screen.getByRole("button", { name: "Excluir lançamento" }));
+    await u.click(screen.getByRole("button", { name: "Desfazer" }));
+    expect(repoL.restaurar).toHaveBeenCalledWith("l1");
+    expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["LOJA 2"]);
+  });
+
+  it("sem nenhuma edição: hero, Conferência, faixa e grade como na 2.6", async () => {
+    const out = faturaQueBate(outubro, 49);
+    definir({ faturas: [outubro], fatura_cartoes: [cartao(outubro)], lancamentos: out });
+    renderizar();
+    await userEvent.setup().click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
+    expect(linhasDaGrade()).toHaveLength(49);
+    expect(screen.getByText(TEXTOS_CONFERENCIA.conferido)).toBeTruthy();
+    expect(screen.queryByRole("region", { name: TEXTOS_CONFERENCIA.faixa })).toBeNull();
+    expect(rodape()).toContain("R$ 7.687,77");
+    expect(painelLateral()).toBeNull();
+    expect(repoL.atualizar).not.toHaveBeenCalled();
   });
 });

@@ -188,6 +188,23 @@ describe("conferir: matriz da História 2.5", () => {
     expect(precisaVerificar({ ...bellaPietra(linhas), fatura_id: null }, d)).toBe(false);
   });
 
+  it("final nulo: entra nos totais gerais, em nenhum cartão; nunca marcado por cartão (História 2.7)", () => {
+    const { fatura, cartoes, linhas } = outubroGravado();
+    const semFinal = { ...linhas[0], id: "x-nulo", valor_centavos: 500, final_cartao: null, ordem_fatura: null };
+    const c = conferir(fatura, cartoes, [...linhas, semFinal]);
+    expect(c.despesasCentavos).toBe(ESPERADO_OUTUBRO_2026.despesasCentavos + 500);
+    expect(c.diferencaDespesasCentavos).toBe(500);
+    expect(c.porCartao.map((p) => p.final)).toEqual(["3967", "5061", "8175", "8673", "9277"]);
+    expect(c.porCartao.every((p) => p.diferencaCentavos === 0)).toBe(true);
+    expect(c.cartoesComDiferenca).toEqual([]);
+    expect(precisaVerificar(semFinal, c)).toBe(false);
+    // Com um cartão com diferença, a linha sem final continua sem a marca.
+    bellaPietra(linhas).valor_centavos = 8000;
+    const d = conferir(fatura, cartoes, [...linhas, semFinal]);
+    expect(d.cartoesComDiferenca).toEqual(["8673"]);
+    expect(precisaVerificar(semFinal, d)).toBe(false);
+  });
+
   it("cartões de outra Fatura não entram", () => {
     const { fatura, cartoes, linhas } = outubroGravado();
     const c = conferir(fatura, [...cartoes, { fatura_id: "f11", final: "8673", total_centavos: 1 }], linhas);

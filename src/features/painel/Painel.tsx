@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { conferir } from "@/domain/conferencia";
 import { hojeEmSaoPaulo } from "@/domain/datas";
+import { alternarSelecao, alternarTodos, selecaoValida } from "@/domain/lancamento";
 import {
   COLUNAS_DA_BARRA,
   FILTROS_VAZIOS,
@@ -19,8 +20,11 @@ import {
   TEXTOS_CONFERENCIA,
   TEXTOS_FILTROS,
   TEXTOS_IMPORTAR,
+  TEXTOS_LANCAMENTO,
   TEXTOS_PAINEL as T,
+  descricaoExcluirLancamento,
   mensagem,
+  rotuloIncluidoEm,
   rotuloLancamentos,
 } from "@/domain/mensagens";
 import {
@@ -30,12 +34,16 @@ import {
   ehOrdemPadrao,
   mesAtual,
   mesesDaLista,
+  nomeExibido,
   type Ordem,
 } from "@/domain/painel";
 import { repoFaturas } from "@/data/faturas-repo";
+import { repoLancamentos, type LinhaLancamento } from "@/data/lancamentos-repo";
 import { gerenciador, useLinhas } from "@/data/realtime";
 import { ImportarFatura } from "@/features/importar/ImportarFatura";
 import { Botao } from "@/ui/Botao";
+import { cn } from "@/ui/cn";
+import { ConfirmarAcao } from "@/ui/ConfirmarAcao";
 import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
 import { Esqueleto } from "@/ui/Esqueleto";
 import { Tela } from "@/ui/Tela";
@@ -44,6 +52,7 @@ import { BarraFiltros } from "./BarraFiltros";
 import { FaixaConferencia } from "./FaixaConferencia";
 import { FaturaDoMes } from "./FaturaDoMes";
 import { GradeLancamentos, type CadastrosGrade } from "./GradeLancamentos";
+import { PainelLancamento } from "./PainelLancamento";
 import { SeletorMes } from "./SeletorMes";
 
 // Painel do Mês (História 2.4, FR-21, FR-22): um Mês só, o Mês aberto, que
@@ -66,8 +75,19 @@ import { SeletorMes } from "./SeletorMes";
 // gravado. Trocar de Mês mantém busca, filtros, "Verificar" e ordem. A barra
 // do hero e a `person-tag` escrevem na coluna Responsável. Um `role=status`
 // oculto anuncia "N lançamentos" quando os filtros mudam a grade.
+//
+// Painel do Lançamento (História 2.7, FR-7, FR-46, UX-DR14): tocar no corpo
+// de uma linha abre o `side-panel` pela direita, sem véu; outra linha troca
+// o Lançamento; ✕ ou Esc fecham. Em `lg`+ o conteúdo reserva os 400 px do
+// painel. "＋ Lançamento" abre o painel vazio. "Excluir" (rodapé ou ⋯) pede
+// confirmação e mostra "Excluído · Desfazer". A linha aberta fica na grade
+// enquanto o painel estiver nela, mesmo que uma edição a tire do filtro
+// (opção A); o total, as contagens e o anúncio seguem o filtro. A seleção
+// é só estado da tela: trocar de Mês a limpa e um excluído sai dela.
 
 const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status"] as const;
+
+type EstadoPainel = { modo: "editar"; id: string } | { modo: "novo" } | null;
 
 function EsqueletoPainel() {
   return (
@@ -93,15 +113,36 @@ function BotaoImportar({ aoImportar }: { aoImportar: () => void }) {
   );
 }
 
+function BotaoNovoLancamento({ aoIncluir, pronto }: { aoIncluir: () => void; pronto: boolean }) {
+  return (
+    <Botao aria-label={TEXTOS_LANCAMENTO.rotulo_novo} disabled={!pronto} onClick={aoIncluir}>
+      <span aria-hidden>＋</span>
+      {TEXTOS_LANCAMENTO.botao_novo}
+    </Botao>
+  );
+}
+
+/** Esc fecha o painel, menos quando uma janela, um menu ou um popover está por cima. */
+function sobreposicaoAberta(): boolean {
+  return document.querySelector('[role="alertdialog"], [role="dialog"], [role="menu"]') !== null;
+}
+
 export function Painel({ titulo }: { titulo: string }) {
   // O relógio fica fora do núcleo: "hoje" é lido aqui, uma vez.
   const [atual] = useState(() => mesAtual(hojeEmSaoPaulo(new Date())));
   const [mesAberto, setMesAberto] = useState(atual);
+  const mesAbertoRef = useRef(mesAberto);
+  useEffect(() => {
+    mesAbertoRef.current = mesAberto;
+  }, [mesAberto]);
   const [filtros, setFiltros] = useState<FiltrosGrade>(FILTROS_VAZIOS);
   const [ordem, setOrdem] = useState<Ordem>(ORDEM_PADRAO);
   const [importando, setImportando] = useState(false);
   // O anúncio de "N lançamentos" só depois que os filtros mudam a grade.
   const [anunciar, setAnunciar] = useState(false);
+  const [painel, setPainel] = useState<EstadoPainel>(null);
+  const [selecao, setSelecao] = useState<ReadonlySet<string>>(() => new Set());
+  const [excluindo, setExcluindo] = useState<string | null>(null);
   const toast = useToast();
 
   const faturas = useLinhas("faturas");
@@ -110,6 +151,8 @@ export function Painel({ titulo }: { titulo: string }) {
   const responsaveis = useLinhas("responsaveis");
   const tipos = useLinhas("tipos");
   const status = useLinhas("status");
+  const ciclo = useLinhas("config_ciclo");
+  const configuracoes = useLinhas("configuracoes");
 
   // A memória de `lancamentos` acompanha o Mês aberto.
   useEffect(() => {
@@ -154,7 +197,74 @@ export function Painel({ titulo }: { titulo: string }) {
   const mudarMes = (mes: string) => {
     setMesAberto(mes);
     setAnunciar(false);
+    // A seleção e o painel são do Mês.
+    setSelecao(new Set());
+    setPainel(null);
   };
+
+  // Esc fecha o painel (a janela de confirmação, os menus e os popovers fecham antes).
+  const painelAberto = painel !== null;
+  useEffect(() => {
+    if (!painelAberto) return;
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || sobreposicaoAberta()) return;
+      setPainel(null);
+    };
+    document.addEventListener("keydown", aoTeclar);
+    return () => document.removeEventListener("keydown", aoTeclar);
+  }, [painelAberto]);
+
+  // O Lançamento aberto (com os excluídos: a memória guarda o Mês inteiro).
+  const aberta =
+    painel?.modo === "editar" ? lancamentos.linhas.find((l) => l.id === painel.id && l.mes === mesAberto) : undefined;
+  // Excluído (ou apagado) em outro aparelho: o painel fecha. A exclusão feita
+  // aqui fecha o painel antes de gravar, então nunca cai aqui.
+  const excluidaFora =
+    painel?.modo === "editar" && !carregando && !erro && (aberta === undefined || aberta.excluido_em !== null);
+  const [excluidasFora, setExcluidasFora] = useState(0);
+  if (excluidaFora) {
+    // Ajuste durante a renderização: fecha já e conta o aviso para o efeito.
+    setPainel(null);
+    setExcluidasFora((n) => n + 1);
+  }
+  useEffect(() => {
+    if (excluidasFora > 0) toast.mostrar({ texto: TEXTOS_LANCAMENTO.excluido_em_outro_aparelho });
+  }, [excluidasFora, toast]);
+
+  function aoIncluido(linha: LinhaLancamento) {
+    // O Mês aberto de agora (a gravação pode ter terminado depois de trocar de Mês).
+    if (linha.mes === mesAbertoRef.current) {
+      setPainel({ modo: "editar", id: linha.id });
+      return;
+    }
+    setPainel(null);
+    toast.mostrar({ texto: rotuloIncluidoEm(linha.mes) });
+  }
+
+  async function excluir(id: string) {
+    // Fecha antes de gravar: a linha sai do painel e da seleção.
+    setPainel((p) => (p?.modo === "editar" && p.id === id ? null : p));
+    setSelecao((s) => {
+      const nova = new Set(s);
+      nova.delete(id);
+      return nova;
+    });
+    const r = await repoLancamentos().excluir(id);
+    if (!r.ok) {
+      toast.mostrar({ texto: mensagem(r.codigo) });
+      return;
+    }
+    toast.mostrar({
+      texto: TEXTOS_LANCAMENTO.excluido,
+      aoDesfazer: () => {
+        void repoLancamentos()
+          .restaurar(id)
+          .then((d) => {
+            if (!d.ok) toast.mostrar({ texto: mensagem(d.codigo) });
+          });
+      },
+    });
+  }
 
   async function dispensar(faturaId: string) {
     const r = await repoFaturas().dispensarAlerta(faturaId);
@@ -175,6 +285,7 @@ export function Painel({ titulo }: { titulo: string }) {
   }
 
   let conteudo;
+  let painelLateral = null;
   if (erro) {
     conteudo = (
       <ErroAoCarregar
@@ -193,16 +304,49 @@ export function Painel({ titulo }: { titulo: string }) {
     const verificando = filtros.verificar && conferencia !== null;
     const efetivos = { ...filtros, verificar: verificando };
     const naGrade = aplicarFiltros(doMes, filtros, conferencia);
-    const opcoes = Object.fromEntries(
-      COLUNAS_DA_BARRA.map((c) => [
-        c,
-        valoresDaColuna(c, doMes, filtros, conferencia, {
-          responsaveis: responsaveis.linhas,
-          tipos: tipos.linhas,
-          status: status.linhas,
-        }),
-      ]),
-    ) as Record<ColunaFiltro, OpcaoFiltro[]>;
+    const cadastrosFiltro = { responsaveis: responsaveis.linhas, tipos: tipos.linhas, status: status.linhas };
+    const listar = (c: ColunaFiltro, extras: readonly (string | null)[] = []) =>
+      valoresDaColuna(c, doMes, filtros, conferencia, cadastrosFiltro, extras);
+    const opcoes = Object.fromEntries(COLUNAS_DA_BARRA.map((c) => [c, listar(c)])) as Record<ColunaFiltro, OpcaoFiltro[]>;
+    // A linha aberta que uma edição tirou do filtro continua na grade (opção A).
+    const linhaFixa = aberta && aberta.excluido_em === null ? aberta : null;
+    const idsDoMes = doMes.map((l) => l.id);
+    const selecionados = selecaoValida(selecao, idsDoMes);
+    const idsNaGrade = naGrade.map((l) => l.id);
+    const cartoesDaFatura = fatura
+      ? cartoes.linhas
+          .filter((c) => c.fatura_id === fatura.id)
+          .map((c) => c.final)
+          .sort()
+      : [];
+    const cadastrosPainel = { responsaveis: responsaveis.linhas, tipos: tipos.linhas, status: status.linhas };
+    if (painel?.modo === "novo") {
+      painelLateral = (
+        <PainelLancamento
+          modo="novo"
+          mesAberto={mesAberto}
+          fatura={fatura}
+          cartoes={cartoesDaFatura}
+          configsCiclo={ciclo.linhas}
+          statusPadraoId={configuracoes.linhas[0]?.status_padrao_id ?? null}
+          cadastros={cadastrosPainel}
+          aoFechar={() => setPainel(null)}
+          aoIncluido={aoIncluido}
+        />
+      );
+    } else if (linhaFixa) {
+      painelLateral = (
+        <PainelLancamento
+          key={linhaFixa.id}
+          modo="editar"
+          linha={linhaFixa}
+          conferencia={conferencia}
+          cadastros={cadastrosPainel}
+          aoFechar={() => setPainel(null)}
+          aoExcluir={setExcluindo}
+        />
+      );
+    }
     const mostrarFaixa = fatura !== null && conferencia !== null && !conferencia.conferido && fatura.alerta_dispensado_em === null;
     const motivo = motivoDoVazio(efetivos, doMes.length > 0);
     conteudo = (
@@ -233,6 +377,7 @@ export function Painel({ titulo }: { titulo: string }) {
           filtros={filtros}
           aoMudar={mudarFiltros}
           opcoes={opcoes}
+          listar={listar}
           comVerificar={conferencia !== null}
           mostrarLimpar={temFiltro(efetivos) || !ehOrdemPadrao(ordem)}
           aoLimparTudo={limparTudo}
@@ -259,28 +404,59 @@ export function Painel({ titulo }: { titulo: string }) {
                   : T.sem_lancamentos
           }
           aoLimparFiltros={motivo === null ? undefined : limparTudo}
+          selecao={selecionados}
+          aoSelecionar={(id) => setSelecao((s) => alternarSelecao(selecaoValida(s, idsDoMes), id))}
+          aoSelecionarTodos={() => setSelecao((s) => alternarTodos(selecaoValida(s, idsDoMes), idsNaGrade))}
+          abertoId={linhaFixa?.id ?? null}
+          aoAbrir={(id) => setPainel({ modo: "editar", id })}
+          aoExcluir={setExcluindo}
+          linhaFixa={linhaFixa}
         />
       </div>
     );
   }
 
+  const aExcluir = excluindo === null ? undefined : lancamentos.linhas.find((l) => l.id === excluindo);
+
   return (
-    <Tela
-      titulo={titulo}
-      acoes={
-        <>
-          <SeletorMes
-            mes={mesAberto}
-            meses={meses}
-            mesesComFatura={faturas.status === "pronto" ? mesesComFatura : new Set()}
-            aoMudar={mudarMes}
-          />
-          <BotaoImportar aoImportar={abrirImportar} />
-        </>
-      }
-    >
-      {conteudo}
-      <ImportarFatura aberta={importando} aoMudar={setImportando} aoImportar={mudarMes} />
-    </Tela>
+    // iPad deitado e PC: o conteúdo reserva a largura do painel lateral.
+    <div className={cn(painelLateral !== null && "lg:pr-painel-lateral")}>
+      <Tela
+        titulo={titulo}
+        acoes={
+          <>
+            <SeletorMes
+              mes={mesAberto}
+              meses={meses}
+              mesesComFatura={faturas.status === "pronto" ? mesesComFatura : new Set()}
+              aoMudar={mudarMes}
+            />
+            {/* Só com o Ciclo (Mês pela data) e o Status padrão carregados. */}
+            <BotaoNovoLancamento
+              aoIncluir={() => setPainel({ modo: "novo" })}
+              pronto={ciclo.status === "pronto" && configuracoes.status === "pronto"}
+            />
+            <BotaoImportar aoImportar={abrirImportar} />
+          </>
+        }
+      >
+        {conteudo}
+        {painelLateral}
+        <ConfirmarAcao
+          aberta={aExcluir !== undefined}
+          aoMudar={(abrir) => {
+            if (!abrir) setExcluindo(null);
+          }}
+          titulo={TEXTOS_LANCAMENTO.confirmar_excluir_titulo}
+          descricao={aExcluir ? descricaoExcluirLancamento(nomeExibido(aExcluir), aExcluir.fatura_id !== null) : ""}
+          rotuloConfirmar={TEXTOS_LANCAMENTO.confirmar_excluir}
+          aoConfirmar={() => {
+            if (excluindo !== null) void excluir(excluindo);
+            setExcluindo(null);
+          }}
+        />
+        <ImportarFatura aberta={importando} aoMudar={setImportando} aoImportar={mudarMes} />
+      </Tela>
+    </div>
   );
 }

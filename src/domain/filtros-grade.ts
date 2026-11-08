@@ -184,7 +184,10 @@ const VALORES_LANCADO_POR: readonly LancadoPor[] = ["fatura", "sistema", "manual
 
 /**
  * A lista do popover de uma coluna, com a contagem de cada valor. `linhas`
- * são os Lançamentos do Mês aberto (sem excluídos).
+ * são os Lançamentos do Mês aberto (sem excluídos). `extras` são os valores
+ * marcados no rascunho do popover aberto (História 2.7): como os já
+ * escolhidos, continuam na lista mesmo que tenham sumido do Mês (uma
+ * mudança em tempo real), com contagem 0.
  */
 export function valoresDaColuna(
   coluna: ColunaFiltro,
@@ -192,8 +195,9 @@ export function valoresDaColuna(
   filtros: FiltrosGrade,
   conferencia: Conferencia | null,
   cadastros: CadastrosFiltro,
+  extras: readonly ValorFiltro[] = [],
 ): OpcaoFiltro[] {
-  const escolhidos = filtros.colunas[coluna];
+  const escolhidos = [...new Set([...filtros.colunas[coluna], ...extras])];
   const usados = new Set(linhas.flatMap((l) => valoresDoLancamento(l, coluna)));
   let lista: { valor: ValorFiltro; rotulo: string; curto?: string }[];
   switch (coluna) {

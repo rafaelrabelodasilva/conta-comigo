@@ -1,5 +1,7 @@
 // Repositório da Fatura (Histórias 2.3 e 2.5, AD-3/4/7). Única porta de
-// gravação de `faturas`, `fatura_cartoes` e `lancamentos` nestas histórias.
+// gravação de `faturas` e `fatura_cartoes`, e da importação dos
+// `lancamentos` (a edição, a inclusão e a exclusão de um Lançamento são do
+// `lancamentos-repo.ts`, História 2.7).
 //
 // - Importação: chama a RPC atômica `importar_fatura` com o que o núcleo
 //   preparou (`prepararImportacao`) e o `updated_at` mais novo dos

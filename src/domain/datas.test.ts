@@ -7,6 +7,7 @@ import {
   formatarMesExtenso,
   formatarNomeDoMes,
   hojeEmSaoPaulo,
+  instanteEmMicros,
   lerMes,
   partesMes,
 } from "./datas";
@@ -64,6 +65,12 @@ describe("formatarHora", () => {
     expect(formatarHora("2026-11-06T15:30:00-03:00")).toBe("15:30");
   });
 
+  it("aceita o formato do Realtime e do PostgREST com microssegundos (História 2.7)", () => {
+    expect(formatarHora("2026-11-08 00:30:00.123456+00")).toBe("21:30");
+    expect(formatarHora("2026-11-08T00:30:00.123456+00:00")).toBe("21:30");
+    expect(formatarHora("2026-11-08 00:30:00+0000")).toBe("21:30");
+  });
+
   it("recusa instante inválido", () => {
     expect(() => formatarHora("não é data")).toThrow();
   });
@@ -84,5 +91,21 @@ describe("hojeEmSaoPaulo", () => {
 
   it("recusa instante inválido", () => {
     expect(() => hojeEmSaoPaulo(new Date(Number.NaN))).toThrow();
+  });
+});
+
+describe("instanteEmMicros", () => {
+  it("o mesmo instante nos formatos do PostgREST e do Realtime", () => {
+    const a = instanteEmMicros("2026-11-02T12:00:00.123456+00:00");
+    expect(instanteEmMicros("2026-11-02 12:00:00.123456+00")).toBe(a);
+    expect(instanteEmMicros("2026-11-02T09:00:00.123456-03:00")).toBe(a);
+    expect(instanteEmMicros("2026-11-02T12:00:00.123457Z")).toBe(a + 1);
+    // O PostgREST corta os zeros do fim.
+    expect(instanteEmMicros("2026-11-02T12:00:00.12+00:00")).toBe(instanteEmMicros("2026-11-02T12:00:00.120000+00:00"));
+  });
+
+  it("formato desconhecido ou sem fuso: NaN", () => {
+    expect(instanteEmMicros("ontem")).toBeNaN();
+    expect(instanteEmMicros("2026-11-02T12:00:00")).toBeNaN();
   });
 });
