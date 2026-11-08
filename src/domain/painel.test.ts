@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest";
 import { ESPACO } from "./dinheiro";
 import {
   ORDEM_PADRAO,
-  alternarFiltroResponsavel,
   alternarOrdem,
   distribuicaoPorResponsavel,
-  filtrarPorResponsavel,
   mesAtual,
   mesesDaLista,
   ehOrdemPadrao,
@@ -139,22 +137,7 @@ describe("ordenarLancamentos", () => {
   });
 });
 
-describe("filtro por Responsável", () => {
-  const linhas = [lanc("a", { responsavel_id: "r-rafael" }), lanc("b"), lanc("c", { responsavel_id: "r-casal" })];
-
-  it("sem filtro, todas; null filtra as sem Responsável", () => {
-    expect(ids(filtrarPorResponsavel(linhas, undefined))).toEqual(["a", "b", "c"]);
-    expect(ids(filtrarPorResponsavel(linhas, "r-rafael"))).toEqual(["a"]);
-    expect(ids(filtrarPorResponsavel(linhas, null))).toEqual(["b"]);
-  });
-
-  it("tocar de novo no mesmo limpa; em outro, troca", () => {
-    expect(alternarFiltroResponsavel(undefined, "r-rafael")).toBe("r-rafael");
-    expect(alternarFiltroResponsavel("r-rafael", "r-rafael")).toBeUndefined();
-    expect(alternarFiltroResponsavel("r-rafael", null)).toBeNull();
-    expect(alternarFiltroResponsavel(null, null)).toBeUndefined();
-  });
-
+describe("soma dos valores", () => {
   it("a soma dos valores desconta os créditos", () => {
     expect(somarValores([lanc("a", { valor_centavos: 114074 }), lanc("b", { valor_centavos: -8 })])).toBe(114066);
     expect(somarValores([])).toBe(0);

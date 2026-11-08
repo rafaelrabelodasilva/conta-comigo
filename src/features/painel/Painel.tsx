@@ -1,25 +1,35 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { conferir, linhasParaVerificar } from "@/domain/conferencia";
+import { conferir } from "@/domain/conferencia";
 import { hojeEmSaoPaulo } from "@/domain/datas";
 import {
+  COLUNAS_DA_BARRA,
+  FILTROS_VAZIOS,
+  alternarResponsavelUnico,
+  aplicarFiltros,
+  motivoDoVazio,
+  temFiltro,
+  valoresDaColuna,
+  type ColunaFiltro,
+  type FiltrosGrade,
+  type OpcaoFiltro,
+} from "@/domain/filtros-grade";
+import {
   TEXTOS_CONFERENCIA,
+  TEXTOS_FILTROS,
   TEXTOS_IMPORTAR,
   TEXTOS_PAINEL as T,
   mensagem,
-  rotuloFiltroResponsavel,
-  rotuloSemLancamentosDe,
+  rotuloLancamentos,
 } from "@/domain/mensagens";
 import {
   ORDEM_PADRAO,
-  alternarFiltroResponsavel,
   alternarOrdem,
   distribuicaoPorResponsavel,
-  filtrarPorResponsavel,
+  ehOrdemPadrao,
   mesAtual,
   mesesDaLista,
-  type FiltroResponsavel,
   type Ordem,
 } from "@/domain/painel";
 import { repoFaturas } from "@/data/faturas-repo";
@@ -30,7 +40,7 @@ import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
 import { Esqueleto } from "@/ui/Esqueleto";
 import { Tela } from "@/ui/Tela";
 import { useToast } from "@/ui/Toast";
-import { cn } from "@/ui/cn";
+import { BarraFiltros } from "./BarraFiltros";
 import { FaixaConferencia } from "./FaixaConferencia";
 import { FaturaDoMes } from "./FaturaDoMes";
 import { GradeLancamentos, type CadastrosGrade } from "./GradeLancamentos";
@@ -41,15 +51,21 @@ import { SeletorMes } from "./SeletorMes";
 // `month-switcher` troca o Mês; o `invoice-hero` mostra a Fatura dele e a
 // barra por Responsável; a grade mostra os Lançamentos do Mês. O
 // gerenciador de `lancamentos` guarda só o Mês aberto (AD-4): trocar de Mês
-// mostra o esqueleto enquanto ele relê. O filtro de Responsável continua
-// ao trocar de Mês. Depois de importar, o Painel abre o Mês importado.
+// mostra o esqueleto enquanto ele relê. Depois de importar, o Painel abre o
+// Mês importado.
 //
 // Conferência (História 2.5, FR-6): o núcleo confere a Fatura do Mês com os
 // cartões lidos (`fatura_cartoes`) e os Lançamentos dela (`conferir`); o
 // hero mostra o selo, a faixa âmbar avisa a diferença (até bater ou ser
-// dispensada) e a pílula "Verificar" mostra só as linhas marcadas, junto
-// com o filtro de Responsável. Tudo derivado; só "Dispensar" grava. O filtro
-// "Verificar" também continua ao trocar de Mês.
+// dispensada) e a pílula "Verificar" mostra só as linhas marcadas. Tudo
+// derivado; só "Dispensar" grava.
+//
+// Barra de filtros (História 2.6, FR-21): busca, pílulas por coluna,
+// "Verificar" e "Limpar filtros" (`BarraFiltros`); o estado é
+// `FiltrosGrade` e as regras são do núcleo (`filtros-grade.ts`). Nada é
+// gravado. Trocar de Mês mantém busca, filtros, "Verificar" e ordem. A barra
+// do hero e a `person-tag` escrevem na coluna Responsável. Um `role=status`
+// oculto anuncia "N lançamentos" quando os filtros mudam a grade.
 
 const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status"] as const;
 
@@ -81,10 +97,11 @@ export function Painel({ titulo }: { titulo: string }) {
   // O relógio fica fora do núcleo: "hoje" é lido aqui, uma vez.
   const [atual] = useState(() => mesAtual(hojeEmSaoPaulo(new Date())));
   const [mesAberto, setMesAberto] = useState(atual);
-  const [filtro, setFiltro] = useState<FiltroResponsavel>(undefined);
+  const [filtros, setFiltros] = useState<FiltrosGrade>(FILTROS_VAZIOS);
   const [ordem, setOrdem] = useState<Ordem>(ORDEM_PADRAO);
   const [importando, setImportando] = useState(false);
-  const [verificar, setVerificar] = useState(false);
+  // O anúncio de "N lançamentos" só depois que os filtros mudam a grade.
+  const [anunciar, setAnunciar] = useState(false);
   const toast = useToast();
 
   const faturas = useLinhas("faturas");
@@ -123,8 +140,21 @@ export function Painel({ titulo }: { titulo: string }) {
     retratos.some((r) => r.status === "carregando") || (lancamentos.mes !== undefined && lancamentos.mes !== mesAberto);
 
   const abrirImportar = () => setImportando(true);
-  const filtrar = (id: string | null) => setFiltro((atualFiltro) => alternarFiltroResponsavel(atualFiltro, id));
-  const ligarVerificar = () => setVerificar(true);
+  const mudarFiltros = (atualizar: (f: FiltrosGrade) => FiltrosGrade) => {
+    setFiltros(atualizar);
+    setAnunciar(true);
+  };
+  const filtrar = (id: string | null) => mudarFiltros((f) => alternarResponsavelUnico(f, id));
+  // O selo e "Ver lançamentos" ligam "Verificar" sem mexer nos outros filtros.
+  const ligarVerificar = () => mudarFiltros((f) => ({ ...f, verificar: true }));
+  const limparTudo = () => {
+    mudarFiltros(() => FILTROS_VAZIOS);
+    setOrdem(ORDEM_PADRAO);
+  };
+  const mudarMes = (mes: string) => {
+    setMesAberto(mes);
+    setAnunciar(false);
+  };
 
   async function dispensar(faturaId: string) {
     const r = await repoFaturas().dispensarAlerta(faturaId);
@@ -160,15 +190,21 @@ export function Painel({ titulo }: { titulo: string }) {
     const daFatura = fatura ? doMes.filter((l) => l.fatura_id === fatura.id) : [];
     const conferencia = fatura ? conferir(fatura, cartoes.linhas, doMes) : null;
     // Sem Fatura não há o que verificar (nem a pílula): o filtro fica guardado.
-    const verificando = verificar && conferencia !== null;
-    const naGrade = filtrarPorResponsavel(verificando ? linhasParaVerificar(doMes, conferencia) : doMes, filtro);
+    const verificando = filtros.verificar && conferencia !== null;
+    const efetivos = { ...filtros, verificar: verificando };
+    const naGrade = aplicarFiltros(doMes, filtros, conferencia);
+    const opcoes = Object.fromEntries(
+      COLUNAS_DA_BARRA.map((c) => [
+        c,
+        valoresDaColuna(c, doMes, filtros, conferencia, {
+          responsaveis: responsaveis.linhas,
+          tipos: tipos.linhas,
+          status: status.linhas,
+        }),
+      ]),
+    ) as Record<ColunaFiltro, OpcaoFiltro[]>;
     const mostrarFaixa = fatura !== null && conferencia !== null && !conferencia.conferido && fatura.alerta_dispensado_em === null;
-    const nomeDoFiltro =
-      filtro === undefined
-        ? null
-        : filtro === null
-          ? T.sem_responsavel
-          : (cadastros.responsaveis.get(filtro)?.nome ?? T.vazio);
+    const motivo = motivoDoVazio(efetivos, doMes.length > 0);
     conteudo = (
       <div className="flex flex-col gap-3">
         {/* iPad deitado e PC: o cartão da fatura ocupa 40% (os Blocos virão ao lado); em pé, a largura toda. */}
@@ -179,7 +215,7 @@ export function Painel({ titulo }: { titulo: string }) {
             valoresDaFaturaCentavos={daFatura.map((l) => l.valor_centavos)}
             distribuicao={distribuicaoPorResponsavel(doMes, ordemResponsaveis)}
             responsaveis={cadastros.responsaveis}
-            filtro={filtro}
+            escolhidos={filtros.colunas.responsavel}
             aoFiltrar={filtrar}
             aoImportar={abrirImportar}
             conferencia={conferencia}
@@ -193,53 +229,36 @@ export function Painel({ titulo }: { titulo: string }) {
             aoDispensar={() => void dispensar(fatura.id)}
           />
         ) : null}
-        {fatura !== null || nomeDoFiltro !== null ? (
-          <div className="flex flex-wrap gap-2">
-            {fatura !== null ? (
-              <button
-                type="button"
-                aria-pressed={verificar}
-                onClick={() => setVerificar((v) => !v)}
-                className={cn(
-                  "inline-flex min-h-toque cursor-pointer items-center gap-2 rounded-full border px-3 texto-label text-text",
-                  verificar ? "border-accent-line bg-selection" : "border-border bg-surface",
-                )}
-              >
-                {TEXTOS_CONFERENCIA.verificar}
-                {verificar ? <span aria-hidden>✕</span> : null}
-              </button>
-            ) : null}
-            {nomeDoFiltro !== null ? (
-              <button
-                type="button"
-                aria-label={`${rotuloFiltroResponsavel(nomeDoFiltro)}, ${T.limpar_filtro}`}
-                onClick={() => setFiltro(undefined)}
-                className="inline-flex min-h-toque cursor-pointer items-center gap-2 rounded-full border border-accent-line bg-selection px-3 texto-label text-text"
-              >
-                {rotuloFiltroResponsavel(nomeDoFiltro)}
-                <span aria-hidden>✕</span>
-              </button>
-            ) : null}
-          </div>
-        ) : null}
+        <BarraFiltros
+          filtros={filtros}
+          aoMudar={mudarFiltros}
+          opcoes={opcoes}
+          comVerificar={conferencia !== null}
+          mostrarLimpar={temFiltro(efetivos) || !ehOrdemPadrao(ordem)}
+          aoLimparTudo={limparTudo}
+        />
+        <p role="status" className="sr-only">
+          {anunciar ? rotuloLancamentos(naGrade.length) : ""}
+        </p>
         <GradeLancamentos
           linhas={naGrade}
           cadastros={cadastros}
           ordem={ordem}
           aoOrdenar={(coluna) => setOrdem((o) => alternarOrdem(o, coluna))}
-          filtro={filtro}
+          escolhidos={filtros.colunas.responsavel}
           aoFiltrar={filtrar}
           conferencia={conferencia}
           verificando={verificando}
           vazio={
-            verificando
-              ? TEXTOS_CONFERENCIA.sem_para_verificar
-              : nomeDoFiltro !== null && doMes.length > 0
-                ? rotuloSemLancamentosDe(filtro === null ? null : nomeDoFiltro)
+            motivo === "filtros"
+              ? TEXTOS_FILTROS.sem_resultado
+              : motivo === "verificar"
+                ? TEXTOS_CONFERENCIA.sem_para_verificar
                 : faturas.linhas.length === 0
                   ? mensagem("painel.vazio")
                   : T.sem_lancamentos
           }
+          aoLimparFiltros={motivo === null ? undefined : limparTudo}
         />
       </div>
     );
@@ -254,14 +273,14 @@ export function Painel({ titulo }: { titulo: string }) {
             mes={mesAberto}
             meses={meses}
             mesesComFatura={faturas.status === "pronto" ? mesesComFatura : new Set()}
-            aoMudar={setMesAberto}
+            aoMudar={mudarMes}
           />
           <BotaoImportar aoImportar={abrirImportar} />
         </>
       }
     >
       {conteudo}
-      <ImportarFatura aberta={importando} aoMudar={setImportando} aoImportar={setMesAberto} />
+      <ImportarFatura aberta={importando} aoMudar={setImportando} aoImportar={mudarMes} />
     </Tela>
   );
 }

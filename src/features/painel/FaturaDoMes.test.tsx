@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { conferir, type Conferencia } from "@/domain/conferencia";
 import { formatarDinheiro } from "@/domain/dinheiro";
 import { TEXTOS_CONFERENCIA, TEXTOS_IMPORTAR, TEXTOS_PAINEL } from "@/domain/mensagens";
-import { distribuicaoPorResponsavel, type FiltroResponsavel } from "@/domain/painel";
+import type { ValorFiltro } from "@/domain/filtros-grade";
+import { distribuicaoPorResponsavel } from "@/domain/painel";
 import { FaturaDoMes, type FaturaHero } from "./FaturaDoMes";
 
 const sem = (t: string | null | undefined) => (t ?? "").replaceAll(" ", " ");
@@ -27,7 +28,7 @@ function montar(opcoes: {
   fatura?: FaturaHero | null;
   valores?: number[];
   linhas?: { responsavel_id: string | null; valor_centavos: number }[];
-  filtro?: FiltroResponsavel;
+  escolhidos?: ValorFiltro[];
   conferencia?: Conferencia | null;
 }) {
   const aoFiltrar = vi.fn();
@@ -40,7 +41,7 @@ function montar(opcoes: {
       valoresDaFaturaCentavos={opcoes.valores ?? [768777]}
       distribuicao={distribuicaoPorResponsavel(opcoes.linhas ?? [], ["r-rafael", "r-casal"])}
       responsaveis={responsaveis}
-      filtro={opcoes.filtro}
+      escolhidos={opcoes.escolhidos ?? []}
       aoFiltrar={aoFiltrar}
       aoImportar={aoImportar}
       conferencia={opcoes.conferencia}
@@ -112,9 +113,26 @@ describe("FaturaDoMes (invoice-hero)", () => {
   });
 
   it("filtro ativo: o segmento e a legenda ficam marcados", () => {
-    montar({ linhas: [{ responsavel_id: "r-rafael", valor_centavos: 1000 }], filtro: "r-rafael" });
+    montar({ linhas: [{ responsavel_id: "r-rafael", valor_centavos: 1000 }], escolhidos: ["r-rafael"] });
     expect(screen.getByRole("button", { name: "Filtrar por Rafael" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: "Rafael" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("vários escolhidos na coluna: todos marcados; os segmentos fora da escolha se apagam", () => {
+    montar({
+      linhas: [
+        { responsavel_id: "r-rafael", valor_centavos: 1000 },
+        { responsavel_id: "r-casal", valor_centavos: 2000 },
+        { responsavel_id: null, valor_centavos: 500 },
+      ],
+      escolhidos: ["r-rafael", null],
+    });
+    const barra = screen.getByRole("group", { name: TEXTOS_PAINEL.distribuicao });
+    const [rafael, casal, semResp] = within(barra).getAllByRole("button");
+    expect([rafael, casal, semResp].map((b) => b.getAttribute("aria-pressed"))).toEqual(["true", "false", "true"]);
+    expect(rafael.className).not.toContain("opacity-40");
+    expect(casal.className).toContain("opacity-40");
+    expect(semResp.className).not.toContain("opacity-40");
   });
 
   it("sem Fatura: 'Fatura ainda não importada' e Importar fatura", async () => {

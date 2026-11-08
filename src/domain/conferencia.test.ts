@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import extracaoOutubro from "../../test/fixtures/extracao-2026-10.json";
 import {
   conferir,
-  linhasParaVerificar,
   ordenarDuvidasPrimeiro,
   partesDaDiferenca,
   precisaVerificar,
@@ -65,7 +64,6 @@ describe("conferir: outubro/2026 gravado (aceite)", () => {
     expect(c.cartoesComDiferenca).toEqual([]);
     expect(valorDaDiferenca(c)).toBeNull();
     expect(linhas.some((l) => precisaVerificar(l, c))).toBe(false);
-    expect(linhasParaVerificar(linhas, c)).toEqual([]);
   });
 });
 
@@ -128,7 +126,7 @@ describe("conferir: matriz da História 2.5", () => {
     const outra = linhas.find((l) => l.final_cartao === "5061")!;
     outra.duvida_extracao = true;
     const c = conferir(fatura, cartoes, linhas);
-    const ordem = linhasParaVerificar(linhas, c);
+    const ordem = ordenarDuvidasPrimeiro(linhas.filter((l) => precisaVerificar(l, c)));
     expect(ordem[0]).toBe(ultima);
     expect(ordem.slice(1).map((l) => l.ordem_fatura)).toEqual(
       do8673.filter((l) => l !== ultima).map((l) => l.ordem_fatura),

@@ -80,16 +80,6 @@ export function precisaVerificar(lancamento: LancamentoParaVerificar, conferenci
   return conferencia.diferencaCreditosCentavos !== 0 && lancamento.valor_centavos < 0;
 }
 
-/**
- * As linhas marcadas "verificar", na ordem padrão do filtro: as de
- * `duvida_extracao` primeiro e depois a ordem da fatura. Não muda a lista.
- */
-export function linhasParaVerificar<
-  L extends LancamentoParaVerificar & { duvida_extracao: boolean; ordem_fatura: number | null },
->(linhas: readonly L[], conferencia: Conferencia): L[] {
-  return ordenarDuvidasPrimeiro(linhas.filter((l) => precisaVerificar(l, conferencia)));
-}
-
 /** Dúvidas de extração primeiro; depois (e dentro de cada grupo), a ordem da fatura. */
 export function ordenarDuvidasPrimeiro<L extends { duvida_extracao: boolean; ordem_fatura: number | null }>(
   linhas: readonly L[],

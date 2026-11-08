@@ -38,16 +38,20 @@ import {
   TEXTOS_PAINEL,
   rotuloEscolherMes,
   rotuloFiltrarPor,
-  rotuloFiltroResponsavel,
   rotuloItemMes,
   rotuloLancamentos,
   rotuloParcelaFalada,
-  rotuloSemLancamentosDe,
   sobrelinhaFatura,
   TEXTOS_CONFERENCIA,
   frasesFaixaConferencia,
   rotuloBotaoDiferenca,
   rotuloSeloConferencia,
+  COLUNAS_FILTRO,
+  TEXTOS_FILTROS,
+  rotuloMaisFiltros,
+  rotuloPilulaFiltro,
+  rotuloValorFiltro,
+  tituloPopoverFiltro,
 } from "./mensagens";
 import type { Conferencia } from "./conferencia";
 
@@ -399,9 +403,6 @@ describe("textos do Painel do Mês", () => {
 
   it("filtro e ordenação", () => {
     expect(rotuloFiltrarPor("Rafael")).toBe("Filtrar por Rafael");
-    expect(rotuloFiltroResponsavel("Casal")).toBe("Responsável: Casal");
-    expect(rotuloSemLancamentosDe("Rafael")).toBe("Nenhum lançamento de Rafael neste Mês");
-    expect(rotuloSemLancamentosDe(null)).toBe("Nenhum lançamento sem responsável neste Mês");
     expect(rotuloParcelaFalada(2, 12)).toBe("parcela 2 de 12");
     expect(rotuloParcelaFalada(null, null)).toBe("");
   });
@@ -479,5 +480,25 @@ describe("Conferência no Painel (História 2.5)", () => {
     expect(TEXTOS_CONFERENCIA.alerta_dispensado).toBe("Alerta dispensado");
     expect(TEXTOS_CONFERENCIA.ver_lancamentos).toBe("Ver lançamentos");
     expect(TEXTOS_CONFERENCIA.dispensar).toBe("Dispensar");
+  });
+});
+
+describe("Barra de filtros (História 2.6)", () => {
+  it("pílula, título do popover, Mais e caixa", () => {
+    expect(rotuloPilulaFiltro(COLUNAS_FILTRO.responsavel, [])).toBe("Responsável");
+    expect(rotuloPilulaFiltro(COLUNAS_FILTRO.responsavel, ["Casal", "Rangel"])).toBe("Responsável: Casal, Rangel");
+    expect(rotuloPilulaFiltro(COLUNAS_FILTRO.cartao, ["3967"])).toBe("Cartão: 3967");
+    expect(tituloPopoverFiltro(COLUNAS_FILTRO.responsavel)).toBe("Responsável (pode marcar vários)");
+    expect(rotuloMaisFiltros(0)).toBe("Mais");
+    expect(rotuloMaisFiltros(1)).toBe("Mais (1)");
+    expect(rotuloValorFiltro("Casal", 3)).toBe("Casal, 3 lançamentos");
+    expect(rotuloValorFiltro("Sem responsável", 1)).toBe("Sem responsável, 1 lançamento");
+  });
+
+  it("textos fixos", () => {
+    expect(TEXTOS_FILTROS.buscar).toBe("Buscar nome ou apelido");
+    expect(TEXTOS_FILTROS.limpar_filtros).toBe("Limpar filtros");
+    expect(TEXTOS_FILTROS.sem_resultado).toBe("Nenhum lançamento com esses filtros");
+    expect(Object.values(COLUNAS_FILTRO)).toEqual(["Responsável", "Tipo", "Status", "Lançado por", "Parcela", "Cartão"]);
   });
 });

@@ -3,7 +3,7 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatarDinheiro } from "@/domain/dinheiro";
-import { TEXTOS_CONFERENCIA, TEXTOS_IMPORTAR, TEXTOS_PAINEL, mensagem } from "@/domain/mensagens";
+import { TEXTOS_CONFERENCIA, TEXTOS_FILTROS, TEXTOS_IMPORTAR, TEXTOS_PAINEL, mensagem } from "@/domain/mensagens";
 import type { LinhaFatura, LinhaLancamento } from "@/data/faturas-repo";
 import { ToastProvider } from "@/ui/Toast";
 import { Painel } from "./Painel";
@@ -168,8 +168,8 @@ const responsaveis = [
   { id: "r-casal", nome: "Casal", cor: 2, ordem: 2 },
 ];
 const status = [
-  { id: "s-nao", nome: "Não pago", conta_como_pago: false },
-  { id: "s-pago", nome: "Pago", conta_como_pago: true },
+  { id: "s-nao", nome: "Não pago", conta_como_pago: false, arquivado: false },
+  { id: "s-pago", nome: "Pago", conta_como_pago: true, arquivado: false },
 ];
 
 function definir(
@@ -275,6 +275,7 @@ describe("Painel do Mês", () => {
     expect(screen.queryByText(TEXTOS_PAINEL.fechado)).toBeNull();
     expect(linhasDaGrade()).toHaveLength(0);
     expect(screen.getByText(TEXTOS_PAINEL.sem_lancamentos)).toBeTruthy();
+    expect(within(screen.getByRole("table")).queryByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toBeNull();
     // Um no topo e um no cartão; o do cartão abre a janela.
     const botoes = screen.getAllByRole("button", { name: TEXTOS_IMPORTAR.botao });
     expect(botoes).toHaveLength(2);
@@ -351,8 +352,14 @@ describe("Painel do Mês", () => {
     await u.click(segmento);
     await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
     expect(linhasDaGrade()).toHaveLength(0);
-    expect(screen.getByText("Nenhum lançamento de Rafael neste Mês")).toBeTruthy();
+    expect(screen.getByText(TEXTOS_FILTROS.sem_resultado)).toBeTruthy();
     expect(screen.queryByText(TEXTOS_PAINEL.sem_lancamentos)).toBeNull();
+    // "Limpar filtros" na barra e na grade vazia; o da grade limpa tudo.
+    const limpar = screen.getAllByRole("button", { name: TEXTOS_FILTROS.limpar_filtros });
+    expect(limpar).toHaveLength(2);
+    await u.click(limpar[1]);
+    expect(linhasDaGrade()).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toBeNull();
   });
 
   it("Lançamentos sem Responsável: segmento e legenda 'Sem responsável'; a tag mostra —", () => {
@@ -367,7 +374,7 @@ describe("Painel do Mês", () => {
     expect(within(linha).getAllByRole("cell")[5].textContent).toBe("—");
   });
 
-  it("filtro: segmento filtra a grade e o rodapé; vale ao trocar de Mês; ✕ limpa", async () => {
+  it("filtro: segmento filtra a grade e o rodapé; vale ao trocar de Mês; Limpar filtros limpa", async () => {
     definir({
       faturas: [outubro, novembro],
       lancamentos: [
@@ -395,8 +402,13 @@ describe("Painel do Mês", () => {
     expect(linhasDaGrade()).toHaveLength(1);
     expect(rodape()).toContain(sem(formatarDinheiro(700)));
 
-    await u.click(screen.getByRole("button", { name: `Responsável: Rafael, ${TEXTOS_PAINEL.limpar_filtro}` }));
+    // A coluna Responsável da barra mostra a escolha.
+    const pilulaResp = screen.getByRole("button", { name: "Responsável: Rafael" });
+    expect(pilulaResp.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(pilulaResp.className).toContain("bg-selection");
+    await u.click(screen.getByRole("button", { name: TEXTOS_FILTROS.limpar_filtros }));
     expect(linhasDaGrade()).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Responsável", expanded: false })).toBeTruthy();
 
     // A person-tag também filtra; tocar de novo limpa.
     const tagCasal = () => within(linhasDaGrade()[1]).getByRole("button", { name: "Filtrar por Casal" });
@@ -528,6 +540,7 @@ describe("Conferência e marca verificar (História 2.5)", () => {
     await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.proximo_mes }));
     expect(screen.queryByRole("button", { name: TEXTOS_CONFERENCIA.verificar })).toBeNull();
     expect(linhasDaGrade().map(nomeVisivel)).toEqual(["DEZEMBRO"]);
+    expect(screen.queryByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toBeNull();
 
     await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
     expect(pilula().getAttribute("aria-pressed")).toBe("true");
@@ -569,5 +582,185 @@ describe("Conferência e marca verificar (História 2.5)", () => {
     const [padaria, estorno] = linhasDaGrade();
     expect(padaria.querySelector(".bg-verify")).toBeNull();
     expect(estorno.querySelector(".bg-verify")).toBeTruthy();
+  });
+});
+
+describe("Barra de filtros e busca (História 2.6)", () => {
+  const pilula = (nome: string) => screen.getByRole("button", { name: nome, expanded: false });
+  const busca = () => screen.getByRole("searchbox", { name: TEXTOS_FILTROS.buscar });
+  const anuncio = () =>
+    screen.getAllByRole("status").find((s) => s.className.includes("sr-only") && !s.getAttribute("aria-busy"));
+
+  it("busca: Nome ou Apelido, sem acento; rodapé soma a grade; anuncia; vale ao trocar de Mês", async () => {
+    definir({
+      faturas: [outubro, novembro],
+      lancamentos: [
+        lanc("2026-11", { nome: "MAGALU MAGALU", apelido: "Lava e seca", valor_centavos: 44_589 }),
+        lanc("2026-11", { nome: "PADARIA", valor_centavos: 1000 }),
+        lanc("2026-10", { nome: "MAGALU OUTUBRO", valor_centavos: 500 }),
+        lanc("2026-10", { nome: "MERCADO", valor_centavos: 700 }),
+      ],
+    });
+    renderizar();
+    const u = userEvent.setup();
+    expect(anuncio()?.textContent).toBe("");
+    await u.type(busca(), "lava");
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["Lava e seca · MAGALU MAGALU"]);
+    expect(rodape()).toContain("R$ 445,89");
+    expect(anuncio()?.textContent).toBe("1 lançamento");
+    await u.clear(busca());
+    await u.type(busca(), "magalu");
+    expect(linhasDaGrade()).toHaveLength(1);
+
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
+    expect((busca() as HTMLInputElement).value).toBe("magalu");
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["MAGALU OUTUBRO"]);
+    // Trocar de Mês não é mudança de filtro: o anúncio volta a ficar vazio.
+    expect(anuncio()?.textContent).toBe("");
+  });
+
+  it("cartão: outubro escolhe 3967, novembro fica vazio com Limpar filtros e 3967 com 0", async () => {
+    definir({
+      faturas: [outubro, novembro],
+      lancamentos: [
+        lanc("2026-10", { final_cartao: "3967" }),
+        lanc("2026-10", { final_cartao: "8673" }),
+        lanc("2026-11", { final_cartao: "8673" }),
+        lanc("2026-11", { final_cartao: "5061" }),
+      ],
+    });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
+    await u.click(pilula("Cartão"));
+    const dialogo = screen.getByRole("dialog", { name: "Cartão (pode marcar vários)" });
+    expect(within(dialogo).getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
+      "Cartão final 3967, 1 lançamento",
+      "Cartão final 8673, 1 lançamento",
+    ]);
+    await u.click(within(dialogo).getByRole("checkbox", { name: "Cartão final 3967, 1 lançamento" }));
+    await u.click(within(dialogo).getByRole("button", { name: TEXTOS_FILTROS.aplicar }));
+    expect(linhasDaGrade()).toHaveLength(1);
+
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.proximo_mes }));
+    expect(pilula("Cartão: 3967")).toBeTruthy();
+    expect(linhasDaGrade()).toHaveLength(0);
+    expect(screen.getByText(TEXTOS_FILTROS.sem_resultado)).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toHaveLength(2);
+    await u.click(pilula("Cartão: 3967"));
+    expect(
+      within(screen.getByRole("dialog")).getAllByRole("checkbox").map((c) => c.getAttribute("aria-label")),
+    ).toEqual(["Cartão final 3967, 0 lançamentos", "Cartão final 5061, 1 lançamento", "Cartão final 8673, 1 lançamento"]);
+  });
+
+  it("popover com caixas marcadas: tocar fora não muda a grade", async () => {
+    definir({
+      faturas: [novembro],
+      lancamentos: [lanc("2026-11", { responsavel_id: "r-casal" }), lanc("2026-11"), lanc("2026-11")],
+    });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(pilula("Responsável"));
+    await u.click(screen.getByRole("checkbox", { name: "Casal, 1 lançamento" }));
+    await u.click(document.body);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(linhasDaGrade()).toHaveLength(3);
+    expect(pilula("Responsável")).toBeTruthy();
+  });
+
+  it("produção hoje: sem Responsável, Tipo e Status, cada valor 0 e o 'Sem …' com todos; grade sem filtro", async () => {
+    definir({ faturas: [novembro], lancamentos: Array.from({ length: 49 }, () => lanc("2026-11", { status_id: null })) });
+    renderizar();
+    const u = userEvent.setup();
+    expect(linhasDaGrade()).toHaveLength(49);
+    expect(screen.queryByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toBeNull();
+    await u.click(pilula("Responsável"));
+    expect(screen.getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
+      "Rafael, 0 lançamentos",
+      "Casal, 0 lançamentos",
+      "Sem responsável, 49 lançamentos",
+    ]);
+    await u.keyboard("{Escape}");
+    await u.click(pilula("Status"));
+    expect(screen.getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
+      "Não pago, 0 lançamentos",
+      "Pago, 0 lançamentos",
+      "Sem status, 49 lançamentos",
+    ]);
+  });
+
+  it("hero: com {Casal, Rafael}, tocar em Casal deixa só Casal; de novo limpa a coluna", async () => {
+    definir({
+      faturas: [novembro],
+      lancamentos: [
+        lanc("2026-11", { responsavel_id: "r-rafael" }),
+        lanc("2026-11", { responsavel_id: "r-casal" }),
+        lanc("2026-11"),
+      ],
+    });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(pilula("Responsável"));
+    await u.click(screen.getByRole("checkbox", { name: "Rafael, 1 lançamento" }));
+    await u.click(screen.getByRole("checkbox", { name: "Casal, 1 lançamento" }));
+    await u.click(screen.getByRole("button", { name: TEXTOS_FILTROS.aplicar }));
+    expect(pilula("Responsável: Rafael, Casal")).toBeTruthy();
+    const barra = screen.getByRole("group", { name: TEXTOS_PAINEL.distribuicao });
+    const casal = within(barra).getByRole("button", { name: "Filtrar por Casal" });
+    expect(casal.getAttribute("aria-pressed")).toBe("true");
+    expect(within(barra).getByRole("button", { name: "Filtrar por Sem responsável" }).className).toContain("opacity-40");
+
+    await u.click(casal);
+    expect(pilula("Responsável: Casal")).toBeTruthy();
+    expect(linhasDaGrade()).toHaveLength(1);
+    await u.click(casal);
+    expect(pilula("Responsável")).toBeTruthy();
+    expect(linhasDaGrade()).toHaveLength(3);
+  });
+
+  it("Ver lançamentos com busca ativa: liga Verificar e a busca continua", async () => {
+    const f = { ...novembro, total_despesas_centavos: 100_000, total_creditos_centavos: 0 } as LinhaFatura;
+    definir({
+      faturas: [f],
+      fatura_cartoes: [cartao(f, "5061", 10_000), cartao(f, "8673", 90_000)],
+      lancamentos: [
+        lanc("2026-11", { nome: "PADARIA X", final_cartao: "5061", valor_centavos: 10_000 }),
+        lanc("2026-11", { nome: "BELLA X", final_cartao: "8673", valor_centavos: 8_000 }),
+        lanc("2026-11", { nome: "MERCADO", final_cartao: "8673", valor_centavos: 10_000 }),
+      ],
+    });
+    renderizar();
+    const u = userEvent.setup();
+    await u.type(busca(), "x");
+    expect(linhasDaGrade()).toHaveLength(2);
+    await u.click(screen.getByRole("button", { name: TEXTOS_CONFERENCIA.ver_lancamentos }));
+    expect(screen.getByRole("button", { name: TEXTOS_CONFERENCIA.verificar }).getAttribute("aria-pressed")).toBe("true");
+    expect((busca() as HTMLInputElement).value).toBe("x");
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["BELLA X"]);
+  });
+
+  it("só Verificar sem linhas marcadas: 'Nenhum lançamento para verificar' com Limpar filtros", async () => {
+    definir({ faturas: [novembro], fatura_cartoes: [cartao(novembro)], lancamentos: faturaQueBate(novembro, 3) });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: TEXTOS_CONFERENCIA.verificar }));
+    expect(screen.getByText(TEXTOS_CONFERENCIA.sem_para_verificar)).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toHaveLength(2);
+    expect(anuncio()?.textContent).toBe("0 lançamentos");
+  });
+
+  it("Limpar filtros aparece com a ordem fora da padrão e volta à ordem da fatura", async () => {
+    definir({
+      faturas: [novembro],
+      lancamentos: [lanc("2026-11", { nome: "B" }), lanc("2026-11", { nome: "A" })],
+    });
+    renderizar();
+    const u = userEvent.setup();
+    expect(screen.queryByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toBeNull();
+    await u.click(screen.getByRole("button", { name: "Nome" }));
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["A", "B"]);
+    await u.click(screen.getByRole("button", { name: TEXTOS_FILTROS.limpar_filtros }));
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["B", "A"]);
+    expect(screen.queryByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toBeNull();
   });
 });
