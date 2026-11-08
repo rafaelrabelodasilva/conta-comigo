@@ -20,9 +20,18 @@ vi.mock("./conexao", () => ({
 vi.mock("./supabase/navegador", () => {
   const cliente = {
     from: (tabela: string) => ({
-      select: async () => {
-        falso.leituras.push(tabela);
-        return { data: [], error: null };
+      select: () => {
+        const consulta = {
+          eq: async (coluna: string, valor: string) => {
+            falso.leituras.push(`${tabela} ${coluna}=${valor}`);
+            return { data: [], error: null };
+          },
+          then: (resolver: (r: unknown) => unknown) => {
+            falso.leituras.push(tabela);
+            return Promise.resolve({ data: [], error: null }).then(resolver);
+          },
+        };
+        return consulta;
       },
     }),
     channel: () => ({
@@ -82,5 +91,15 @@ describe("recarregarTodos", () => {
     falso.leituras.length = 0;
     await recarregarTodos();
     expect(falso.leituras.sort()).toEqual(["responsaveis", "tipos"]);
+  });
+
+  it("o gerenciador de lancamentos é por Mês; os outros não", async () => {
+    const { gerenciador } = await realtimeNovo();
+    gerenciador("lancamentos").abrirMes("2026-10");
+    gerenciador("lancamentos").assinar(() => {});
+    await esperar();
+    expect(falso.leituras).toEqual(["lancamentos mes=2026-10"]);
+    expect(gerenciador("lancamentos").mesAberto()).toBe("2026-10");
+    expect(gerenciador("tipos").mesAberto()).toBeNull();
   });
 });

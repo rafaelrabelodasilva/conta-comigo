@@ -138,12 +138,6 @@ export function tituloFaturaLida(mes: string, vencimento: string): string {
   return `Fatura de ${formatarNomeDoMes(mes)} · vence ${formatarData(vencimento)}`;
 }
 
-/** Cartão do Painel: "Fatura de outubro/26 · vence 06/10/26 · 49 lançamentos". */
-export function tituloFaturaImportada(mes: string, vencimento: string, quantidade: number): string {
-  return `Fatura de ${formatarMesExtenso(mes)} · vence ${formatarData(vencimento)} · ${rotuloLancamentos(quantidade)}`;
-}
-
-/** "Despesas R$ 8.327,39 · Créditos R$ 639,62". */
 /** "Total a pagar R$ 7.713,67" (sem o total lido: "Total a pagar não lido"). */
 export function rotuloTotalAPagar(lidoCentavos: number | null): string {
   return lidoCentavos === null ? "Total a pagar não lido" : `Total a pagar ${formatarDinheiro(lidoCentavos)}`;
@@ -169,6 +163,7 @@ export function rotuloConferenciaTotal(c: ComposicaoTotalAPagar): string | null 
   return `⚠ Diferença de ${formatarDinheiro(Math.abs(c.diferencaCentavos))} para o total a pagar`;
 }
 
+/** "Despesas R$ 8.327,39 · Créditos R$ 639,62". */
 export function rotuloDespesasCreditos(despesasCentavos: number, creditosCentavos: number): string {
   return `Despesas ${formatarDinheiro(despesasCentavos)} · Créditos ${formatarDinheiro(creditosCentavos)}`;
 }
@@ -194,16 +189,79 @@ export function textoExtracaoIncompleta(lidos: number): string {
   return `Não conseguimos ler todos os lançamentos (lemos ${lidos}). Você pode importar mesmo assim e corrigir à mão, ou cancelar`;
 }
 
-/** Colunas da lista provisória de Lançamentos do Painel (até a grade da 2.4). */
-export const COLUNAS_LANCAMENTOS = {
-  titulo: "Lançamentos",
-  data: "Data",
+/** Textos do Painel do Mês (História 2.4): `invoice-hero`, `month-switcher` e grade. */
+export const TEXTOS_PAINEL = {
+  fechado: "Fechado",
+  sem_fatura: "Fatura ainda não importada",
+  sem_responsavel: "Sem responsável",
+  /** O que a grade mostra no lugar de um cadastro vazio (Tipo, Responsável, Status). */
+  vazio: "—",
+  mes_anterior: "Mês anterior",
+  proximo_mes: "Próximo mês",
+  meses: "Meses",
+  distribuicao: "Distribuição por Responsável",
+  grade: "Lançamentos do Mês",
+  total: "Total dos lançamentos",
+  limpar_filtro: "Limpar filtro",
+  sem_lancamentos: "Nenhum lançamento neste Mês",
+  total_a_pagar: "Total a pagar",
+  carregando: "Carregando…",
+} as const;
+
+/** Cabeçalhos da grade de Lançamentos (UX-DR10), na ordem das colunas. */
+export const COLUNAS_GRADE = {
+  selecao: "Seleção",
   nome: "Nome",
   parcela: "Parcela",
   valor: "Valor",
-  cartao: "Cartão",
-  total: "Total dos lançamentos",
+  tipo: "Tipo",
+  responsavel: "Responsável",
+  lancado_por: "Lançado por",
+  status: "Status",
 } as const;
+
+/** Rótulos de `lancado_por` (AD-6). */
+export const ROTULOS_LANCADO_POR = {
+  fatura: "Fatura",
+  sistema: "Sistema",
+  manual: "Manual",
+  historico: "Histórico",
+} as const;
+
+/** Sobrelinha do `invoice-hero`: "Fatura de outubro · vence 06/10/26" (sem Fatura: "Fatura de outubro"). */
+export function sobrelinhaFatura(mes: string, vencimento: string | null): string {
+  return vencimento === null ? `Fatura de ${formatarNomeDoMes(mes)}` : tituloFaturaLida(mes, vencimento);
+}
+
+/** Nome acessível do nome do Mês no seletor: "outubro/26, escolher o Mês". */
+export function rotuloEscolherMes(mes: string): string {
+  return `${formatarMesExtenso(mes)}, escolher o Mês`;
+}
+
+/** Item da lista de Meses: "outubro/26, Fechado" (sem Fatura, só o Mês). */
+export function rotuloItemMes(mes: string, fechado: boolean): string {
+  return fechado ? `${formatarMesExtenso(mes)}, ${TEXTOS_PAINEL.fechado}` : formatarMesExtenso(mes);
+}
+
+/** Nome acessível de um segmento ou etiqueta que filtra: "Filtrar por Rafael". */
+export function rotuloFiltrarPor(nome: string): string {
+  return `Filtrar por ${nome}`;
+}
+
+/** Filtro ativo acima da grade: "Responsável: Rafael". */
+export function rotuloFiltroResponsavel(nome: string): string {
+  return `${COLUNAS_GRADE.responsavel}: ${nome}`;
+}
+
+/** A Parcela lida pelo VoiceOver: "parcela 2 de 12"; à vista, vazio. */
+export function rotuloParcelaFalada(n: number | null, total: number | null): string {
+  return n === null || total === null ? "" : `parcela ${n} de ${total}`;
+}
+
+/** Grade vazia porque o filtro esconde tudo: "Nenhum lançamento de Rafael neste Mês". */
+export function rotuloSemLancamentosDe(nome: string | null): string {
+  return nome === null ? "Nenhum lançamento sem responsável neste Mês" : `Nenhum lançamento de ${nome} neste Mês`;
+}
 
 /** "Cartão final 9012". */
 export function rotuloCartaoFinal(final: string): string {

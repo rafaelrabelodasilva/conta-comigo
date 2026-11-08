@@ -1,44 +1,58 @@
 "use client";
 
-import { useState } from "react";
-import { formatarData } from "@/domain/datas";
-import { formatarDinheiro } from "@/domain/dinheiro";
-import { formatarParcela } from "@/domain/importacao-fatura";
+import { useEffect, useMemo, useState } from "react";
+import { hojeEmSaoPaulo } from "@/domain/datas";
 import {
-  COLUNAS_LANCAMENTOS as C,
   TEXTOS_IMPORTAR,
+  TEXTOS_PAINEL as T,
   mensagem,
-  rotuloDespesasCreditos,
-  tituloFaturaImportada,
+  rotuloFiltroResponsavel,
+  rotuloSemLancamentosDe,
 } from "@/domain/mensagens";
-import type { LinhaFatura, LinhaLancamento } from "@/data/faturas-repo";
+import {
+  ORDEM_PADRAO,
+  alternarFiltroResponsavel,
+  alternarOrdem,
+  distribuicaoPorResponsavel,
+  filtrarPorResponsavel,
+  mesAtual,
+  mesesDaLista,
+  type FiltroResponsavel,
+  type Ordem,
+} from "@/domain/painel";
 import { gerenciador, useLinhas } from "@/data/realtime";
 import { ImportarFatura } from "@/features/importar/ImportarFatura";
-import { TotalAPagar } from "@/features/importar/TotalAPagar";
 import { Botao } from "@/ui/Botao";
 import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
 import { Esqueleto } from "@/ui/Esqueleto";
-import { EstadoVazio } from "@/ui/EstadoVazio";
 import { Tela } from "@/ui/Tela";
+import { FaturaDoMes } from "./FaturaDoMes";
+import { GradeLancamentos, type CadastrosGrade } from "./GradeLancamentos";
+import { SeletorMes } from "./SeletorMes";
 
-// Painel provisório (decisão do Rafael, 03/11/2026), até a grade da 2.4:
-// "＋ Importar fatura" no topo, um cartão por Fatura importada e uma lista
-// simples dos Lançamentos na ordem da fatura. Tudo vem dos gerenciadores de
-// Realtime: uma importação (deste ou de outro aparelho) aparece sem recarregar.
+// Painel do Mês (História 2.4, FR-21, FR-22): um Mês só, o Mês aberto, que
+// começa sempre no Mês atual (calendário de hoje em São Paulo). O
+// `month-switcher` troca o Mês; o `invoice-hero` mostra a Fatura dele e a
+// barra por Responsável; a grade mostra os Lançamentos do Mês. O
+// gerenciador de `lancamentos` guarda só o Mês aberto (AD-4): trocar de Mês
+// mostra o esqueleto enquanto ele relê. O filtro de Responsável continua
+// ao trocar de Mês. Depois de importar, o Painel abre o Mês importado.
 
-/** Faturas do Mês mais novo para o mais antigo. */
-function ordenarFaturas(faturas: readonly LinhaFatura[]): LinhaFatura[] {
-  return [...faturas].sort((a, b) => (a.mes < b.mes ? 1 : a.mes > b.mes ? -1 : 0));
-}
+const TABELAS = ["faturas", "lancamentos", "responsaveis", "tipos", "status"] as const;
 
-/** Mês mais novo primeiro; dentro do Mês, a ordem da fatura (sem ordem no fim). */
-function ordenarLancamentos(linhas: readonly LinhaLancamento[]): LinhaLancamento[] {
-  return linhas
-    .filter((l) => l.excluido_em === null)
-    .sort((a, b) => {
-      if (a.mes !== b.mes) return a.mes < b.mes ? 1 : -1;
-      return (a.ordem_fatura ?? Number.MAX_SAFE_INTEGER) - (b.ordem_fatura ?? Number.MAX_SAFE_INTEGER);
-    });
+function EsqueletoPainel() {
+  return (
+    <div role="status" aria-busy="true" className="flex flex-col gap-3">
+      <span className="sr-only">{T.carregando}</span>
+      <Esqueleto className="h-40 w-full lg:w-2/5" />
+      <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
+        <Esqueleto className="h-6" />
+        {Array.from({ length: 8 }, (_, i) => (
+          <Esqueleto key={i} className="h-8" />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function BotaoImportar({ aoImportar }: { aoImportar: () => void }) {
@@ -51,90 +65,134 @@ function BotaoImportar({ aoImportar }: { aoImportar: () => void }) {
 }
 
 export function Painel({ titulo }: { titulo: string }) {
+  // O relógio fica fora do núcleo: "hoje" é lido aqui, uma vez.
+  const [atual] = useState(() => mesAtual(hojeEmSaoPaulo(new Date())));
+  const [mesAberto, setMesAberto] = useState(atual);
+  const [filtro, setFiltro] = useState<FiltroResponsavel>(undefined);
+  const [ordem, setOrdem] = useState<Ordem>(ORDEM_PADRAO);
   const [importando, setImportando] = useState(false);
+
   const faturas = useLinhas("faturas");
   const lancamentos = useLinhas("lancamentos");
-  const abrir = () => setImportando(true);
+  const responsaveis = useLinhas("responsaveis");
+  const tipos = useLinhas("tipos");
+  const status = useLinhas("status");
+
+  // A memória de `lancamentos` acompanha o Mês aberto.
+  useEffect(() => {
+    gerenciador("lancamentos").abrirMes(mesAberto);
+  }, [mesAberto]);
+
+  const cadastros = useMemo<CadastrosGrade>(
+    () => ({
+      tipos: new Map(tipos.linhas.map((t) => [t.id, t.nome])),
+      responsaveis: new Map(responsaveis.linhas.map((r) => [r.id, { nome: r.nome, cor: r.cor }])),
+      status: new Map(status.linhas.map((s) => [s.id, { nome: s.nome, conta_como_pago: s.conta_como_pago }])),
+    }),
+    [tipos.linhas, responsaveis.linhas, status.linhas],
+  );
+  const ordemResponsaveis = useMemo(
+    () => [...responsaveis.linhas].sort((a, b) => a.ordem - b.ordem).map((r) => r.id),
+    [responsaveis.linhas],
+  );
+
+  const mesesComFatura = useMemo(() => new Set(faturas.linhas.map((f) => f.mes)), [faturas.linhas]);
+  const meses = mesesDaLista([...mesesComFatura], atual, mesAberto);
+  const fatura = faturas.linhas.find((f) => f.mes === mesAberto) ?? null;
+
+  const retratos = [faturas, lancamentos, responsaveis, tipos, status];
+  const erro = retratos.some((r) => r.status === "erro");
+  // A memória ainda é de outro Mês até o gerenciador abrir este.
+  const carregando =
+    retratos.some((r) => r.status === "carregando") || (lancamentos.mes !== undefined && lancamentos.mes !== mesAberto);
+
+  const abrirImportar = () => setImportando(true);
+  const filtrar = (id: string | null) => setFiltro((atualFiltro) => alternarFiltroResponsavel(atualFiltro, id));
 
   let conteudo;
-  if (faturas.status === "erro" || lancamentos.status === "erro") {
+  if (erro) {
     conteudo = (
       <ErroAoCarregar
         aoTentarDeNovo={() => {
-          void gerenciador("faturas").recarregar();
-          void gerenciador("lancamentos").recarregar();
+          for (const t of TABELAS) void gerenciador(t).recarregar();
         }}
       />
     );
-  } else if (faturas.status === "carregando" || lancamentos.status === "carregando") {
-    conteudo = (
-      <div className="flex flex-col gap-3">
-        <Esqueleto className="h-24" />
-        <Esqueleto className="h-64" />
-      </div>
-    );
-  } else if (faturas.linhas.length === 0) {
-    conteudo = <EstadoVazio texto={mensagem("painel.vazio")} />;
+  } else if (carregando) {
+    conteudo = <EsqueletoPainel />;
   } else {
-    const linhas = ordenarLancamentos(lancamentos.linhas);
+    const doMes = lancamentos.linhas.filter((l) => l.mes === mesAberto && l.excluido_em === null);
+    const daFatura = fatura ? doMes.filter((l) => l.fatura_id === fatura.id) : [];
+    const nomeDoFiltro =
+      filtro === undefined
+        ? null
+        : filtro === null
+          ? T.sem_responsavel
+          : (cadastros.responsaveis.get(filtro)?.nome ?? T.vazio);
     conteudo = (
       <div className="flex flex-col gap-3">
-        {ordenarFaturas(faturas.linhas).map((f) => {
-          const daFatura = linhas.filter((l) => l.fatura_id === f.id);
-          return (
-            <section key={f.id} className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
-              <h2 className="texto-body-strong">{tituloFaturaImportada(f.mes, f.vencimento, daFatura.length)}</h2>
-              <TotalAPagar fatura={f} valoresCentavos={daFatura.map((l) => l.valor_centavos)} />
-              <p className="texto-number text-text-muted">
-                {rotuloDespesasCreditos(f.total_despesas_centavos, f.total_creditos_centavos)}
-              </p>
-            </section>
-          );
-        })}
-        <section className="overflow-x-auto rounded-lg border border-border bg-surface p-3">
-          <table className="w-full texto-body">
-            <caption className="pb-2 text-left texto-body-strong">{C.titulo}</caption>
-            <thead>
-              <tr className="text-left text-text-muted">
-                <th className="py-1 pr-3">{C.data}</th>
-                <th className="py-1 pr-3">{C.nome}</th>
-                <th className="py-1 pr-3">{C.parcela}</th>
-                <th className="py-1 pr-3 text-right">{C.valor}</th>
-                <th className="py-1">{C.cartao}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {linhas.map((l) => (
-                <tr key={l.id} className="border-t border-border-subtle">
-                  <td className="py-1 pr-3 texto-number">{l.data ? formatarData(l.data) : ""}</td>
-                  <td className="py-1 pr-3">{l.nome}</td>
-                  <td className="py-1 pr-3 texto-number">{formatarParcela(l.parcela_n, l.parcela_total)}</td>
-                  <td className="py-1 pr-3 text-right texto-number">{formatarDinheiro(l.valor_centavos)}</td>
-                  <td className="py-1 texto-number">{l.final_cartao ?? ""}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-border texto-body-strong">
-                <td className="py-1 pr-3" colSpan={3}>
-                  {C.total}
-                </td>
-                <td className="py-1 pr-3 text-right texto-number">
-                  {formatarDinheiro(linhas.reduce((soma, l) => soma + l.valor_centavos, 0))}
-                </td>
-                <td />
-              </tr>
-            </tfoot>
-          </table>
-        </section>
+        {/* iPad deitado e PC: o cartão da fatura ocupa 40% (os Blocos virão ao lado); em pé, a largura toda. */}
+        <div className="w-full lg:w-2/5">
+          <FaturaDoMes
+            mes={mesAberto}
+            fatura={fatura}
+            valoresDaFaturaCentavos={daFatura.map((l) => l.valor_centavos)}
+            distribuicao={distribuicaoPorResponsavel(doMes, ordemResponsaveis)}
+            responsaveis={cadastros.responsaveis}
+            filtro={filtro}
+            aoFiltrar={filtrar}
+            aoImportar={abrirImportar}
+          />
+        </div>
+        {nomeDoFiltro !== null ? (
+          <div>
+            <button
+              type="button"
+              aria-label={`${rotuloFiltroResponsavel(nomeDoFiltro)}, ${T.limpar_filtro}`}
+              onClick={() => setFiltro(undefined)}
+              className="inline-flex min-h-toque cursor-pointer items-center gap-2 rounded-full border border-accent-line bg-selection px-3 texto-label text-text"
+            >
+              {rotuloFiltroResponsavel(nomeDoFiltro)}
+              <span aria-hidden>✕</span>
+            </button>
+          </div>
+        ) : null}
+        <GradeLancamentos
+          linhas={filtrarPorResponsavel(doMes, filtro)}
+          cadastros={cadastros}
+          ordem={ordem}
+          aoOrdenar={(coluna) => setOrdem((o) => alternarOrdem(o, coluna))}
+          filtro={filtro}
+          aoFiltrar={filtrar}
+          vazio={
+            nomeDoFiltro !== null && doMes.length > 0
+              ? rotuloSemLancamentosDe(filtro === null ? null : nomeDoFiltro)
+              : faturas.linhas.length === 0
+                ? mensagem("painel.vazio")
+                : T.sem_lancamentos
+          }
+        />
       </div>
     );
   }
 
   return (
-    <Tela titulo={titulo} acoes={<BotaoImportar aoImportar={abrir} />}>
+    <Tela
+      titulo={titulo}
+      acoes={
+        <>
+          <SeletorMes
+            mes={mesAberto}
+            meses={meses}
+            mesesComFatura={faturas.status === "pronto" ? mesesComFatura : new Set()}
+            aoMudar={setMesAberto}
+          />
+          <BotaoImportar aoImportar={abrirImportar} />
+        </>
+      }
+    >
       {conteudo}
-      <ImportarFatura aberta={importando} aoMudar={setImportando} />
+      <ImportarFatura aberta={importando} aoMudar={setImportando} aoImportar={setMesAberto} />
     </Tela>
   );
 }
