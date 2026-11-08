@@ -1,5 +1,6 @@
 "use client";
 
+import { precisaVerificar, type Conferencia } from "@/domain/conferencia";
 import { formatarDinheiro } from "@/domain/dinheiro";
 import { formatarParcela } from "@/domain/importacao-fatura";
 import {
@@ -10,7 +11,7 @@ import {
 } from "@/domain/mensagens";
 import {
   nomeExibido,
-  ordenarLancamentos,
+  ordenarGrade,
   rotuloLinhaAcessivel,
   somarValores,
   type ColunaOrdem,
@@ -28,6 +29,13 @@ import { classesPessoa } from "@/ui/cores-pessoa";
 // Tocar num cabeçalho ordena (o núcleo decide a ordem); de novo, inverte.
 // O cabeçalho fica fixo e, sem largura, a grade rola para os lados com a
 // caixa e o Nome fixos. A linha nunca leva cor de pessoa nem de Status.
+//
+// "Verificar" (História 2.5): bolinha de 8 px em `verify` antes do Nome nas
+// linhas que o núcleo marca (`precisaVerificar`). Para o VoiceOver, o
+// `aria-label` do `<tr>` termina com "verificar este lançamento" e a célula
+// do Nome leva a mesma frase num resumo oculto (`sr-only`), caso ele leia
+// célula a célula; o Nome visível (com a bolinha) fica `aria-hidden` para
+// não ser lido duas vezes.
 
 export type CadastroResponsavel = { nome: string; cor: number };
 export type CadastroStatus = { nome: string; conta_como_pago: boolean };
@@ -48,6 +56,10 @@ export type PropsGradeLancamentos = {
   aoFiltrar: (responsavelId: string | null) => void;
   /** Texto da grade vazia. */
   vazio: string;
+  /** Conferência da Fatura do Mês: marca "verificar". Sem ela, nenhuma linha marcada. */
+  conferencia?: Conferencia | null;
+  /** Filtro "Verificar" ligado: na ordem padrão, dúvidas de extração primeiro. */
+  verificando?: boolean;
 };
 
 /** Nomes por id, para o núcleo ordenar pelo que a grade mostra. */
@@ -80,6 +92,10 @@ const FIXA_NOME = "sticky left-11 z-10 bg-surface";
 
 function Caixa() {
   return <span aria-hidden className="inline-block size-4.5 rounded-[5px] border-[1.5px] border-text-muted align-middle" />;
+}
+
+function Bolinha() {
+  return <span className="mr-1.5 inline-block size-2 shrink-0 rounded-full bg-verify align-middle" />;
 }
 
 function Vazio() {
@@ -130,8 +146,10 @@ export function GradeLancamentos({
   filtro,
   aoFiltrar,
   vazio,
+  conferencia = null,
+  verificando = false,
 }: PropsGradeLancamentos) {
-  const ordenadas = ordenarLancamentos(linhas, ordem, nomesDosCadastros(cadastros));
+  const ordenadas = ordenarGrade(linhas, ordem, nomesDosCadastros(cadastros), verificando);
 
   return (
     <div className="max-h-[75dvh] overflow-auto rounded-lg border border-border bg-surface">
@@ -154,30 +172,34 @@ export function GradeLancamentos({
             const nome = nomeExibido(l);
             // Com Apelido, o Nome original vai ao lado, em cinza.
             const temApelido = nome !== l.nome;
+            const verificar = conferencia !== null && precisaVerificar(l, conferencia);
+            const rotulo = rotuloLinhaAcessivel({
+              nome,
+              valorCentavos: l.valor_centavos,
+              parcelaN: l.parcela_n,
+              parcelaTotal: l.parcela_total,
+              responsavel: responsavel?.nome ?? T.sem_responsavel,
+              status: status?.nome ?? null,
+              verificar,
+            });
             return (
-              <tr
-                key={l.id}
-                aria-label={rotuloLinhaAcessivel({
-                  nome,
-                  valorCentavos: l.valor_centavos,
-                  parcelaN: l.parcela_n,
-                  parcelaTotal: l.parcela_total,
-                  responsavel: responsavel?.nome ?? T.sem_responsavel,
-                  status: status?.nome ?? null,
-                })}
-              >
+              <tr key={l.id} aria-label={rotulo} data-verificar={verificar || undefined}>
                 <td className={cn(CELULA, FIXA_CAIXA)}>
                   <Caixa />
                 </td>
                 <td className={cn(CELULA, FIXA_NOME)}>
-                  {temApelido ? (
-                    <>
-                      <span className="texto-body-strong">{nome}</span>{" "}
-                      <span className="text-text-muted">· {l.nome}</span>
-                    </>
-                  ) : (
-                    l.nome
-                  )}
+                  <span className="sr-only">{rotulo}</span>
+                  <span aria-hidden data-nome>
+                    {verificar ? <Bolinha /> : null}
+                    {temApelido ? (
+                      <>
+                        <span className="texto-body-strong">{nome}</span>{" "}
+                        <span className="text-text-muted">· {l.nome}</span>
+                      </>
+                    ) : (
+                      l.nome
+                    )}
+                  </span>
                 </td>
                 <td className={cn(CELULA, "texto-number")}>{formatarParcela(l.parcela_n, l.parcela_total)}</td>
                 <td className={cn(CELULA, "text-right texto-number")}>{formatarDinheiro(l.valor_centavos)}</td>

@@ -18,6 +18,7 @@ import {
   parecePagamentoDeFatura,
   resumirExtracao,
   type Extracao,
+  type SomaConferencia,
   type LancamentoExtraido,
 } from "./extracao-fatura";
 import type { Resultado } from "./resultado";
@@ -221,6 +222,16 @@ export type ConferenciaImportacao = {
  */
 export function conferirImportacao(extracao: Extracao): ConferenciaImportacao {
   const r = resumirExtracao({ ...extracao, lancamentos: lancamentosDaFatura(extracao) });
+  return montarConferencia(r.quantidade, r);
+}
+
+/**
+ * A Conferência a partir das somas (`somarConferencia`): "conferido" quando
+ * despesas, créditos e todos os cartões batem; "incompleta" quando as
+ * despesas ou os créditos ficaram abaixo do lido. Usada pela importação e
+ * pelo Painel (`conferencia.ts`).
+ */
+export function montarConferencia(quantidade: number, r: SomaConferencia): ConferenciaImportacao {
   const porCartao = r.porCartao.map((c) => ({
     final: c.final,
     lidoCentavos: c.lidoCentavos,
@@ -228,7 +239,7 @@ export function conferirImportacao(extracao: Extracao): ConferenciaImportacao {
     diferencaCentavos: c.diferencaCentavos,
   }));
   return {
-    quantidade: r.quantidade,
+    quantidade,
     despesasCentavos: r.despesasCentavos,
     creditosCentavos: r.creditosCentavos,
     totalDespesasLidoCentavos: r.totalDespesasLidoCentavos,

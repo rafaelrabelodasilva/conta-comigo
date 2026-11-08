@@ -44,7 +44,12 @@ import {
   rotuloParcelaFalada,
   rotuloSemLancamentosDe,
   sobrelinhaFatura,
+  TEXTOS_CONFERENCIA,
+  frasesFaixaConferencia,
+  rotuloBotaoDiferenca,
+  rotuloSeloConferencia,
 } from "./mensagens";
+import type { Conferencia } from "./conferencia";
 
 describe("mensagem", () => {
   it("devolve o texto do código", () => {
@@ -399,5 +404,80 @@ describe("textos do Painel do Mês", () => {
     expect(rotuloSemLancamentosDe(null)).toBe("Nenhum lançamento sem responsável neste Mês");
     expect(rotuloParcelaFalada(2, 12)).toBe("parcela 2 de 12");
     expect(rotuloParcelaFalada(null, null)).toBe("");
+  });
+});
+
+describe("Conferência no Painel (História 2.5)", () => {
+  const base = (extra: Partial<Conferencia> = {}): Conferencia => ({
+    faturaId: "f10",
+    quantidade: 49,
+    despesasCentavos: 832739,
+    creditosCentavos: 63962,
+    totalDespesasLidoCentavos: 832739,
+    totalCreditosLidoCentavos: 63962,
+    diferencaDespesasCentavos: 0,
+    diferencaCreditosCentavos: 0,
+    porCartao: [],
+    conferido: true,
+    incompleta: false,
+    cartoesComDiferenca: [],
+    ...extra,
+  });
+  const cartao = (final: string, diferencaCentavos: number) => ({
+    final,
+    lidoCentavos: 0,
+    despesasCentavos: 0,
+    diferencaCentavos,
+  });
+
+  it("selo: Conferido ou a diferença das despesas, senão dos créditos, senão a maior de cartão", () => {
+    expect(rotuloSeloConferencia(base())).toBe("✓ Conferido");
+    expect(
+      rotuloSeloConferencia(
+        base({
+          conferido: false,
+          diferencaDespesasCentavos: -72000,
+          diferencaCreditosCentavos: 5,
+          porCartao: [cartao("8673", -72000)],
+        }),
+      ),
+    ).toBe(`⚠ Diferença de R$${ESPACO}720,00`);
+    expect(rotuloBotaoDiferenca(base({ conferido: false, diferencaDespesasCentavos: -72000 }))).toBe(
+      `Diferença de R$${ESPACO}720,00, ver lançamentos para verificar`,
+    );
+    expect(rotuloSeloConferencia(base({ conferido: false, diferencaCreditosCentavos: 2500 }))).toBe(
+      `⚠ Diferença de R$${ESPACO}25,00`,
+    );
+    expect(
+      rotuloSeloConferencia(base({ conferido: false, porCartao: [cartao("8673", -80000), cartao("9277", 80001)] })),
+    ).toBe(`⚠ Diferença de R$${ESPACO}800,01`);
+  });
+
+  it("faixa: despesas, créditos e cartões, com abaixo/acima", () => {
+    expect(frasesFaixaConferencia(base())).toEqual([]);
+    expect(
+      frasesFaixaConferencia(base({ conferido: false, diferencaDespesasCentavos: -72000, cartoesComDiferenca: ["8673"] })),
+    ).toEqual([
+      `A soma dos lançamentos ficou R$${ESPACO}720,00 abaixo do total da fatura.`,
+      "A diferença está no cartão final 8673.",
+    ]);
+    expect(frasesFaixaConferencia(base({ conferido: false, diferencaCreditosCentavos: 800 }))).toEqual([
+      `A soma dos créditos ficou R$${ESPACO}8,00 acima do total de créditos da fatura.`,
+    ]);
+    expect(frasesFaixaConferencia(base({ conferido: false, cartoesComDiferenca: ["8673", "9277"] }))).toEqual([
+      "A diferença está nos cartões finais 8673 e 9277.",
+    ]);
+    expect(frasesFaixaConferencia(base({ conferido: false, cartoesComDiferenca: ["3967", "8673", "9277"] }))).toEqual([
+      "A diferença está nos cartões finais 3967, 8673 e 9277.",
+    ]);
+  });
+
+  it("textos fixos da pílula, da bolinha, do vazio e do toast", () => {
+    expect(TEXTOS_CONFERENCIA.verificar).toBe("Verificar");
+    expect(TEXTOS_CONFERENCIA.verificar_lancamento).toBe("verificar este lançamento");
+    expect(TEXTOS_CONFERENCIA.sem_para_verificar).toBe("Nenhum lançamento para verificar");
+    expect(TEXTOS_CONFERENCIA.alerta_dispensado).toBe("Alerta dispensado");
+    expect(TEXTOS_CONFERENCIA.ver_lancamentos).toBe("Ver lançamentos");
+    expect(TEXTOS_CONFERENCIA.dispensar).toBe("Dispensar");
   });
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import type { Conferencia } from "@/domain/conferencia";
 import { formatarDinheiro } from "@/domain/dinheiro";
 import { comporTotalAPagar, type TotaisLidosDaFatura } from "@/domain/importacao-fatura";
 import {
@@ -9,6 +10,8 @@ import {
   rotuloConferenciaTotal,
   rotuloFiltrarPor,
   rotuloLancamentos,
+  rotuloBotaoDiferenca,
+  rotuloSeloConferencia,
   rotuloTotalAPagar,
   sobrelinhaFatura,
 } from "@/domain/mensagens";
@@ -23,6 +26,9 @@ import { classesPessoa } from "@/ui/cores-pessoa";
 // Responsável. Tocar num segmento (ou na legenda) filtra a grade; tocar de
 // novo limpa. Mês sem Fatura: "Fatura ainda não importada" com "Importar
 // fatura". "Recebido no mês" e "Falta receber" chegam com os Recebimentos.
+// Selo da Conferência (História 2.5) na linha da quantidade: "✓ Conferido
+// · 49 lançamentos" ou "⚠ Diferença de R$ X" (toque liga o filtro
+// "Verificar"); a conta do total e o "Bate" ficam embaixo, menores.
 
 export type FaturaHero = TotaisLidosDaFatura & { mes: string; vencimento: string };
 
@@ -38,6 +44,10 @@ export type PropsFaturaDoMes = {
   filtro: FiltroResponsavel;
   aoFiltrar: (responsavelId: string | null) => void;
   aoImportar: () => void;
+  /** Conferência da Fatura (`conferir`); sem ela, sem selo. */
+  conferencia?: Conferencia | null;
+  /** Toque no selo de diferença: liga o filtro "Verificar". */
+  aoVerificar?: () => void;
 };
 
 type Fatia = { id: string | null; nome: string; centavos: number; fundo: string };
@@ -94,6 +104,21 @@ function BarraPorResponsavel({
   );
 }
 
+function SeloConferencia({ conferencia, aoVerificar }: { conferencia: Conferencia; aoVerificar?: () => void }) {
+  const texto = rotuloSeloConferencia(conferencia);
+  if (conferencia.conferido) return <span className="texto-body-strong text-accent">{texto}</span>;
+  return (
+    <button
+      type="button"
+      aria-label={rotuloBotaoDiferenca(conferencia)}
+      onClick={aoVerificar}
+      className="area-toque inline-flex cursor-pointer items-center rounded-full border border-alert-warning-border bg-alert-warning-bg px-2 texto-body-strong text-text"
+    >
+      {texto}
+    </button>
+  );
+}
+
 export function FaturaDoMes({
   mes,
   fatura,
@@ -103,6 +128,8 @@ export function FaturaDoMes({
   filtro,
   aoFiltrar,
   aoImportar,
+  conferencia = null,
+  aoVerificar,
 }: PropsFaturaDoMes) {
   const fatias: Fatia[] = distribuicao.segmentos.map((s) => {
     const r = responsaveis.get(s.responsavelId);
@@ -151,11 +178,17 @@ export function FaturaDoMes({
           {formatarDinheiro(c.lidoCentavos)}
         </p>
       )}
-      <p className="texto-body text-text-muted">{rotuloLancamentos(valoresDaFaturaCentavos.length)}</p>
-      <p className="texto-number text-text-muted">{rotuloComposicaoTotal(c)}</p>
-      {selo ? (
-        <p className={c.diferencaCentavos === 0 ? "texto-body-strong text-accent" : "texto-body-strong"}>{selo}</p>
-      ) : null}
+      <p className="flex flex-wrap items-center gap-x-1.5 texto-body text-text-muted">
+        {conferencia ? (
+          <>
+            <SeloConferencia conferencia={conferencia} aoVerificar={aoVerificar} />
+            <span aria-hidden>·</span>
+          </>
+        ) : null}
+        <span>{rotuloLancamentos(valoresDaFaturaCentavos.length)}</span>
+      </p>
+      <p className="texto-caption tabular-nums text-text-muted">{rotuloComposicaoTotal(c)}</p>
+      {selo ? <p className={c.diferencaCentavos === 0 ? "texto-caption text-accent" : "texto-caption"}>{selo}</p> : null}
       {barra}
     </section>
   );

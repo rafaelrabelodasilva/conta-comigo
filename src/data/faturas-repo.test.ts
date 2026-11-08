@@ -71,13 +71,20 @@ const gravados = {
 
 type Linha = Record<string, unknown>;
 
+type Atualizacao = { tabela: string; corpo: Record<string, unknown>; id: string | null };
+
 function montar(
   tabelas: Record<string, unknown[]>,
   responder: (c: Chamada) => { data: unknown; error: unknown },
   online = () => true,
-  opcoes: { erroDaLeitura?: unknown } = {},
+  opcoes: {
+    erroDaLeitura?: unknown;
+    /** Resposta de `update(...).eq(...).select().single()`; padrão: a linha com o corpo e `updated_at` T2. */
+    responderUpdate?: (u: Atualizacao) => Promise<{ data: unknown; error: unknown }>;
+  } = {},
 ) {
   const chamadas: Chamada[] = [];
+  const atualizacoes: Atualizacao[] = [];
   // Leituras do banco: a tabela, as colunas e os filtros de cada uma.
   const leituras: { tabela: string; colunas: string; filtros: string[] }[] = [];
   const cliente = {
@@ -110,6 +117,23 @@ function montar(
         };
         return consulta;
       },
+      update: (corpo: Record<string, unknown>) => {
+        const u: Atualizacao = { tabela, corpo, id: null };
+        atualizacoes.push(u);
+        const encadeada = {
+          eq(_coluna: string, valor: string) {
+            u.id = valor;
+            return encadeada;
+          },
+          select: () => encadeada,
+          single: () => {
+            if (opcoes.responderUpdate) return opcoes.responderUpdate(u);
+            const atual = ((tabelas[tabela] ?? []) as Linha[]).find((l) => l.id === u.id);
+            return Promise.resolve({ data: { ...atual, ...corpo, updated_at: T2 }, error: null });
+          },
+        };
+        return encadeada;
+      },
     }),
     rpc: async (funcao: string, args: Record<string, unknown>) => {
       const c = { funcao, args };
@@ -134,7 +158,7 @@ function montar(
     porMes: true,
   });
   const repo = criarRepoFaturas({ obterCliente: () => cliente, faturas, cartoes, lancamentos, online });
-  return { chamadas, leituras, faturas, cartoes, lancamentos, repo };
+  return { chamadas, leituras, atualizacoes, faturas, cartoes, lancamentos, repo };
 }
 
 /** Assina as três tabelas com o Mês aberto (padrão: o Mês importado). */
@@ -296,5 +320,55 @@ describe("repositório da importação da Fatura", () => {
       online: () => true,
     });
     expect(await semCliente.importar(importacao)).toEqual({ ok: false, codigo: "salvar.falhou" });
+  });
+});
+
+describe("dispensar o alerta da Conferência (História 2.5)", () => {
+  const fatura = { id: "f10", mes: "2026-10", alerta_dispensado_em: null, total_despesas_centavos: 1, updated_at: T1 };
+  const AGORA = new Date("2026-11-08T15:00:00.000Z");
+
+  it("grava só alerta_dispensado_em e aplica a resposta; Desfazer grava null", async () => {
+    const m = montar({ faturas: [fatura] }, () => ({ data: null, error: null }));
+    await pronto(m);
+    expect(await m.repo.dispensarAlerta("f10", AGORA)).toEqual({ ok: true });
+    expect(m.atualizacoes).toEqual([
+      { tabela: "faturas", corpo: { alerta_dispensado_em: "2026-11-08T15:00:00.000Z" }, id: "f10" },
+    ]);
+    expect(m.faturas.linha("f10")?.alerta_dispensado_em).toBe("2026-11-08T15:00:00.000Z");
+    expect(m.faturas.linha("f10")?.updated_at).toBe(T2);
+
+    expect(await m.repo.desfazerDispensa("f10")).toEqual({ ok: true });
+    expect(m.atualizacoes[1]).toEqual({ tabela: "faturas", corpo: { alerta_dispensado_em: null }, id: "f10" });
+    expect(m.faturas.linha("f10")?.alerta_dispensado_em).toBeNull();
+  });
+
+  it("otimista: a memória muda antes da resposta; recusa do banco desfaz", async () => {
+    let responder: (r: { data: unknown; error: unknown }) => void = () => {};
+    const m = montar({ faturas: [fatura] }, () => ({ data: null, error: null }), () => true, {
+      responderUpdate: () => new Promise((r) => (responder = r)),
+    });
+    await pronto(m);
+    const gravacao = m.repo.dispensarAlerta("f10", AGORA);
+    expect(m.faturas.linha("f10")?.alerta_dispensado_em).toBe("2026-11-08T15:00:00.000Z");
+    responder({ data: null, error: { code: "42501" } });
+    expect(await gravacao).toEqual({ ok: false, codigo: "salvar.falhou" });
+    expect(m.faturas.linha("f10")?.alerta_dispensado_em).toBeNull();
+  });
+
+  it("sem conexão: nada gravado, nada muda na memória", async () => {
+    let online = true;
+    const m = montar({ faturas: [fatura] }, () => ({ data: null, error: null }), () => online);
+    await pronto(m);
+    online = false;
+    expect(await m.repo.dispensarAlerta("f10", AGORA)).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(m.atualizacoes).toEqual([]);
+    expect(m.faturas.linha("f10")?.alerta_dispensado_em).toBeNull();
+  });
+
+  it("Fatura que não está na memória: salvar.falhou sem chamar o banco", async () => {
+    const m = montar({}, () => ({ data: null, error: null }));
+    await pronto(m);
+    expect(await m.repo.dispensarAlerta("f99", AGORA)).toEqual({ ok: false, codigo: "salvar.falhou" });
+    expect(m.atualizacoes).toEqual([]);
   });
 });

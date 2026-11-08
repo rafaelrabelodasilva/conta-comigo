@@ -249,12 +249,44 @@ export type ResumoExtracao = {
   duvidas: number;
 };
 
-/** Somas e diferenças da extração contra os totais que a própria Fatura traz. */
-export function resumirExtracao(extracao: Extracao): ResumoExtracao {
+/** O que a soma por cartão usa de um Lançamento (extraído ou gravado). */
+export type ValorNoCartao = { valorCentavos: number; finalCartao: string };
+
+/** O que a soma por cartão usa da Fatura e dos cartões lidos. */
+export type TotaisLidos = { totalDespesasCentavos: number; totalCreditosCentavos: number };
+
+export type SomaConferencia = {
+  /** Soma dos valores positivos. */
+  despesasCentavos: number;
+  /** Soma dos créditos, em valor absoluto. */
+  creditosCentavos: number;
+  totalDespesasLidoCentavos: number;
+  totalCreditosLidoCentavos: number;
+  /** Soma das despesas − total de despesas lido. */
+  diferencaDespesasCentavos: number;
+  /** Soma dos créditos − total de créditos lido. */
+  diferencaCreditosCentavos: number;
+  /** Cartões lidos e, depois, finais que só aparecem nos Lançamentos (lido R$ 0,00). */
+  porCartao: ResumoCartao[];
+};
+
+/**
+ * A regra única da Conferência (FR-6): despesas (valor ≥ 0) contra o total
+ * de despesas, créditos (valor absoluto dos negativos) contra o total de
+ * créditos e, por cartão, as despesas de cada final contra o "VALOR TOTAL"
+ * dele (que é só despesas). Um final que só existe nos Lançamentos conta
+ * como lido R$ 0,00. Saldo anterior e pagamentos não entram. Serve à
+ * importação (extração) e ao Painel (linhas gravadas).
+ */
+export function somarConferencia(
+  lancamentos: readonly ValorNoCartao[],
+  cartoes: readonly CartaoExtraido[],
+  totais: TotaisLidos,
+): SomaConferencia {
   let despesas = 0;
   let creditos = 0;
   const despesasPorCartao = new Map<string, number>();
-  for (const l of extracao.lancamentos) {
+  for (const l of lancamentos) {
     if (l.valorCentavos >= 0) {
       despesas += l.valorCentavos;
       despesasPorCartao.set(l.finalCartao, (despesasPorCartao.get(l.finalCartao) ?? 0) + l.valorCentavos);
@@ -262,30 +294,36 @@ export function resumirExtracao(extracao: Extracao): ResumoExtracao {
       creditos += -l.valorCentavos;
     }
   }
-  const cartoes = extracao.cartoes.reduce((soma, c) => soma + c.valorTotalCentavos, 0);
-  const { totalDespesasCentavos, totalCreditosCentavos } = extracao.fatura;
+  const { totalDespesasCentavos, totalCreditosCentavos } = totais;
 
-  // Cartões lidos e, depois, finais que só aparecem nos Lançamentos.
-  const finais = [...new Set([...extracao.cartoes.map((c) => c.final), ...despesasPorCartao.keys()])];
+  const finais = [...new Set([...cartoes.map((c) => c.final), ...despesasPorCartao.keys()])];
   const porCartao = finais.map((f) => {
-    const lido = extracao.cartoes
-      .filter((c) => c.final === f)
-      .reduce((soma, c) => soma + c.valorTotalCentavos, 0);
+    const lido = cartoes.filter((c) => c.final === f).reduce((soma, c) => soma + c.valorTotalCentavos, 0);
     const somaDespesas = despesasPorCartao.get(f) ?? 0;
     return { final: f, lidoCentavos: lido, despesasCentavos: somaDespesas, diferencaCentavos: somaDespesas - lido };
   });
 
   return {
-    quantidade: extracao.lancamentos.length,
     despesasCentavos: despesas,
     creditosCentavos: creditos,
-    cartoesCentavos: cartoes,
     totalDespesasLidoCentavos: totalDespesasCentavos,
     totalCreditosLidoCentavos: totalCreditosCentavos,
     diferencaDespesasCentavos: despesas - totalDespesasCentavos,
     diferencaCreditosCentavos: creditos - totalCreditosCentavos,
-    diferencaCartoesCentavos: cartoes - totalDespesasCentavos,
     porCartao,
+  };
+}
+
+/** Somas e diferenças da extração contra os totais que a própria Fatura traz. */
+export function resumirExtracao(extracao: Extracao): ResumoExtracao {
+  const soma = somarConferencia(extracao.lancamentos, extracao.cartoes, extracao.fatura);
+  const cartoes = extracao.cartoes.reduce((total, c) => total + c.valorTotalCentavos, 0);
+
+  return {
+    quantidade: extracao.lancamentos.length,
+    ...soma,
+    cartoesCentavos: cartoes,
+    diferencaCartoesCentavos: cartoes - soma.totalDespesasLidoCentavos,
     pagamentosDeFatura: extracao.lancamentos.filter((l) => parecePagamentoDeFatura(l.nome)).length,
     duvidas: extracao.lancamentos.filter((l) => l.duvida).length,
   };

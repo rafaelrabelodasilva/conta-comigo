@@ -6,6 +6,7 @@
 // para a pessoa e podem mudar. Erro de login nunca diz qual campo errou.
 
 import type { PassoPrimeiroUso } from "./primeiro-uso";
+import { partesDaDiferenca, valorDaDiferenca, type Conferencia, type SentidoDiferenca } from "./conferencia";
 import { formatarData, formatarMesExtenso, formatarNomeDoMes } from "./datas";
 import { formatarDinheiro } from "./dinheiro";
 import {
@@ -207,6 +208,62 @@ export const TEXTOS_PAINEL = {
   total_a_pagar: "Total a pagar",
   carregando: "Carregando…",
 } as const;
+
+/** Textos da Conferência no Painel (História 2.5): selo, faixa, pílula "Verificar" e bolinha. */
+export const TEXTOS_CONFERENCIA = {
+  conferido: "✓ Conferido",
+  /** Nome acessível da faixa âmbar. */
+  faixa: "Diferença na conferência",
+  ver_lancamentos: "Ver lançamentos",
+  dispensar: "Dispensar",
+  /** Pílula do filtro acima da grade. */
+  verificar: "Verificar",
+  /** Texto acessível da bolinha (e o fim do nome acessível da linha marcada). */
+  verificar_lancamento: "verificar este lançamento",
+  sem_para_verificar: "Nenhum lançamento para verificar",
+  alerta_dispensado: "Alerta dispensado",
+} as const;
+
+/** Selo do `invoice-hero`: "✓ Conferido" ou "⚠ Diferença de R$ 720,00". */
+export function rotuloSeloConferencia(c: Conferencia): string {
+  const valor = valorDaDiferenca(c);
+  return valor === null ? TEXTOS_CONFERENCIA.conferido : `⚠ Diferença de ${formatarDinheiro(valor)}`;
+}
+
+/**
+ * Nome acessível do selo de diferença (botão que liga "Verificar"), sem o
+ * "⚠": "Diferença de R$ 720,00, ver lançamentos para verificar".
+ */
+export function rotuloBotaoDiferenca(c: Conferencia): string {
+  const valor = valorDaDiferenca(c) ?? 0;
+  return `Diferença de ${formatarDinheiro(valor)}, ver lançamentos para verificar`;
+}
+
+/** "8673", "8673 e 9277", "3967, 8673 e 9277". */
+function listarFinais(finais: readonly string[]): string {
+  if (finais.length <= 1) return finais.join("");
+  return `${finais.slice(0, -1).join(", ")} e ${finais[finais.length - 1]}`;
+}
+
+/**
+ * Frases da faixa âmbar, na ordem: despesas ("A soma dos lançamentos ficou
+ * R$ 720,00 abaixo do total da fatura."), créditos ("A soma dos créditos
+ * ficou R$ 8,00 acima do total de créditos da fatura.") e cartões ("A
+ * diferença está no cartão final 8673." / "…nos cartões finais 8673 e
+ * 9277."). Conferido: nenhuma.
+ */
+export function frasesFaixaConferencia(c: Conferencia): string[] {
+  const p = partesDaDiferenca(c);
+  const frases: string[] = [];
+  const quanto = (centavos: number, sentido: SentidoDiferenca) => `${formatarDinheiro(centavos)} ${sentido}`;
+  if (p.despesas) frases.push(`A soma dos lançamentos ficou ${quanto(p.despesas.centavos, p.despesas.sentido)} do total da fatura.`);
+  if (p.creditos) {
+    frases.push(`A soma dos créditos ficou ${quanto(p.creditos.centavos, p.creditos.sentido)} do total de créditos da fatura.`);
+  }
+  if (p.cartoes.length === 1) frases.push(`A diferença está no cartão final ${p.cartoes[0]}.`);
+  else if (p.cartoes.length > 1) frases.push(`A diferença está nos cartões finais ${listarFinais(p.cartoes)}.`);
+  return frases;
+}
 
 /** Cabeçalhos da grade de Lançamentos (UX-DR10), na ordem das colunas. */
 export const COLUNAS_GRADE = {
