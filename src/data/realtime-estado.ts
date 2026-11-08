@@ -6,6 +6,8 @@
 // novo. O `updated_at` é sempre do banco; o otimismo mantém o da linha
 // anterior, então a resposta do banco (mais nova) sempre o substitui.
 
+import { instanteEmMicros } from "@/domain/datas";
+
 export type LinhaBase = { id: string; updated_at: string };
 
 export type StatusTabela = "carregando" | "pronto" | "erro";
@@ -19,29 +21,14 @@ export function estadoInicial<L extends LinhaBase>(): EstadoTabela<L> {
   return { status: "carregando", porId: new Map() };
 }
 
-const INSTANTE =
-  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}(?::?\d{2})?)?$/;
-
 /**
  * Instante em microssegundos desde 1970. Aceita o formato do PostgREST
  * (`2026-11-02T12:00:00.123456+00:00`) e o do Realtime
  * (`2026-11-02 12:00:00.123456+00`), que guardam microssegundos (o
- * `Date` só guarda milissegundos). Formato desconhecido → `NaN`.
+ * `Date` só guarda milissegundos). Formato desconhecido → `NaN`. A regra é
+ * do núcleo (`instanteEmMicros`, `src/domain/datas.ts`).
  */
-export function instanteMicros(valor: string): number {
-  const m = INSTANTE.exec(valor.trim());
-  if (!m) return NaN;
-  const [, ano, mes, dia, hora, min, seg, fracao = "", fuso = "Z"] = m;
-  let deslocamentoMin = 0;
-  if (fuso !== "Z") {
-    const sinal = fuso[0] === "-" ? -1 : 1;
-    const digitos = fuso.slice(1).replace(":", "");
-    deslocamentoMin = sinal * (Number(digitos.slice(0, 2)) * 60 + Number(digitos.slice(2, 4) || 0));
-  }
-  const ms =
-    Date.UTC(+ano, +mes - 1, +dia, +hora, +min, +seg) - deslocamentoMin * 60_000;
-  return ms * 1000 + Number(fracao.padEnd(6, "0"));
-}
+export const instanteMicros = instanteEmMicros;
 
 /** `a` é estritamente mais novo que `b`. Instante ilegível nunca é mais novo. */
 export function ehMaisNovo(a: string, b: string): boolean {

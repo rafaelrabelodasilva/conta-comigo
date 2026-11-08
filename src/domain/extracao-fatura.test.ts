@@ -4,6 +4,7 @@ import {
   converterExtracao,
   parecePagamentoDeFatura,
   resumirExtracao,
+  somarConferencia,
   validarExtracao,
   type ExtracaoBruta,
 } from "./extracao-fatura";
@@ -168,5 +169,23 @@ describe("ESQUEMA_PEDIDO_EXTRACAO", () => {
     expect(ESQUEMA_PEDIDO_EXTRACAO.safeParse({ texto: "   " }).success).toBe(false);
     expect(ESQUEMA_PEDIDO_EXTRACAO.safeParse({}).success).toBe(false);
     expect(ESQUEMA_PEDIDO_EXTRACAO.safeParse({ texto: "x".repeat(200_001) }).success).toBe(false);
+  });
+});
+
+describe("somarConferencia com final nulo", () => {
+  it("o valor entra nas despesas, mas em nenhum cartão (não existe cartão \"\")", () => {
+    const soma = somarConferencia(
+      [
+        { valorCentavos: 1000, finalCartao: "8673" },
+        { valorCentavos: 500, finalCartao: null },
+        { valorCentavos: -200, finalCartao: null },
+      ],
+      [{ final: "8673", valorTotalCentavos: 1000 }],
+      { totalDespesasCentavos: 1000, totalCreditosCentavos: 0 },
+    );
+    expect(soma.despesasCentavos).toBe(1500);
+    expect(soma.creditosCentavos).toBe(200);
+    expect(soma.diferencaDespesasCentavos).toBe(500);
+    expect(soma.porCartao).toEqual([{ final: "8673", lidoCentavos: 1000, despesasCentavos: 1000, diferencaCentavos: 0 }]);
   });
 });

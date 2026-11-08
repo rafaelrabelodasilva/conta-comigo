@@ -1,7 +1,16 @@
 "use client";
 
 import { DropdownMenu } from "radix-ui";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import { cn } from "./cn";
 import { criarDetectorToqueLongo } from "./toque-longo";
 
@@ -22,6 +31,12 @@ export type PropsMenuAcoes = {
   /** Conteúdo que também abre o menu com toque longo (linha, Bloco). */
   children?: ReactNode;
   className?: string;
+  /**
+   * Menu controlado de fora (ex.: a linha da grade, que abre o menu com o
+   * toque longo no `<tr>` por `useToqueLongo`). Sem ele, o estado é interno.
+   */
+  aberto?: boolean;
+  aoMudarAberto?: (aberto: boolean) => void;
 };
 
 const temporizadoresDoNavegador = {
@@ -37,20 +52,70 @@ function doConteudo(e: { target: EventTarget; currentTarget: EventTarget }): boo
   return e.target instanceof Node && (e.currentTarget as Node).contains(e.target);
 }
 
-export function MenuAcoes({ rotulo, itens, children, className }: PropsMenuAcoes) {
-  const [aberto, setAberto] = useState(false);
-  // O clique que vem depois de um toque longo não pode acionar o conteúdo.
+/**
+ * Toque longo (dedo ou caneta) e clique direito numa área abrem o menu
+ * (`aoToqueLongo`, de preferência estável: trocá-lo recria o detector). Os manipuladores vão no elemento da área (uma `<div>`, um
+ * `<tr>`); o clique que vem logo depois do toque longo é engolido, para não
+ * acionar o conteúdo.
+ */
+export function useToqueLongo(aoToqueLongo: () => void) {
   const engolirClique = useRef(false);
-
   const detector = useMemo(
-    () =>
-      criarDetectorToqueLongo({
-        aoToqueLongo: () => setAberto(true),
-        temporizadores: temporizadoresDoNavegador,
-      }),
-    [],
+    () => criarDetectorToqueLongo({ aoToqueLongo, temporizadores: temporizadoresDoNavegador }),
+    [aoToqueLongo],
   );
   useEffect(() => () => detector.cancelar(), [detector]);
+
+  return {
+    onPointerDown: (e: ReactPointerEvent) => {
+      engolirClique.current = false;
+      if (!doConteudo(e)) return;
+      // Toque longo é do dedo e da caneta; no mouse há o ⋯ e o clique direito.
+      if (e.pointerType === "mouse") return;
+      detector.iniciar(e.clientX, e.clientY);
+    },
+    onPointerMove: (e: ReactPointerEvent) => {
+      if (doConteudo(e)) detector.mover(e.clientX, e.clientY);
+    },
+    onPointerUp: (e: ReactPointerEvent) => {
+      if (doConteudo(e) && detector.soltar()) engolirClique.current = true;
+    },
+    onPointerCancel: (e: ReactPointerEvent) => {
+      if (doConteudo(e)) detector.cancelar();
+    },
+    onPointerLeave: () => detector.cancelar(),
+    onKeyDown: () => {
+      engolirClique.current = false;
+    },
+    onContextMenu: (e: ReactMouseEvent) => {
+      // Clique direito (ou o menu do sistema após toque longo) abre o ⋯.
+      e.preventDefault();
+      if (!doConteudo(e)) return;
+      aoToqueLongo();
+    },
+    onClickCapture: (e: ReactMouseEvent) => {
+      if (!doConteudo(e)) return;
+      if (engolirClique.current) {
+        engolirClique.current = false;
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+  };
+}
+
+export function MenuAcoes({ rotulo, itens, children, className, aberto: abertoFora, aoMudarAberto }: PropsMenuAcoes) {
+  const [abertoDentro, setAbertoDentro] = useState(false);
+  const aberto = abertoFora ?? abertoDentro;
+  const setAberto = (v: boolean) => {
+    if (abertoFora === undefined) setAbertoDentro(v);
+    aoMudarAberto?.(v);
+  };
+  const abrirPorToque = useCallback(() => {
+    setAbertoDentro(true);
+    aoMudarAberto?.(true);
+  }, [aoMudarAberto]);
+  const toqueLongo = useToqueLongo(abrirPorToque);
 
   const botao = (
     <DropdownMenu.Root open={aberto} onOpenChange={setAberto}>
@@ -88,39 +153,7 @@ export function MenuAcoes({ rotulo, itens, children, className }: PropsMenuAcoes
   return (
     <div
       className={cn("flex items-center gap-2 select-none [-webkit-touch-callout:none]", className)}
-      onPointerDown={(e) => {
-        engolirClique.current = false;
-        if (!doConteudo(e)) return;
-        // Toque longo é do dedo e da caneta; no mouse há o ⋯ e o clique direito.
-        if (e.pointerType === "mouse") return;
-        detector.iniciar(e.clientX, e.clientY);
-      }}
-      onPointerMove={(e) => {
-        if (doConteudo(e)) detector.mover(e.clientX, e.clientY);
-      }}
-      onPointerUp={(e) => {
-        if (doConteudo(e) && detector.soltar()) engolirClique.current = true;
-      }}
-      onPointerCancel={(e) => {
-        if (doConteudo(e)) detector.cancelar();
-      }}
-      onPointerLeave={() => detector.cancelar()}
-      onKeyDown={() => {
-        engolirClique.current = false;
-      }}
-      onContextMenu={(e) => {
-        // Clique direito (ou o menu do sistema após toque longo) abre o ⋯.
-        e.preventDefault();
-        setAberto(true);
-      }}
-      onClickCapture={(e) => {
-        if (!doConteudo(e)) return;
-        if (engolirClique.current) {
-          engolirClique.current = false;
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      }}
+      {...toqueLongo}
     >
       <div className="min-w-0 flex-1">{children}</div>
       {botao}

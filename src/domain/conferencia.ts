@@ -40,7 +40,8 @@ export type Conferencia = ConferenciaImportacao & {
  * Conferência geral e por cartão da Fatura a partir das linhas gravadas.
  * Os cartões entram em ordem de final (o texto da faixa não depende da
  * ordem de leitura); finais que só existem nos Lançamentos vêm depois, com
- * lido R$ 0,00.
+ * lido R$ 0,00. Um Lançamento sem final entra só nos totais gerais (não
+ * existe cartão "").
  */
 export function conferir(
   fatura: FaturaParaConferir,
@@ -53,7 +54,7 @@ export function conferir(
     .map((c) => ({ final: c.final, valorTotalCentavos: c.total_centavos }))
     .sort((a, b) => (a.final < b.final ? -1 : a.final > b.final ? 1 : 0));
   const soma = somarConferencia(
-    daFatura.map((l) => ({ valorCentavos: l.valor_centavos, finalCartao: l.final_cartao ?? "" })),
+    daFatura.map((l) => ({ valorCentavos: l.valor_centavos, finalCartao: l.final_cartao })),
     lidos,
     { totalDespesasCentavos: fatura.total_despesas_centavos, totalCreditosCentavos: fatura.total_creditos_centavos },
   );
@@ -75,7 +76,8 @@ export type LancamentoParaVerificar = Pick<LancamentoParaConferir, "fatura_id" |
 export function precisaVerificar(lancamento: LancamentoParaVerificar, conferencia: Conferencia): boolean {
   if (conferencia.conferido || lancamento.fatura_id !== conferencia.faturaId) return false;
   if (conferencia.cartoesComDiferenca.length > 0) {
-    return conferencia.cartoesComDiferenca.includes(lancamento.final_cartao ?? "");
+    // Sem final, a linha não está em nenhum cartão: nunca é marcada por cartão.
+    return lancamento.final_cartao !== null && conferencia.cartoesComDiferenca.includes(lancamento.final_cartao);
   }
   return conferencia.diferencaCreditosCentavos !== 0 && lancamento.valor_centavos < 0;
 }
