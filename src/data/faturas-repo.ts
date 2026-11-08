@@ -2,8 +2,10 @@
 // de gravação de `faturas`, `fatura_cartoes` e `lancamentos` nesta
 // história: chama a RPC atômica `importar_fatura` com o que o núcleo
 // preparou (`prepararImportacao`) e o `updated_at` mais novo dos
-// Lançamentos do Mês que estão na memória, e aplica as linhas devolvidas
-// nos três gerenciadores de Realtime, sem esperar os eventos.
+// Lançamentos do Mês importado, e aplica as linhas devolvidas nos três
+// gerenciadores de Realtime, sem esperar os eventos. O `updated_at` vem da
+// memória quando o Mês importado é o Mês aberto e já carregou; senão, de
+// uma leitura do banco só daquele Mês (a memória guarda só o Mês aberto).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Importacao } from "@/domain/importacao-fatura";
@@ -50,7 +52,7 @@ function ehGravados(dados: unknown): dados is Gravados {
   );
 }
 
-/** O `updated_at` mais novo dos Lançamentos do Mês na memória (null se nenhum). */
+/** O `updated_at` mais novo dos Lançamentos do Mês entre as linhas dadas (null se nenhum). */
 export function ultimaAlteracaoDoMes(linhas: readonly LinhaLancamento[], mes: string): string | null {
   let ultima: string | null = null;
   for (const l of linhas) {
@@ -81,16 +83,38 @@ export function criarRepoFaturas(deps: {
 }) {
   const { obterCliente, faturas, cartoes, lancamentos, online = estaOnline } = deps;
 
+  /**
+   * O `updated_at` mais novo dos Lançamentos do Mês (inclusive excluídos,
+   * como a RPC compara): da memória, se o Mês está aberto e carregado;
+   * senão, do banco.
+   */
+  async function lerUltimaAlteracao(
+    cliente: SupabaseClient<Database>,
+    mes: string,
+  ): Promise<{ ok: true; valor: string | null } | { ok: false; codigo: string }> {
+    if (lancamentos.mesAberto() === mes && lancamentos.retrato().status === "pronto") {
+      return { ok: true, valor: ultimaAlteracaoDoMes(lancamentos.linhas(), mes) };
+    }
+    const { data, error } = await cliente
+      .from("lancamentos")
+      .select("updated_at")
+      .eq("mes", mes)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    if (error || !data) return { ok: false, codigo: codigoDoErro(error) };
+    return { ok: true, valor: data[0]?.updated_at ?? null };
+  }
+
   return {
     /** Grava tudo ou nada pela RPC e aplica as linhas devolvidas na memória. */
     async importar(importacao: Importacao): Promise<ResultadoImportacao> {
       if (!online()) return SEM_CONEXAO;
       const cliente = obterCliente();
       if (!cliente) return FALHOU;
-      // Sem os Lançamentos carregados, o `updated_at` lido daria "Mês mudou" falso.
-      if (lancamentos.retrato().status !== "pronto") return FALHOU;
-      const lidoEm = ultimaAlteracaoDoMes(lancamentos.linhas(), importacao.fatura.mes);
       try {
+        const lida = await lerUltimaAlteracao(cliente, importacao.fatura.mes);
+        if (!lida.ok) return { ok: false, codigo: lida.codigo };
+        const lidoEm = lida.valor;
         const { data, error } = await cliente.rpc("importar_fatura", {
           dados_fatura: importacao.fatura as unknown as Json,
           dados_cartoes: importacao.cartoes as unknown as Json,

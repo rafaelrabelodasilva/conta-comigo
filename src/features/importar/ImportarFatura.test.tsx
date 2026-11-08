@@ -54,6 +54,7 @@ function arquivoPdf(nome = "fatura.pdf") {
 }
 
 const aoMudar = vi.fn();
+const aoImportar = vi.fn();
 
 function Montar() {
   const [aberta, setAberta] = useState(true);
@@ -64,6 +65,7 @@ function Montar() {
         aoMudar(a);
         setAberta(a);
       }}
+      aoImportar={aoImportar}
     />
   );
 }
@@ -134,6 +136,8 @@ describe("ImportarFatura", () => {
 
     await u.click(screen.getByRole("button", { name: T.importar }));
     await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
+    // O Painel abre o Mês importado.
+    expect(aoImportar).toHaveBeenCalledExactlyOnceWith("2026-10");
     const gravado: Importacao = falso.importar.mock.calls[0][0];
     expect(gravado.fatura.mes).toBe("2026-10");
     expect(gravado.cartoes).toHaveLength(5);
@@ -202,6 +206,8 @@ describe("ImportarFatura", () => {
     await u.click(await screen.findByRole("button", { name: T.importar }));
     expect((await screen.findByRole("alert")).textContent).toBe(mensagem("fatura.mes_ja_importado"));
     expect(screen.queryByRole("button", { name: T.importar })).toBeNull();
+    // Nada gravado: o Painel não troca de Mês.
+    expect(aoImportar).not.toHaveBeenCalled();
   });
 
   it("503 esgotado: mensagem e \"Tentar de novo\" reenvia o mesmo texto sem pedir PDF e senha", async () => {

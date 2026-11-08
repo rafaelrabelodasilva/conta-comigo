@@ -56,6 +56,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-3-importar-a-fatura-do-mes.md`
   summary: Testar o ramo `unique_violation` de `importar_fatura` (duas importações do mesmo Mês ao mesmo tempo devolvem `fatura.mes_ja_importado`).
   evidence: Low, não verificado: a trava `pg_advisory_xact_lock` já serializa as importações do mesmo dono e Mês, mas um erro no nome da restrição em `sqlerrm like '%faturas_owner_id_mes_key%'` passaria no CI; falta um teste de integração com duas chamadas em paralelo.
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-importar-a-fatura-do-mes.md`
-  summary: Ler os Lançamentos por Mês (ou paginado) no gerenciador de Realtime antes de passar de ~1000 linhas.
-  evidence: Medium: `criarGerenciador` relê com `select("*")`, e o PostgREST corta em 1000 linhas por padrão; com ~50 Lançamentos por Mês isso chega em ~20 meses e deixa o Painel e o `updated_at` do Mês incompletos (falso `fatura.mes_mudou`). O AD-4 já pede reler o Mês aberto (História 2.4).
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-4-painel-do-mes-com-a-grade-de-lancamentos.md`
+  summary: Confirmar no Safari do iPad que o VoiceOver lê a linha da grade como "Nome, Valor, Parcela, Responsável, Status" (`aria-label` no `<tr>`); se não ler, trocar por um resumo oculto na primeira célula.
+  evidence: Medium, não verificado: o jsdom só confere o `aria-label`, e o VoiceOver do iOS costuma ler tabelas célula a célula. A conferência manual da 2.4 decide.

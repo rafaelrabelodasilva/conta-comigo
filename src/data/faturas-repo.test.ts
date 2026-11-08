@@ -69,15 +69,47 @@ const gravados = {
   ],
 };
 
+type Linha = Record<string, unknown>;
+
 function montar(
   tabelas: Record<string, unknown[]>,
   responder: (c: Chamada) => { data: unknown; error: unknown },
   online = () => true,
+  opcoes: { erroDaLeitura?: unknown } = {},
 ) {
   const chamadas: Chamada[] = [];
+  // Leituras do banco: a tabela, as colunas e os filtros de cada uma.
+  const leituras: { tabela: string; colunas: string; filtros: string[] }[] = [];
   const cliente = {
     from: (tabela: string) => ({
-      select: async () => ({ data: tabelas[tabela] ?? [], error: null }),
+      select: (colunas: string) => {
+        const leitura = { tabela, colunas, filtros: [] as string[] };
+        leituras.push(leitura);
+        let linhas = (tabelas[tabela] ?? []) as Linha[];
+        const consulta = {
+          eq(coluna: string, valor: unknown) {
+            leitura.filtros.push(`${coluna}=${String(valor)}`);
+            linhas = linhas.filter((l) => l[coluna] === valor);
+            return consulta;
+          },
+          order(coluna: string, o: { ascending: boolean }) {
+            leitura.filtros.push(`order ${coluna} ${o.ascending ? "asc" : "desc"}`);
+            linhas = [...linhas].sort((a, b) => (String(a[coluna]) < String(b[coluna]) ? -1 : 1));
+            if (!o.ascending) linhas.reverse();
+            return consulta;
+          },
+          limit(n: number) {
+            leitura.filtros.push(`limit ${n}`);
+            linhas = linhas.slice(0, n);
+            return consulta;
+          },
+          then<T>(resolver: (r: { data: unknown; error: unknown }) => T) {
+            const erro = colunas === "updated_at" ? (opcoes.erroDaLeitura ?? null) : null;
+            return Promise.resolve(erro ? { data: null, error: erro } : { data: linhas, error: null }).then(resolver);
+          },
+        };
+        return consulta;
+      },
     }),
     rpc: async (funcao: string, args: Record<string, unknown>) => {
       const c = { funcao, args };
@@ -96,15 +128,24 @@ function montar(
   } as unknown as SupabaseClient<Database>;
   const faturas = criarGerenciador<LinhaFatura>({ tabela: "faturas", obterCliente: () => cliente });
   const cartoes = criarGerenciador<LinhaFaturaCartao>({ tabela: "fatura_cartoes", obterCliente: () => cliente });
-  const lancamentos = criarGerenciador<LinhaLancamento>({ tabela: "lancamentos", obterCliente: () => cliente });
+  const lancamentos = criarGerenciador<LinhaLancamento>({
+    tabela: "lancamentos",
+    obterCliente: () => cliente,
+    porMes: true,
+  });
   const repo = criarRepoFaturas({ obterCliente: () => cliente, faturas, cartoes, lancamentos, online });
-  return { chamadas, faturas, cartoes, lancamentos, repo };
+  return { chamadas, leituras, faturas, cartoes, lancamentos, repo };
 }
 
-async function pronto(m: ReturnType<typeof montar>) {
+/** Assina as três tabelas com o Mês aberto (padrão: o Mês importado). */
+async function pronto(m: ReturnType<typeof montar>, mesAberto = "2026-10") {
+  m.lancamentos.abrirMes(mesAberto);
   for (const g of [m.faturas, m.cartoes, m.lancamentos]) g.assinar(() => {});
   await new Promise((r) => setTimeout(r, 0));
 }
+
+/** Leituras de `updated_at` no banco (fora a releitura dos gerenciadores). */
+const leiturasDoMes = (m: ReturnType<typeof montar>) => m.leituras.filter((l) => l.colunas === "updated_at");
 
 describe("ultimaAlteracaoDoMes", () => {
   it("o updated_at mais novo do Mês, com microssegundos; nenhum → null", () => {
@@ -134,7 +175,7 @@ describe("repositório da importação da Fatura", () => {
     expect(m.lancamentos.linhas().map((l) => l.valor_centavos).sort()).toEqual([-8, 114074]);
   });
 
-  it("manda o updated_at mais novo dos Lançamentos do Mês já lidos", async () => {
+  it("Mês importado aberto e carregado: o updated_at mais novo vem da memória", async () => {
     const m = montar(
       { lancamentos: [lancamento("x", "2026-10", T1), lancamento("y", "2026-10", T2), lancamento("z", "2026-09", "2026-12-01T00:00:00+00:00")] },
       () => ({ data: gravados, error: null }),
@@ -142,6 +183,48 @@ describe("repositório da importação da Fatura", () => {
     await pronto(m);
     await m.repo.importar(importacao);
     expect(m.chamadas[0].args.lancamentos_atualizados_em).toBe(T2);
+    expect(leiturasDoMes(m)).toEqual([]);
+  });
+
+  it("outro Mês aberto: o updated_at do Mês importado é lido do banco, só daquele Mês", async () => {
+    const m = montar(
+      {
+        lancamentos: [
+          lancamento("x", "2026-10", T1),
+          lancamento("y", "2026-10", T2),
+          lancamento("n", "2026-11", "2026-12-01T00:00:00+00:00"),
+        ],
+      },
+      () => ({ data: gravados, error: null }),
+    );
+    await pronto(m, "2026-11");
+    expect(await m.repo.importar(importacao)).toEqual({ ok: true, quantidade: 2 });
+    expect(leiturasDoMes(m)).toEqual([
+      { tabela: "lancamentos", colunas: "updated_at", filtros: ["mes=2026-10", "order updated_at desc", "limit 1"] },
+    ]);
+    expect(m.chamadas[0].args.lancamentos_atualizados_em).toBe(T2);
+    // As linhas gravadas são de outubro: a memória (novembro) não muda.
+    expect(m.lancamentos.linhas().map((l) => l.id)).toEqual(["n"]);
+  });
+
+  it("Mês sem Lançamentos no banco: não manda o updated_at", async () => {
+    const m = montar({}, () => ({ data: gravados, error: null }));
+    await pronto(m, "2026-11");
+    await m.repo.importar(importacao);
+    expect(m.chamadas[0].args).not.toHaveProperty("lancamentos_atualizados_em");
+  });
+
+  it("falha ao ler o updated_at do banco: não chama a RPC e devolve o código da 2.3", async () => {
+    for (const [erro, codigo] of [
+      [{ code: "", message: "TypeError: Failed to fetch" }, "fatura.conexao_caiu"],
+      [{ code: "PGRST301", message: "JWT expired" }, "auth.sessao_expirou"],
+      [{ code: "42501", message: "permission denied" }, "salvar.falhou"],
+    ] as const) {
+      const m = montar({}, () => ({ data: gravados, error: null }), () => true, { erroDaLeitura: erro });
+      await pronto(m, "2026-11");
+      expect(await m.repo.importar(importacao)).toEqual({ ok: false, codigo });
+      expect(m.chamadas).toEqual([]);
+    }
   });
 
   it("códigos da RPC passam; o resto vira salvar.falhou; sem código do banco, a conexão caiu", async () => {
@@ -181,11 +264,13 @@ describe("repositório da importação da Fatura", () => {
     expect(lidas).toHaveLength(3);
   });
 
-  it("Lançamentos ainda carregando ou com erro: não chama a RPC", async () => {
-    const m = montar({}, () => ({ data: gravados, error: null }));
+  it("Lançamentos do Mês ainda carregando: lê o updated_at do banco em vez da memória", async () => {
+    const m = montar({ lancamentos: [lancamento("x", "2026-10", T1)] }, () => ({ data: gravados, error: null }));
+    m.lancamentos.abrirMes("2026-10");
     expect(m.lancamentos.retrato().status).toBe("carregando");
-    expect(await m.repo.importar(importacao)).toEqual({ ok: false, codigo: "salvar.falhou" });
-    expect(m.chamadas).toEqual([]);
+    expect(await m.repo.importar(importacao)).toEqual({ ok: true, quantidade: 2 });
+    expect(leiturasDoMes(m)).toHaveLength(1);
+    expect(m.chamadas[0].args.lancamentos_atualizados_em).toBe(T1);
   });
 
   it("exceção vira conexão caída; resposta sem a forma esperada, salvar.falhou", async () => {

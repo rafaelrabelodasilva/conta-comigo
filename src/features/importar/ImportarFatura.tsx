@@ -72,9 +72,11 @@ function passoDo(estado: Estado): Passo {
 export type PropsImportarFatura = {
   aberta: boolean;
   aoMudar: (aberta: boolean) => void;
+  /** Gravou: o Mês importado (`AAAA-MM`), para o Painel abri-lo. */
+  aoImportar?: (mes: string) => void;
 };
 
-export function ImportarFatura({ aberta, aoMudar }: PropsImportarFatura) {
+export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFatura) {
   const [estado, setEstado] = useState<Estado>(INICIAL);
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [senha, setSenha] = useState("");
@@ -192,6 +194,7 @@ export function ImportarFatura({ aberta, aoMudar }: PropsImportarFatura) {
     if (r.ok) {
       reiniciar();
       aoMudar(false);
+      aoImportar?.(atual.importacao.fatura.mes);
       return;
     }
     setEstado({ ...atual, gravando: false, erro: r.codigo });

@@ -3,7 +3,8 @@ import { rotuloComposicaoTotal, rotuloConferenciaTotal, rotuloTotalAPagar } from
 
 // "Total a pagar" da Fatura e como os Lançamentos chegam a ele (soma dos
 // Lançamentos + saldo anterior − pagamentos), para conferir com o valor da
-// fatura do cartão. Usado no passo 3 da importação e no cartão do Painel.
+// fatura do cartão. Usado no passo 3 da importação (o `invoice-hero` do
+// Painel mostra a mesma conta com `comporTotalAPagar`).
 
 export function TotalAPagar({
   fatura,

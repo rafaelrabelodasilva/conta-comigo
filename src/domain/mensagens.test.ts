@@ -32,8 +32,18 @@ import {
   rotuloPassoImportar,
   rotuloSeraoGravados,
   textoExtracaoIncompleta,
-  tituloFaturaImportada,
   tituloFaturaLida,
+  COLUNAS_GRADE,
+  ROTULOS_LANCADO_POR,
+  TEXTOS_PAINEL,
+  rotuloEscolherMes,
+  rotuloFiltrarPor,
+  rotuloFiltroResponsavel,
+  rotuloItemMes,
+  rotuloLancamentos,
+  rotuloParcelaFalada,
+  rotuloSemLancamentosDe,
+  sobrelinhaFatura,
 } from "./mensagens";
 
 describe("mensagem", () => {
@@ -278,12 +288,10 @@ describe("textos da importação da fatura (História 2.3)", () => {
     ...extra,
   });
 
-  it("título do passo 3 e do cartão do Painel", () => {
+  it("título do passo 3 e a contagem de lançamentos", () => {
     expect(tituloFaturaLida("2026-10", "2026-10-06")).toBe("Fatura de outubro · vence 06/10/26");
-    expect(tituloFaturaImportada("2026-10", "2026-10-06", 49)).toBe(
-      "Fatura de outubro/26 · vence 06/10/26 · 49 lançamentos",
-    );
-    expect(tituloFaturaImportada("2026-10", "2026-10-06", 1)).toContain("· 1 lançamento");
+    expect(rotuloLancamentos(49)).toBe("49 lançamentos");
+    expect(rotuloLancamentos(1)).toBe("1 lançamento");
     expect(rotuloDespesasCreditos(832739, 63962)).toBe(`Despesas R$${ESPACO}8.327,39 · Créditos R$${ESPACO}639,62`);
   });
 
@@ -351,5 +359,45 @@ describe("total a pagar da fatura (História 2.3)", () => {
       "⚠ Diferença de R$ 0,08 para o total a pagar",
     );
     expect(rotuloConferenciaTotal({ ...composicao, lidoCentavos: null, diferencaCentavos: null })).toBeNull();
+  });
+});
+
+describe("textos do Painel do Mês", () => {
+  it("sobrelinha do invoice-hero, com e sem Fatura", () => {
+    expect(sobrelinhaFatura("2026-10", "2026-10-06")).toBe("Fatura de outubro · vence 06/10/26");
+    expect(sobrelinhaFatura("2026-12", null)).toBe("Fatura de dezembro");
+  });
+
+  it("seletor de Mês: nome acessível e itens da lista", () => {
+    expect(rotuloEscolherMes("2026-10")).toBe("outubro/26, escolher o Mês");
+    expect(rotuloItemMes("2026-10", true)).toBe("outubro/26, Fechado");
+    expect(rotuloItemMes("2026-12", false)).toBe("dezembro/26");
+    expect(TEXTOS_PAINEL.fechado).toBe("Fechado");
+    expect(TEXTOS_PAINEL.sem_fatura).toBe("Fatura ainda não importada");
+    expect(TEXTOS_PAINEL.sem_responsavel).toBe("Sem responsável");
+  });
+
+  it("colunas da grade na ordem da UX-DR10 e rótulos de Lançado por", () => {
+    expect(Object.values(COLUNAS_GRADE)).toEqual([
+      "Seleção",
+      "Nome",
+      "Parcela",
+      "Valor",
+      "Tipo",
+      "Responsável",
+      "Lançado por",
+      "Status",
+    ]);
+    expect(ROTULOS_LANCADO_POR).toEqual({ fatura: "Fatura", sistema: "Sistema", manual: "Manual", historico: "Histórico" });
+    expect(TEXTOS_PAINEL.total).toBe("Total dos lançamentos");
+  });
+
+  it("filtro e ordenação", () => {
+    expect(rotuloFiltrarPor("Rafael")).toBe("Filtrar por Rafael");
+    expect(rotuloFiltroResponsavel("Casal")).toBe("Responsável: Casal");
+    expect(rotuloSemLancamentosDe("Rafael")).toBe("Nenhum lançamento de Rafael neste Mês");
+    expect(rotuloSemLancamentosDe(null)).toBe("Nenhum lançamento sem responsável neste Mês");
+    expect(rotuloParcelaFalada(2, 12)).toBe("parcela 2 de 12");
+    expect(rotuloParcelaFalada(null, null)).toBe("");
   });
 });

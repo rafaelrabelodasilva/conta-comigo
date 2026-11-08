@@ -13,9 +13,9 @@ const item = itemDaRota("/");
 
 export const metadata: Metadata = { title: `${item.titulo} · Conta Comigo` };
 
-// Painel: o servidor decide o Primeiro uso; o conteúdo (Faturas importadas,
-// Lançamentos e a janela "Importar fatura") é o componente cliente, que lê
-// dos gerenciadores de Realtime. Provisório até a grade da 2.4.
+// Painel: o servidor decide o Primeiro uso; o conteúdo (o Painel do Mês com
+// o seletor, o cartão da fatura, a grade e a janela "Importar fatura") é o
+// componente cliente, que lê dos gerenciadores de Realtime.
 export default async function PaginaPainel() {
   // Confere a sessão aqui também, sem depender só do proxy.
   if (!(await temSessao())) redirect("/entrar");
