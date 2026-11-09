@@ -13,6 +13,8 @@ import {
   pareceFaturaSantander,
   prepararImportacao,
   primeiraDiferenca,
+  resumirReimportacao,
+  type LinhaParaReimportar,
 } from "./importacao-fatura";
 
 // A extração de outubro/2026 foi gravada uma vez com o Gemini de verdade
@@ -342,5 +344,47 @@ describe("comporTotalAPagar", () => {
     const fatura = { saldo_anterior_centavos: 500, pagamentos_centavos: 500, total_a_pagar_centavos: 1100 };
     expect(comporTotalAPagar(fatura, [1000]).diferencaCentavos).toBe(-100);
     expect(comporTotalAPagar(fatura, []).lancamentosCentavos).toBe(0);
+  });
+});
+
+describe("resumirReimportacao (História 3.11)", () => {
+  const PADRAO = "nao-pago";
+  const limpa: LinhaParaReimportar = {
+    excluido_em: null,
+    responsavel_id: null,
+    tipo_id: null,
+    observacao: null,
+    status_id: PADRAO,
+  };
+
+  it("nov/26: 52 linhas, 30 classificadas ou marcadas e 2 excluídas", () => {
+    const linhas: LinhaParaReimportar[] = [
+      ...Array.from({ length: 22 }, () => limpa),
+      ...Array.from({ length: 10 }, () => ({ ...limpa, responsavel_id: "casal" })),
+      ...Array.from({ length: 10 }, () => ({ ...limpa, tipo_id: "casa" })),
+      ...Array.from({ length: 5 }, () => ({ ...limpa, observacao: "ver com a Mãe" })),
+      ...Array.from({ length: 5 }, () => ({ ...limpa, status_id: "pago" })),
+      // Excluídas não contam em N nem em X, mesmo classificadas.
+      { ...limpa, excluido_em: "2026-11-05T00:00:00Z", responsavel_id: "casal" },
+      { ...limpa, excluido_em: "2026-11-05T00:00:00Z" },
+    ];
+    expect(resumirReimportacao(linhas, PADRAO)).toEqual({ quantidade: 52, mexidos: 30, excluidos: 2 });
+  });
+
+  it("Status nulo é o padrão quando o padrão é nulo; fora do padrão conta", () => {
+    expect(resumirReimportacao([{ ...limpa, status_id: null }], null)).toEqual({ quantidade: 1, mexidos: 0, excluidos: 0 });
+    expect(resumirReimportacao([{ ...limpa, status_id: null }], PADRAO).mexidos).toBe(1);
+    expect(resumirReimportacao([limpa], null).mexidos).toBe(1);
+  });
+
+  it("Observação vazia ou só com espaços não conta; uma linha com várias marcas conta uma vez", () => {
+    expect(resumirReimportacao([{ ...limpa, observacao: "" }, { ...limpa, observacao: "  " }], PADRAO).mexidos).toBe(0);
+    expect(
+      resumirReimportacao([{ ...limpa, responsavel_id: "r", tipo_id: "t", observacao: "x", status_id: "pago" }], PADRAO),
+    ).toEqual({ quantidade: 1, mexidos: 1, excluidos: 0 });
+  });
+
+  it("sem linhas: tudo zero", () => {
+    expect(resumirReimportacao([], PADRAO)).toEqual({ quantidade: 0, mexidos: 0, excluidos: 0 });
   });
 });

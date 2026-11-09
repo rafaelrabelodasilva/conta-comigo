@@ -10,11 +10,18 @@
 //   da memória quando o Mês importado é o Mês aberto e já carregou; senão,
 //   de uma leitura do banco só daquele Mês (a memória guarda só o Mês
 //   aberto).
+// - Reimportação (História 3.11 simplificada): `lerReimportacao` lê do
+//   banco a Fatura do Mês, as linhas dela (inclusive excluídas) e o
+//   `updated_at` mais novo do Mês, para o aviso "Importar de novo".
+//   `importar(…, substituir)` manda o id da Fatura confirmada e esse
+//   `updated_at` (o lido com o aviso, não o da hora do toque); a RPC apaga a
+//   anterior e devolve os ids apagados, que saem da memória antes de as
+//   linhas novas entrarem.
 // - "Dispensar" o alerta da Conferência (e o "Desfazer"): grava só
 //   `faturas.alerta_dispensado_em`, com otimismo.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Importacao } from "@/domain/importacao-fatura";
+import type { Importacao, LinhaParaReimportar } from "@/domain/importacao-fatura";
 import { estaOnline } from "./conexao";
 import type { Database, Json } from "./database.types";
 import { FALHOU, SEM_CONEXAO, gravarComOtimismo, type Online, type ResultadoGravacao } from "./gravacao";
@@ -39,11 +46,41 @@ export type ResultadoImportacao =
   | { ok: true; quantidade: number }
   | { ok: false; codigo: string };
 
+/** A Fatura que Rafael confirmou substituir e o `updated_at` lido com o aviso. */
+export type Substituir = { faturaId: string; atualizadoEm: string | null };
+
+/** O que o aviso "Importar de novo" precisa, lido do banco. */
+export type LeituraReimportacao = Substituir & {
+  /** As linhas da Fatura do Mês (inclusive excluídas e Ajustes); manuais ficam de fora. */
+  linhas: LinhaParaReimportar[];
+  /** O Status padrão de `configuracoes`, lido junto (null: sem padrão). */
+  statusPadraoId: string | null;
+};
+
+/**
+ * `valor` null: o Mês não tem Fatura no banco. `codigo`:
+ * `auth.sessao_expirou`, `conexao.gravar_sem_conexao` ou `carregar.falhou`.
+ */
+export type ResultadoLeituraReimportacao =
+  | { ok: true; valor: LeituraReimportacao | null }
+  | { ok: false; codigo: string };
+
+type Removidos = { fatura_id: string; cartoes: string[]; lancamentos: string[] };
+
 type Gravados = {
   fatura: LinhaFatura;
   cartoes: LinhaFaturaCartao[];
   lancamentos: LinhaLancamento[];
+  removidos?: Removidos | null;
 };
+
+const ehListaDeIds = (v: unknown): v is string[] => Array.isArray(v) && v.every((id) => typeof id === "string");
+
+function ehRemovidos(dados: unknown): boolean {
+  if (dados === null || dados === undefined) return true;
+  const r = dados as Partial<Record<keyof Removidos, unknown>>;
+  return typeof r === "object" && typeof r.fatura_id === "string" && ehListaDeIds(r.cartoes) && ehListaDeIds(r.lancamentos);
+}
 
 function ehGravados(dados: unknown): dados is Gravados {
   const d = dados as Partial<Record<keyof Gravados, unknown>> | null;
@@ -54,9 +91,12 @@ function ehGravados(dados: unknown): dados is Gravados {
     d.fatura !== null &&
     typeof (d.fatura as { id?: unknown }).id === "string" &&
     Array.isArray(d.cartoes) &&
-    Array.isArray(d.lancamentos)
+    Array.isArray(d.lancamentos) &&
+    ehRemovidos(d.removidos)
   );
 }
+
+const COLUNAS_REIMPORTACAO = "id, fatura_id, excluido_em, responsavel_id, tipo_id, observacao, status_id, updated_at";
 
 /** O `updated_at` mais novo dos Lançamentos do Mês entre as linhas dadas (null se nenhum). */
 export function ultimaAlteracaoDoMes(linhas: readonly LinhaLancamento[], mes: string): string | null {
@@ -132,6 +172,50 @@ export function criarRepoFaturas(deps: {
   }
 
   return {
+    /**
+     * Para o aviso "Importar de novo": a Fatura do Mês, as linhas dela, o
+     * `updated_at` mais novo de todos os Lançamentos do Mês (inclusive
+     * manuais e excluídos, como a RPC compara) e o Status padrão, tudo do banco.
+     */
+    async lerReimportacao(mes: string): Promise<ResultadoLeituraReimportacao> {
+      if (!online()) return SEM_CONEXAO;
+      const cliente = obterCliente();
+      if (!cliente) return { ok: false, codigo: "carregar.falhou" };
+      const falhou = (erro: { message?: string; code?: string } | null | undefined) => {
+        const codigo = codigoDoErro(erro);
+        return { ok: false as const, codigo: codigo === "auth.sessao_expirou" ? codigo : "carregar.falhou" };
+      };
+      try {
+        const [lidaFatura, lidasLinhas, lidaConfig] = await Promise.all([
+          cliente.from("faturas").select("id").eq("mes", mes),
+          cliente.from("lancamentos").select(COLUNAS_REIMPORTACAO).eq("mes", mes),
+          cliente.from("configuracoes").select("status_padrao_id"),
+        ]);
+        if (lidaFatura.error || !lidaFatura.data) return falhou(lidaFatura.error);
+        if (lidasLinhas.error || !lidasLinhas.data) return falhou(lidasLinhas.error);
+        if (lidaConfig.error || !lidaConfig.data) return falhou(lidaConfig.error);
+        const statusPadraoId = lidaConfig.data[0]?.status_padrao_id ?? null;
+        const faturaId = lidaFatura.data[0]?.id;
+        if (faturaId === undefined) return { ok: true, valor: null };
+        let atualizadoEm: string | null = null;
+        for (const l of lidasLinhas.data) {
+          if (atualizadoEm === null || ehMaisNovo(l.updated_at, atualizadoEm)) atualizadoEm = l.updated_at;
+        }
+        const linhas = lidasLinhas.data
+          .filter((l) => l.fatura_id === faturaId)
+          .map(({ excluido_em, responsavel_id, tipo_id, observacao, status_id }) => ({
+            excluido_em,
+            responsavel_id,
+            tipo_id,
+            observacao,
+            status_id,
+          }));
+        return { ok: true, valor: { faturaId, atualizadoEm, linhas, statusPadraoId } };
+      } catch {
+        return { ok: false, codigo: "carregar.falhou" };
+      }
+    },
+
     /** "Dispensar" a faixa de diferença da Fatura: grava o momento (`agora`, padrão o relógio). */
     dispensarAlerta(faturaId: string, agora: Date = new Date()): Promise<ResultadoGravacao> {
       return gravarAlerta(faturaId, agora.toISOString());
@@ -142,20 +226,30 @@ export function criarRepoFaturas(deps: {
       return gravarAlerta(faturaId, null);
     },
 
-    /** Grava tudo ou nada pela RPC e aplica as linhas devolvidas na memória. */
-    async importar(importacao: Importacao): Promise<ResultadoImportacao> {
+    /**
+     * Grava tudo ou nada pela RPC e aplica as linhas devolvidas na memória.
+     * Com `substituir` (reimportação), a RPC apaga a Fatura confirmada e as
+     * linhas dela; os ids apagados saem da memória antes.
+     */
+    async importar(importacao: Importacao, substituir?: Substituir): Promise<ResultadoImportacao> {
       if (!online()) return SEM_CONEXAO;
       const cliente = obterCliente();
       if (!cliente) return FALHOU;
       try {
-        const lida = await lerUltimaAlteracao(cliente, importacao.fatura.mes);
-        if (!lida.ok) return { ok: false, codigo: lida.codigo };
-        const lidoEm = lida.valor;
+        let lidoEm: string | null;
+        if (substituir) {
+          lidoEm = substituir.atualizadoEm;
+        } else {
+          const lida = await lerUltimaAlteracao(cliente, importacao.fatura.mes);
+          if (!lida.ok) return { ok: false, codigo: lida.codigo };
+          lidoEm = lida.valor;
+        }
         const { data, error } = await cliente.rpc("importar_fatura", {
           dados_fatura: importacao.fatura as unknown as Json,
           dados_cartoes: importacao.cartoes as unknown as Json,
           dados_lancamentos: importacao.lancamentos as unknown as Json,
           ...(lidoEm === null ? {} : { lancamentos_atualizados_em: lidoEm }),
+          ...(substituir ? { substituir_fatura_id: substituir.faturaId } : {}),
         });
         if (error) {
           const codigo = codigoDoErro(error);
@@ -167,6 +261,11 @@ export function criarRepoFaturas(deps: {
           return { ok: false, codigo };
         }
         if (!ehGravados(data)) return FALHOU;
+        if (data.removidos) {
+          lancamentos.remover(data.removidos.lancamentos);
+          cartoes.remover(data.removidos.cartoes);
+          faturas.remover([data.removidos.fatura_id]);
+        }
         faturas.aplicarLote([data.fatura]);
         cartoes.aplicarLote(data.cartoes);
         lancamentos.aplicarLote(data.lancamentos);

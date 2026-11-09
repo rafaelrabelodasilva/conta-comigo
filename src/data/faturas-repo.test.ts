@@ -92,6 +92,8 @@ function montar(
   online = () => true,
   opcoes: {
     erroDaLeitura?: unknown;
+    /** Erro de qualquer leitura da tabela (reimportação). */
+    errosDeTabela?: Record<string, unknown>;
     /** Resposta de `update(...).eq(...).select().single()`; padrão: a linha com o corpo e `updated_at` T2. */
     responderUpdate?: (u: Atualizacao) => Promise<{ data: unknown; error: unknown }>;
   } = {},
@@ -124,7 +126,8 @@ function montar(
             return consulta;
           },
           then<T>(resolver: (r: { data: unknown; error: unknown }) => T) {
-            const erro = colunas === "updated_at" ? (opcoes.erroDaLeitura ?? null) : null;
+            const erro =
+              opcoes.errosDeTabela?.[tabela] ?? (colunas === "updated_at" ? (opcoes.erroDaLeitura ?? null) : null);
             return Promise.resolve(erro ? { data: null, error: erro } : { data: linhas, error: null }).then(resolver);
           },
         };
@@ -338,6 +341,139 @@ describe("repositório da importação da Fatura", () => {
       online: () => true,
     });
     expect(await semCliente.importar(importacao)).toEqual({ ok: false, codigo: "salvar.falhou" });
+  });
+});
+
+describe("reimportar um Mês (História 3.11)", () => {
+  const PADRAO = "nao-pago";
+  const linhaDb = (id: string, extra: Record<string, unknown>) => ({
+    id,
+    mes: "2026-10",
+    fatura_id: "f0",
+    excluido_em: null,
+    responsavel_id: null,
+    tipo_id: null,
+    observacao: null,
+    status_id: PADRAO,
+    updated_at: T1,
+    ordem_fatura: 1,
+    ...extra,
+  });
+  const banco = {
+    configuracoes: [{ id: "cfg", status_padrao_id: PADRAO }],
+    faturas: [
+      { id: "f0", mes: "2026-10", updated_at: T1 },
+      { id: "f9", mes: "2026-09", updated_at: T1 },
+    ],
+    lancamentos: [
+      linhaDb("a", { responsavel_id: "casal" }),
+      linhaDb("b", { excluido_em: T1 }),
+      linhaDb("c", {}),
+      // Manual do Mês: fica de fora das linhas, mas o updated_at dele conta.
+      linhaDb("m", { fatura_id: null, updated_at: T2, tipo_id: "casa" }),
+      linhaDb("s", { mes: "2026-09", fatura_id: "f9", updated_at: "2026-12-01T00:00:00+00:00" }),
+    ],
+  };
+
+  it("lerReimportacao: a Fatura do Mês, só as linhas dela (com excluídas), o updated_at mais novo do Mês e o Status padrão do banco", async () => {
+    const m = montar(banco, () => ({ data: null, error: null }));
+    expect(await m.repo.lerReimportacao("2026-10")).toEqual({
+      ok: true,
+      valor: {
+        faturaId: "f0",
+        atualizadoEm: T2,
+        linhas: [
+          { excluido_em: null, responsavel_id: "casal", tipo_id: null, observacao: null, status_id: PADRAO },
+          { excluido_em: T1, responsavel_id: null, tipo_id: null, observacao: null, status_id: PADRAO },
+          { excluido_em: null, responsavel_id: null, tipo_id: null, observacao: null, status_id: PADRAO },
+        ],
+        statusPadraoId: PADRAO,
+      },
+    });
+    expect(m.leituras.map((l) => [l.tabela, l.colunas, l.filtros])).toEqual([
+      ["faturas", "id", ["mes=2026-10"]],
+      ["lancamentos", expect.any(String), ["mes=2026-10"]],
+      ["configuracoes", "status_padrao_id", []],
+    ]);
+  });
+
+  it("lerReimportacao: sem configuracoes no banco, o Status padrão é null", async () => {
+    const m = montar({ ...banco, configuracoes: [] }, () => ({ data: null, error: null }));
+    const r = await m.repo.lerReimportacao("2026-10");
+    expect(r.ok && r.valor?.statusPadraoId).toBeNull();
+  });
+
+  it("lerReimportacao: Mês sem Fatura → null; falhas viram carregar.falhou (sessão expirada passa); sem conexão nada lido", async () => {
+    const sem = montar(banco, () => ({ data: null, error: null }));
+    expect(await sem.repo.lerReimportacao("2026-11")).toEqual({ ok: true, valor: null });
+    for (const [tabela, erro, codigo] of [
+      ["faturas", { code: "", message: "Failed to fetch" }, "carregar.falhou"],
+      ["lancamentos", { code: "42501", message: "permission denied" }, "carregar.falhou"],
+      ["lancamentos", { code: "PGRST301", message: "JWT expired" }, "auth.sessao_expirou"],
+      ["configuracoes", { code: "42501", message: "permission denied" }, "carregar.falhou"],
+    ] as const) {
+      const m = montar(banco, () => ({ data: null, error: null }), () => true, { errosDeTabela: { [tabela]: erro } });
+      expect(await m.repo.lerReimportacao("2026-10")).toEqual({ ok: false, codigo });
+    }
+    const offline = montar(banco, () => ({ data: null, error: null }), () => false);
+    expect(await offline.repo.lerReimportacao("2026-10")).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(offline.leituras).toEqual([]);
+  });
+
+  it("importar com substituir: manda o id e o updated_at do aviso, sem reler; tira os apagados da memória", async () => {
+    const m = montar(
+      {
+        faturas: [{ id: "f0", mes: "2026-10", updated_at: T1 }],
+        fatura_cartoes: [{ id: "c0", fatura_id: "f0", final: "5061", updated_at: T1 }],
+        lancamentos: [
+          lancamento("a", "2026-10", T1),
+          lancamento("b", "2026-10", T1),
+          lancamento("m", "2026-10", "2026-12-01T00:00:00+00:00"),
+        ],
+      },
+      () => ({
+        data: { ...gravados, removidos: { fatura_id: "f0", cartoes: ["c0"], lancamentos: ["a", "b"] } },
+        error: null,
+      }),
+    );
+    await pronto(m);
+    expect(await m.repo.importar(importacao, { faturaId: "f0", atualizadoEm: T1 })).toEqual({ ok: true, quantidade: 2 });
+    expect(m.chamadas[0].args).toEqual({
+      dados_fatura: importacao.fatura,
+      dados_cartoes: importacao.cartoes,
+      dados_lancamentos: importacao.lancamentos,
+      // O do aviso, não o mais novo da memória (o do "m").
+      lancamentos_atualizados_em: T1,
+      substituir_fatura_id: "f0",
+    });
+    expect(leiturasDoMes(m)).toEqual([]);
+    expect(m.faturas.linhas().map((f) => f.id)).toEqual(["f1"]);
+    expect(m.cartoes.linhas().map((c) => c.id)).toEqual(["c1"]);
+    expect(m.lancamentos.linhas().map((l) => l.id).sort()).toEqual(["l1", "l2", "m"]);
+  });
+
+  it("importar com substituir e Mês sem updated_at: não manda o updated_at; mes_mudou passa", async () => {
+    const m = montar({}, () => ({ data: null, error: { code: "P0001", message: "fatura.mes_mudou" } }));
+    await pronto(m);
+    expect(await m.repo.importar(importacao, { faturaId: "f0", atualizadoEm: null })).toEqual({
+      ok: false,
+      codigo: "fatura.mes_mudou",
+    });
+    expect(m.chamadas[0].args).not.toHaveProperty("lancamentos_atualizados_em");
+    expect(m.chamadas[0].args.substituir_fatura_id).toBe("f0");
+  });
+
+  it("removidos com forma errada: salvar.falhou sem mexer na memória", async () => {
+    const m = montar({ faturas: [{ id: "f0", mes: "2026-10", updated_at: T1 }] }, () => ({
+      data: { ...gravados, removidos: { fatura_id: "f0", cartoes: "c0" } },
+      error: null,
+    }));
+    await pronto(m);
+    expect(await m.repo.importar(importacao, { faturaId: "f0", atualizadoEm: T1 })).toEqual({
+      ok: false,
+      codigo: "salvar.falhou",
+    });
+    expect(m.faturas.linhas().map((f) => f.id)).toEqual(["f0"]);
   });
 });
 

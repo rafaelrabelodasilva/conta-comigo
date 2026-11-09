@@ -18,6 +18,8 @@
 //   `tipo_sugerido` da extração e deixa as linhas sem classificação (o
 //   Ajuste sem motivo, as outras `sem_classificacao`); quem classifica é
 //   `classificarImportacao` (`classificacao.ts`), antes de gravar.
+// - Reimportação (História 3.11 simplificada): `resumirReimportacao` dá os
+//   números do aviso a partir das linhas da Fatura do Mês lidas do banco.
 
 import { reconhecerAjustes } from "./ajustes";
 import type { DadosRevisao, MotivoRevisao } from "./classificacao";
@@ -343,4 +345,51 @@ export function comporTotalAPagar(
     lidoCentavos: lido,
     diferencaCentavos: lido === null ? null : calculado - lido,
   };
+}
+
+/** O que o aviso de reimportação precisa de cada linha da Fatura do Mês. */
+export type LinhaParaReimportar = {
+  excluido_em: string | null;
+  responsavel_id: string | null;
+  tipo_id: string | null;
+  observacao: string | null;
+  status_id: string | null;
+};
+
+export type ResumoReimportacao = {
+  /** Linhas não excluídas da Fatura (com os Ajustes): as que o aviso diz que apaga. */
+  quantidade: number;
+  /** Dessas, as com Responsável, Tipo, Observação ou Status fora do Status padrão. */
+  mexidos: number;
+  /** Linhas excluídas da Fatura, que voltam na importação nova. */
+  excluidos: number;
+};
+
+/**
+ * Os números do aviso "Importar de novo" (História 3.11 simplificada), a
+ * partir das linhas da Fatura do Mês lidas do banco (só as com `fatura_id`
+ * dela; manuais ficam de fora). `statusPadraoId` é o de `configuracoes`
+ * (null: o padrão é "sem Status"). Observação só com espaços não conta.
+ */
+export function resumirReimportacao(
+  linhas: readonly LinhaParaReimportar[],
+  statusPadraoId: string | null,
+): ResumoReimportacao {
+  let quantidade = 0;
+  let mexidos = 0;
+  let excluidos = 0;
+  for (const l of linhas) {
+    if (l.excluido_em !== null) {
+      excluidos++;
+      continue;
+    }
+    quantidade++;
+    const mexido =
+      l.responsavel_id !== null ||
+      l.tipo_id !== null ||
+      (l.observacao !== null && l.observacao.trim() !== "") ||
+      l.status_id !== statusPadraoId;
+    if (mexido) mexidos++;
+  }
+  return { quantidade, mexidos, excluidos };
 }

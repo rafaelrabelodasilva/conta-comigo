@@ -53,9 +53,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-3-importar-a-fatura-do-mes.md`
   summary: Decidir o ano das parcelas compradas há mais de 12 meses, hoje gravadas com o ano do fechamento (ou do vencimento) ou o anterior.
   evidence: A regra da 2.3 (`dataDoLancamento`) só conhece DD/MM e o corte (fechamento, senão vencimento): a "SHOPEE *CELLSOLUTIONS 12/12" de 01/10 já vai para 2025-10-01, mas uma parcela 13/18 comprada há mais de um ano fica com o ano errado. Afeta só a exibição da data e, no Épico 3, a chave da Série (`mes_primeira_parcela` pode ser calculada pela parcela e pelo Mês, sem a data).
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-importar-a-fatura-do-mes.md`
-  summary: Testar o ramo `unique_violation` de `importar_fatura` (duas importações do mesmo Mês ao mesmo tempo devolvem `fatura.mes_ja_importado`).
-  evidence: Low, não verificado: a trava `pg_advisory_xact_lock` já serializa as importações do mesmo dono e Mês, mas um erro no nome da restrição em `sqlerrm like '%faturas_owner_id_mes_key%'` passaria no CI; falta um teste de integração com duas chamadas em paralelo.
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-painel-do-mes-com-a-grade-de-lancamentos.md`
   summary: Confirmar no Safari do iPad que o VoiceOver lê a linha da grade como "Nome, Valor, Parcela, Responsável, Status" (e, nas linhas marcadas, "verificar este lançamento" no fim), tanto pelo `aria-label` do `<tr>` quanto célula a célula.
   evidence: Medium, não verificado. Atualizado na 2.5 (`spec-2-5-conferencia-e-marca-verificar.md`): além do `aria-label` no `<tr>`, a célula do Nome agora leva um resumo oculto (`sr-only`) com a mesma frase, e o Nome visível (com a bolinha) é `aria-hidden`. O jsdom só confere o DOM; falta a conferência manual no iPad (Rafael nunca usou o VoiceOver, decisão de 08/11/2026), que fecha esta pendência. A decidir nessa conferência: o resumo oculto repete a linha inteira, então quem ouve célula a célula escuta Valor, Parcela, Responsável e Status duas vezes (no resumo e nas próprias células); se incomodar, o resumo pode ficar só com o Nome e "verificar este lançamento".
@@ -71,3 +68,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-regras-que-aprendem-com-a-classificacao.md`
   summary: Na 3.2, tratar a linha com `revisao_motivo` de sugestão cujos ids o `substituir_cadastro` anulou (cadastro excluído sem substituto): mostrar como "sem classificação" e ignorar `null` em `outros_responsaveis`.
   evidence: `anular_id_jsonb` troca o id por `null` e mantém o motivo; o painel da 3.1 já esconde a sugestão vazia, mas a fila da 3.2 lê o motivo.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-11-reimportar-um-mes.md`
+  summary: Testar a tradução do ramo `unique_violation` de `importar_fatura` (o `sqlerrm like '%faturas_owner_id_mes_key%'` devolve `fatura.mes_ja_importado` em vez do erro cru).
+  evidence: Low. A 3.11 fixou o nome da restrição (teste do insert direto repetido) e o resultado de duas importações em paralelo, mas a trava `pg_advisory_xact_lock` faz a segunda cair na checagem explícita, não no ramo; um erro de digitação no padrão `like` passaria no CI. Só se alcança o ramo contornando a trava.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-11-reimportar-um-mes.md`
+  summary: Antes de a 3.5 (Séries) ou o Épico 6 (Pagamentos) irem para produção, trocar a reimportação simplificada pela Story 3.12 ou fazer a RPC recusar com código próprio quando as linhas da Fatura tiverem Série ou Pagamento.
+  evidence: Low hoje. A 3.11 simplificada apaga todas as linhas da Fatura; uma FK nova sem cascata faz a RPC falhar com erro genérico (nada é apagado, a transação desfaz), e uma com cascata apagaria Séries ou Pagamentos. Só a nota no `epics.md` (Story 3.12) lembra disso.
