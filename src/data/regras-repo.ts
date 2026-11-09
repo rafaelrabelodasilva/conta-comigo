@@ -45,7 +45,7 @@ export function criarRepoRegras(deps: {
       const nova = aprenderRegra(lida.data as RegraGravada | null, evento, agora().toISOString());
       const { data, error } = await cliente
         .from("regras")
-        .upsert({ ...nova, contagem: nova.contagem as unknown as Json }, { onConflict: "owner_id,chave" })
+        .upsert({ ...nova, contagem: nova.contagem as unknown as NonNullable<Json> }, { onConflict: "owner_id,chave" })
         .select()
         .single();
       return error || !data ? { ok: false } : { ok: true, regra: data };

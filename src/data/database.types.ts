@@ -325,7 +325,7 @@ export type Database = {
       regras: {
         Row: {
           chave: string
-          contagem: Json
+          contagem: NonNullable<Json>
           created_at: string
           id: string
           owner_id: string
@@ -337,7 +337,7 @@ export type Database = {
         }
         Insert: {
           chave: string
-          contagem?: Json
+          contagem?: NonNullable<Json>
           created_at?: string
           id?: string
           owner_id?: string
@@ -349,7 +349,7 @@ export type Database = {
         }
         Update: {
           chave?: string
-          contagem?: Json
+          contagem?: NonNullable<Json>
           created_at?: string
           id?: string
           owner_id?: string
