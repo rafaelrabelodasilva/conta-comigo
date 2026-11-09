@@ -13,6 +13,7 @@ import {
   primeiraDiferenca,
   type ComposicaoTotalAPagar,
   type ConferenciaImportacao,
+  type ResumoReimportacao,
 } from "./importacao-fatura";
 
 export const MENSAGENS = {
@@ -117,8 +118,12 @@ export const TEXTOS_IMPORTAR = {
   lido_no_pdf: "Lido no PDF",
   importar: "Importar",
   importar_mesmo_assim: "Importar mesmo assim",
+  /** Reimportação (História 3.11): o botão destrutivo do aviso. */
+  importar_de_novo: "Importar de novo",
   escolher_outro_pdf: "Escolher outro PDF",
   gravando: "Gravando…",
+  /** Reimportação: lendo os números do aviso. */
+  carregando: "Carregando…",
   progresso: "Progresso da importação",
 } as const;
 
@@ -197,6 +202,28 @@ export function rotuloConferencia(c: ConferenciaImportacao): string {
 /** Extração incompleta (EXPERIENCE.md): "Não conseguimos ler todos os lançamentos (lemos 41)…". */
 export function textoExtracaoIncompleta(lidos: number): string {
   return `Não conseguimos ler todos os lançamentos (lemos ${lidos}). Você pode importar mesmo assim e corrigir à mão, ou cancelar`;
+}
+
+/**
+ * Aviso do passo 3 quando o Mês já tem Fatura (História 3.11 simplificada):
+ * "Esta fatura já foi importada. Importar de novo apaga os 52 lançamentos
+ * de novembro vindos da fatura (30 já classificados ou marcados à mão) e
+ * importa tudo de novo. Os 2 excluídos voltam."
+ */
+export function avisoReimportar(mes: string, r: ResumoReimportacao): string {
+  const linhas =
+    r.quantidade === 1
+      ? `o 1 lançamento de ${formatarNomeDoMes(mes)} vindo da fatura`
+      : `os ${r.quantidade} lançamentos de ${formatarNomeDoMes(mes)} vindos da fatura`;
+  const mexidos = r.mexidos === 1 ? "1 já classificado ou marcado à mão" : `${r.mexidos} já classificados ou marcados à mão`;
+  const excluidos =
+    r.excluidos === 0 ? "" : r.excluidos === 1 ? " O 1 excluído volta." : ` Os ${r.excluidos} excluídos voltam.`;
+  return `Esta fatura já foi importada. Importar de novo apaga ${linhas} (${mexidos}) e importa tudo de novo.${excluidos}`;
+}
+
+/** Toast depois de reimportar: "Fatura de novembro importada de novo · 52 lançamentos". */
+export function rotuloReimportado(mes: string, n: number): string {
+  return `Fatura de ${formatarNomeDoMes(mes)} importada de novo · ${rotuloLancamentos(n)}`;
 }
 
 /** Textos do Painel do Mês (História 2.4): `invoice-hero`, `month-switcher` e grade. */

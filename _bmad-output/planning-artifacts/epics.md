@@ -958,9 +958,34 @@ So that o app já comece sabendo classificar o que eu classifico há meses (FR-2
 
 ### Story 3.11: Reimportar um Mês
 
+> **Entregue simplificada** (`spec-3-11-reimportar-um-mes.md`, decisão 5-A do Rafael, 09/11/2026): antecipada para antes da 3.2, apaga a Fatura do Mês e todas as linhas dela e importa tudo de novo, sem casar linhas novas com antigas. Os critérios de casamento (AD-7.6) passaram para a Story 3.12.
+
+As a Rafael,
+I want importar de novo a fatura de um mês,
+So that eu possa corrigir uma importação ruim (FR-51).
+
+**Acceptance Criteria:**
+
+**Given** um Mês que já tem Fatura
+**When** Rafael importa uma Fatura do mesmo Mês
+**Then** o passo 3 avisa: "Esta fatura já foi importada. Importar de novo apaga os N lançamentos de <mês> vindos da fatura (X já classificados ou marcados à mão) e importa tudo de novo.", com "Os K excluídos voltam." quando há excluídos, e os botões "Importar de novo" (destrutivo) e "Cancelar"
+**And** N e X vêm do banco (linhas da Fatura do Mês), calculados pelo núcleo
+**And** "Cancelar" não muda nada
+
+**Given** a confirmação
+**When** a RPC `importar_fatura` roda com o id da Fatura confirmada
+**Then** apaga numa transação a Fatura, os totais por cartão e todos os Lançamentos dela (inclusive Ajustes e excluídos) e grava a nova, classificada pelas Regras atuais como uma importação nova
+**And** os Lançamentos sem Fatura (manuais) do Mês e as Regras não são tocados
+**And** se a Fatura do Mês já não é a confirmada, ou o Mês mudou depois do aviso, recusa com `fatura.mes_mudou` e nada é gravado
+**And** depois de gravar, o toast "Fatura de <mês> importada de novo · N lançamentos" aparece e o Painel abre o Mês
+
+### Story 3.12: Reimportar mantendo a classificação
+
+> Feita depois da 3.6 e obrigatória antes de Séries (3.5) e Pagamentos (Épico 6) irem para produção: a reimportação simplificada da 3.11 apagaria previstos casados, Séries e Pagamentos.
+
 As a Rafael,
 I want importar de novo a fatura de um mês sem perder o que já fiz,
-So that eu possa corrigir uma importação ruim (FR-51).
+So that eu possa corrigir uma importação ruim sem reclassificar tudo (FR-51).
 
 **Acceptance Criteria:**
 

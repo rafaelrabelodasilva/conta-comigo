@@ -25,6 +25,8 @@ import type { ConferenciaImportacao } from "./importacao-fatura";
 import {
   ETAPAS_IMPORTACAO,
   TEXTOS_IMPORTAR,
+  avisoReimportar,
+  rotuloReimportado,
   rotuloComposicaoTotal,
   rotuloConferencia,
   rotuloConferenciaTotal,
@@ -578,5 +580,28 @@ describe("sugestão da fila no painel (História 3.1)", () => {
     expect(textoSugestao("Casal", null, ["Rafael", "Mãe"])).toBe("Sugestão: Casal (às vezes Rafael ou Mãe)");
     expect(textoSugestao(null, "Gatos")).toBe("Sugestão: Gatos");
     expect(textoSugestao(null, null, ["Rafael"])).toBeNull();
+  });
+});
+
+describe("reimportar um Mês (História 3.11)", () => {
+  it("aviso com N, X e os excluídos que voltam", () => {
+    expect(avisoReimportar("2026-11", { quantidade: 52, mexidos: 30, excluidos: 2 })).toBe(
+      "Esta fatura já foi importada. Importar de novo apaga os 52 lançamentos de novembro vindos da fatura (30 já classificados ou marcados à mão) e importa tudo de novo. Os 2 excluídos voltam.",
+    );
+  });
+
+  it("singulares; sem excluídos, a última frase some", () => {
+    expect(avisoReimportar("2026-10", { quantidade: 1, mexidos: 1, excluidos: 1 })).toBe(
+      "Esta fatura já foi importada. Importar de novo apaga o 1 lançamento de outubro vindo da fatura (1 já classificado ou marcado à mão) e importa tudo de novo. O 1 excluído volta.",
+    );
+    expect(avisoReimportar("2026-10", { quantidade: 49, mexidos: 0, excluidos: 0 })).toBe(
+      "Esta fatura já foi importada. Importar de novo apaga os 49 lançamentos de outubro vindos da fatura (0 já classificados ou marcados à mão) e importa tudo de novo.",
+    );
+  });
+
+  it("botão e toast", () => {
+    expect(TEXTOS_IMPORTAR.importar_de_novo).toBe("Importar de novo");
+    expect(rotuloReimportado("2026-11", 52)).toBe("Fatura de novembro importada de novo · 52 lançamentos");
+    expect(rotuloReimportado("2026-11", 1)).toBe("Fatura de novembro importada de novo · 1 lançamento");
   });
 });

@@ -485,6 +485,7 @@ export type Database = {
           dados_fatura: Json
           dados_lancamentos: Json
           lancamentos_atualizados_em?: string
+          substituir_fatura_id?: string
         }
         Returns: Json
       }

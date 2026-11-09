@@ -8,17 +8,21 @@ import {
   conferirImportacao,
   pareceFaturaSantander,
   prepararImportacao,
+  resumirReimportacao,
   type ConferenciaImportacao,
   type Importacao,
+  type ResumoReimportacao,
 } from "@/domain/importacao-fatura";
 import {
   ETAPAS_IMPORTACAO,
   ROTULOS,
   TEXTOS_IMPORTAR as T,
+  avisoReimportar,
   mensagem,
   rotuloConferencia,
   rotuloDespesasCreditos,
   rotuloPassoImportar,
+  rotuloReimportado,
   rotuloSeraoGravados,
   textoExtracaoIncompleta,
   tituloFaturaLida,
@@ -26,12 +30,13 @@ import {
 } from "@/domain/mensagens";
 import type { RegraGravada } from "@/domain/regras";
 import type { Resultado } from "@/domain/resultado";
-import { repoFaturas } from "@/data/faturas-repo";
+import { repoFaturas, type Substituir } from "@/data/faturas-repo";
 import { repoRegras } from "@/data/regras-repo";
 import { useLinhas } from "@/data/realtime";
 import { Botao } from "@/ui/Botao";
 import { Campo } from "@/ui/Campo";
 import { Janela } from "@/ui/Janela";
+import { useToast } from "@/ui/Toast";
 import { CANCELADO, extrairTexto } from "./extrair";
 import { lerPdf, type PdfLido } from "./ler-pdf";
 import { TotalAPagar } from "./TotalAPagar";
@@ -50,6 +55,15 @@ import { TotalAPagar } from "./TotalAPagar";
 // classificação. Nenhum dos dois bloqueia: a espera tem limite
 // (`LIMITE_CLASSIFICAR_MS`); passado o limite, segue como se tivesse falhado.
 // Cancelar, recomeçar ou fechar a janela solta as esperas pendentes.
+//
+// Reimportação (História 3.11 simplificada): se o Mês já tem Fatura (na
+// memória, ao classificar; ou depois, pelo Realtime ou pelo erro
+// `fatura.mes_ja_importado` da RPC), lê do banco as linhas dela e o passo 3
+// mostra o aviso com os números do núcleo (`resumirReimportacao`), com
+// "Cancelar" e "Importar de novo" (destrutivo, um toque grava). Sem os
+// números (falha ao ler), só o erro e "Tentar de novo", que relê só o
+// resumo. A RPC recebe o id da Fatura e o `updated_at` lidos com o aviso;
+// `fatura.mes_mudou` volta ao erro com "Tentar de novo" (números novos).
 
 /** Quanto a etapa "classificando" espera as Regras e os cadastros, em ms. */
 export const LIMITE_CLASSIFICAR_MS = 10_000;
@@ -57,6 +71,16 @@ export const LIMITE_CLASSIFICAR_MS = 10_000;
 const ORDEM_ETAPAS = Object.keys(ETAPAS_IMPORTACAO) as EtapaImportacao[];
 
 type Passo = 1 | 2 | 3;
+
+/** O aviso "Importar de novo" do passo 3 (null: o Mês não tinha Fatura). */
+type AvisoReimportar =
+  | { tipo: "lendo" }
+  | { tipo: "pronto"; substituir: Substituir; resumo: ResumoReimportacao }
+  | { tipo: "falhou"; codigo: string }
+  /** Lido do banco: o Mês não tem Fatura (importação normal). */
+  | { tipo: "sem_fatura" };
+
+const AVISO_NO_LIMITE: AvisoReimportar = { tipo: "falhou", codigo: "carregar.falhou" };
 
 type Estado =
   | { tipo: "arquivo"; erro: string | null; naoSantander: boolean }
@@ -69,6 +93,7 @@ type Estado =
       conferencia: ConferenciaImportacao;
       gravando: boolean;
       erro: string | null;
+      reimportar: AvisoReimportar | null;
     };
 
 const INICIAL: Estado = { tipo: "arquivo", erro: null, naoSantander: false };
@@ -96,10 +121,13 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
   const [estado, setEstado] = useState<Estado>(INICIAL);
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [senha, setSenha] = useState("");
+  const toast = useToast();
   const { linhas: faturas } = useLinhas("faturas");
   // O limite do Ajuste de centavos (Configurações → Conferência e atraso).
   const { linhas: configuracoes } = useLinhas("configuracoes");
   const limiteAjuste = configuracoes[0]?.limite_ajuste_centavos ?? LIMITE_AJUSTE_PADRAO_CENTAVOS;
+  // Numa ref: o aviso é lido depois de esperas e usa as atuais.
+  const atuais = useRef({ faturas });
   // Cadastros para classificar (arquivado conta como ausente).
   const { linhas: responsaveis, status: statusResponsaveis } = useLinhas("responsaveis");
   const { linhas: tipos, status: statusTipos } = useLinhas("tipos");
@@ -122,6 +150,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
     };
   }, []);
   useEffect(() => {
+    atuais.current = { faturas };
     cadastros.current = { responsaveis, tipos, status: statusCadastros };
     if (statusCadastros !== "carregando") {
       const esperando = esperandoCadastros.current;
@@ -186,7 +215,13 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
     setEstado({ tipo: "processando", passo: 3, etapa: "classificando" });
     await deixarDesenhar();
     if (minha !== geracao.current) return;
-    const [lidas, prontos] = await Promise.all([comLimite(lerRegras(), []), esperarCadastros()]);
+    const mes = importacao.valor.fatura.mes;
+    const temFatura = atuais.current.faturas.some((f) => f.mes === mes);
+    const [lidas, prontos, reimportar] = await Promise.all([
+      comLimite(lerRegras(), []),
+      esperarCadastros(),
+      temFatura ? comLimite(lerAviso(mes), AVISO_NO_LIMITE) : Promise.resolve(null),
+    ]);
     if (minha !== geracao.current) return;
     const { responsaveis: r, tipos: t } = cadastros.current;
     const classificada: Importacao = {
@@ -197,7 +232,38 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
         prontos ? { responsaveis: r, tipos: t } : { responsaveis: [], tipos: [] },
       ),
     };
-    setEstado({ tipo: "conferir", importacao: classificada, conferencia, gravando: false, erro: null });
+    setEstado({ tipo: "conferir", importacao: classificada, conferencia, gravando: false, erro: null, reimportar });
+  }
+
+  /** Os números do aviso, das linhas da Fatura do Mês lidas do banco. */
+  async function lerAviso(mes: string): Promise<AvisoReimportar> {
+    try {
+      const r = await repoFaturas().lerReimportacao(mes);
+      if (!r.ok) return { tipo: "falhou", codigo: r.codigo };
+      if (!r.valor) return { tipo: "sem_fatura" };
+      const { linhas, statusPadraoId, ...substituir } = r.valor;
+      return { tipo: "pronto", substituir, resumo: resumirReimportacao(linhas, statusPadraoId) };
+    } catch {
+      return AVISO_NO_LIMITE;
+    }
+  }
+
+  /** Lê o aviso no passo 3 (sem chamar a leitura da Fatura de novo) e o põe no estado. */
+  async function buscarAviso(mes: string) {
+    const minha = geracao.current;
+    const aviso = await comLimite(lerAviso(mes), AVISO_NO_LIMITE);
+    if (minha !== geracao.current) return;
+    setEstado((e) =>
+      e.tipo === "conferir" && e.importacao.fatura.mes === mes
+        ? { ...e, reimportar: aviso, erro: e.erro === "fatura.mes_ja_importado" ? null : e.erro }
+        : e,
+    );
+  }
+
+  /** "Tentar de novo" do aviso: relê só o resumo. */
+  function atualizarAviso(mes: string) {
+    setEstado((e) => (e.tipo === "conferir" ? { ...e, reimportar: { tipo: "lendo" } } : e));
+    void buscarAviso(mes);
   }
 
   /** Solta as esperas pendentes (com o valor do limite): quem esperava vê a geração nova e para. */
@@ -294,17 +360,44 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
     if (estado.tipo !== "conferir" || estado.gravando || gravandoAgora.current) return;
     gravandoAgora.current = true;
     const atual = estado;
+    const mes = atual.importacao.fatura.mes;
+    const substituir = atual.reimportar?.tipo === "pronto" ? atual.reimportar.substituir : undefined;
     setEstado({ ...atual, gravando: true, erro: null });
-    const r = await repoFaturas().importar(atual.importacao);
+    const r = await repoFaturas().importar(atual.importacao, substituir);
     gravandoAgora.current = false;
     if (r.ok) {
       reiniciar();
       aoMudar(false);
-      aoImportar?.(atual.importacao.fatura.mes);
+      if (substituir) toast.mostrar({ texto: rotuloReimportado(mes, r.quantidade) });
+      aoImportar?.(mes);
+      return;
+    }
+    if (substituir && r.codigo === "fatura.mes_mudou") {
+      // Os números do aviso ficaram velhos: só o erro, e "Tentar de novo" relê.
+      setEstado({ ...atual, gravando: false, erro: null, reimportar: { tipo: "falhou", codigo: r.codigo } });
+      return;
+    }
+    if (r.codigo === "fatura.mes_ja_importado") {
+      // Outro aparelho importou antes: o efeito abaixo lê o aviso.
+      setEstado({ ...atual, gravando: false, erro: r.codigo, reimportar: null });
       return;
     }
     setEstado({ ...atual, gravando: false, erro: r.codigo });
   }
+
+  // O Mês ganhou Fatura depois de classificar (Realtime ou recusa da RPC): lê
+  // o aviso; enquanto lê, o passo 3 mostra "Carregando…".
+  const mesSemAviso =
+    estado.tipo === "conferir" &&
+    !estado.gravando &&
+    estado.reimportar === null &&
+    (estado.erro === "fatura.mes_ja_importado" || faturas.some((f) => f.mes === estado.importacao.fatura.mes))
+      ? estado.importacao.fatura.mes
+      : null;
+  useEffect(() => {
+    if (mesSemAviso !== null) void buscarAviso(mesSemAviso);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só quando o Mês passa a precisar do aviso
+  }, [mesSemAviso]);
 
   const passo = passoDo(estado);
   const ocupado = estado.tipo === "processando";
@@ -434,8 +527,13 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
         </>
       );
   } else {
-    const { importacao, conferencia, erro } = estado;
-    const jaImportado = erro === "fatura.mes_ja_importado" || faturas.some((f) => f.mes === importacao.fatura.mes);
+    const { importacao, conferencia, erro, reimportar } = estado;
+    const aviso: AvisoReimportar | null =
+      mesSemAviso !== null
+        ? { tipo: "lendo" }
+        : reimportar?.tipo === "pronto" || reimportar?.tipo === "lendo" || reimportar?.tipo === "falhou"
+          ? reimportar
+          : null;
     const f = importacao.fatura;
     corpo = (
       <div className="flex flex-col gap-3">
@@ -456,16 +554,31 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
           </p>
         )}
         <p className="texto-body">{rotuloSeraoGravados(importacao.lancamentos.length)}</p>
-        {jaImportado ? (
+        {aviso?.tipo === "pronto" ? (
           <p role="alert" className="rounded-lg border border-alert-warning-border bg-alert-warning-bg p-3 texto-body">
-            {mensagem("fatura.mes_ja_importado")}
+            {avisoReimportar(f.mes, aviso.resumo)}
           </p>
-        ) : conferencia.incompleta ? (
+        ) : aviso?.tipo === "lendo" ? (
+          <p role="status" className="texto-body text-text-muted">
+            {T.carregando}
+          </p>
+        ) : aviso?.tipo === "falhou" ? (
+          <p role="alert" className="texto-body text-danger-fg">
+            {mensagem(aviso.codigo)}
+          </p>
+        ) : null}
+        {aviso?.tipo === "pronto" && conferencia.incompleta ? (
           <p role="alert" className="rounded-lg border border-alert-warning-border bg-alert-warning-bg p-3 texto-body">
             {textoExtracaoIncompleta(conferencia.quantidade)}
           </p>
         ) : null}
-        {erro && !jaImportado ? (
+        {/* Sem aviso (Mês sem Fatura, ou o banco disse que não tem): passo 3 normal. */}
+        {aviso ? null : conferencia.incompleta ? (
+          <p role="alert" className="rounded-lg border border-alert-warning-border bg-alert-warning-bg p-3 texto-body">
+            {textoExtracaoIncompleta(conferencia.quantidade)}
+          </p>
+        ) : null}
+        {erro ? (
           <p role="alert" className="texto-body text-danger-fg">
             {mensagem(erro)}
           </p>
@@ -479,8 +592,23 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
         : conferencia.incompleta
           ? T.importar_mesmo_assim
           : T.importar;
-    acoes = jaImportado || erro === "auth.sessao_expirou" ? (
+    const sessaoExpirou = erro === "auth.sessao_expirou" || (aviso?.tipo === "falhou" && aviso.codigo === "auth.sessao_expirou");
+    acoes = sessaoExpirou || aviso?.tipo === "lendo" ? (
       cancelar
+    ) : aviso?.tipo === "falhou" ? (
+      <>
+        {cancelar}
+        <Botao variante="primario" onClick={() => atualizarAviso(f.mes)}>
+          {ROTULOS.tentar_de_novo}
+        </Botao>
+      </>
+    ) : aviso?.tipo === "pronto" ? (
+      <>
+        {cancelar}
+        <Botao variante="destrutivo" disabled={estado.gravando} onClick={() => void gravar()}>
+          {estado.gravando ? T.gravando : T.importar_de_novo}
+        </Botao>
+      </>
     ) : (
       <>
         {cancelar}
