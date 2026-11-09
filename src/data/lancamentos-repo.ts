@@ -15,14 +15,29 @@
 // Toda gravação que deu certo devolve a linha gravada: o painel guarda o
 // `updated_at` dela para reconhecer as próprias gravações quando o Realtime
 // as trouxer de volta.
+//
+// Regras (História 3.1): quando `atualizar` ou `incluir` escolhem um
+// Responsável ou um Tipo (valor não nulo), a linha principal ensina a Regra
+// do Nome (`regrasRepo.aprender`, sem esperar). Só escolher ensina (7-A): a
+// gravação que só limpa não chama `aprender`. Nunca os ids que vão `junto`
+// (os Ajustes), nem `desvincular`/`religar`, nem uma linha que é Ajuste
+// (`ajuste_de_id`). A falha de `aprender` não desfaz nem avisa a gravação.
+//
+// Fila do Revisar: a gravação que deixa a linha com Responsável e Tipo tira
+// a linha da fila no mesmo corpo (`revisao_motivo` e `revisao_dados` = null).
+// A linha da Fatura (não Ajuste) fora da fila em que a gravação limpa o
+// Responsável ou o Tipo volta como `sem_classificacao`; com Ajustes `junto`,
+// isso vai numa segunda requisição só para a mãe (o Ajuste nunca tem motivo).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MudancaCampo, NovoLancamento } from "@/domain/lancamento";
+import type { EventoAprender } from "@/domain/regras";
 import { estaOnline } from "./conexao";
 import type { Database } from "./database.types";
 import { FALHOU, gravarComOtimismo, semConexao, type CodigoFalhaGravacao, type Online } from "./gravacao";
 import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
 import { colunasAlteradas } from "./realtime-estado";
+import { repoRegras } from "./regras-repo";
 import { criarClienteNavegador } from "./supabase/navegador";
 
 export type LinhaLancamento = LinhaDe<"lancamentos">;
@@ -58,13 +73,44 @@ export type OpcoesGravacao = {
 /** A mãe a que um Ajuste volta no "Desfazer" do "Desvincular": o id e a classificação atual. */
 export type MaeDoAjuste = Pick<LinhaLancamento, "id" | "tipo_id" | "responsavel_id">;
 
+/** Quem aprende a Regra de uma classificação (`regrasRepo.aprender`). */
+export type Aprender = (evento: EventoAprender) => Promise<unknown>;
+
+/** A gravação mexeu na classificação? */
+const mudouClassificacao = (corpo: Partial<LinhaLancamento>) => "responsavel_id" in corpo || "tipo_id" in corpo;
+
+/** A gravação limpou o Responsável ou o Tipo? */
+const limpouClassificacao = (corpo: Partial<LinhaLancamento>) => corpo.responsavel_id === null || corpo.tipo_id === null;
+
+/** A gravação escolheu um Responsável ou um Tipo (não só limpou)? */
+const escolheuClassificacao = (corpo: Partial<LinhaLancamento>) =>
+  (corpo.responsavel_id !== undefined && corpo.responsavel_id !== null) ||
+  (corpo.tipo_id !== undefined && corpo.tipo_id !== null);
+
 export function criarRepoLancamentos(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
   memoria: Gerenciador<LinhaLancamento>;
   /** Há conexão? Padrão: o detector único (`conexao.ts`). */
   online?: Online;
+  /** Aprende a Regra da classificação; sem ele, nenhuma Regra é aprendida. */
+  aprender?: Aprender;
 }) {
-  const { obterCliente, memoria, online = estaOnline } = deps;
+  const { obterCliente, memoria, online = estaOnline, aprender } = deps;
+
+  /** Ensina a Regra pela linha principal, sem esperar; a falha não chega à gravação. */
+  function ensinar(nome: string, responsavelAntes: string | null, gravada: LinhaLancamento) {
+    if (!aprender || gravada.ajuste_de_id != null) return;
+    try {
+      void aprender({
+        nome,
+        responsavelAntes,
+        responsavelDepois: gravada.responsavel_id,
+        tipoDepois: gravada.tipo_id,
+      }).catch(() => {});
+    } catch {
+      // A gravação do Lançamento já valeu.
+    }
+  }
 
   /** Os ids da gravação: a linha e as que vão junto, sem repetir. */
   const todos = (id: string, junto: readonly string[] = []) => [id, ...junto.filter((j) => j !== id)];
@@ -135,10 +181,46 @@ export function criarRepoLancamentos(deps: {
       if (bloqueio) return bloqueio;
       const atual = memoria.linha(id);
       if (!atual) return FALHOU;
-      const corpo = colunasAlteradas<MudancaLancamento>(atual, mudanca);
+      const corpo: Partial<LinhaLancamento> = colunasAlteradas<MudancaLancamento>(atual, mudanca);
       if (Object.keys(corpo).length === 0) return { ok: true, linha: atual };
+      const classificou = mudouClassificacao(corpo);
+      /** Colunas só da linha principal (nunca dos Ajustes `junto`). */
+      let soDaPrincipal: Partial<LinhaLancamento> | null = null;
+      if (classificou) {
+        const depois = { ...atual, ...corpo };
+        const naFila = atual.revisao_motivo != null || atual.revisao_dados != null;
+        if (depois.responsavel_id !== null && depois.tipo_id !== null) {
+          // Com Responsável e Tipo, sai da fila do Revisar na mesma gravação
+          // (nos Ajustes `junto` as colunas já são nulas).
+          if (naFila) {
+            corpo.revisao_motivo = null;
+            corpo.revisao_dados = null;
+          }
+        } else if (
+          limpouClassificacao(corpo) &&
+          atual.revisao_motivo == null &&
+          atual.fatura_id != null &&
+          atual.ajuste_de_id == null
+        ) {
+          // Linha da Fatura que a gravação deixa sem Responsável ou sem Tipo volta à fila.
+          soDaPrincipal = { revisao_motivo: "sem_classificacao", revisao_dados: null };
+        }
+      }
       const ids = todos(id, (opcoes.junto ?? []).filter((j) => memoria.linha(j)));
-      return gravar(ids, { ...corpo, editado_em: (opcoes.agora ?? new Date()).toISOString() });
+      const editado_em = (opcoes.agora ?? new Date()).toISOString();
+      let r: ResultadoLancamento;
+      if (soDaPrincipal && ids.length === 1) {
+        r = await gravar(ids, { ...corpo, ...soDaPrincipal, editado_em });
+      } else {
+        r = await gravar(ids, { ...corpo, editado_em });
+        if (r.ok && soDaPrincipal) {
+          // A classificação já valeu (mãe e Ajustes juntos); a fila é só da mãe.
+          const fila = await gravar([id], { ...soDaPrincipal, editado_em });
+          if (fila.ok) r = fila;
+        }
+      }
+      if (r.ok && escolheuClassificacao(corpo)) ensinar(atual.nome, atual.responsavel_id, r.linha);
+      return r;
     },
 
     /** Insere (sem otimismo: o id vem do banco) e aplica a linha devolvida. */
@@ -152,6 +234,7 @@ export function criarRepoLancamentos(deps: {
         if (error || !data) return FALHOU;
         // De outro Mês, o gerenciador (só o Mês aberto) não guarda.
         memoria.aplicarLote([data]);
+        if (data.responsavel_id !== null || data.tipo_id !== null) ensinar(data.nome, null, data);
         return { ok: true, linha: data };
       } catch {
         return FALHOU;
@@ -184,17 +267,29 @@ export function criarRepoLancamentos(deps: {
       return gravarSemMemoria(ids, { excluido_em: null });
     },
 
-    /** "Desvincular" do Ajuste: `ajuste_de_id = null`; Tipo e Responsável ficam como estão. */
+    /**
+     * "Desvincular" do Ajuste: `ajuste_de_id = null`; Tipo e Responsável ficam
+     * como estão. Linha da Fatura sem Responsável ou sem Tipo entra na fila
+     * (`sem_classificacao`) na mesma gravação.
+     */
     desvincular(id: string, agora: Date = new Date()): Promise<ResultadoLancamento> {
       const bloqueio = semConexao(online);
       if (bloqueio) return Promise.resolve(bloqueio);
-      if (!memoria.linha(id)) return Promise.resolve(FALHOU);
-      return gravar([id], { ajuste_de_id: null, editado_em: agora.toISOString() });
+      const atual = memoria.linha(id);
+      if (!atual) return Promise.resolve(FALHOU);
+      // Vira linha comum da Fatura: sem Responsável ou sem Tipo, entra na fila do Revisar.
+      const semClassificacao = atual.fatura_id != null && (atual.responsavel_id === null || atual.tipo_id === null);
+      return gravar([id], {
+        ajuste_de_id: null,
+        ...(semClassificacao ? { revisao_motivo: "sem_classificacao" as const, revisao_dados: null } : {}),
+        editado_em: agora.toISOString(),
+      });
     },
 
     /**
      * "Desfazer" do "Desvincular": religa o Ajuste à mãe e copia o Tipo e o
-     * Responsável atuais dela, numa gravação só.
+     * Responsável atuais dela, numa gravação só. Ajuste de novo: sai da fila
+     * do Revisar (o `desvincular` pode ter posto a linha lá).
      */
     religar(id: string, mae: MaeDoAjuste, agora: Date = new Date()): Promise<ResultadoLancamento> {
       const bloqueio = semConexao(online);
@@ -203,6 +298,8 @@ export function criarRepoLancamentos(deps: {
         ajuste_de_id: mae.id,
         tipo_id: mae.tipo_id,
         responsavel_id: mae.responsavel_id,
+        revisao_motivo: null,
+        revisao_dados: null,
         editado_em: agora.toISOString(),
       };
       // Fora da memória (o Mês mudou depois de desvincular): sem otimismo, como `restaurar`.
@@ -220,6 +317,7 @@ export function repoLancamentos(): RepoLancamentos {
   repo ??= criarRepoLancamentos({
     obterCliente: () => criarClienteNavegador() as SupabaseClient<Database> | null,
     memoria: gerenciador("lancamentos"),
+    aprender: (evento) => repoRegras().aprender(evento),
   });
   return repo;
 }

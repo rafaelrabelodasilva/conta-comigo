@@ -652,3 +652,56 @@ describe("Ajustes de centavos (História 2.8)", () => {
     await vi.waitFor(() => expect(repo.atualizar).toHaveBeenLastCalledWith("msc", { status_id: "s-pago" }));
   });
 });
+
+describe("sugestão da fila (História 3.1)", () => {
+  const dados = (extra: object) => ({ responsavel_id: null, tipo_id: null, outros_responsaveis: [], ...extra });
+
+  it("sugestão com dúvida: 'Sugestão: Casal · Casa (às vezes Rafael)' sob os seletores, que seguem vazios", () => {
+    const m = montarRepo();
+    m.memoria.atual = linha({
+      revisao_motivo: "sugestao_duvida",
+      revisao_dados: dados({ responsavel_id: "r-casal", tipo_id: "t-casa", outros_responsaveis: ["r-rafael", "r-sumiu"] }),
+    });
+    renderizar(<Editar m={m} />);
+    const texto = screen.getByText("Sugestão: Casal · Casa (às vezes Rafael)");
+    expect(texto.id).not.toBe("");
+    for (const rotulo of ["Responsável", "Tipo"]) {
+      expect(screen.getByLabelText(rotulo).getAttribute("aria-describedby")).toBe(texto.id);
+    }
+    expect((screen.getByLabelText("Responsável") as HTMLSelectElement).value).toBe("");
+    expect((screen.getByLabelText("Tipo") as HTMLSelectElement).value).toBe("");
+  });
+
+  it("só o Tipo sugerido: 'Sugestão: Casa'", () => {
+    const m = montarRepo();
+    m.memoria.atual = linha({ revisao_motivo: "sugestao", revisao_dados: dados({ tipo_id: "t-casa" }) });
+    renderizar(<Editar m={m} />);
+    expect(screen.getByText("Sugestão: Casa")).toBeTruthy();
+  });
+
+  it("sem sugestão (sem_classificacao, fora da fila ou cadastro que não existe mais): nada", () => {
+    for (const extra of [
+      { revisao_motivo: "sem_classificacao", revisao_dados: null },
+      { revisao_motivo: null, revisao_dados: dados({ tipo_id: "t-casa" }) },
+      { revisao_motivo: "sugestao", revisao_dados: dados({ tipo_id: "t-sumiu" }) },
+    ] as const) {
+      const m = montarRepo();
+      m.memoria.atual = linha(extra as Partial<LinhaLancamento>);
+      const { unmount } = renderizar(<Editar m={m} />);
+      expect(screen.queryByText(/^Sugestão:/)).toBeNull();
+      expect(screen.getByLabelText("Tipo").hasAttribute("aria-describedby")).toBe(false);
+      unmount();
+    }
+  });
+
+  it("cadastro arquivado não aparece na sugestão", () => {
+    const m = montarRepo();
+    m.memoria.atual = linha({
+      revisao_motivo: "sugestao_duvida",
+      revisao_dados: dados({ responsavel_id: "r-antigo", tipo_id: "t-casa", outros_responsaveis: ["r-casal", "r-antigo"] }),
+    });
+    renderizar(<Editar m={m} />);
+    expect(screen.getByText("Sugestão: Casa (às vezes Casal)")).toBeTruthy();
+    expect(screen.queryByText(/Antigo/)).toBeNull();
+  });
+});

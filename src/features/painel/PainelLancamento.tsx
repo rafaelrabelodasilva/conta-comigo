@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { liquidoCentavos, somaDosAjustes } from "@/domain/ajustes";
+import { lerDadosRevisao } from "@/domain/classificacao";
 import type { ConfigCiclo } from "@/domain/ciclo";
 import type { Conferencia } from "@/domain/conferencia";
 import { formatarHora, instanteEmMicros } from "@/domain/datas";
@@ -33,6 +34,7 @@ import {
   rotuloIncluidoEm,
   rotuloSalvoAs,
   rotuloSegueAParcela,
+  textoSugestao,
 } from "@/domain/mensagens";
 import { nomeExibido } from "@/domain/painel";
 import { ordenarParaConfiguracoes as ordenarResponsaveis } from "@/domain/responsaveis";
@@ -78,6 +80,10 @@ import { useToast } from "@/ui/Toast";
 // classificação atual da mãe). No painel da mãe, a linha "Ajuste - R$ 0,08 ·
 // líquido R$ 1.140,66", e mudar Tipo ou Responsável grava a mãe e os
 // Ajustes dela na mesma requisição.
+//
+// Sugestão da fila (História 3.1): na linha que a importação mandou para o
+// Revisar com sugestão, o texto "Sugestão: Casal · Saúde (às vezes Rafael)"
+// fica sob os seletores. Só texto: a grade e os seletores não mudam.
 
 /** Atrasos das novas tentativas automáticas, em ms. */
 export const ATRASOS_NOVA_TENTATIVA = [2000, 5000, 10000] as const;
@@ -205,6 +211,20 @@ function Observacao({
       ) : null}
     </div>
   );
+}
+
+/** "Sugestão: …" de uma linha com `revisao_motivo` de sugestão (só cadastros ativos); senão, null. */
+function sugestaoDaLinha(linha: LinhaLancamento, cadastros: CadastrosPainel): string | null {
+  if (linha.revisao_motivo !== "sugestao" && linha.revisao_motivo !== "sugestao_duvida") return null;
+  const dados = lerDadosRevisao(linha.revisao_dados);
+  if (!dados) return null;
+  // Cadastro arquivado ou que não existe mais não aparece na sugestão.
+  const nome = (lista: readonly { id: string; nome: string; arquivado: boolean }[], id: string | null) =>
+    id === null ? null : (lista.find((c) => c.id === id && !c.arquivado)?.nome ?? null);
+  const outros = dados.outros_responsaveis
+    .map((id) => nome(cadastros.responsaveis, id))
+    .filter((n): n is string => n !== null);
+  return textoSugestao(nome(cadastros.responsaveis, dados.responsavel_id), nome(cadastros.tipos, dados.tipo_id), outros);
 }
 
 function opcoesDosCadastros(cadastros: CadastrosPainel, atual: { responsavel: string | null; tipo: string | null; status: string | null }) {
@@ -446,6 +466,8 @@ function EditarLancamento({
     status: linha.status_id,
   });
   const textoConferencia = textoConferenciaDoLancamento(linha, conferencia);
+  const sugestao = sugestaoDaLinha(linha, cadastros);
+  const idSugestao = useId();
   const nomeDoCadastro = (lista: readonly { id: string; nome: string }[], id: string | null, sem: string) =>
     id === null ? sem : (lista.find((c) => c.id === id)?.nome ?? sem);
 
@@ -556,19 +578,28 @@ function EditarLancamento({
           <p className="texto-caption text-text-muted">{rotuloSegueAParcela(nomeExibido(mae))}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2">
-          <Seletor
-            rotulo={T.responsavel}
-            opcoes={opcoes.responsavel}
-            value={texto("responsavel")}
-            onChange={(e) => escolher("responsavel", e.target.value)}
-          />
-          <Seletor
-            rotulo={T.tipo}
-            opcoes={opcoes.tipo}
-            value={texto("tipo")}
-            onChange={(e) => escolher("tipo", e.target.value)}
-          />
+        <div className="flex flex-col gap-1">
+          <div className="grid grid-cols-2 gap-2">
+            <Seletor
+              rotulo={T.responsavel}
+              opcoes={opcoes.responsavel}
+              value={texto("responsavel")}
+              onChange={(e) => escolher("responsavel", e.target.value)}
+              aria-describedby={sugestao ? idSugestao : undefined}
+            />
+            <Seletor
+              rotulo={T.tipo}
+              opcoes={opcoes.tipo}
+              value={texto("tipo")}
+              onChange={(e) => escolher("tipo", e.target.value)}
+              aria-describedby={sugestao ? idSugestao : undefined}
+            />
+          </div>
+          {sugestao ? (
+            <p id={idSugestao} className="texto-caption text-text-muted">
+              {sugestao}
+            </p>
+          ) : null}
         </div>
       )}
       <Seletor

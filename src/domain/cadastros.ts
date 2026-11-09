@@ -38,10 +38,23 @@ export const REFERENCIAS_COLUNAS: readonly Referencia[] = [
   { cadastro: "responsavel", tabela: "lancamentos", coluna: "responsavel_id", contaUso: true },
   { cadastro: "tipo", tabela: "lancamentos", coluna: "tipo_id", contaUso: true },
   { cadastro: "status", tabela: "lancamentos", coluna: "status_id", contaUso: true },
+  // Regras (História 3.1): não contam uso; excluir sem substituto anula a coluna.
+  { cadastro: "responsavel", tabela: "regras", coluna: "responsavel_id", contaUso: false },
+  { cadastro: "tipo", tabela: "regras", coluna: "tipo_id", contaUso: false },
 ];
 
-/** Colunas `jsonb` em que o id aparece como texto (valor ou chave, em qualquer nível). */
-export const REFERENCIAS_JSONB: readonly Referencia[] = [];
+/**
+ * Colunas `jsonb` em que o id aparece como texto (valor ou chave, em qualquer
+ * nível). Com substituto, o id é trocado; sem substituto, uma referência sem
+ * `contaUso` não bloqueia e o id vira `null` no documento (por isso essas
+ * guardam ids só como valores, nunca como chave).
+ */
+export const REFERENCIAS_JSONB: readonly Referencia[] = [
+  // História 3.1: a contagem por Responsável da Regra e a sugestão da fila.
+  { cadastro: "responsavel", tabela: "regras", coluna: "contagem", contaUso: false },
+  { cadastro: "responsavel", tabela: "lancamentos", coluna: "revisao_dados", contaUso: false },
+  { cadastro: "tipo", tabela: "lancamentos", coluna: "revisao_dados", contaUso: false },
+];
 
 /**
  * Substitutos possíveis para excluir `deId`: os ativos do mesmo cadastro,
