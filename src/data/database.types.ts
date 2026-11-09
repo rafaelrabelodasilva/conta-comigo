@@ -471,10 +471,7 @@ export type Database = {
         Args: { de: string; doc: Json; para: string }
         Returns: Json
       }
-      vincular_ajustes_gravados: {
-        Args: { dono?: string }
-        Returns: number
-      }
+      vincular_ajustes_gravados: { Args: { dono?: string }; Returns: number }
     }
     Enums: {
       lancado_por: "fatura" | "sistema" | "manual" | "historico"
