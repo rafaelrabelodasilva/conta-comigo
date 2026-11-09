@@ -13,10 +13,14 @@
 // - Créditos entram negativos (como a extração já os traz).
 // - Ajustes de centavos (História 2.8): o crédito reconhecido por
 //   `reconhecerAjustes` leva a `ordem_fatura` da mãe em `ajuste_de_ordem`; a
-//   RPC grava o `ajuste_de_id` na mesma transação. Na importação ninguém tem
-//   Tipo nem Responsável, então os dois ficam vazios.
+//   RPC grava o `ajuste_de_id` na mesma transação.
+// - Classificação (História 3.1): `prepararImportacao` só repassa o
+//   `tipo_sugerido` da extração e deixa as linhas sem classificação (o
+//   Ajuste sem motivo, as outras `sem_classificacao`); quem classifica é
+//   `classificarImportacao` (`classificacao.ts`), antes de gravar.
 
 import { reconhecerAjustes } from "./ajustes";
+import type { DadosRevisao, MotivoRevisao } from "./classificacao";
 import { ehData } from "./ciclo";
 import { LIMITE_AJUSTE_PADRAO_CENTAVOS } from "./configuracoes";
 import { dois } from "./datas";
@@ -125,6 +129,13 @@ export type LancamentoParaGravar = {
   duvida_extracao: boolean;
   /** Ajuste de centavos: a `ordem_fatura` da mãe; senão, null. */
   ajuste_de_ordem: number | null;
+  /** Nome do Tipo sugerido pela extração (já um dos Tipos ativos), ou null. */
+  tipo_sugerido: string | null;
+  /** Classificação (História 3.1): de `classificarImportacao`. */
+  responsavel_id: string | null;
+  tipo_id: string | null;
+  revisao_motivo: MotivoRevisao | null;
+  revisao_dados: DadosRevisao | null;
 };
 
 export type Importacao = {
@@ -175,10 +186,17 @@ export function prepararImportacao(
       ordem_fatura: lancamentos.length + 1,
       duvida_extracao: l.duvida,
       ajuste_de_ordem: null,
+      tipo_sugerido: l.tipoSugerido,
+      responsavel_id: null,
+      tipo_id: null,
+      revisao_motivo: "sem_classificacao",
+      revisao_dados: null,
     });
   }
   for (const par of reconhecerAjustes(lancamentos, limiteAjusteCentavos)) {
     lancamentos[par.ajuste].ajuste_de_ordem = lancamentos[par.mae].ordem_fatura;
+    // O Ajuste não tem motivo próprio: segue a mãe.
+    lancamentos[par.ajuste].revisao_motivo = null;
   }
 
   const porFinal = new Map<string, number>();

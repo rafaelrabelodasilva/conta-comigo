@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { classificarImportacao } from "@/domain/classificacao";
 import { LIMITE_AJUSTE_PADRAO_CENTAVOS } from "@/domain/configuracoes";
 import { removerDadosPessoais } from "@/domain/dados-pessoais";
 import {
@@ -23,8 +24,10 @@ import {
   tituloFaturaLida,
   type EtapaImportacao,
 } from "@/domain/mensagens";
+import type { RegraGravada } from "@/domain/regras";
 import type { Resultado } from "@/domain/resultado";
 import { repoFaturas } from "@/data/faturas-repo";
+import { repoRegras } from "@/data/regras-repo";
 import { useLinhas } from "@/data/realtime";
 import { Botao } from "@/ui/Botao";
 import { Campo } from "@/ui/Campo";
@@ -38,6 +41,18 @@ import { TotalAPagar } from "./TotalAPagar";
 // dados pessoais vai para a leitura. O núcleo prepara as linhas e a
 // Conferência, e o repositório grava tudo ou nada pela RPC. "Cancelar"
 // interrompe sem gravar, mas fica desligado enquanto a RPC grava.
+//
+// Classificação (História 3.1): na etapa "classificando", lê as Regras do
+// dono e classifica pelo núcleo (`classificarImportacao`) com os
+// Responsáveis e Tipos da memória, só depois de os dois estarem "pronto"
+// (espera o carregamento). Falhou ao ler as Regras: importa sem elas (só
+// com o `tipo_sugerido`); falhou ao ler os cadastros: importa sem
+// classificação. Nenhum dos dois bloqueia: a espera tem limite
+// (`LIMITE_CLASSIFICAR_MS`); passado o limite, segue como se tivesse falhado.
+// Cancelar, recomeçar ou fechar a janela solta as esperas pendentes.
+
+/** Quanto a etapa "classificando" espera as Regras e os cadastros, em ms. */
+export const LIMITE_CLASSIFICAR_MS = 10_000;
 
 const ORDEM_ETAPAS = Object.keys(ETAPAS_IMPORTACAO) as EtapaImportacao[];
 
@@ -85,6 +100,35 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
   // O limite do Ajuste de centavos (Configurações → Conferência e atraso).
   const { linhas: configuracoes } = useLinhas("configuracoes");
   const limiteAjuste = configuracoes[0]?.limite_ajuste_centavos ?? LIMITE_AJUSTE_PADRAO_CENTAVOS;
+  // Cadastros para classificar (arquivado conta como ausente).
+  const { linhas: responsaveis, status: statusResponsaveis } = useLinhas("responsaveis");
+  const { linhas: tipos, status: statusTipos } = useLinhas("tipos");
+  const statusCadastros =
+    statusResponsaveis === "erro" || statusTipos === "erro"
+      ? "erro"
+      : statusResponsaveis === "pronto" && statusTipos === "pronto"
+        ? "pronto"
+        : "carregando";
+  // Numa ref: a classificação roda depois de esperas (leitura, Regras) e usa os atuais.
+  const cadastros = useRef({ responsaveis, tipos, status: statusCadastros });
+  // Quem espera os cadastros saírem de "carregando".
+  const esperandoCadastros = useRef<(() => void)[]>([]);
+  // As esperas da classificação ainda pendentes (cada uma solta com o valor do limite).
+  const esperas = useRef(new Set<() => void>());
+  useEffect(() => {
+    const pendentes = esperas.current;
+    return () => {
+      for (const soltar of [...pendentes]) soltar();
+    };
+  }, []);
+  useEffect(() => {
+    cadastros.current = { responsaveis, tipos, status: statusCadastros };
+    if (statusCadastros !== "carregando") {
+      const esperando = esperandoCadastros.current;
+      esperandoCadastros.current = [];
+      for (const continuar of esperando) continuar();
+    }
+  });
   // O texto já limpo: "Tentar de novo" reenvia o mesmo, sem pedir PDF e senha.
   const textoLimpo = useRef<string | null>(null);
   const controle = useRef<AbortController | null>(null);
@@ -96,6 +140,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
   const gravando = estado.tipo === "conferir" && estado.gravando;
 
   function reiniciar() {
+    soltarEsperas();
     controle.current?.abort();
     controle.current = null;
     geracao.current++;
@@ -112,6 +157,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
   }
 
   async function lerTexto(texto: string, minha: number) {
+    soltarEsperas();
     setEstado({ tipo: "processando", passo: 3, etapa: "lendo" });
     const c = new AbortController();
     controle.current = c;
@@ -137,11 +183,67 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
       return;
     }
     const conferencia = conferirImportacao(lida.valor);
-    // A classificação (Regras, sugestões) chega no Épico 3: a etapa só aparece.
     setEstado({ tipo: "processando", passo: 3, etapa: "classificando" });
     await deixarDesenhar();
     if (minha !== geracao.current) return;
-    setEstado({ tipo: "conferir", importacao: importacao.valor, conferencia, gravando: false, erro: null });
+    const [lidas, prontos] = await Promise.all([comLimite(lerRegras(), []), esperarCadastros()]);
+    if (minha !== geracao.current) return;
+    const { responsaveis: r, tipos: t } = cadastros.current;
+    const classificada: Importacao = {
+      ...importacao.valor,
+      lancamentos: classificarImportacao(
+        importacao.valor.lancamentos,
+        lidas,
+        prontos ? { responsaveis: r, tipos: t } : { responsaveis: [], tipos: [] },
+      ),
+    };
+    setEstado({ tipo: "conferir", importacao: classificada, conferencia, gravando: false, erro: null });
+  }
+
+  /** Solta as esperas pendentes (com o valor do limite): quem esperava vê a geração nova e para. */
+  function soltarEsperas() {
+    for (const soltar of [...esperas.current]) soltar();
+  }
+
+  /** `p`, ou `noLimite` se `p` falhar, passar de `LIMITE_CLASSIFICAR_MS` ou a espera for solta. */
+  function comLimite<V>(p: Promise<V>, noLimite: V): Promise<V> {
+    return new Promise((resolver) => {
+      let feito = false;
+      const terminar = (v: V) => {
+        if (feito) return;
+        feito = true;
+        clearTimeout(relogio);
+        esperas.current.delete(soltar);
+        resolver(v);
+      };
+      const soltar = () => terminar(noLimite);
+      const relogio = setTimeout(soltar, LIMITE_CLASSIFICAR_MS);
+      esperas.current.add(soltar);
+      p.then(terminar, soltar);
+    });
+  }
+
+  /** Espera os Responsáveis e os Tipos saírem de "carregando": true se ficaram "pronto". */
+  function esperarCadastros(): Promise<boolean> {
+    if (cadastros.current.status !== "carregando") return Promise.resolve(cadastros.current.status === "pronto");
+    let continuar = () => {};
+    const saiu = new Promise<boolean>((resolver) => {
+      continuar = () => resolver(cadastros.current.status === "pronto");
+    });
+    esperandoCadastros.current.push(continuar);
+    return comLimite(saiu, false).finally(() => {
+      esperandoCadastros.current = esperandoCadastros.current.filter((c) => c !== continuar);
+    });
+  }
+
+  /** As Regras do dono; falhou → nenhuma (a importação não bloqueia). */
+  async function lerRegras(): Promise<RegraGravada[]> {
+    try {
+      const r = await repoRegras().listar();
+      return r.ok ? r.regras : [];
+    } catch {
+      return [];
+    }
   }
 
   /** Abre o PDF (sem senha no passo 1) e segue para a leitura. */

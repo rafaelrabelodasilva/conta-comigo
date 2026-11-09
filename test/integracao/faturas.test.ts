@@ -42,6 +42,10 @@ function pequena(mes: string, extra: Partial<Importacao["lancamentos"][number]> 
     data: `${mes}-01`,
     final_cartao: "5061",
     duvida_extracao: false,
+    tipo_sugerido: null,
+    responsavel_id: null,
+    tipo_id: null,
+    revisao_dados: null,
   };
   return {
     fatura: {
@@ -56,8 +60,25 @@ function pequena(mes: string, extra: Partial<Importacao["lancamentos"][number]> 
     },
     cartoes: [{ final: "5061", total_centavos: 114074 }],
     lancamentos: [
-      { ...linha, valor_centavos: 114074, parcela_n: 2, parcela_total: 12, ordem_fatura: 1, ajuste_de_ordem: null },
-      { ...linha, valor_centavos: -8, parcela_n: null, parcela_total: null, ordem_fatura: 2, ajuste_de_ordem: 1, ...extra },
+      {
+        ...linha,
+        valor_centavos: 114074,
+        parcela_n: 2,
+        parcela_total: 12,
+        ordem_fatura: 1,
+        ajuste_de_ordem: null,
+        revisao_motivo: "sem_classificacao",
+      },
+      {
+        ...linha,
+        valor_centavos: -8,
+        parcela_n: null,
+        parcela_total: null,
+        ordem_fatura: 2,
+        ajuste_de_ordem: 1,
+        revisao_motivo: null,
+        ...extra,
+      },
     ],
   };
 }

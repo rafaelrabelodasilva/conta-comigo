@@ -221,6 +221,8 @@ export type Database = {
           parcela_n: number | null
           parcela_total: number | null
           responsavel_id: string | null
+          revisao_dados: Json | null
+          revisao_motivo: Database["public"]["Enums"]["revisao_motivo"] | null
           status_id: string | null
           tipo_id: string | null
           updated_at: string
@@ -247,6 +249,8 @@ export type Database = {
           parcela_n?: number | null
           parcela_total?: number | null
           responsavel_id?: string | null
+          revisao_dados?: Json | null
+          revisao_motivo?: Database["public"]["Enums"]["revisao_motivo"] | null
           status_id?: string | null
           tipo_id?: string | null
           updated_at?: string
@@ -273,6 +277,8 @@ export type Database = {
           parcela_n?: number | null
           parcela_total?: number | null
           responsavel_id?: string | null
+          revisao_dados?: Json | null
+          revisao_motivo?: Database["public"]["Enums"]["revisao_motivo"] | null
           status_id?: string | null
           tipo_id?: string | null
           updated_at?: string
@@ -309,6 +315,60 @@ export type Database = {
           },
           {
             foreignKeyName: "lancamentos_tipo_fkey"
+            columns: ["owner_id", "tipo_id"]
+            isOneToOne: false
+            referencedRelation: "tipos"
+            referencedColumns: ["owner_id", "id"]
+          },
+        ]
+      }
+      regras: {
+        Row: {
+          chave: string
+          contagem: Json
+          created_at: string
+          id: string
+          owner_id: string
+          responsavel_id: string | null
+          tipo_id: string | null
+          ultimo_uso: string
+          updated_at: string
+          versao_normalizacao: number
+        }
+        Insert: {
+          chave: string
+          contagem?: Json
+          created_at?: string
+          id?: string
+          owner_id?: string
+          responsavel_id?: string | null
+          tipo_id?: string | null
+          ultimo_uso?: string
+          updated_at?: string
+          versao_normalizacao: number
+        }
+        Update: {
+          chave?: string
+          contagem?: Json
+          created_at?: string
+          id?: string
+          owner_id?: string
+          responsavel_id?: string | null
+          tipo_id?: string | null
+          ultimo_uso?: string
+          updated_at?: string
+          versao_normalizacao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "regras_responsavel_fkey"
+            columns: ["owner_id", "responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "responsaveis"
+            referencedColumns: ["owner_id", "id"]
+          },
+          {
+            foreignKeyName: "regras_tipo_fkey"
             columns: ["owner_id", "tipo_id"]
             isOneToOne: false
             referencedRelation: "tipos"
@@ -411,6 +471,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      anular_id_jsonb: { Args: { de: string; doc: Json }; Returns: Json }
       contar_usos_cadastro: {
         Args: { cadastro: string }
         Returns: {
@@ -475,6 +536,7 @@ export type Database = {
     }
     Enums: {
       lancado_por: "fatura" | "sistema" | "manual" | "historico"
+      revisao_motivo: "sem_classificacao" | "sugestao" | "sugestao_duvida"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -606,6 +668,7 @@ export const Constants = {
   public: {
     Enums: {
       lancado_por: ["fatura", "sistema", "manual", "historico"],
+      revisao_motivo: ["sem_classificacao", "sugestao", "sugestao_duvida"],
     },
   },
 } as const

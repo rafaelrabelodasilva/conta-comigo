@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,7 +15,7 @@ import {
   textoExtracaoIncompleta,
 } from "@/domain/mensagens";
 import extracaoOutubro from "../../../test/fixtures/extracao-2026-10.json";
-import { ImportarFatura } from "./ImportarFatura";
+import { ImportarFatura, LIMITE_CLASSIFICAR_MS } from "./ImportarFatura";
 
 // O pdf.js, a rota, o gerenciador de Realtime e o repositório são falsos:
 // o teste confere os passos, que o texto vai limpo (sem senha, CPF, cartão
@@ -26,15 +26,38 @@ const falso = vi.hoisted(() => ({
   importar: vi.fn(),
   faturas: [] as { id: string; mes: string }[],
   configuracoes: [] as { limite_ajuste_centavos: number }[],
+  responsaveis: [] as { id: string; nome: string; arquivado: boolean }[],
+  tipos: [] as { id: string; nome: string; arquivado: boolean }[],
+  listarRegras: vi.fn(),
+  // Status de Responsáveis e Tipos no gerenciador falso (os outros: "pronto").
+  statusCadastros: "pronto" as "carregando" | "pronto" | "erro",
+  ouvintes: new Set<() => void>(),
 }));
 vi.mock("./ler-pdf", () => ({ lerPdf: falso.lerPdf }));
-vi.mock("@/data/realtime", () => ({
-  useLinhas: (tabela: string) => ({
-    status: "pronto",
-    linhas: tabela === "configuracoes" ? falso.configuracoes : falso.faturas,
-  }),
-}));
+vi.mock("@/data/realtime", async () => {
+  const { useSyncExternalStore } = await import("react");
+  const assinar = (ouvinte: () => void) => {
+    falso.ouvintes.add(ouvinte);
+    return () => falso.ouvintes.delete(ouvinte);
+  };
+  const statusDe = (tabela: string) =>
+    tabela === "responsaveis" || tabela === "tipos" ? falso.statusCadastros : "pronto";
+  return {
+    useLinhas: (tabela: string) => ({
+      status: useSyncExternalStore(assinar, () => statusDe(tabela)),
+      linhas:
+        tabela === "configuracoes"
+          ? falso.configuracoes
+          : tabela === "responsaveis"
+            ? falso.responsaveis
+            : tabela === "tipos"
+              ? falso.tipos
+              : falso.faturas,
+    }),
+  };
+});
 vi.mock("@/data/faturas-repo", () => ({ repoFaturas: () => ({ importar: falso.importar }) }));
+vi.mock("@/data/regras-repo", () => ({ repoRegras: () => ({ listar: falso.listarRegras }) }));
 
 const TEXTO_PDF = [
   "Olá, Fulana! Esta é a fatura do seu cartão SANTANDER",
@@ -95,6 +118,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   falso.faturas = [];
   falso.configuracoes = [];
+  falso.responsaveis = [];
+  falso.tipos = [];
+  falso.listarRegras.mockResolvedValue({ ok: true, regras: [] });
+  falso.statusCadastros = "pronto";
   vi.stubGlobal("fetch", falso.fetch);
   // Primeiro sem senha (pede a senha), depois com a senha certa.
   falso.lerPdf.mockImplementation(async (_dados: Uint8Array, senha: string) =>
@@ -370,5 +397,155 @@ describe("ImportarFatura: Ajustes de centavos (História 2.8)", () => {
 
   it("com o limite de Configurações (R$ 0,05): não é Ajuste", async () => {
     expect(await importarCom(5)).toEqual([null, null]);
+  });
+});
+
+describe("ImportarFatura: classificação pelas Regras (História 3.1)", () => {
+  const msc = { nome: "MSC CRUZEIROS", data: "04/09", finalCartao: "5061", duvida: false };
+  const extracao: Extracao = {
+    ...outubro,
+    fatura: { ...outubro.fatura, totalDespesasCentavos: 114074 + 14557, totalCreditosCentavos: 8 },
+    cartoes: [{ final: "5061", valorTotalCentavos: 114074 + 14557 }],
+    lancamentos: [
+      { ...msc, parcelaN: 3, parcelaTotal: 12, valorCentavos: 114074, tipoSugerido: null },
+      { ...msc, parcelaN: null, parcelaTotal: null, valorCentavos: -8, tipoSugerido: null },
+      { ...msc, nome: "PETZ", parcelaN: null, parcelaTotal: null, valorCentavos: 14557, tipoSugerido: "Gatos" },
+    ],
+  };
+  const regraMsc = {
+    chave: "MSC CRUZEIROS",
+    versao_normalizacao: 1,
+    responsavel_id: "casal",
+    tipo_id: "casa",
+    contagem: [{ responsavel_id: "casal", n: 2 }],
+    ultimo_uso: "2026-10-10T00:00:00Z",
+  };
+
+  async function gravado() {
+    falso.responsaveis = [{ id: "casal", nome: "Casal", arquivado: false }];
+    falso.tipos = [
+      { id: "casa", nome: "Casa", arquivado: false },
+      { id: "gatos", nome: "Gatos", arquivado: false },
+    ];
+    falso.fetch.mockImplementation(async () => resposta(extracao));
+    const u = await escolherPdf();
+    await digitarSenha(u, "segredo");
+    await screen.findByText(PASSO_3);
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    await waitFor(() => expect(falso.importar).toHaveBeenCalled());
+    const imp: Importacao = falso.importar.mock.calls[0][0];
+    return imp.lancamentos.map((l) => [l.responsavel_id, l.tipo_id, l.revisao_motivo, l.revisao_dados]);
+  }
+
+  it("parcela com Regra limpa e o Ajuste dela classificados; sem Regra com tipo_sugerido vai sugerido", async () => {
+    falso.listarRegras.mockResolvedValue({ ok: true, regras: [regraMsc] });
+    expect(await gravado()).toEqual([
+      ["casal", "casa", null, null],
+      ["casal", "casa", null, null],
+      [null, null, "sugestao", { responsavel_id: null, tipo_id: "gatos", outros_responsaveis: [] }],
+    ]);
+    expect(falso.listarRegras).toHaveBeenCalledTimes(1);
+  });
+
+  it("falha ao ler as Regras: importa sem elas, sem bloquear", async () => {
+    falso.listarRegras.mockResolvedValue({ ok: false });
+    expect(await gravado()).toEqual([
+      [null, null, "sem_classificacao", null],
+      [null, null, null, null],
+      [null, null, "sugestao", { responsavel_id: null, tipo_id: "gatos", outros_responsaveis: [] }],
+    ]);
+  });
+
+  it("leitura das Regras que lança também não bloqueia", async () => {
+    falso.listarRegras.mockRejectedValue(new Error("rede"));
+    expect((await gravado())[0]).toEqual([null, null, "sem_classificacao", null]);
+  });
+
+  it("espera Responsáveis e Tipos carregarem antes de classificar", async () => {
+    falso.statusCadastros = "carregando";
+    falso.listarRegras.mockResolvedValue({ ok: true, regras: [regraMsc] });
+    falso.responsaveis = [{ id: "casal", nome: "Casal", arquivado: false }];
+    falso.tipos = [
+      { id: "casa", nome: "Casa", arquivado: false },
+      { id: "gatos", nome: "Gatos", arquivado: false },
+    ];
+    falso.fetch.mockImplementation(async () => resposta(extracao));
+    const u = await escolherPdf();
+    await digitarSenha(u, "segredo");
+    expect(await screen.findByText(ETAPAS_IMPORTACAO.classificando)).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText(PASSO_3)).toBeNull();
+    act(() => {
+      falso.statusCadastros = "pronto";
+      for (const o of falso.ouvintes) o();
+    });
+    await screen.findByText(PASSO_3);
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    await waitFor(() => expect(falso.importar).toHaveBeenCalled());
+    const imp: Importacao = falso.importar.mock.calls[0][0];
+    expect(imp.lancamentos.map((l) => [l.responsavel_id, l.tipo_id, l.revisao_motivo])).toEqual([
+      ["casal", "casa", null],
+      ["casal", "casa", null],
+      [null, null, "sugestao"],
+    ]);
+  });
+
+  it("cadastros com erro de leitura: importa sem classificação, sem bloquear", async () => {
+    falso.statusCadastros = "erro";
+    falso.listarRegras.mockResolvedValue({ ok: true, regras: [regraMsc] });
+    expect(await gravado()).toEqual([
+      [null, null, "sem_classificacao", null],
+      [null, null, null, null],
+      [null, null, "sem_classificacao", null],
+    ]);
+  });
+
+  it("\"Cancelar\" durante \"classificando\": cadastros que chegam depois não abrem o passo 3 nem gravam", async () => {
+    falso.statusCadastros = "carregando";
+    falso.fetch.mockImplementation(async () => resposta(extracao));
+    const u = await escolherPdf();
+    await digitarSenha(u, "segredo");
+    expect(await screen.findByText(ETAPAS_IMPORTACAO.classificando)).toBeTruthy();
+    await u.click(screen.getByRole("button", { name: ROTULOS.cancelar }));
+    expect(aoMudar).toHaveBeenCalledWith(false);
+    act(() => {
+      falso.statusCadastros = "pronto";
+      for (const o of falso.ouvintes) o();
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText(PASSO_3)).toBeNull();
+    expect(falso.importar).not.toHaveBeenCalled();
+  });
+
+  it("passado o limite, segue sem classificação (cadastros carregando, Regras sem resposta)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      falso.statusCadastros = "carregando";
+      falso.listarRegras.mockReturnValue(new Promise(() => {}));
+      falso.responsaveis = [{ id: "casal", nome: "Casal", arquivado: false }];
+      falso.tipos = [{ id: "gatos", nome: "Gatos", arquivado: false }];
+      falso.fetch.mockImplementation(async () => resposta(extracao));
+      const u = await escolherPdf();
+      await digitarSenha(u, "segredo");
+      expect(await screen.findByText(ETAPAS_IMPORTACAO.classificando)).toBeTruthy();
+      await act(async () => {
+        vi.advanceTimersByTime(LIMITE_CLASSIFICAR_MS - 100);
+      });
+      expect(screen.queryByText(PASSO_3)).toBeNull();
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+      await screen.findByText(PASSO_3);
+      await u.click(screen.getByRole("button", { name: T.importar }));
+      await waitFor(() => expect(falso.importar).toHaveBeenCalled());
+      const imp: Importacao = falso.importar.mock.calls[0][0];
+      expect(imp.lancamentos.map((l) => [l.responsavel_id, l.tipo_id, l.revisao_motivo])).toEqual([
+        [null, null, "sem_classificacao"],
+        [null, null, null],
+        [null, null, "sem_classificacao"],
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

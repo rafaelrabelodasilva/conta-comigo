@@ -43,6 +43,11 @@ const importacao: Importacao = {
       ordem_fatura: 1,
       duvida_extracao: false,
       ajuste_de_ordem: null,
+      tipo_sugerido: null,
+      responsavel_id: null,
+      tipo_id: null,
+      revisao_motivo: "sem_classificacao",
+      revisao_dados: null,
     },
     {
       nome: "MSC CRUZEIROS",
@@ -56,6 +61,11 @@ const importacao: Importacao = {
       duvida_extracao: false,
       // Ajuste de centavos da parcela (História 2.8).
       ajuste_de_ordem: 1,
+      tipo_sugerido: null,
+      responsavel_id: null,
+      tipo_id: null,
+      revisao_motivo: null,
+      revisao_dados: null,
     },
   ],
 };

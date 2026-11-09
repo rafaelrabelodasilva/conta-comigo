@@ -104,4 +104,26 @@ insert into public.lancamentos (
    null, '2026-11', null, null, false, 'manual',
    null, null, null, null, null, '2026-11-03 13:00:00+00', null);
 
+-- Fila do Revisar (História 3.1): uma linha da Fatura com sugestão com dúvida.
+insert into public.lancamentos (
+  id, owner_id, nome, nome_normalizado, valor_centavos, data, final_cartao, mes, fatura_id,
+  ordem_fatura, lancado_por, revisao_motivo, revisao_dados
+) values
+  ('b0000000-0000-4000-8000-000000000804', 'b0000000-0000-4000-8000-000000000001',
+   'GRASSO FARMÁCIA', 'GRASSO FARMACIA', 3990, '2026-09-20', '5061', '2026-10',
+   'b0000000-0000-4000-8000-000000000601', 3, 'fatura', 'sugestao_duvida',
+   '{"responsavel_id": "b0000000-0000-4000-8000-000000000101", "tipo_id": "b0000000-0000-4000-8000-000000000201", "outros_responsaveis": ["b0000000-0000-4000-8000-000000000102"]}');
+
+-- Regras (História 3.1): uma limpa e uma com dúvida, uma com cadastro nulo.
+insert into public.regras (
+  id, owner_id, chave, versao_normalizacao, responsavel_id, tipo_id, contagem, ultimo_uso
+) values
+  ('b0000000-0000-4000-8000-000000000901', 'b0000000-0000-4000-8000-000000000001',
+   'MSC CRUZEIROS', 1, 'b0000000-0000-4000-8000-000000000102', 'b0000000-0000-4000-8000-000000000201',
+   '[{"responsavel_id": "b0000000-0000-4000-8000-000000000102", "n": 3}]', '2026-11-03 12:00:00+00'),
+  ('b0000000-0000-4000-8000-000000000902', 'b0000000-0000-4000-8000-000000000001',
+   'GRASSO FARMACIA', 1, 'b0000000-0000-4000-8000-000000000101', null,
+   '[{"responsavel_id": "b0000000-0000-4000-8000-000000000101", "n": 2}, {"responsavel_id": "b0000000-0000-4000-8000-000000000102", "n": 1}]',
+   '2026-11-04 12:00:00+00');
+
 commit;

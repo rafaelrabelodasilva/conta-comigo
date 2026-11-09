@@ -50,6 +50,15 @@ const extracao = (lancamentos: LancamentoExtraido[], extra: Partial<Extracao["fa
   };
 };
 
+// Sem classificação: `classificarImportacao` (3.1) é quem classifica.
+const SEM_CLASSIFICACAO = {
+  tipo_sugerido: null,
+  responsavel_id: null,
+  tipo_id: null,
+  revisao_motivo: "sem_classificacao",
+  revisao_dados: null,
+} as const;
+
 describe("normalizarNome", () => {
   it("maiúsculas, sem acento e espaços colapsados", () => {
     expect(normalizarNome("  Óticas  Exata\tLtda ")).toBe("OTICAS EXATA LTDA");
@@ -138,6 +147,7 @@ describe("prepararImportacao", () => {
         ordem_fatura: 1,
         duvida_extracao: false,
         ajuste_de_ordem: null,
+        ...SEM_CLASSIFICACAO,
       },
       {
         nome: "MSC CRUZEIROS",
@@ -150,6 +160,7 @@ describe("prepararImportacao", () => {
         ordem_fatura: 2,
         duvida_extracao: true,
         ajuste_de_ordem: null,
+        ...SEM_CLASSIFICACAO,
       },
       {
         nome: "SHOPEE",
@@ -162,9 +173,15 @@ describe("prepararImportacao", () => {
         ordem_fatura: 3,
         duvida_extracao: false,
         ajuste_de_ordem: null,
+        ...SEM_CLASSIFICACAO,
       },
     ]);
     expect(r.valor.cartoes).toEqual([{ final: "1234", total_centavos: 79366 }]);
+  });
+
+  it("repassa o tipo_sugerido da extração (História 3.1)", () => {
+    const r = prepararImportacao(extracao([lanc({ tipoSugerido: "Gatos" })]));
+    expect(r.ok && r.valor.lancamentos[0].tipo_sugerido).toBe("Gatos");
   });
 
   it("o pagamento da fatura anterior não vira Lançamento", () => {
@@ -200,6 +217,8 @@ describe("prepararImportacao", () => {
       [2, null],
       [3, 1],
     ]);
+    // O Ajuste não tem motivo próprio (História 3.1).
+    expect(r.ok && r.valor.lancamentos.map((l) => l.revisao_motivo)).toEqual(["sem_classificacao", "sem_classificacao", null]);
     // O limite vem de configuracoes: com R$ 0,05, R$ 0,08 não é Ajuste.
     const comLimite = prepararImportacao(e, 5);
     expect(comLimite.ok && comLimite.valor.lancamentos.map((l) => l.ajuste_de_ordem)).toEqual([null, null, null]);

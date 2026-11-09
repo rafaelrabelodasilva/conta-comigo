@@ -16,14 +16,20 @@ describe("referências", () => {
     expect(CADASTROS).toEqual(["responsavel", "tipo", "status"]);
   });
 
-  it("o Status padrão não conta uso; Responsável, Tipo e Status dos Lançamentos contam", () => {
+  it("o Status padrão e as Regras não contam uso; Responsável, Tipo e Status dos Lançamentos contam", () => {
     expect(REFERENCIAS_COLUNAS).toEqual([
       { cadastro: "status", tabela: "configuracoes", coluna: "status_padrao_id", contaUso: false },
       { cadastro: "responsavel", tabela: "lancamentos", coluna: "responsavel_id", contaUso: true },
       { cadastro: "tipo", tabela: "lancamentos", coluna: "tipo_id", contaUso: true },
       { cadastro: "status", tabela: "lancamentos", coluna: "status_id", contaUso: true },
+      { cadastro: "responsavel", tabela: "regras", coluna: "responsavel_id", contaUso: false },
+      { cadastro: "tipo", tabela: "regras", coluna: "tipo_id", contaUso: false },
     ]);
-    expect(REFERENCIAS_JSONB).toEqual([]);
+    expect(REFERENCIAS_JSONB).toEqual([
+      { cadastro: "responsavel", tabela: "regras", coluna: "contagem", contaUso: false },
+      { cadastro: "responsavel", tabela: "lancamentos", coluna: "revisao_dados", contaUso: false },
+      { cadastro: "tipo", tabela: "lancamentos", coluna: "revisao_dados", contaUso: false },
+    ]);
   });
 
   it("toda referência aponta para um cadastro conhecido", () => {

@@ -7,8 +7,14 @@
 //
 // O caminho "em uso" (recusa sem substituto, contagem > 0) usa Lançamentos
 // (História 2.3): Responsável, Tipo e Status de um Lançamento contam uso.
+//
+// O ramo jsonb (História 3.1): a contagem da Regra e a sugestão da fila
+// (`revisao_dados`) citam ids sem contar uso. Com substituto, o id é trocado
+// no documento; sem substituto, a exclusão segue e o id vira null.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { REFERENCIAS_COLUNAS, REFERENCIAS_JSONB, type Referencia } from "../../src/domain/cadastros";
+import { lerDadosRevisao } from "../../src/domain/classificacao";
+import { lerContagem } from "../../src/domain/regras";
 import type { Json } from "../../src/data/database.types";
 import { esperarEvento, ligado, supabaseLocal, type Usuario } from "./apoio";
 
@@ -344,6 +350,147 @@ describe.skipIf(!ligado)("substituir_cadastro no Supabase local", () => {
       expect(await colunaDe([ids[0]], "responsavel_id")).toEqual([outroResp!.id]);
       expect(await existe("tipos", tipo)).toBe(false);
       expect(await existe("responsaveis", resp!.id)).toBe(false);
+    });
+  });
+  describe("referências jsonb: Regras e sugestão da fila (História 3.1)", () => {
+    let c: Usuario;
+
+    beforeAll(async () => {
+      c = await local.criarUsuario("c");
+    });
+
+    async function responsavel(nome: string, cor: number) {
+      const { data, error } = await c.cliente.from("responsaveis").insert({ nome, cor, ordem: cor }).select().single();
+      expect(error).toBeNull();
+      return data!.id;
+    }
+
+    async function tipo(nome: string) {
+      const { data, error } = await c.cliente.from("tipos").insert({ nome }).select().single();
+      expect(error).toBeNull();
+      return data!.id;
+    }
+
+    /** Um Lançamento manual na fila do Revisar com a sugestão dada. */
+    async function naFila(dados: Json) {
+      const { data, error } = await c.cliente
+        .from("lancamentos")
+        .insert({
+          nome: "FARMACIA",
+          nome_normalizado: "FARMACIA",
+          valor_centavos: 1000,
+          lancado_por: "manual",
+          mes: "2026-10",
+          revisao_motivo: "sugestao_duvida",
+          revisao_dados: dados,
+        })
+        .select()
+        .single();
+      expect(error).toBeNull();
+      return data!.id;
+    }
+
+    async function usos(cadastro: "responsavel" | "tipo", id: string) {
+      const { data, error } = await c.cliente.rpc("contar_usos_cadastro", { cadastro });
+      expect(error).toBeNull();
+      return Number((data ?? []).find((l) => l.id === id)?.usos ?? -1);
+    }
+
+    it("Substituir A por B: a contagem com A 2 e B 1 vira B e o núcleo lê B 3; a sugestão também troca", async () => {
+      const ra = await responsavel("A", 1);
+      const rb = await responsavel("B", 2);
+      const { data: regra, error } = await c.cliente
+        .from("regras")
+        .insert({
+          chave: "FARMACIA",
+          versao_normalizacao: 1,
+          responsavel_id: ra,
+          contagem: [
+            { responsavel_id: ra, n: 2 },
+            { responsavel_id: rb, n: 1 },
+          ],
+        })
+        .select()
+        .single();
+      expect(error).toBeNull();
+      const linha = await naFila({ responsavel_id: ra, tipo_id: null, outros_responsaveis: [rb] });
+
+      // Regras e sugestão não contam uso.
+      expect(await usos("responsavel", ra)).toBe(0);
+      expect(await usos("responsavel", rb)).toBe(0);
+
+      const { error: erro } = await c.cliente.rpc("substituir_cadastro", { cadastro: "responsavel", de_id: ra, para_id: rb });
+      expect(erro).toBeNull();
+
+      const { data: depois } = await local.admin.from("regras").select("*").eq("id", regra!.id).single();
+      expect(depois!.responsavel_id).toBe(rb);
+      expect(depois!.contagem).toEqual([
+        { responsavel_id: rb, n: 2 },
+        { responsavel_id: rb, n: 1 },
+      ]);
+      expect(lerContagem(depois!.contagem)).toEqual([{ responsavel_id: rb, n: 3 }]);
+      const { data: l } = await local.admin.from("lancamentos").select("revisao_dados").eq("id", linha).single();
+      expect(lerDadosRevisao(l!.revisao_dados)).toEqual({ responsavel_id: rb, tipo_id: null, outros_responsaveis: [rb] });
+      // A contagem de usos não muda.
+      expect(await usos("responsavel", rb)).toBe(0);
+    });
+
+    it("Excluir Responsável e Tipo sem substituto, só citados em Regra e sugestão: exclui; coluna nula e id null no jsonb", async () => {
+      const rx = await responsavel("X", 3);
+      const ry = await responsavel("Y", 4);
+      const tx = await tipo("Remédios");
+      const { data: regra, error } = await c.cliente
+        .from("regras")
+        .insert({
+          chave: "DROGARIA",
+          versao_normalizacao: 1,
+          responsavel_id: rx,
+          tipo_id: tx,
+          contagem: [
+            { responsavel_id: rx, n: 2 },
+            { responsavel_id: ry, n: 1 },
+          ],
+        })
+        .select()
+        .single();
+      expect(error).toBeNull();
+      const linha = await naFila({ responsavel_id: rx, tipo_id: tx, outros_responsaveis: [ry] });
+
+      for (const [cadastro, id] of [
+        ["responsavel", rx],
+        ["tipo", tx],
+      ] as const) {
+        const { error: erro } = await c.cliente.rpc("substituir_cadastro", { cadastro, de_id: id });
+        expect(erro).toBeNull();
+      }
+      const { data: existe } = await local.admin.from("responsaveis").select("id").eq("id", rx);
+      expect(existe).toEqual([]);
+
+      const { data: depois } = await local.admin.from("regras").select("*").eq("id", regra!.id).single();
+      expect(depois!.responsavel_id).toBeNull();
+      expect(depois!.tipo_id).toBeNull();
+      expect(depois!.contagem).toEqual([
+        { responsavel_id: null, n: 2 },
+        { responsavel_id: ry, n: 1 },
+      ]);
+      expect(lerContagem(depois!.contagem)).toEqual([{ responsavel_id: ry, n: 1 }]);
+      const { data: l } = await local.admin.from("lancamentos").select("revisao_dados").eq("id", linha).single();
+      expect(l!.revisao_dados).toEqual({ responsavel_id: null, tipo_id: null, outros_responsaveis: [ry] });
+    });
+
+    it("um Lançamento classificado continua exigindo substituto (a referência jsonb não muda isso)", async () => {
+      const rz = await responsavel("Z", 5);
+      const { error } = await c.cliente.from("lancamentos").insert({
+        nome: "LOJA",
+        nome_normalizado: "LOJA",
+        valor_centavos: 1,
+        lancado_por: "manual",
+        mes: "2026-10",
+        responsavel_id: rz,
+      });
+      expect(error).toBeNull();
+      const { error: emUso } = await c.cliente.rpc("substituir_cadastro", { cadastro: "responsavel", de_id: rz });
+      expect(emUso?.message).toBe("cadastro.em_uso");
     });
   });
 });

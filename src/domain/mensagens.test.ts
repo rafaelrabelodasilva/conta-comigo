@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  textoSugestao,
   MENSAGENS,
   RESPOSTAS_PERGUNTA,
   ROTULOS,
@@ -567,5 +568,15 @@ describe("Ajustes de centavos (História 2.8)", () => {
     expect(descricaoExcluirLancamento("MSC CRUZEIROS", true, 2)).toBe(
       "“MSC CRUZEIROS” sai da grade e da Conferência junto com os 2 Ajustes dele. Dá para desfazer logo depois.",
     );
+  });
+});
+
+describe("sugestão da fila no painel (História 3.1)", () => {
+  it("Responsável · Tipo, com dúvida, só um deles, ou nada", () => {
+    expect(textoSugestao("Casal", "Casa")).toBe("Sugestão: Casal · Casa");
+    expect(textoSugestao("Casal", "Saúde", ["Rafael"])).toBe("Sugestão: Casal · Saúde (às vezes Rafael)");
+    expect(textoSugestao("Casal", null, ["Rafael", "Mãe"])).toBe("Sugestão: Casal (às vezes Rafael ou Mãe)");
+    expect(textoSugestao(null, "Gatos")).toBe("Sugestão: Gatos");
+    expect(textoSugestao(null, null, ["Rafael"])).toBeNull();
   });
 });

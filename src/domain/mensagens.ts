@@ -413,6 +413,20 @@ export const TEXTOS_LANCAMENTO = {
   selecionar_todos: "Selecionar todos",
 } as const;
 
+/**
+ * A sugestão da fila no painel (História 3.1): "Sugestão: Casal · Saúde",
+ * "Sugestão: Casal · Saúde (às vezes Rafael)", "Sugestão: Gatos". Recebe os
+ * nomes já resolvidos (cadastro que não existe mais fica de fora); sem
+ * Responsável e sem Tipo, null.
+ */
+export function textoSugestao(responsavel: string | null, tipo: string | null, outros: readonly string[] = []): string | null {
+  const partes = [responsavel, tipo].filter((p): p is string => p !== null && p !== "");
+  if (partes.length === 0) return null;
+  const vezes = outros.filter((o) => o !== "");
+  const duvida = vezes.length > 0 ? ` (às vezes ${vezes.join(" ou ")})` : "";
+  return `Sugestão: ${partes.join(" · ")}${duvida}`;
+}
+
 /** "Salvo às 21:14". */
 export function rotuloSalvoAs(hora: string): string {
   return `Salvo às ${hora}`;
