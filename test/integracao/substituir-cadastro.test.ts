@@ -430,7 +430,9 @@ describe.skipIf(!ligado)("substituir_cadastro no Supabase local", () => {
       ]);
       expect(lerContagem(depois!.contagem)).toEqual([{ responsavel_id: rb, n: 3 }]);
       const { data: l } = await local.admin.from("lancamentos").select("revisao_dados").eq("id", linha).single();
-      expect(lerDadosRevisao(l!.revisao_dados)).toEqual({ responsavel_id: rb, tipo_id: null, outros_responsaveis: [rb] });
+      // O banco troca o id em todo o documento; o núcleo tira o sugerido de "às vezes".
+      expect(l!.revisao_dados).toEqual({ responsavel_id: rb, tipo_id: null, outros_responsaveis: [rb] });
+      expect(lerDadosRevisao(l!.revisao_dados)).toEqual({ responsavel_id: rb, tipo_id: null, outros_responsaveis: [] });
       // A contagem de usos não muda.
       expect(await usos("responsavel", rb)).toBe(0);
     });
