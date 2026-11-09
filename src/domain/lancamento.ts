@@ -4,7 +4,9 @@
 //
 // - Cada campo do painel salva ao sair dele: `mudancaDoCampo` lê o texto do
 //   campo, valida e diz qual coluna gravar (ou que nada mudou).
-// - Valor: texto lido por `lerReais`; negativo é crédito; zero é recusado.
+// - Valor: texto lido por `lerReais`; negativo é crédito; zero vale (a
+//   Fatura traz a anuidade com R$ 0,00; decisão do Rafael, 09/11/2026), na
+//   edição e no "＋ Lançamento", e conta como despesa de R$ 0,00.
 // - Data: opcional (`AAAA-MM-DD`, do `<input type="date">`), menos numa
 //   linha da Fatura, que o banco exige com data.
 // - Apelido até 60 e Observação até 500 caracteres, recortados; em branco
@@ -63,12 +65,11 @@ export type MudancaCampo = { [C in ColunaEditavel]: { coluna: C; valor: Lancamen
 
 const erro = (codigo: string): { ok: false; erro: { codigo: string } } => ({ ok: false, erro: { codigo } });
 
-/** Valor digitado → centavos. Vazio, ilegível ou zero é recusado; negativo é crédito. */
+/** Valor digitado → centavos. Vazio ou ilegível é recusado; zero vale; negativo é crédito. */
 export function lerValor(texto: string): Resultado<number> {
   if (texto.trim() === "") return erro("lancamento.valor_vazio");
   const r = lerReais(texto);
   if (!r.ok || Math.abs(r.valor) > MAIOR_INTEGER) return erro("lancamento.valor_invalido");
-  if (r.valor === 0) return erro("lancamento.valor_zero");
   return r;
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { liquidoCentavos, somaDosAjustes } from "@/domain/ajustes";
 import type { ConfigCiclo } from "@/domain/ciclo";
 import type { Conferencia } from "@/domain/conferencia";
 import { formatarHora, instanteEmMicros } from "@/domain/datas";
@@ -21,14 +22,17 @@ import {
 import {
   ROTULOS,
   ROTULOS_LANCADO_POR,
+  TEXTOS_AJUSTE,
   TEXTOS_LANCAMENTO as T,
   TEXTOS_PAINEL,
   mensagem,
+  rotuloAjusteDaMae,
   rotuloAlteradoEmOutroAparelho,
   rotuloCartaoFinal,
   rotuloDetalhesLancamento,
   rotuloIncluidoEm,
   rotuloSalvoAs,
+  rotuloSegueAParcela,
 } from "@/domain/mensagens";
 import { nomeExibido } from "@/domain/painel";
 import { ordenarParaConfiguracoes as ordenarResponsaveis } from "@/domain/responsaveis";
@@ -67,6 +71,13 @@ import { useToast } from "@/ui/Toast";
 // Incluir ("＋ Lançamento"): o mesmo painel vazio, com o Nome editável e
 // "Cancelar" / "Incluir"; nada é gravado antes de "Incluir". As regras são do
 // núcleo (`src/domain/lancamento.ts`).
+//
+// Ajustes de centavos (História 2.8): no painel do Ajuste, Tipo e
+// Responsável ficam só para leitura ("Segue a parcela NOME") e o rodapé tem
+// "Desvincular" (toast "Desvinculado · Desfazer", que religa e copia a
+// classificação atual da mãe). No painel da mãe, a linha "Ajuste - R$ 0,08 ·
+// líquido R$ 1.140,66", e mudar Tipo ou Responsável grava a mãe e os
+// Ajustes dela na mesma requisição.
 
 /** Atrasos das novas tentativas automáticas, em ms. */
 export const ATRASOS_NOVA_TENTATIVA = [2000, 5000, 10000] as const;
@@ -91,6 +102,12 @@ export type PropsPainelLancamento = Comum &
     | {
         modo: "editar";
         linha: LinhaLancamento;
+        /** A linha é Ajuste desta mãe (do Mês aberto). */
+        mae?: LinhaLancamento | null;
+        /** Os Ajustes da linha (ela é mãe): acompanham o Tipo e o Responsável. */
+        ajustes?: readonly LinhaLancamento[];
+        /** A linha atual da memória (o "Desfazer" do "Desvincular" lê a mãe). */
+        lerLinha?: (id: string) => LinhaLancamento | undefined;
         conferencia: Conferencia | null;
         /** "Excluir" do rodapé (a tela confirma). */
         aoExcluir: (id: string) => void;
@@ -206,8 +223,16 @@ export function PainelLancamento(props: PropsPainelLancamento) {
 
 type EstadoCampo = "salvando" | "tentando";
 
+const SEM_AJUSTES: readonly LinhaLancamento[] = [];
+
+/** Os campos que o Ajuste segue da mãe. */
+const SEGUEM_A_MAE: readonly CampoLancamento[] = ["tipo", "responsavel"];
+
 function EditarLancamento({
   linha,
+  mae = null,
+  ajustes = SEM_AJUSTES,
+  lerLinha,
   conferencia,
   cadastros,
   aoFechar,
@@ -226,6 +251,8 @@ function EditarLancamento({
   // Refs para as gravações assíncronas lerem o estado atual.
   const rascunhosRef = useRef(rascunhos);
   const linhaRef = useRef(linha);
+  const ajustesRef = useRef(ajustes);
+  const maeRef = useRef(mae);
   const focado = useRef<CampoLancamento | null>(null);
   const emVoo = useRef(0);
   const visto = useRef(linha.updated_at);
@@ -233,6 +260,8 @@ function EditarLancamento({
   const temporizadores = useRef(new Set<ReturnType<typeof setTimeout>>());
   useEffect(() => {
     linhaRef.current = linha;
+    ajustesRef.current = ajustes;
+    if (mae) maeRef.current = mae;
   });
   // Fechado (Esc, outra linha, outro Mês): sem novas tentativas; a falha vira toast.
   const montado = useRef(false);
@@ -301,7 +330,12 @@ function EditarLancamento({
     emVoo.current++;
     definirEstado(campo, "salvando");
     setFalhou(false);
-    const r = await repo.atualizar(linhaRef.current.id, mudancaDaColuna(mudanca));
+    // Tipo e Responsável da mãe vão também para os Ajustes dela, na mesma requisição.
+    const junto = SEGUEM_A_MAE.includes(campo) ? ajustesRef.current.map((a) => a.id) : [];
+    const r =
+      junto.length > 0
+        ? await repo.atualizar(linhaRef.current.id, mudancaDaColuna(mudanca), { junto })
+        : await repo.atualizar(linhaRef.current.id, mudancaDaColuna(mudanca));
     emVoo.current--;
     if (r.ok) {
       gravadosAqui.current.push(r.linha.updated_at);
@@ -351,6 +385,47 @@ function EditarLancamento({
 
   const texto = (campo: CampoLancamento) => rascunhos[campo] ?? textoDoCampo(linha, campo);
 
+  /** Registra uma gravação deste painel (não é "alterado em outro aparelho"). */
+  function gravadoAqui(updatedAt: string) {
+    gravadosAqui.current.push(updatedAt);
+    setSalvoAs(formatarHora(updatedAt));
+  }
+
+  async function desvincular() {
+    const id = linhaRef.current.id;
+    const maeId = linhaRef.current.ajuste_de_id;
+    emVoo.current++;
+    const r = await repo.desvincular(id);
+    emVoo.current--;
+    if (!r.ok) {
+      toast.mostrar({ texto: mensagem(r.codigo) });
+      avaliar();
+      return;
+    }
+    gravadoAqui(r.linha.updated_at);
+    avaliar();
+    toast.mostrar({
+      texto: TEXTOS_AJUSTE.desvinculado,
+      aoDesfazer: () => {
+        // A classificação atual da mãe (pode ter mudado depois de desvincular).
+        const atual = maeId === null ? undefined : (lerLinha?.(maeId) ?? (maeRef.current?.id === maeId ? maeRef.current : undefined));
+        if (!atual || atual.excluido_em !== null) {
+          toast.mostrar({ texto: mensagem("salvar.falhou") });
+          return;
+        }
+        if (montado.current) emVoo.current++;
+        void repo.religar(id, atual).then((d) => {
+          if (montado.current) {
+            emVoo.current--;
+            if (d.ok) gravadoAqui(d.linha.updated_at);
+            avaliar();
+          }
+          if (!d.ok) toast.mostrar({ texto: mensagem(d.codigo) });
+        });
+      },
+    });
+  }
+
   function focar(campo: CampoLancamento) {
     focado.current = campo;
     if (rascunhosRef.current[campo] === undefined) definirRascunho(campo, textoDoCampo(linhaRef.current, campo));
@@ -371,6 +446,8 @@ function EditarLancamento({
     status: linha.status_id,
   });
   const textoConferencia = textoConferenciaDoLancamento(linha, conferencia);
+  const nomeDoCadastro = (lista: readonly { id: string; nome: string }[], id: string | null, sem: string) =>
+    id === null ? sem : (lista.find((c) => c.id === id)?.nome ?? sem);
 
   const situacao = Object.values(estados);
   let indicador: ReactNode = null;
@@ -389,9 +466,12 @@ function EditarLancamento({
         </p>
       }
       rodape={
-        <Botao variante="destrutivo" className="ml-auto" onClick={() => aoExcluir(linha.id)}>
-          {T.excluir}
-        </Botao>
+        <div className="ml-auto flex gap-2">
+          {mae ? <Botao onClick={() => void desvincular()}>{TEXTOS_AJUSTE.desvincular}</Botao> : null}
+          <Botao variante="destrutivo" onClick={() => aoExcluir(linha.id)}>
+            {T.excluir}
+          </Botao>
+        </div>
       }
     >
       {alteradoAs ? (
@@ -436,6 +516,11 @@ function EditarLancamento({
           }}
         />
       </div>
+      {ajustes.length > 0 ? (
+        <p className="texto-label font-normal text-text-muted">
+          {rotuloAjusteDaMae(somaDosAjustes(ajustes), liquidoCentavos(linha, ajustes))}
+        </p>
+      ) : null}
       {textoConferencia ? (
         <p role="status" className="texto-label text-text">
           {textoConferencia}
@@ -451,20 +536,41 @@ function EditarLancamento({
         onChange={(e) => definirRascunho("apelido", e.target.value)}
         onBlur={() => sair("apelido")}
       />
-      <div className="grid grid-cols-2 gap-2">
-        <Seletor
-          rotulo={T.responsavel}
-          opcoes={opcoes.responsavel}
-          value={texto("responsavel")}
-          onChange={(e) => escolher("responsavel", e.target.value)}
-        />
-        <Seletor
-          rotulo={T.tipo}
-          opcoes={opcoes.tipo}
-          value={texto("tipo")}
-          onChange={(e) => escolher("tipo", e.target.value)}
-        />
-      </div>
+      {mae ? (
+        // O Ajuste segue a mãe: Tipo e Responsável só para leitura.
+        <div className="flex flex-col gap-1">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1">
+              <span className="texto-label text-text">{T.responsavel}</span>
+              <span className="flex min-h-toque items-center texto-body text-text">
+                {nomeDoCadastro(cadastros.responsaveis, linha.responsavel_id, TEXTOS_PAINEL.sem_responsavel)}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="texto-label text-text">{T.tipo}</span>
+              <span className="flex min-h-toque items-center texto-body text-text">
+                {nomeDoCadastro(cadastros.tipos, linha.tipo_id, T.sem_tipo)}
+              </span>
+            </div>
+          </div>
+          <p className="texto-caption text-text-muted">{rotuloSegueAParcela(nomeExibido(mae))}</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <Seletor
+            rotulo={T.responsavel}
+            opcoes={opcoes.responsavel}
+            value={texto("responsavel")}
+            onChange={(e) => escolher("responsavel", e.target.value)}
+          />
+          <Seletor
+            rotulo={T.tipo}
+            opcoes={opcoes.tipo}
+            value={texto("tipo")}
+            onChange={(e) => escolher("tipo", e.target.value)}
+          />
+        </div>
+      )}
       <Seletor
         rotulo={T.status}
         opcoes={opcoes.status}

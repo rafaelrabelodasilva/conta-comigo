@@ -137,6 +137,7 @@ describe("prepararImportacao", () => {
         final_cartao: "1234",
         ordem_fatura: 1,
         duvida_extracao: false,
+        ajuste_de_ordem: null,
       },
       {
         nome: "MSC CRUZEIROS",
@@ -148,6 +149,7 @@ describe("prepararImportacao", () => {
         final_cartao: "1234",
         ordem_fatura: 2,
         duvida_extracao: true,
+        ajuste_de_ordem: null,
       },
       {
         nome: "SHOPEE",
@@ -159,6 +161,7 @@ describe("prepararImportacao", () => {
         final_cartao: "1234",
         ordem_fatura: 3,
         duvida_extracao: false,
+        ajuste_de_ordem: null,
       },
     ]);
     expect(r.valor.cartoes).toEqual([{ final: "1234", total_centavos: 79366 }]);
@@ -183,6 +186,28 @@ describe("prepararImportacao", () => {
       { final: "1234", total_centavos: 1000 },
       { final: "9999", total_centavos: 0 },
     ]);
+  });
+
+  it("Ajuste de centavos: o crédito leva a ordem da mãe em ajuste_de_ordem (História 2.8)", () => {
+    const e = extracao([
+      lanc({ nome: "MSC CRUZEIROS", data: "04/09", parcelaN: 2, parcelaTotal: 12, valorCentavos: 114074, finalCartao: "5061" }),
+      lanc({ nome: "PADARIA", valorCentavos: 2000 }),
+      lanc({ nome: "MSC CRUZEIROS", data: "04/09", valorCentavos: -8, finalCartao: "5061" }),
+    ]);
+    const r = prepararImportacao(e);
+    expect(r.ok && r.valor.lancamentos.map((l) => [l.ordem_fatura, l.ajuste_de_ordem])).toEqual([
+      [1, null],
+      [2, null],
+      [3, 1],
+    ]);
+    // O limite vem de configuracoes: com R$ 0,05, R$ 0,08 não é Ajuste.
+    const comLimite = prepararImportacao(e, 5);
+    expect(comLimite.ok && comLimite.valor.lancamentos.map((l) => l.ajuste_de_ordem)).toEqual([null, null, null]);
+  });
+
+  it("outubro/2026: nenhum Ajuste (a grade fica como na 2.7)", () => {
+    const r = prepararImportacao(outubro);
+    expect(r.ok && r.valor.lancamentos.every((l) => l.ajuste_de_ordem === null)).toBe(true);
   });
 
   it("vencimento, fechamento ou data ilegível → leitura falhou", () => {

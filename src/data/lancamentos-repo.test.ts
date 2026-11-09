@@ -7,7 +7,7 @@ import { criarGerenciador } from "./realtime";
 // Cliente falso: registra o corpo de cada chamada e responde o que o teste
 // mandar; a memória é um gerenciador por Mês de verdade, com outubro aberto.
 
-type Chamada = { tipo: "insert" | "update"; corpo: Record<string, unknown>; id?: string };
+type Chamada = { tipo: "insert" | "update"; corpo: Record<string, unknown>; id?: string; ids?: string[] };
 
 const T1 = "2026-11-08T00:00:00.000001+00:00";
 const T2 = "2026-11-08T00:14:00.000002+00:00";
@@ -49,6 +49,11 @@ function montar(iniciais: LinhaLancamento[], responder: (c: Chamada) => { data: 
         c.id = valor;
         return encadeada;
       },
+      // Várias linhas numa requisição (Ajustes): `update … in (ids)`, sem `single`.
+      in(_coluna: string, valores: string[]) {
+        c.ids = valores;
+        return { select: async () => responder(c) };
+      },
       select: () => encadeada,
       single: async () => responder(c),
     };
@@ -88,7 +93,7 @@ describe("repositório de Lançamentos", () => {
   it("Classificar: grava só responsavel_id e editado_em, e devolve a linha gravada", async () => {
     const m = montar([linha("a")], (c) => ({ data: linha("a", { ...c.corpo, updated_at: T2 }), error: null }));
     await pronto(m);
-    const r = await m.repo.atualizar("a", mudancaDaColuna({ coluna: "responsavel_id", valor: "r-casal" }), AGORA);
+    const r = await m.repo.atualizar("a", mudancaDaColuna({ coluna: "responsavel_id", valor: "r-casal" }), { agora: AGORA });
     expect(m.chamadas).toEqual([
       { tipo: "update", corpo: { responsavel_id: "r-casal", editado_em: "2026-11-08T00:14:00.000Z" }, id: "a" },
     ]);
@@ -102,7 +107,7 @@ describe("repositório de Lançamentos", () => {
     const r = await m.repo.atualizar("a", { apelido: "Pedras" });
     expect(r).toMatchObject({ ok: true, linha: { updated_at: T1 } });
     expect(m.chamadas).toEqual([]);
-    await m.repo.atualizar("a", { apelido: "Pedras", valor_centavos: 8000 }, AGORA);
+    await m.repo.atualizar("a", { apelido: "Pedras", valor_centavos: 8000 }, { agora: AGORA });
     expect(m.chamadas[0].corpo).toEqual({ valor_centavos: 8000, editado_em: "2026-11-08T00:14:00.000Z" });
   });
 
@@ -164,7 +169,7 @@ describe("repositório de Lançamentos", () => {
   it("excluir grava só excluido_em; restaurar limpa no mesmo id", async () => {
     const m = montar([linha("a")], (c) => ({ data: linha("a", { ...c.corpo, updated_at: c.corpo.excluido_em ? T2 : "2026-11-08T00:15:00+00:00" }), error: null }));
     await pronto(m);
-    expect(await m.repo.excluir("a", AGORA)).toMatchObject({ ok: true });
+    expect(await m.repo.excluir("a", { agora: AGORA })).toMatchObject({ ok: true });
     expect(m.chamadas[0]).toEqual({ tipo: "update", corpo: { excluido_em: "2026-11-08T00:14:00.000Z" }, id: "a" });
     expect(m.memoria.linha("a")?.excluido_em).toBe("2026-11-08T00:14:00.000Z");
     expect(await m.repo.restaurar("a")).toMatchObject({ ok: true, linha: { id: "a", excluido_em: null } });
@@ -219,5 +224,116 @@ describe("Lançamentos sem conexão", () => {
     ).toEqual(sem);
     expect(obterCliente).not.toHaveBeenCalled();
     expect(m.memoria.retrato().linhas).toBe(antes);
+  });
+});
+
+describe("Ajustes de centavos (História 2.8)", () => {
+  const mae = linha("msc", { nome: "MSC CRUZEIROS", parcela_n: 2, parcela_total: 12, valor_centavos: 114074 });
+  const ajuste = linha("aj", { nome: "MSC CRUZEIROS", valor_centavos: -8, ordem_fatura: 2, ajuste_de_id: "msc" });
+  /** Responde a gravação de várias linhas com cada uma já gravada. */
+  const gravarTodas = (c: Chamada) => ({
+    data: (c.ids ?? [c.id!]).map((id) => linha(id, { ...c.corpo, updated_at: T2 })),
+    error: null,
+  });
+
+  it("Tipo da mãe: mãe e Ajuste numa requisição (in), com otimismo", async () => {
+    const m = montar([mae, ajuste], gravarTodas);
+    await pronto(m);
+    const gravacao = m.repo.atualizar("msc", { tipo_id: "t-viagem" }, { agora: AGORA, junto: ["aj"] });
+    expect(m.memoria.linha("aj")?.tipo_id).toBe("t-viagem");
+    const r = await gravacao;
+    expect(m.chamadas).toEqual([
+      { tipo: "update", corpo: { tipo_id: "t-viagem", editado_em: "2026-11-08T00:14:00.000Z" }, ids: ["msc", "aj"] },
+    ]);
+    expect(r).toMatchObject({ ok: true, linha: { id: "msc", tipo_id: "t-viagem" } });
+    expect(m.memoria.linha("aj")?.updated_at).toBe(T2);
+  });
+
+  it("falha: a mãe e o Ajuste voltam", async () => {
+    const m = montar([mae, ajuste], () => ({ data: null, error: { code: "42501" } }));
+    await pronto(m);
+    expect(await m.repo.atualizar("msc", { responsavel_id: "r-casal" }, { junto: ["aj"] })).toEqual({
+      ok: false,
+      codigo: "salvar.falhou",
+    });
+    expect(m.memoria.linha("msc")?.responsavel_id).toBeNull();
+    expect(m.memoria.linha("aj")?.responsavel_id).toBeNull();
+  });
+
+  it("excluir a mãe exclui o Ajuste na mesma gravação; restaurar volta os dois", async () => {
+    const m = montar([mae, ajuste], gravarTodas);
+    await pronto(m);
+    expect(await m.repo.excluir("msc", { agora: AGORA, junto: ["aj"] })).toMatchObject({ ok: true });
+    expect(m.chamadas[0]).toEqual({ tipo: "update", corpo: { excluido_em: "2026-11-08T00:14:00.000Z" }, ids: ["msc", "aj"] });
+    expect(m.memoria.linha("aj")?.excluido_em).toBe("2026-11-08T00:14:00.000Z");
+    expect(await m.repo.restaurar("msc", { junto: ["aj"] })).toMatchObject({ ok: true, linha: { id: "msc" } });
+    expect(m.chamadas[1]).toEqual({ tipo: "update", corpo: { excluido_em: null }, ids: ["msc", "aj"] });
+    expect(m.memoria.linha("aj")?.excluido_em).toBeNull();
+  });
+
+  it("desvincular grava ajuste_de_id = null e mantém Tipo e Responsável; religar copia os da mãe", async () => {
+    const classificado = { ...ajuste, tipo_id: "t-viagem", responsavel_id: "r-casal" };
+    const m = montar([mae, classificado], (c) => ({ data: linha("aj", { ...classificado, ...c.corpo, updated_at: T2 }), error: null }));
+    await pronto(m);
+    const r = await m.repo.desvincular("aj", AGORA);
+    expect(m.chamadas[0]).toEqual({
+      tipo: "update",
+      corpo: { ajuste_de_id: null, editado_em: "2026-11-08T00:14:00.000Z" },
+      id: "aj",
+    });
+    expect(r).toMatchObject({ ok: true, linha: { ajuste_de_id: null, tipo_id: "t-viagem", responsavel_id: "r-casal" } });
+    await m.repo.religar("aj", { id: "msc", tipo_id: "t-casa", responsavel_id: null }, AGORA);
+    expect(m.chamadas[1]).toEqual({
+      tipo: "update",
+      corpo: { ajuste_de_id: "msc", tipo_id: "t-casa", responsavel_id: null, editado_em: "2026-11-08T00:14:00.000Z" },
+      id: "aj",
+    });
+    expect(m.memoria.linha("aj")).toMatchObject({ ajuste_de_id: "msc", tipo_id: "t-casa", responsavel_id: null });
+  });
+
+  it("resposta parcial do in (ids): falha e o otimismo é desfeito nas linhas todas", async () => {
+    const m = montar([mae, ajuste], (c) => ({ data: [linha("msc", { ...c.corpo, updated_at: T2 })], error: null }));
+    await pronto(m);
+    expect(await m.repo.atualizar("msc", { tipo_id: "t-viagem" }, { junto: ["aj"] })).toEqual({
+      ok: false,
+      codigo: "salvar.falhou",
+    });
+    expect(m.memoria.linha("msc")?.tipo_id).toBeNull();
+    expect(m.memoria.linha("aj")?.tipo_id).toBeNull();
+  });
+
+  it("restaurar com junto fora da memória: um in (ids) só, sem otimismo, devolve a mãe", async () => {
+    const m = montar([], gravarTodas);
+    await pronto(m);
+    const r = await m.repo.restaurar("msc", { junto: ["aj"] });
+    expect(m.chamadas).toEqual([{ tipo: "update", corpo: { excluido_em: null }, ids: ["msc", "aj"] }]);
+    expect(r).toMatchObject({ ok: true, linha: { id: "msc", excluido_em: null } });
+  });
+
+  it("restaurar fora da memória com resposta parcial: falha", async () => {
+    const m = montar([], (c) => ({ data: [linha("msc", { ...c.corpo, updated_at: T2 })], error: null }));
+    await pronto(m);
+    expect(await m.repo.restaurar("msc", { junto: ["aj"] })).toEqual({ ok: false, codigo: "salvar.falhou" });
+  });
+
+  it("religar fora da memória (o Mês mudou depois de desvincular): grava sem otimismo e devolve a linha", async () => {
+    const m = montar([], (c) => ({ data: linha("aj", { ...c.corpo, valor_centavos: -8, updated_at: T2 }), error: null }));
+    await pronto(m);
+    const r = await m.repo.religar("aj", { id: "msc", tipo_id: "t-casa", responsavel_id: "r-casal" }, AGORA);
+    expect(m.chamadas).toEqual([
+      {
+        tipo: "update",
+        corpo: { ajuste_de_id: "msc", tipo_id: "t-casa", responsavel_id: "r-casal", editado_em: "2026-11-08T00:14:00.000Z" },
+        id: "aj",
+      },
+    ]);
+    expect(r).toMatchObject({ ok: true, linha: { id: "aj", ajuste_de_id: "msc" } });
+  });
+
+  it("desvincular que falha: nada muda", async () => {
+    const m = montar([mae, ajuste], () => ({ data: null, error: { code: "42501" } }));
+    await pronto(m);
+    expect(await m.repo.desvincular("aj")).toEqual({ ok: false, codigo: "salvar.falhou" });
+    expect(m.memoria.linha("aj")?.ajuste_de_id).toBe("msc");
   });
 });

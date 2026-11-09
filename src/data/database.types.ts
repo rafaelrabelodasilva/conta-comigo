@@ -201,6 +201,7 @@ export type Database = {
       }
       lancamentos: {
         Row: {
+          ajuste_de_id: string | null
           apelido: string | null
           created_at: string
           data: string | null
@@ -226,6 +227,7 @@ export type Database = {
           valor_centavos: number
         }
         Insert: {
+          ajuste_de_id?: string | null
           apelido?: string | null
           created_at?: string
           data?: string | null
@@ -251,6 +253,7 @@ export type Database = {
           valor_centavos: number
         }
         Update: {
+          ajuste_de_id?: string | null
           apelido?: string | null
           created_at?: string
           data?: string | null
@@ -276,6 +279,13 @@ export type Database = {
           valor_centavos?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "lancamentos_ajuste_de_fkey"
+            columns: ["owner_id", "ajuste_de_id"]
+            isOneToOne: false
+            referencedRelation: "lancamentos"
+            referencedColumns: ["owner_id", "id"]
+          },
           {
             foreignKeyName: "lancamentos_fatura_fkey"
             columns: ["owner_id", "fatura_id"]
@@ -460,6 +470,10 @@ export type Database = {
       trocar_id_jsonb: {
         Args: { de: string; doc: Json; para: string }
         Returns: Json
+      }
+      vincular_ajustes_gravados: {
+        Args: { dono?: string }
+        Returns: number
       }
     }
     Enums: {

@@ -206,7 +206,7 @@ describe("salvar ao sair do campo", () => {
     expect(m.atualizar).not.toHaveBeenCalled();
   });
 
-  it("Valor 'abc' ou '0': erro no campo (aria-describedby), o texto fica e nada grava", async () => {
+  it("Valor 'abc': erro no campo (aria-describedby), o texto fica e nada grava; '0,00' grava zero", async () => {
     const m = montarRepo();
     renderizar(<Editar m={m} />);
     const u = userEvent.setup();
@@ -219,11 +219,12 @@ describe("salvar ao sair do campo", () => {
     const erro = document.getElementById(campo("Valor").getAttribute("aria-describedby")!);
     expect(erro?.textContent).toBe(mensagem("lancamento.valor_invalido"));
     expect(erro?.className).toContain("text-danger-fg");
+    // Zero vale (História 2.8): o erro some e grava R$ 0,00.
     await u.clear(campo("Valor"));
-    await u.type(campo("Valor"), "0");
+    await u.type(campo("Valor"), "0,00");
     await u.tab();
-    expect(m.atualizar).not.toHaveBeenCalled();
-    expect(screen.getByText(mensagem("lancamento.valor_zero"))).toBeTruthy();
+    expect(m.atualizar).toHaveBeenLastCalledWith("a", { valor_centavos: 0 });
+    expect(campo("Valor").getAttribute("aria-invalid")).toBeNull();
   });
 
   it("Apelido recortado e Observação", async () => {
@@ -516,5 +517,138 @@ describe("＋ Lançamento", () => {
     unmount();
     renderizar(<Novo repo={m.repo} comFatura={false} />);
     expect(screen.queryByRole("checkbox", { name: "Corrige a leitura da fatura" })).toBeNull();
+  });
+});
+
+describe("Ajustes de centavos (História 2.8)", () => {
+  const mae = linha({
+    id: "msc",
+    nome: "MSC CRUZEIROS",
+    nome_normalizado: "MSC CRUZEIROS",
+    valor_centavos: 114074,
+    parcela_n: 2,
+    parcela_total: 12,
+    final_cartao: "5061",
+    tipo_id: "t-casa",
+    responsavel_id: "r-casal",
+  });
+  const ajuste = linha({
+    id: "aj",
+    nome: "MSC CRUZEIROS",
+    nome_normalizado: "MSC CRUZEIROS",
+    valor_centavos: -8,
+    parcela_n: null,
+    parcela_total: null,
+    final_cartao: "5061",
+    ordem_fatura: 2,
+    tipo_id: "t-casa",
+    responsavel_id: "r-casal",
+    ajuste_de_id: "msc",
+  });
+
+  function repoFalso() {
+    const gravada = (id: string, extra: Partial<LinhaLancamento>) =>
+      ({ ok: true as const, linha: { ...(id === "msc" ? mae : ajuste), ...extra, updated_at: T2 } });
+    return {
+      atualizar: vi.fn(async (id: string, m: MudancaLancamento) => gravada(id, m)),
+      desvincular: vi.fn(async (id: string) => gravada(id, { ajuste_de_id: null }) as ResultadoLancamento),
+      religar: vi.fn(async (id: string, m: { id: string }) => gravada(id, { ajuste_de_id: m.id })),
+      incluir: vi.fn(),
+      excluir: vi.fn(),
+      restaurar: vi.fn(),
+    };
+  }
+
+  it("painel do Ajuste: Tipo e Responsável só para leitura ('Segue a parcela'), o resto editável, e Desvincular ao lado de Excluir", () => {
+    const repo = repoFalso();
+    renderizar(
+      <PainelLancamento
+        modo="editar"
+        linha={ajuste}
+        mae={{ ...mae, apelido: "Cruzeiro" }}
+        conferencia={null}
+        cadastros={cadastros}
+        aoFechar={() => {}}
+        aoExcluir={() => {}}
+        repo={repo as unknown as RepoLancamentos}
+      />,
+    );
+    const painel = screen.getByRole("complementary");
+    const rotulos = [...painel.querySelectorAll("label")].map((l) => l.textContent);
+    expect(rotulos).toEqual(["Valor", "Data da compra", "Apelido", "Status", "Observação"]);
+    expect(screen.queryByRole("combobox", { name: "Tipo" })).toBeNull();
+    expect(screen.getByText("Segue a parcela Cruzeiro")).toBeTruthy();
+    expect(screen.getByText("Casal")).toBeTruthy();
+    expect(screen.getByText("Casa")).toBeTruthy();
+    const botoes = within(painel).getAllByRole("button").map((b) => b.textContent);
+    expect(botoes.slice(-2)).toEqual(["Desvincular", "Excluir"]);
+  });
+
+  it("Desvincular: grava, toast 'Desvinculado · Desfazer'; Desfazer religa com a classificação atual da mãe", async () => {
+    const repo = repoFalso();
+    const maeAtual = { ...mae, tipo_id: null, responsavel_id: "r-rafael" };
+    renderizar(
+      <PainelLancamento
+        modo="editar"
+        linha={ajuste}
+        mae={mae}
+        lerLinha={(id) => (id === "msc" ? maeAtual : undefined)}
+        conferencia={null}
+        cadastros={cadastros}
+        aoFechar={() => {}}
+        aoExcluir={() => {}}
+        repo={repo as unknown as RepoLancamentos}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Desvincular" }));
+    await screen.findByText("Desvinculado");
+    expect(repo.desvincular).toHaveBeenCalledWith("aj");
+    fireEvent.click(screen.getByRole("button", { name: "Desfazer" }));
+    await vi.waitFor(() => expect(repo.religar).toHaveBeenCalledWith("aj", maeAtual));
+  });
+
+  it("Desvincular que falha: toast salvar.falhou", async () => {
+    const repo = repoFalso();
+    repo.desvincular.mockResolvedValueOnce({ ok: false, codigo: "salvar.falhou" });
+    renderizar(
+      <PainelLancamento
+        modo="editar"
+        linha={ajuste}
+        mae={mae}
+        conferencia={null}
+        cadastros={cadastros}
+        aoFechar={() => {}}
+        aoExcluir={() => {}}
+        repo={repo as unknown as RepoLancamentos}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Desvincular" }));
+    expect(await screen.findByText(mensagem("salvar.falhou"))).toBeTruthy();
+    expect(screen.queryByText("Desvinculado")).toBeNull();
+  });
+
+  it("painel da mãe: a linha do Ajuste com o líquido; Tipo e Responsável gravam a mãe e os Ajustes juntos", async () => {
+    const repo = repoFalso();
+    renderizar(
+      <PainelLancamento
+        modo="editar"
+        linha={mae}
+        ajustes={[ajuste]}
+        conferencia={null}
+        cadastros={cadastros}
+        aoFechar={() => {}}
+        aoExcluir={() => {}}
+        repo={repo as unknown as RepoLancamentos}
+      />,
+    );
+    expect(screen.getByText((_, el) => el?.tagName === "P" && sem(el.textContent) === "Ajuste - R$ 0,08 · líquido R$ 1.140,66")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Desvincular" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Responsável"), { target: { value: "r-rafael" } });
+    await vi.waitFor(() =>
+      expect(repo.atualizar).toHaveBeenCalledWith("msc", { responsavel_id: "r-rafael" }, { junto: ["aj"] }),
+    );
+    // Status não acompanha: só a mãe.
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "s-pago" } });
+    await vi.waitFor(() => expect(repo.atualizar).toHaveBeenLastCalledWith("msc", { status_id: "s-pago" }));
   });
 });

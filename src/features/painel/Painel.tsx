@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { idsQueAcompanham, separarAjustes } from "@/domain/ajustes";
 import { conferir } from "@/domain/conferencia";
 import { hojeEmSaoPaulo } from "@/domain/datas";
 import { alternarSelecao, alternarTodos, selecaoValida } from "@/domain/lancamento";
@@ -84,6 +85,13 @@ import { SeletorMes } from "./SeletorMes";
 // enquanto o painel estiver nela, mesmo que uma edição a tire do filtro
 // (opção A); o total, as contagens e o anúncio seguem o filtro. A seleção
 // é só estado da tela: trocar de Mês a limpa e um excluído sai dela.
+//
+// Ajustes de centavos (História 2.8, FR-47): o núcleo separa os Ajustes das
+// mães (`separarAjustes`). Filtros, busca, "Verificar", contagens, anúncio e
+// seleção olham só as mães; a grade põe cada Ajuste logo abaixo da mãe. O
+// hero e a Conferência continuam com todas as linhas (o Ajuste é crédito).
+// Excluir a mãe exclui os Ajustes dela na mesma gravação; "Desfazer"
+// restaura todos.
 
 const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status"] as const;
 
@@ -153,6 +161,12 @@ export function Painel({ titulo }: { titulo: string }) {
   const status = useLinhas("status");
   const ciclo = useLinhas("config_ciclo");
   const configuracoes = useLinhas("configuracoes");
+  // Para o "Desfazer" do "Desvincular" ler a classificação atual da mãe.
+  const linhasRef = useRef(lancamentos.linhas);
+  useEffect(() => {
+    linhasRef.current = lancamentos.linhas;
+  }, [lancamentos.linhas]);
+  const lerLinha = useCallback((id: string) => linhasRef.current.find((l) => l.id === id), []);
 
   // A memória de `lancamentos` acompanha o Mês aberto.
   useEffect(() => {
@@ -241,15 +255,19 @@ export function Painel({ titulo }: { titulo: string }) {
     toast.mostrar({ texto: rotuloIncluidoEm(linha.mes) });
   }
 
+  /** Os Ajustes não excluídos da linha `id` no Mês aberto (saem e voltam com ela). */
+  const ajustesDe = (id: string) => idsQueAcompanham(id, lancamentos.linhas.filter((l) => l.mes === mesAberto));
+
   async function excluir(id: string) {
-    // Fecha antes de gravar: a linha sai do painel e da seleção.
-    setPainel((p) => (p?.modo === "editar" && p.id === id ? null : p));
+    const junto = ajustesDe(id);
+    // Fecha antes de gravar: a linha (e os Ajustes dela) sai do painel e da seleção.
+    setPainel((p) => (p?.modo === "editar" && (p.id === id || junto.includes(p.id)) ? null : p));
     setSelecao((s) => {
       const nova = new Set(s);
       nova.delete(id);
       return nova;
     });
-    const r = await repoLancamentos().excluir(id);
+    const r = junto.length > 0 ? await repoLancamentos().excluir(id, { junto }) : await repoLancamentos().excluir(id);
     if (!r.ok) {
       toast.mostrar({ texto: mensagem(r.codigo) });
       return;
@@ -257,8 +275,7 @@ export function Painel({ titulo }: { titulo: string }) {
     toast.mostrar({
       texto: TEXTOS_LANCAMENTO.excluido,
       aoDesfazer: () => {
-        void repoLancamentos()
-          .restaurar(id)
+        void (junto.length > 0 ? repoLancamentos().restaurar(id, { junto }) : repoLancamentos().restaurar(id))
           .then((d) => {
             if (!d.ok) toast.mostrar({ texto: mensagem(d.codigo) });
           });
@@ -300,17 +317,26 @@ export function Painel({ titulo }: { titulo: string }) {
     const doMes = lancamentos.linhas.filter((l) => l.mes === mesAberto && l.excluido_em === null);
     const daFatura = fatura ? doMes.filter((l) => l.fatura_id === fatura.id) : [];
     const conferencia = fatura ? conferir(fatura, cartoes.linhas, doMes) : null;
+    // Filtros, contagens, anúncio e seleção olham só as mães (o Ajuste segue a dele).
+    const { maes, ajustesPorMae } = separarAjustes(doMes);
     // Sem Fatura não há o que verificar (nem a pílula): o filtro fica guardado.
     const verificando = filtros.verificar && conferencia !== null;
     const efetivos = { ...filtros, verificar: verificando };
-    const naGrade = aplicarFiltros(doMes, filtros, conferencia);
+    const naGrade = aplicarFiltros(maes, filtros, conferencia);
     const cadastrosFiltro = { responsaveis: responsaveis.linhas, tipos: tipos.linhas, status: status.linhas };
     const listar = (c: ColunaFiltro, extras: readonly (string | null)[] = []) =>
-      valoresDaColuna(c, doMes, filtros, conferencia, cadastrosFiltro, extras);
+      valoresDaColuna(c, maes, filtros, conferencia, cadastrosFiltro, extras);
     const opcoes = Object.fromEntries(COLUNAS_DA_BARRA.map((c) => [c, listar(c)])) as Record<ColunaFiltro, OpcaoFiltro[]>;
-    // A linha aberta que uma edição tirou do filtro continua na grade (opção A).
-    const linhaFixa = aberta && aberta.excluido_em === null ? aberta : null;
-    const idsDoMes = doMes.map((l) => l.id);
+    const abertaNoMes = aberta && aberta.excluido_em === null ? aberta : null;
+    // A mãe do Ajuste aberto (se ele é Ajuste de uma linha do Mês).
+    const maeDaAberta =
+      abertaNoMes?.ajuste_de_id && ajustesPorMae.get(abertaNoMes.ajuste_de_id)?.some((a) => a.id === abertaNoMes.id)
+        ? (doMes.find((l) => l.id === abertaNoMes.ajuste_de_id) ?? null)
+        : null;
+    // A linha aberta que uma edição tirou do filtro continua na grade (opção A);
+    // num Ajuste, fica a mãe (com ele embaixo).
+    const linhaFixa = maeDaAberta ?? abertaNoMes;
+    const idsDoMes = maes.map((l) => l.id);
     const selecionados = selecaoValida(selecao, idsDoMes);
     const idsNaGrade = naGrade.map((l) => l.id);
     const cartoesDaFatura = fatura
@@ -334,12 +360,15 @@ export function Painel({ titulo }: { titulo: string }) {
           aoIncluido={aoIncluido}
         />
       );
-    } else if (linhaFixa) {
+    } else if (abertaNoMes) {
       painelLateral = (
         <PainelLancamento
-          key={linhaFixa.id}
+          key={abertaNoMes.id}
           modo="editar"
-          linha={linhaFixa}
+          linha={abertaNoMes}
+          mae={maeDaAberta}
+          ajustes={maeDaAberta ? [] : (ajustesPorMae.get(abertaNoMes.id) ?? [])}
+          lerLinha={lerLinha}
           conferencia={conferencia}
           cadastros={cadastrosPainel}
           aoFechar={() => setPainel(null)}
@@ -387,6 +416,7 @@ export function Painel({ titulo }: { titulo: string }) {
         </p>
         <GradeLancamentos
           linhas={naGrade}
+          ajustesPorMae={ajustesPorMae}
           cadastros={cadastros}
           ordem={ordem}
           aoOrdenar={(coluna) => setOrdem((o) => alternarOrdem(o, coluna))}
@@ -407,7 +437,7 @@ export function Painel({ titulo }: { titulo: string }) {
           selecao={selecionados}
           aoSelecionar={(id) => setSelecao((s) => alternarSelecao(selecaoValida(s, idsDoMes), id))}
           aoSelecionarTodos={() => setSelecao((s) => alternarTodos(selecaoValida(s, idsDoMes), idsNaGrade))}
-          abertoId={linhaFixa?.id ?? null}
+          abertoId={abertaNoMes?.id ?? null}
           aoAbrir={(id) => setPainel({ modo: "editar", id })}
           aoExcluir={setExcluindo}
           linhaFixa={linhaFixa}
@@ -448,7 +478,11 @@ export function Painel({ titulo }: { titulo: string }) {
             if (!abrir) setExcluindo(null);
           }}
           titulo={TEXTOS_LANCAMENTO.confirmar_excluir_titulo}
-          descricao={aExcluir ? descricaoExcluirLancamento(nomeExibido(aExcluir), aExcluir.fatura_id !== null) : ""}
+          descricao={
+            aExcluir
+              ? descricaoExcluirLancamento(nomeExibido(aExcluir), aExcluir.fatura_id !== null, ajustesDe(aExcluir.id).length)
+              : ""
+          }
           rotuloConfirmar={TEXTOS_LANCAMENTO.confirmar_excluir}
           aoConfirmar={() => {
             if (excluindo !== null) void excluir(excluindo);

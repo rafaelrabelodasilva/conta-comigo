@@ -54,6 +54,11 @@ import {
   tituloPopoverFiltro,
   TEXTOS_LANCAMENTO,
   descricaoExcluirLancamento,
+  TEXTOS_AJUSTE,
+  rotuloAjusteDaMae,
+  rotuloAjusteDe,
+  rotuloLiquido,
+  rotuloSegueAParcela,
   rotuloAlteradoEmOutroAparelho,
   rotuloConferenciaDiferenca,
   rotuloDetalhesLancamento,
@@ -516,7 +521,8 @@ describe("painel do Lançamento (História 2.7)", () => {
   it("códigos lancamento.* com mensagem no tom do EXPERIENCE.md", () => {
     expect(mensagem("lancamento.nome_vazio")).toBe("Preencha o nome.");
     expect(mensagem("lancamento.valor_vazio")).toBe("Preencha o valor.");
-    expect(mensagem("lancamento.valor_zero")).toBe("O valor não pode ser zero.");
+    // Zero vale (História 2.8): o código saiu do mapa.
+    expect(ehCodigoConhecido("lancamento.valor_zero")).toBe(false);
     expect(mensagem("lancamento.apelido_longo")).toBe("Use até 60 caracteres.");
     expect(mensagem("lancamento.observacao_longa")).toBe("Use até 500 caracteres.");
     expect(mensagem("lancamento.sem_cartao")).toBe("Escolha o cartão");
@@ -540,5 +546,26 @@ describe("painel do Lançamento (História 2.7)", () => {
       "“PADARIA” sai da grade e da Conferência. Dá para desfazer logo depois.",
     );
     expect(descricaoExcluirLancamento("PADARIA", false)).toBe("“PADARIA” sai da grade. Dá para desfazer logo depois.");
+  });
+});
+
+describe("Ajustes de centavos (História 2.8)", () => {
+  const sem = (t: string) => t.replaceAll(ESPACO, " ");
+
+  it("grade, VoiceOver e painel", () => {
+    expect(TEXTOS_AJUSTE).toEqual({ marca: "↳", desvincular: "Desvincular", desvinculado: "Desvinculado" });
+    expect(rotuloAjusteDe("MSC CRUZEIROS")).toBe("Ajuste de MSC CRUZEIROS");
+    expect(sem(rotuloLiquido(114066))).toBe("líquido R$ 1.140,66");
+    expect(rotuloSegueAParcela("MSC CRUZEIROS")).toBe("Segue a parcela MSC CRUZEIROS");
+    expect(sem(rotuloAjusteDaMae(-8, 114066))).toBe("Ajuste - R$ 0,08 · líquido R$ 1.140,66");
+  });
+
+  it("excluir a mãe diz que os Ajustes saem juntos", () => {
+    expect(descricaoExcluirLancamento("MSC CRUZEIROS", true, 1)).toBe(
+      "“MSC CRUZEIROS” sai da grade e da Conferência junto com o Ajuste dele. Dá para desfazer logo depois.",
+    );
+    expect(descricaoExcluirLancamento("MSC CRUZEIROS", true, 2)).toBe(
+      "“MSC CRUZEIROS” sai da grade e da Conferência junto com os 2 Ajustes dele. Dá para desfazer logo depois.",
+    );
   });
 });

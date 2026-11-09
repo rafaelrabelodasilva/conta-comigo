@@ -42,6 +42,7 @@ const importacao: Importacao = {
       final_cartao: "5061",
       ordem_fatura: 1,
       duvida_extracao: false,
+      ajuste_de_ordem: null,
     },
     {
       nome: "MSC CRUZEIROS",
@@ -53,6 +54,8 @@ const importacao: Importacao = {
       final_cartao: "5061",
       ordem_fatura: 2,
       duvida_extracao: false,
+      // Ajuste de centavos da parcela (História 2.8).
+      ajuste_de_ordem: 1,
     },
   ],
 };
@@ -193,6 +196,11 @@ describe("repositório da importação da Fatura", () => {
           dados_lancamentos: importacao.lancamentos,
         },
       },
+    ]);
+    // O jsonb leva a ordem da mãe no Ajuste (a RPC grava o ajuste_de_id).
+    expect((m.chamadas[0].args.dados_lancamentos as { ajuste_de_ordem: number | null }[]).map((l) => l.ajuste_de_ordem)).toEqual([
+      null,
+      1,
     ]);
     expect(m.faturas.linha("f1")?.mes).toBe("2026-10");
     expect(m.cartoes.linha("c1")?.final).toBe("5061");

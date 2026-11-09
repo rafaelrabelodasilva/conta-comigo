@@ -208,6 +208,20 @@ describe("ordenarGrade", () => {
 });
 
 describe("rotuloLinhaAcessivel", () => {
+  it("Ajuste: 'Ajuste de NOME, - R$ 0,08, líquido R$ 1.140,66, Responsável, Status'", () => {
+    expect(
+      rotuloLinhaAcessivel({
+        nome: "MSC CRUZEIROS",
+        valorCentavos: -8,
+        parcelaN: null,
+        parcelaTotal: null,
+        responsavel: "Casal",
+        status: "Não pago",
+        ajuste: { nomeMae: "Cruzeiro", liquidoCentavos: 114066 },
+      }),
+    ).toBe(`Ajuste de Cruzeiro, -${ESPACO}R$${ESPACO}0,08, líquido R$${ESPACO}1.140,66, Casal, Não pago`);
+  });
+
   it("linha marcada termina com 'verificar este lançamento'", () => {
     expect(
       rotuloLinhaAcessivel({

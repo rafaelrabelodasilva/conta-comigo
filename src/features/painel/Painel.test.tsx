@@ -93,10 +93,12 @@ const repoL = vi.hoisted(() => {
   type Res = Promise<{ ok: true; linha: Linha } | { ok: false; codigo: string }>;
   return {
     gravar: null as ((id: string, corpo: Record<string, unknown>) => Linha) | null,
-    atualizar: vi.fn<(id: string, m: Record<string, unknown>) => Res>(),
+    atualizar: vi.fn<(id: string, m: Record<string, unknown>, o?: { junto?: string[] }) => Res>(),
     incluir: vi.fn<(novo: Record<string, unknown>) => Res>(),
-    excluir: vi.fn<(id: string) => Res>(),
-    restaurar: vi.fn<(id: string) => Res>(),
+    excluir: vi.fn<(id: string, o?: { junto?: string[] }) => Res>(),
+    restaurar: vi.fn<(id: string, o?: { junto?: string[] }) => Res>(),
+    desvincular: vi.fn<(id: string) => Res>(),
+    religar: vi.fn<(id: string, mae: Record<string, unknown>) => Res>(),
   };
 });
 vi.mock("@/data/lancamentos-repo", () => ({
@@ -254,9 +256,19 @@ function gravarNoBanco(id: string, corpo: Record<string, unknown>) {
 
 beforeEach(() => {
   versaoGravada = 0;
-  repoL.atualizar.mockImplementation(async (id, m) => ({ ok: true, linha: gravarNoBanco(id, m) }));
-  repoL.excluir.mockImplementation(async (id) => ({ ok: true, linha: gravarNoBanco(id, { excluido_em: "2026-11-08T00:14:00Z" }) }));
-  repoL.restaurar.mockImplementation(async (id) => ({ ok: true, linha: gravarNoBanco(id, { excluido_em: null }) }));
+  // Com `junto` (os Ajustes da mãe), grava as linhas todas, como o `in (ids)` do repositório.
+  const comJunto = (id: string, o: { junto?: string[] } | undefined, corpo: Record<string, unknown>) => {
+    for (const j of o?.junto ?? []) gravarNoBanco(j, corpo);
+    return { ok: true as const, linha: gravarNoBanco(id, corpo) };
+  };
+  repoL.atualizar.mockImplementation(async (id, m, o) => comJunto(id, o, m));
+  repoL.excluir.mockImplementation(async (id, o) => comJunto(id, o, { excluido_em: "2026-11-08T00:14:00Z" }));
+  repoL.restaurar.mockImplementation(async (id, o) => comJunto(id, o, { excluido_em: null }));
+  repoL.desvincular.mockImplementation(async (id) => ({ ok: true, linha: gravarNoBanco(id, { ajuste_de_id: null }) }));
+  repoL.religar.mockImplementation(async (id, mae) => ({
+    ok: true,
+    linha: gravarNoBanco(id, { ajuste_de_id: mae.id, tipo_id: mae.tipo_id, responsavel_id: mae.responsavel_id }),
+  }));
   repoL.incluir.mockImplementation(async (novo) => {
     const linha = { ...lanc(novo.mes as string), ...novo, id: "novo" };
     if (novo.mes === falso.mes) mudarBanco("lancamentos", (ls) => [...ls, linha]);
@@ -1060,5 +1072,159 @@ describe("Painel do Lançamento (História 2.7)", () => {
     expect(rodape()).toContain("R$ 7.687,77");
     expect(painelLateral()).toBeNull();
     expect(repoL.atualizar).not.toHaveBeenCalled();
+  });
+});
+
+describe("Ajustes de centavos (História 2.8)", () => {
+  const painelLateral = () => screen.queryByRole("complementary");
+  const pilula = (nome: string) => screen.getByRole("button", { name: nome, expanded: false });
+  const linhaDoAjuste = () => linhasDaGrade().find((r) => r.dataset.ajuste);
+  const tipos = [{ id: "t-viagem", nome: "Viagem", arquivado: false, ordem: 1 }];
+
+  /** Novembro com a parcela do MSC, uma padaria e o Ajuste de 8 centavos do MSC (na ordem da Fatura). */
+  function comAjuste(extraAjuste: Partial<LinhaLancamento> = {}) {
+    const mae = lanc("2026-11", {
+      id: "msc",
+      nome: "MSC CRUZEIROS",
+      parcela_n: 2,
+      parcela_total: 12,
+      valor_centavos: 114074,
+      ordem_fatura: 1,
+    });
+    const padaria = lanc("2026-11", { id: "pad", nome: "PADARIA", valor_centavos: 2000, ordem_fatura: 2 });
+    const ajuste = lanc("2026-11", {
+      id: "aj",
+      nome: "MSC CRUZEIROS",
+      valor_centavos: -8,
+      ordem_fatura: 3,
+      ajuste_de_id: "msc",
+      ...extraAjuste,
+    });
+    definir({ faturas: [novembro], lancamentos: [mae, padaria, ajuste] });
+    falso.banco.tipos = tipos;
+  }
+
+  it("o Ajuste logo abaixo da mãe; a grade e o rodapé fecham no líquido; o hero não muda", () => {
+    comAjuste();
+    renderizar();
+    expect(linhasDaGrade().map((r) => (r.dataset.ajuste ? "↳" : nomeVisivel(r)))).toEqual(["MSC CRUZEIROS", "↳", "PADARIA"]);
+    expect(rodape()).toContain(sem(formatarDinheiro(114074 - 8 + 2000)));
+    expect(within(linhaDoAjuste()!).getAllByRole("cell")[0].querySelector("input")).toBeNull();
+  });
+
+  it("filtrar por um Tipo que só o Ajuste teria: nenhuma linha do MSC aparece; contagens só das mães", async () => {
+    comAjuste({ tipo_id: "t-viagem" });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(pilula("Tipo"));
+    const dialogo = screen.getByRole("dialog", { name: "Tipo (pode marcar vários)" });
+    expect(within(dialogo).getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
+      "Viagem, 0 lançamentos",
+      "Sem tipo, 2 lançamentos",
+    ]);
+    await u.click(within(dialogo).getByRole("checkbox", { name: "Viagem, 0 lançamentos" }));
+    await u.click(within(dialogo).getByRole("button", { name: TEXTOS_FILTROS.aplicar }));
+    expect(linhasDaGrade()).toHaveLength(0);
+    expect(screen.getByText("0 lançamentos")).toBeTruthy();
+  });
+
+  it("busca pela padaria: o Ajuste some com a mãe; pelo MSC, aparecem os dois e o anúncio conta 1", async () => {
+    comAjuste();
+    renderizar();
+    const u = userEvent.setup();
+    const busca = screen.getByRole("searchbox", { name: TEXTOS_FILTROS.buscar });
+    await u.type(busca, "padaria");
+    expect(linhaDoAjuste()).toBeUndefined();
+    await u.clear(busca);
+    await u.type(busca, "msc");
+    expect(linhasDaGrade()).toHaveLength(2);
+    expect(screen.getByText("1 lançamento")).toBeTruthy();
+  });
+
+  it("selecionar a mãe pinta o Ajuste; Selecionar todos marca só as mães", async () => {
+    comAjuste();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("checkbox", { name: "Selecionar MSC CRUZEIROS" }));
+    expect(linhaDoAjuste()!.className).toContain("bg-selection");
+    await u.click(screen.getByRole("checkbox", { name: TEXTOS_LANCAMENTO.selecionar_todos }));
+    expect((screen.getByRole("checkbox", { name: TEXTOS_LANCAMENTO.selecionar_todos }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("Tipo da mãe no painel: mãe e Ajuste na mesma gravação", async () => {
+    comAjuste();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhasDaGrade()[0]).getAllByRole("cell")[3]);
+    expect(screen.getByText((_, el) => el?.tagName === "P" && sem(el.textContent) === "Ajuste - R$ 0,08 · líquido R$ 1.140,66")).toBeTruthy();
+    await u.selectOptions(within(painelLateral()!).getByLabelText("Tipo"), "t-viagem");
+    expect(repoL.atualizar).toHaveBeenCalledWith("msc", { tipo_id: "t-viagem" }, { junto: ["aj"] });
+    expect((falso.banco.lancamentos as LinhaLancamento[]).map((l) => l.tipo_id)).toEqual(["t-viagem", null, "t-viagem"]);
+  });
+
+  it("painel do Ajuste: Desvincular vira linha comum; Desfazer religa com a classificação da mãe", async () => {
+    comAjuste();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhaDoAjuste()!).getAllByRole("cell")[3]);
+    expect(within(painelLateral()!).getByText("Segue a parcela MSC CRUZEIROS")).toBeTruthy();
+    await u.click(within(painelLateral()!).getByRole("button", { name: "Desvincular" }));
+    expect(repoL.desvincular).toHaveBeenCalledWith("aj");
+    expect(linhaDoAjuste()).toBeUndefined();
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["MSC CRUZEIROS", "PADARIA", "MSC CRUZEIROS"]);
+    expect(screen.getByText("Desvinculado")).toBeTruthy();
+    // A mãe muda de Tipo em outro aparelho antes do Desfazer.
+    mudarBanco("lancamentos", (ls) => ls.map((l) => ((l as LinhaLancamento).id === "msc" ? { ...(l as object), tipo_id: "t-viagem" } : l)));
+    await u.click(screen.getByRole("button", { name: "Desfazer" }));
+    expect(repoL.religar).toHaveBeenCalledWith("aj", expect.objectContaining({ id: "msc", tipo_id: "t-viagem" }));
+    expect(linhaDoAjuste()).toBeTruthy();
+  });
+
+  it("excluir a mãe: a confirmação avisa, o Ajuste sai junto; Desfazer volta os dois", async () => {
+    comAjuste();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhasDaGrade()[0]).getByRole("button", { name: "Ações de MSC CRUZEIROS" }));
+    await u.click(screen.getByRole("menuitem", { name: "Excluir" }));
+    const confirmar = screen.getByRole("alertdialog", { name: "Excluir lançamento?" });
+    expect(within(confirmar).getByText(/junto com o Ajuste dele/)).toBeTruthy();
+    await u.click(within(confirmar).getByRole("button", { name: "Excluir lançamento" }));
+    expect(repoL.excluir).toHaveBeenCalledWith("msc", { junto: ["aj"] });
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["PADARIA"]);
+    await u.click(screen.getByRole("button", { name: "Desfazer" }));
+    expect(repoL.restaurar).toHaveBeenCalledWith("msc", { junto: ["aj"] });
+    expect(linhasDaGrade()).toHaveLength(3);
+  });
+
+  it("excluir o próprio Ajuste exclui só ele", async () => {
+    comAjuste();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhaDoAjuste()!).getByRole("button", { name: "Ações de Ajuste de MSC CRUZEIROS" }));
+    await u.click(screen.getByRole("menuitem", { name: "Excluir" }));
+    await u.click(screen.getByRole("button", { name: "Excluir lançamento" }));
+    expect(repoL.excluir).toHaveBeenCalledWith("aj");
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["MSC CRUZEIROS", "PADARIA"]);
+  });
+
+  it("com o Ajuste aberto: a mãe fica presa na grade, sem linha repetida, mesmo fora da busca", async () => {
+    comAjuste();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhaDoAjuste()!).getAllByRole("cell")[3]);
+    const grade = () => linhasDaGrade().map((r) => (r.dataset.ajuste ? "↳" : nomeVisivel(r)));
+    expect(grade()).toEqual(["MSC CRUZEIROS", "↳", "PADARIA"]);
+    expect(linhaDoAjuste()!.getAttribute("data-aberta")).toBe("true");
+    await u.type(screen.getByRole("searchbox", { name: TEXTOS_FILTROS.buscar }), "padaria");
+    expect(grade()).toEqual(["MSC CRUZEIROS", "↳", "PADARIA"]);
+    expect(within(painelLateral()!).getByText("Segue a parcela MSC CRUZEIROS")).toBeTruthy();
+  });
+
+  it("Ajuste cuja mãe não está no Mês: linha comum, com caixa", () => {
+    comAjuste({ ajuste_de_id: "de-outro-mes" });
+    renderizar();
+    expect(linhaDoAjuste()).toBeUndefined();
+    expect(linhasDaGrade()).toHaveLength(3);
+    expect(screen.getAllByRole("checkbox", { name: "Selecionar MSC CRUZEIROS" })).toHaveLength(2);
   });
 });

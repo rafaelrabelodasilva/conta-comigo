@@ -35,13 +35,15 @@ const bellaPietra: LancamentoEditavel = {
 };
 
 describe("leitura dos campos", () => {
-  it("Valor: lido por lerReais, negativo é crédito, zero e texto recusados", () => {
+  it("Valor: lido por lerReais, negativo é crédito, zero vale e texto é recusado", () => {
     expect(lerValor("80,00")).toEqual({ ok: true, valor: 8000 });
     expect(lerValor("R$ 1.140,74")).toEqual({ ok: true, valor: 114074 });
     expect(lerValor(`-${ESPACO}R$${ESPACO}0,08`)).toEqual({ ok: true, valor: -8 });
     expect(lerValor("abc")).toMatchObject({ ok: false, erro: { codigo: "lancamento.valor_invalido" } });
-    expect(lerValor("0")).toMatchObject({ ok: false, erro: { codigo: "lancamento.valor_zero" } });
-    expect(lerValor("0,00")).toMatchObject({ ok: false, erro: { codigo: "lancamento.valor_zero" } });
+    // Zero vale (a Fatura traz a anuidade com R$ 0,00; decisão do Rafael, 09/11/2026).
+    expect(lerValor("0")).toEqual({ ok: true, valor: 0 });
+    expect(lerValor("0,00")).toEqual({ ok: true, valor: 0 });
+    expect(lerValor("-0,00")).toEqual({ ok: true, valor: 0 });
     expect(lerValor("21.474.836,47")).toEqual({ ok: true, valor: 2147483647 });
     expect(lerValor("21.474.836,48")).toMatchObject({ ok: false, erro: { codigo: "lancamento.valor_invalido" } });
     expect(lerValor("-21474836,48")).toMatchObject({ ok: false, erro: { codigo: "lancamento.valor_invalido" } });
@@ -88,7 +90,15 @@ describe("mudancaDoCampo", () => {
   it("Corrigir Valor: R$ 800,00 para R$ 80,00", () => {
     expect(mudancaDoCampo(bellaPietra, "valor", "80,00")).toEqual({ ok: true, valor: { coluna: "valor_centavos", valor: 8000 } });
     expect(mudancaDoCampo(bellaPietra, "valor", "abc")).toMatchObject({ ok: false, erro: { codigo: "lancamento.valor_invalido" } });
-    expect(mudancaDoCampo(bellaPietra, "valor", "0")).toMatchObject({ ok: false, erro: { codigo: "lancamento.valor_zero" } });
+    expect(mudancaDoCampo(bellaPietra, "valor", "0")).toEqual({ ok: true, valor: { coluna: "valor_centavos", valor: 0 } });
+  });
+
+  it("Valor zero: a anuidade de R$ 1,00 volta para R$ 0,00; 'abc' fica no campo", () => {
+    const anuidade = { ...bellaPietra, valor_centavos: 100 };
+    expect(mudancaDoCampo(anuidade, "valor", "0,00")).toEqual({ ok: true, valor: { coluna: "valor_centavos", valor: 0 } });
+    expect(mudancaDoCampo(anuidade, "valor", "abc")).toMatchObject({ ok: false, erro: { codigo: "lancamento.valor_invalido" } });
+    // Já zero: nada a salvar.
+    expect(mudancaDoCampo({ ...bellaPietra, valor_centavos: 0 }, "valor", "R$ 0,00")).toEqual({ ok: true, valor: null });
   });
 
   it("igual ao gravado: nada a salvar (o texto formatado do Valor também)", () => {
@@ -177,6 +187,16 @@ describe("novoLancamento", () => {
       ok: true,
       valor: { mes: "2026-11" },
     });
+  });
+
+  it("Valor R$ 0,00 vale, com ou sem 'Corrige a leitura da fatura'", () => {
+    expect(novoLancamento({ ...FORM_NOVO_VAZIO, nome: "ANUIDADE", valor: "0,00" }, outubro)).toMatchObject({
+      ok: true,
+      valor: { valor_centavos: 0, fatura_id: null },
+    });
+    expect(
+      novoLancamento({ ...FORM_NOVO_VAZIO, nome: "ANUIDADE", valor: "0", corrigeFatura: true, cartao: "8673" }, outubro),
+    ).toMatchObject({ ok: true, valor: { valor_centavos: 0, fatura_id: "f10", final_cartao: "8673" } });
   });
 
   it("a caixa marcada sem Fatura no Mês não vale", () => {

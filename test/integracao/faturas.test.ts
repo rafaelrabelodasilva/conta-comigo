@@ -24,6 +24,7 @@ type Gravados = {
     fatura_id: string;
     nome_normalizado: string;
     data: string;
+    ajuste_de_id: string | null;
   }[];
 };
 
@@ -33,7 +34,7 @@ function outubro(): Importacao {
   return r.valor;
 }
 
-/** Uma Fatura pequena no Mês dado: a parcela do cruzeiro e o crédito de 8 centavos. */
+/** Uma Fatura pequena no Mês dado: a parcela do cruzeiro e o crédito de 8 centavos (Ajuste dela). */
 function pequena(mes: string, extra: Partial<Importacao["lancamentos"][number]> = {}): Importacao {
   const linha = {
     nome: "MSC CRUZEIROS",
@@ -55,8 +56,8 @@ function pequena(mes: string, extra: Partial<Importacao["lancamentos"][number]> 
     },
     cartoes: [{ final: "5061", total_centavos: 114074 }],
     lancamentos: [
-      { ...linha, valor_centavos: 114074, parcela_n: 2, parcela_total: 12, ordem_fatura: 1 },
-      { ...linha, valor_centavos: -8, parcela_n: null, parcela_total: null, ordem_fatura: 2, ...extra },
+      { ...linha, valor_centavos: 114074, parcela_n: 2, parcela_total: 12, ordem_fatura: 1, ajuste_de_ordem: null },
+      { ...linha, valor_centavos: -8, parcela_n: null, parcela_total: null, ordem_fatura: 2, ajuste_de_ordem: 1, ...extra },
     ],
   };
 }
@@ -135,6 +136,23 @@ describe.skipIf(!ligado)("importar_fatura no Supabase local", () => {
     expect(g.lancamentos.map((l) => l.valor_centavos)).toEqual([114074, -8]);
     expect(g.lancamentos.every((l) => l.status_id === null)).toBe(true);
     expect(g.lancamentos[0].data).toBe("2026-08-01");
+  });
+
+  it("Ajuste (História 2.8): a RPC grava o ajuste_de_id da mãe na mesma transação e devolve as linhas com ele", async () => {
+    const { data, error } = await importar(b.cliente, pequena("2026-05"));
+    expect(error).toBeNull();
+    const g = data as unknown as Gravados;
+    const [mae, ajuste] = g.lancamentos;
+    expect(mae.ajuste_de_id).toBeNull();
+    expect(ajuste.ajuste_de_id).toBe(mae.id);
+    const { data: lida } = await b.cliente.from("lancamentos").select("ajuste_de_id").eq("id", ajuste.id).single();
+    expect(lida!.ajuste_de_id).toBe(mae.id);
+  });
+
+  it("outubro não tem Ajuste: nenhuma linha com ajuste_de_id", async () => {
+    const { data } = await local.admin.from("lancamentos").select("ajuste_de_id").eq("owner_id", a.id).eq("mes", "2026-10");
+    expect(data).toHaveLength(ESPERADO_OUTUBRO_2026.quantidade);
+    expect(data!.every((l) => l.ajuste_de_id === null)).toBe(true);
   });
 
   it("Mês que já tem Fatura: recusa com fatura.mes_ja_importado e não grava nada", async () => {
