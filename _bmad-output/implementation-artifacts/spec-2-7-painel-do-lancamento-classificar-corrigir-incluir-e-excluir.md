@@ -2,7 +2,7 @@
 title: 'História 2.7: Painel do Lançamento: classificar, corrigir, incluir e excluir'
 type: 'feature'
 created: '2026-11-08'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: 'b3ef1b8f706cf29c850c869f618b6204b6d81528'
 review_loop_iteration: 0
