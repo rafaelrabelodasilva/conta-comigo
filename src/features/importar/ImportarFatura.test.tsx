@@ -25,10 +25,14 @@ const falso = vi.hoisted(() => ({
   fetch: vi.fn(),
   importar: vi.fn(),
   faturas: [] as { id: string; mes: string }[],
+  configuracoes: [] as { limite_ajuste_centavos: number }[],
 }));
 vi.mock("./ler-pdf", () => ({ lerPdf: falso.lerPdf }));
 vi.mock("@/data/realtime", () => ({
-  useLinhas: () => ({ status: "pronto", linhas: falso.faturas }),
+  useLinhas: (tabela: string) => ({
+    status: "pronto",
+    linhas: tabela === "configuracoes" ? falso.configuracoes : falso.faturas,
+  }),
 }));
 vi.mock("@/data/faturas-repo", () => ({ repoFaturas: () => ({ importar: falso.importar }) }));
 
@@ -90,6 +94,7 @@ const PASSO_3 = "Fatura de outubro · vence 06/10/26";
 beforeEach(() => {
   vi.clearAllMocks();
   falso.faturas = [];
+  falso.configuracoes = [];
   vi.stubGlobal("fetch", falso.fetch);
   // Primeiro sem senha (pede a senha), depois com a senha certa.
   falso.lerPdf.mockImplementation(async (_dados: Uint8Array, senha: string) =>
@@ -326,5 +331,44 @@ describe("ImportarFatura", () => {
     terminar({ ok: true, quantidade: 49 });
     await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
     expect(falso.importar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ImportarFatura: Ajustes de centavos (História 2.8)", () => {
+  const msc = {
+    nome: "MSC CRUZEIROS",
+    data: "04/09",
+    finalCartao: "5061",
+    tipoSugerido: null,
+    duvida: false,
+  };
+  const comAjuste: Extracao = {
+    ...outubro,
+    fatura: { ...outubro.fatura, totalDespesasCentavos: 114074, totalCreditosCentavos: 8 },
+    cartoes: [{ final: "5061", valorTotalCentavos: 114074 }],
+    lancamentos: [
+      { ...msc, parcelaN: 2, parcelaTotal: 12, valorCentavos: 114074 },
+      { ...msc, parcelaN: null, parcelaTotal: null, valorCentavos: -8 },
+    ],
+  };
+
+  async function importarCom(limite: number | null) {
+    if (limite !== null) falso.configuracoes = [{ limite_ajuste_centavos: limite }];
+    falso.fetch.mockImplementation(async () => resposta(comAjuste));
+    const u = await escolherPdf();
+    await digitarSenha(u, "segredo");
+    await screen.findByText(PASSO_3);
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    await waitFor(() => expect(falso.importar).toHaveBeenCalled());
+    const gravado: Importacao = falso.importar.mock.calls[0][0];
+    return gravado.lancamentos.map((l) => l.ajuste_de_ordem);
+  }
+
+  it("sem configuracoes, limite R$ 1,00: o crédito de R$ 0,08 vai com a ordem da mãe", async () => {
+    expect(await importarCom(null)).toEqual([null, 1]);
+  });
+
+  it("com o limite de Configurações (R$ 0,05): não é Ajuste", async () => {
+    expect(await importarCom(5)).toEqual([null, null]);
   });
 });

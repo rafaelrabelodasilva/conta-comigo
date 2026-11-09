@@ -96,7 +96,6 @@ export const MENSAGENS = {
   "lancamento.nome_longo": "Use até 200 caracteres.",
   "lancamento.valor_vazio": "Preencha o valor.",
   "lancamento.valor_invalido": "Valor inválido. Use, por exemplo, 1,50.",
-  "lancamento.valor_zero": "O valor não pode ser zero.",
   "lancamento.data_invalida": "Data inválida.",
   "lancamento.data_da_fatura": "Um lançamento da fatura precisa de data.",
   "lancamento.apelido_longo": "Use até 60 caracteres.",
@@ -439,9 +438,41 @@ export function rotuloSelecionar(nome: string): string {
   return `Selecionar ${nome}`;
 }
 
-/** Texto da confirmação de exclusão de um Lançamento; só um da Fatura (`daFatura`) sai da Conferência. */
-export function descricaoExcluirLancamento(nome: string, daFatura: boolean): string {
-  return `“${nome}” sai da grade${daFatura ? " e da Conferência" : ""}. Dá para desfazer logo depois.`;
+/**
+ * Texto da confirmação de exclusão de um Lançamento; só um da Fatura
+ * (`daFatura`) sai da Conferência. Com Ajustes, eles saem juntos.
+ */
+export function descricaoExcluirLancamento(nome: string, daFatura: boolean, ajustes = 0): string {
+  const juntos = ajustes === 0 ? "" : ajustes === 1 ? " junto com o Ajuste dele" : ` junto com os ${ajustes} Ajustes dele`;
+  return `“${nome}” sai da grade${daFatura ? " e da Conferência" : ""}${juntos}. Dá para desfazer logo depois.`;
+}
+
+/** Ajustes de centavos (História 2.8, FR-47). */
+export const TEXTOS_AJUSTE = {
+  /** Antes do Nome do Ajuste na grade. */
+  marca: "↳",
+  desvincular: "Desvincular",
+  desvinculado: "Desvinculado",
+} as const;
+
+/** VoiceOver da linha do Ajuste: "Ajuste de MSC CRUZEIROS". */
+export function rotuloAjusteDe(nomeMae: string): string {
+  return `Ajuste de ${nomeMae}`;
+}
+
+/** VoiceOver da linha do Ajuste: "líquido R$ 1.140,66". */
+export function rotuloLiquido(centavos: number): string {
+  return `líquido ${formatarDinheiro(centavos)}`;
+}
+
+/** Tipo e Responsável do Ajuste, só para leitura: "Segue a parcela MSC CRUZEIROS". */
+export function rotuloSegueAParcela(nomeMae: string): string {
+  return `Segue a parcela ${nomeMae}`;
+}
+
+/** No painel da mãe: "Ajuste - R$ 0,08 · líquido R$ 1.140,66" (os Ajustes somados). */
+export function rotuloAjusteDaMae(somaAjustesCentavos: number, liquidoCentavos: number): string {
+  return `Ajuste ${formatarDinheiro(somaAjustesCentavos)} · ${rotuloLiquido(liquidoCentavos)}`;
 }
 
 /**

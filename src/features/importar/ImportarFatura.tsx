@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
+import { LIMITE_AJUSTE_PADRAO_CENTAVOS } from "@/domain/configuracoes";
 import { removerDadosPessoais } from "@/domain/dados-pessoais";
 import {
   conferirImportacao,
@@ -81,6 +82,9 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [senha, setSenha] = useState("");
   const { linhas: faturas } = useLinhas("faturas");
+  // O limite do Ajuste de centavos (Configurações → Conferência e atraso).
+  const { linhas: configuracoes } = useLinhas("configuracoes");
+  const limiteAjuste = configuracoes[0]?.limite_ajuste_centavos ?? LIMITE_AJUSTE_PADRAO_CENTAVOS;
   // O texto já limpo: "Tentar de novo" reenvia o mesmo, sem pedir PDF e senha.
   const textoLimpo = useRef<string | null>(null);
   const controle = useRef<AbortController | null>(null);
@@ -122,7 +126,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
     setEstado({ tipo: "processando", passo: 3, etapa: "conferindo" });
     await deixarDesenhar();
     if (minha !== geracao.current) return;
-    const importacao = prepararImportacao(lida.valor);
+    const importacao = prepararImportacao(lida.valor, limiteAjuste);
     if (!importacao.ok) {
       setEstado({ tipo: "falha_leitura", codigo: importacao.erro.codigo });
       return;

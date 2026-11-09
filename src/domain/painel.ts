@@ -6,7 +6,7 @@
 import { mesDaData, somarMeses } from "./ciclo";
 import { ordenarDuvidasPrimeiro } from "./conferencia";
 import { formatarDinheiro } from "./dinheiro";
-import { TEXTOS_CONFERENCIA, rotuloParcelaFalada } from "./mensagens";
+import { TEXTOS_CONFERENCIA, rotuloAjusteDe, rotuloLiquido, rotuloParcelaFalada } from "./mensagens";
 
 /** O que a grade usa de um Lançamento (as colunas da tabela `lancamentos`). */
 export type LancamentoGrade = {
@@ -26,6 +26,8 @@ export type LancamentoGrade = {
   fatura_id: string | null;
   /** A leitura ficou incerta: só põe a linha primeiro no filtro "Verificar". */
   duvida_extracao: boolean;
+  /** Ajuste de centavos (História 2.8): a mãe (parcela) dele. */
+  ajuste_de_id?: string | null;
 };
 
 export type LancadoPor = "fatura" | "sistema" | "manual" | "historico";
@@ -147,7 +149,8 @@ export function ehOrdemPadrao(ordem: Ordem): boolean {
 /**
  * A ordem da grade. Com o filtro "Verificar" e a ordem padrão, as linhas
  * de `duvida_extracao` vêm primeiro e depois a ordem da fatura; com uma
- * coluna ordenada, vale a coluna.
+ * coluna ordenada, vale a coluna. Recebe só as mães (`separarAjustes`): os
+ * Ajustes vão logo abaixo delas (`agruparComAjustes`).
  */
 export function ordenarGrade<L extends LancamentoGrade>(
   linhas: readonly L[],
@@ -201,7 +204,9 @@ export function distribuicaoPorResponsavel(
 /**
  * Nome acessível da linha (VoiceOver): "Nome, Valor, Parcela, Responsável,
  * Status" e, na linha marcada, "verificar este lançamento" no fim. Partes
- * vazias (à vista, sem Status) ficam de fora.
+ * vazias (à vista, sem Status) ficam de fora. Num Ajuste (`ajuste`, o Nome
+ * da mãe e o líquido dela): "Ajuste de NOME, - R$ 0,08, líquido R$ 1.140,66,
+ * Responsável, Status".
  */
 export function rotuloLinhaAcessivel(partes: {
   nome: string;
@@ -211,11 +216,13 @@ export function rotuloLinhaAcessivel(partes: {
   responsavel: string;
   status: string | null;
   verificar?: boolean;
+  ajuste?: { nomeMae: string; liquidoCentavos: number };
 }): string {
+  const ajuste = partes.ajuste;
   return [
-    partes.nome,
+    ajuste ? rotuloAjusteDe(ajuste.nomeMae) : partes.nome,
     formatarDinheiro(partes.valorCentavos),
-    rotuloParcelaFalada(partes.parcelaN, partes.parcelaTotal),
+    ajuste ? rotuloLiquido(ajuste.liquidoCentavos) : rotuloParcelaFalada(partes.parcelaN, partes.parcelaTotal),
     partes.responsavel,
     partes.status ?? "",
     partes.verificar ? TEXTOS_CONFERENCIA.verificar_lancamento : "",

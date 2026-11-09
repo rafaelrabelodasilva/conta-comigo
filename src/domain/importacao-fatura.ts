@@ -11,8 +11,14 @@
 // - O pagamento da fatura anterior (crédito "PAGAMENTO DE FATURA…") não
 //   vira Lançamento, mesmo que a leitura o traga.
 // - Créditos entram negativos (como a extração já os traz).
+// - Ajustes de centavos (História 2.8): o crédito reconhecido por
+//   `reconhecerAjustes` leva a `ordem_fatura` da mãe em `ajuste_de_ordem`; a
+//   RPC grava o `ajuste_de_id` na mesma transação. Na importação ninguém tem
+//   Tipo nem Responsável, então os dois ficam vazios.
 
+import { reconhecerAjustes } from "./ajustes";
 import { ehData } from "./ciclo";
+import { LIMITE_AJUSTE_PADRAO_CENTAVOS } from "./configuracoes";
 import { dois } from "./datas";
 import {
   parecePagamentoDeFatura,
@@ -117,6 +123,8 @@ export type LancamentoParaGravar = {
   /** 1, 2, … na ordem do PDF. */
   ordem_fatura: number;
   duvida_extracao: boolean;
+  /** Ajuste de centavos: a `ordem_fatura` da mãe; senão, null. */
+  ajuste_de_ordem: number | null;
 };
 
 export type Importacao = {
@@ -132,10 +140,14 @@ const LEITURA_FALHOU = (detalhe: string): Resultado<never> => ({
 
 /**
  * Prepara o que a RPC grava: Mês e datas completas, ordem da Fatura, Nome
- * normalizado e os cartões (um por final; o mesmo final repetido soma).
+ * normalizado, os Ajustes de centavos (com `limiteAjusteCentavos`, de
+ * `configuracoes`) e os cartões (um por final; o mesmo final repetido soma).
  * Vencimento, fechamento ou data de Lançamento ilegíveis → `fatura.leitura_falhou`.
  */
-export function prepararImportacao(extracao: Extracao): Resultado<Importacao> {
+export function prepararImportacao(
+  extracao: Extracao,
+  limiteAjusteCentavos: number = LIMITE_AJUSTE_PADRAO_CENTAVOS,
+): Resultado<Importacao> {
   const f = extracao.fatura;
   const vencimento = lerDataDaFatura(f.vencimento);
   if (!vencimento) return LEITURA_FALHOU("fatura.vencimento");
@@ -162,7 +174,11 @@ export function prepararImportacao(extracao: Extracao): Resultado<Importacao> {
       final_cartao: l.finalCartao,
       ordem_fatura: lancamentos.length + 1,
       duvida_extracao: l.duvida,
+      ajuste_de_ordem: null,
     });
+  }
+  for (const par of reconhecerAjustes(lancamentos, limiteAjusteCentavos)) {
+    lancamentos[par.ajuste].ajuste_de_ordem = lancamentos[par.mae].ordem_fatura;
   }
 
   const porFinal = new Map<string, number>();

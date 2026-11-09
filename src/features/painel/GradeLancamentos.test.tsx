@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { conferir } from "@/domain/conferencia";
-import { TEXTOS_FILTROS, COLUNAS_GRADE, TEXTOS_CONFERENCIA, TEXTOS_PAINEL } from "@/domain/mensagens";
+import { TEXTOS_FILTROS, COLUNAS_GRADE, TEXTOS_CONFERENCIA, TEXTOS_LANCAMENTO, TEXTOS_PAINEL } from "@/domain/mensagens";
 import { ORDEM_PADRAO, alternarOrdem, type LancamentoGrade, type Ordem } from "@/domain/painel";
 import { alternarSelecao, alternarTodos } from "@/domain/lancamento";
 import type { Conferencia } from "@/domain/conferencia";
@@ -385,5 +385,88 @@ describe("painel do Lançamento e seleção (História 2.7)", () => {
     expect(corpo().map((l) => celulas(l)[1])).toContain("FORA DO FILTRO");
     const [, , pe] = screen.getAllByRole("rowgroup");
     expect(sem(within(pe).getAllByRole("cell")[2].textContent)).toBe("R$ 1.140,66");
+  });
+});
+
+describe("Ajustes de centavos (História 2.8)", () => {
+  const mae = lanc("msc", {
+    ordem_fatura: 1,
+    nome: "MSC CRUZEIROS",
+    parcela_n: 2,
+    parcela_total: 12,
+    valor_centavos: 114074,
+    responsavel_id: "r-casal",
+    status_id: "s-nao",
+  });
+  const ajuste = lanc("aj", {
+    ordem_fatura: 3,
+    nome: "MSC CRUZEIROS",
+    valor_centavos: -8,
+    responsavel_id: "r-casal",
+    status_id: "s-nao",
+    ajuste_de_id: "msc",
+  });
+  const padaria = lanc("pad", { ordem_fatura: 2, nome: "PADARIA", valor_centavos: 50 });
+
+  function MontarComAjuste({ selecao = new Set<string>() }: { selecao?: ReadonlySet<string> }) {
+    const [ordem, setOrdem] = useState<Ordem>(ORDEM_PADRAO);
+    return (
+      <GradeLancamentos
+        linhas={[mae, padaria]}
+        ajustesPorMae={new Map([["msc", [ajuste]]])}
+        cadastros={cadastros}
+        ordem={ordem}
+        aoOrdenar={(c) => setOrdem((o) => alternarOrdem(o, c))}
+        escolhidos={[]}
+        aoFiltrar={() => {}}
+        vazio=""
+        selecao={selecao}
+      />
+    );
+  }
+
+  const linhasDaGrade = () => {
+    const [, corpo] = screen.getAllByRole("rowgroup");
+    return within(corpo).getAllByRole("row");
+  };
+
+  it("logo abaixo da mãe, em qualquer ordenação; recuo, ↳, líquido em text-muted e '- R$ 0,08' no Valor", () => {
+    render(<MontarComAjuste />);
+    const ids = () => linhasDaGrade().map((r) => (r.dataset.ajuste ? "aj" : r.getAttribute("aria-label")!.split(",")[0]));
+    expect(ids()).toEqual(["MSC CRUZEIROS", "aj", "PADARIA"]);
+    // Valor crescente: a padaria vem antes da mãe, e o Ajuste continua sob ela.
+    fireEvent.click(screen.getByRole("button", { name: COLUNAS_GRADE.valor }));
+    expect(ids()).toEqual(["PADARIA", "MSC CRUZEIROS", "aj"]);
+    fireEvent.click(screen.getByRole("button", { name: COLUNAS_GRADE.valor }));
+    expect(ids()).toEqual(["MSC CRUZEIROS", "aj", "PADARIA"]);
+
+    const linha = linhasDaGrade().find((r) => r.dataset.ajuste)!;
+    const celulas = within(linha).getAllByRole("cell");
+    expect(celulas[0].querySelector("input")).toBeNull();
+    const nome = celulas[1].querySelector("[data-nome]")!;
+    expect(sem(nome.textContent)).toBe("↳MSC CRUZEIROS");
+    expect(nome.parentElement!.className).toContain("pl-4");
+    const liquido = celulas[1].querySelector("[data-liquido]")!;
+    expect(sem(liquido.textContent)).toBe("R$ 1.140,74 - R$ 0,08 = R$ 1.140,66");
+    expect(liquido.className).toContain("text-text-muted");
+    expect(sem(celulas[3].textContent)).toBe("- R$ 0,08");
+    // O ⋯ do Ajuste tem nome próprio (não o da mãe).
+    expect(within(linha).getByRole("button", { name: "Ações de Ajuste de MSC CRUZEIROS" })).toBeTruthy();
+    expect(sem(linha.getAttribute("aria-label"))).toBe("Ajuste de MSC CRUZEIROS, - R$ 0,08, líquido R$ 1.140,66, Casal, Não pago");
+  });
+
+  it("sem caixa própria: fundo selection quando a mãe está selecionada; Selecionar todos conta só as mães", () => {
+    render(<MontarComAjuste selecao={new Set(["msc"])} />);
+    const linha = linhasDaGrade().find((r) => r.dataset.ajuste)!;
+    expect(linha.className).toContain("bg-selection");
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    const todos = screen.getByRole("checkbox", { name: TEXTOS_LANCAMENTO.selecionar_todos }) as HTMLInputElement;
+    expect(todos.indeterminate).toBe(true);
+  });
+
+  it("rodapé: soma as linhas visíveis, o Ajuste incluído (fecha no líquido)", () => {
+    render(<MontarComAjuste />);
+    const [, , pe] = screen.getAllByRole("rowgroup");
+    expect(within(pe).getAllByRole("cell").map((c) => sem(c.textContent))).toContain("R$ 1.141,16");
   });
 });

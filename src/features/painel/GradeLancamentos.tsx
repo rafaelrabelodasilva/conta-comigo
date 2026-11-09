@@ -1,5 +1,6 @@
 "use client";
 
+import { agruparComAjustes, liquidoCentavos, textoLiquido } from "@/domain/ajustes";
 import { precisaVerificar, type Conferencia } from "@/domain/conferencia";
 import type { ValorFiltro } from "@/domain/filtros-grade";
 import { formatarDinheiro } from "@/domain/dinheiro";
@@ -8,10 +9,12 @@ import { estadoCaixaCabecalho, type EstadoCaixa } from "@/domain/lancamento";
 import {
   COLUNAS_GRADE as C,
   ROTULOS_LANCADO_POR,
+  TEXTOS_AJUSTE,
   TEXTOS_FILTROS,
   TEXTOS_LANCAMENTO,
   TEXTOS_PAINEL as T,
   rotuloAcoesDe,
+  rotuloAjusteDe,
   rotuloFiltrarPor,
   rotuloSelecionar,
 } from "@/domain/mensagens";
@@ -51,6 +54,13 @@ import { MenuAcoes, useToqueLongo } from "@/ui/MenuAcoes";
 // longo abrem o menu "Abrir" / "Excluir". A linha aberta no painel leva uma
 // borda à esquerda em `accent-line`. A caixa do cabeçalho marca ou desmarca
 // as linhas da grade (fica parcial com parte marcada).
+//
+// Ajustes de centavos (História 2.8): cada Ajuste vem logo abaixo da mãe, em
+// qualquer ordenação, recuado 16 px, com "↳" antes do Nome e, embaixo, o
+// líquido em `text-muted` ("R$ 1.140,74 - R$ 0,08 = R$ 1.140,66", com todos
+// os Ajustes da mãe). Não tem caixa: fica com o fundo `selection` quando a
+// mãe está selecionada. O rodapé soma as linhas visíveis, Ajustes incluídos
+// (fecha no líquido).
 
 export type CadastroResponsavel = { nome: string; cor: number };
 export type CadastroStatus = { nome: string; conta_como_pago: boolean };
@@ -62,8 +72,10 @@ export type CadastrosGrade = {
 };
 
 export type PropsGradeLancamentos = {
-  /** Lançamentos do Mês aberto, já filtrados (sem excluídos). */
+  /** Lançamentos do Mês aberto, já filtrados (sem excluídos): só as mães, sem os Ajustes. */
   linhas: readonly LancamentoGrade[];
+  /** Os Ajustes de cada mãe (pelo id dela): vão logo abaixo dela. */
+  ajustesPorMae?: ReadonlyMap<string, readonly LancamentoGrade[]>;
   cadastros: CadastrosGrade;
   ordem: Ordem;
   aoOrdenar: (coluna: ColunaOrdem) => void;
@@ -212,6 +224,9 @@ const nada = () => {};
 
 type PropsLinha = {
   l: LancamentoGrade;
+  /** Num Ajuste: a mãe e todos os Ajustes dela (para o líquido). */
+  mae: LancamentoGrade | null;
+  ajustesDaMae: readonly LancamentoGrade[];
   cadastros: CadastrosGrade;
   escolhidos: readonly ValorFiltro[];
   aoFiltrar: (responsavelId: string | null) => void;
@@ -232,6 +247,8 @@ function tocouNoCorpo(e: MouseEvent<HTMLElement>): boolean {
 
 function LinhaGrade({
   l,
+  mae,
+  ajustesDaMae,
   cadastros,
   escolhidos,
   aoFiltrar,
@@ -259,13 +276,29 @@ function LinhaGrade({
     responsavel: responsavel?.nome ?? T.sem_responsavel,
     status: status?.nome ?? null,
     verificar,
+    ajuste: mae ? { nomeMae: nomeExibido(mae), liquidoCentavos: liquidoCentavos(mae, ajustesDaMae) } : undefined,
   });
+  const textoNome = (
+    <>
+      {verificar ? <Bolinha /> : null}
+      {mae ? <span className="mr-1 text-text-muted">{TEXTOS_AJUSTE.marca}</span> : null}
+      {temApelido ? (
+        <>
+          <span className="texto-body-strong">{nome}</span>{" "}
+          <span className="text-text-muted">· {l.nome}</span>
+        </>
+      ) : (
+        l.nome
+      )}
+    </>
+  );
   const fundo = selecionada ? "bg-selection" : "bg-surface";
   return (
     <tr
       aria-label={rotulo}
       data-verificar={verificar || undefined}
       data-aberta={aberta || undefined}
+      data-ajuste={mae ? true : undefined}
       className={cn("cursor-pointer select-none [-webkit-touch-callout:none]", selecionada && "bg-selection")}
       {...toqueLongo}
       onClick={(e) => {
@@ -273,22 +306,26 @@ function LinhaGrade({
       }}
     >
       <td className={cn(CELULA, FIXA_CAIXA, fundo, aberta && "shadow-[inset_3px_0_0_var(--color-accent-line)]")}>
-        <Caixa rotulo={rotuloSelecionar(nome)} estado={selecionada ? "todos" : "nenhum"} aoMudar={() => aoSelecionar(l.id)} />
+        {/* O Ajuste não tem caixa: segue a seleção da mãe. */}
+        {mae ? null : (
+          <Caixa rotulo={rotuloSelecionar(nome)} estado={selecionada ? "todos" : "nenhum"} aoMudar={() => aoSelecionar(l.id)} />
+        )}
       </td>
       <td className={cn(CELULA, FIXA_NOME, fundo)}>
         <button type="button" data-corpo className="flex min-h-linha w-full cursor-pointer items-center text-left">
           <span className="sr-only">{rotulo}</span>
-          <span aria-hidden data-nome>
-            {verificar ? <Bolinha /> : null}
-            {temApelido ? (
-              <>
-                <span className="texto-body-strong">{nome}</span>{" "}
-                <span className="text-text-muted">· {l.nome}</span>
-              </>
-            ) : (
-              l.nome
-            )}
-          </span>
+          {mae ? (
+            <span aria-hidden className="flex flex-col py-1 pl-4">
+              <span data-nome>{textoNome}</span>
+              <span data-liquido className="texto-caption text-text-muted">
+                {textoLiquido(mae, ajustesDaMae)}
+              </span>
+            </span>
+          ) : (
+            <span aria-hidden data-nome>
+              {textoNome}
+            </span>
+          )}
         </button>
       </td>
       <td className={cn(CELULA, "texto-number")}>{formatarParcela(l.parcela_n, l.parcela_total)}</td>
@@ -335,7 +372,7 @@ function LinhaGrade({
       </td>
       <td className={cn(CELULA, "text-right")}>
         <MenuAcoes
-          rotulo={rotuloAcoesDe(nome)}
+          rotulo={rotuloAcoesDe(mae ? rotuloAjusteDe(nomeExibido(mae)) : nome)}
           aberto={menuAberto}
           aoMudarAberto={setMenuAberto}
           itens={[
@@ -348,8 +385,11 @@ function LinhaGrade({
   );
 }
 
+const SEM_AJUSTES: ReadonlyMap<string, readonly LancamentoGrade[]> = new Map();
+
 export function GradeLancamentos({
   linhas,
+  ajustesPorMae = SEM_AJUSTES,
   cadastros,
   ordem,
   aoOrdenar,
@@ -369,7 +409,9 @@ export function GradeLancamentos({
 }: PropsGradeLancamentos) {
   // A linha aberta que saiu do filtro continua na grade (opção A), fora do total.
   const comFixa = linhaFixa && !linhas.some((l) => l.id === linhaFixa.id) ? [...linhas, linhaFixa] : linhas;
-  const ordenadas = ordenarGrade(comFixa, ordem, nomesDosCadastros(cadastros), verificando);
+  const ordenadas = agruparComAjustes(ordenarGrade(comFixa, ordem, nomesDosCadastros(cadastros), verificando), ajustesPorMae);
+  // O rodapé: as linhas visíveis (as mães filtradas e os Ajustes delas), fora a fixa.
+  const visiveis = linhas.flatMap((l) => [l, ...(ajustesPorMae.get(l.id) ?? [])]);
   const estadoCaixa = estadoCaixaCabecalho(
     selecao,
     linhas.map((l) => l.id),
@@ -392,15 +434,17 @@ export function GradeLancamentos({
               </td>
             </tr>
           ) : null}
-          {ordenadas.map((l) => (
+          {ordenadas.map(({ linha: l, mae }) => (
             <LinhaGrade
               key={l.id}
               l={l}
+              mae={mae}
+              ajustesDaMae={mae ? (ajustesPorMae.get(mae.id) ?? []) : []}
               cadastros={cadastros}
               escolhidos={escolhidos}
               aoFiltrar={aoFiltrar}
               verificar={conferencia !== null && precisaVerificar(l, conferencia)}
-              selecionada={selecao.has(l.id)}
+              selecionada={selecao.has(mae ? mae.id : l.id)}
               aberta={abertoId === l.id}
               aoSelecionar={aoSelecionar}
               aoAbrir={aoAbrir}
@@ -415,7 +459,7 @@ export function GradeLancamentos({
             </td>
             <td className={cn(CELULA, "border-t border-border")} />
             <td className={cn(CELULA, "border-t border-border text-right texto-number")}>
-              {formatarDinheiro(somarValores(linhas))}
+              {formatarDinheiro(somarValores(visiveis))}
             </td>
             <td colSpan={5} className={cn(CELULA, "border-t border-border")} />
           </tr>
