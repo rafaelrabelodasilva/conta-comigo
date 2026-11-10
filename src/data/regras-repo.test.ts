@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import type { Database } from "./database.types";
+import type { EventoAprender } from "@/domain/regras";
 import { criarRepoRegras, type LinhaRegra } from "./regras-repo";
 
 // Cliente falso de `regras`: uma tabela em memória com o upsert por chave.
@@ -17,11 +18,13 @@ function montar(opcoes: { falharLeitura?: boolean; falharUpsert?: boolean; linha
   }
   const upserts: { corpo: Record<string, unknown>; onConflict?: string }[] = [];
   const intervalos: [number, number][] = [];
+  const leituras: string[] = [];
   const cliente = {
     from: () => ({
       select: () => ({
         eq: (_c: string, chave: string) => ({
           maybeSingle: async () => {
+            leituras.push(chave);
             await tique();
             if (opcoes.falharLeitura) return { data: null, error: { code: "x" } };
             return { data: tabela.get(chave) ?? null, error: null };
@@ -50,7 +53,7 @@ function montar(opcoes: { falharLeitura?: boolean; falharUpsert?: boolean; linha
     }),
   } as unknown as SupabaseClient<Database>;
   const repo = criarRepoRegras({ obterCliente: () => cliente, agora: () => AGORA });
-  return { repo, tabela, upserts, intervalos };
+  return { repo, tabela, upserts, intervalos, leituras };
 }
 
 describe("repositório de Regras", () => {
@@ -94,6 +97,40 @@ describe("repositório de Regras", () => {
         { responsavel_id: "mae", n: 1 },
       ],
     });
+  });
+
+  it("lista de eventos (lote): uma leitura e um upsert por chave; três SHOPEE do Casal somam 3", async () => {
+    const m = montar();
+    const e = (nome: string, depois: string): EventoAprender => ({ nome, responsavelAntes: null, responsavelDepois: depois, tipoDepois: "casa" });
+    const r = await m.repo.aprender([e("SHOPEE X", "casal"), e("SHOPEE X", "casal"), e("SHOPEE Y", "casal"), e("AMAZON Z", "rafael")]);
+    expect(r.ok && r.regras.map((x) => x.chave).sort()).toEqual(["AMAZON Z", "SHOPEE X", "SHOPEE Y"]);
+    expect(m.leituras.sort()).toEqual(["AMAZON Z", "SHOPEE X", "SHOPEE Y"]);
+    expect(m.upserts).toHaveLength(3);
+    expect(m.tabela.get("SHOPEE X")).toMatchObject({ contagem: [{ responsavel_id: "casal", n: 2 }], tipo_id: "casa" });
+    expect(m.tabela.get("AMAZON Z")).toMatchObject({ contagem: [{ responsavel_id: "rafael", n: 1 }] });
+  });
+
+  it("lote: nomes diferentes com a mesma chave somam na mesma Regra", async () => {
+    const m = montar();
+    const e = (nome: string): EventoAprender => ({ nome, responsavelAntes: null, responsavelDepois: "casal", tipoDepois: null });
+    await m.repo.aprender([e("DM*SPOTIFY P4750"), e("EBN SPOTIFY"), e("SPOTIFY")]);
+    expect(m.upserts).toHaveLength(1);
+    expect(m.tabela.get("SPOTIFY")).toMatchObject({ contagem: [{ responsavel_id: "casal", n: 3 }] });
+  });
+
+  it("lote e toque seguem a fila da chave: nenhum incremento se perde", async () => {
+    const m = montar();
+    const e = (antes: string | null): EventoAprender => ({ nome: "SHOPEE", responsavelAntes: antes, responsavelDepois: "casal", tipoDepois: null });
+    await Promise.all([m.repo.aprender([e(null), e(null)]), m.repo.aprender(e(null)), m.repo.aprender([e(null)])]);
+    expect(m.tabela.get("SHOPEE")).toMatchObject({ contagem: [{ responsavel_id: "casal", n: 4 }] });
+  });
+
+  it("lote: se uma chave falha, ok: false; as outras gravaram; lista vazia não grava", async () => {
+    const falha = montar({ falharUpsert: true });
+    expect(await falha.repo.aprender([{ nome: "X", responsavelAntes: null, responsavelDepois: "a", tipoDepois: null }])).toEqual({ ok: false });
+    const vazio = montar();
+    expect(await vazio.repo.aprender([])).toEqual({ ok: true, regras: [] });
+    expect(vazio.upserts).toEqual([]);
   });
 
   it("falha na leitura ou no upsert devolve ok: false, sem lançar; a fila continua", async () => {

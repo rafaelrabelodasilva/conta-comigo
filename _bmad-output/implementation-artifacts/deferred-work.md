@@ -68,3 +68,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-11-reimportar-um-mes.md`
   summary: Antes de a 3.5 (Séries) ou o Épico 6 (Pagamentos) irem para produção, trocar a reimportação simplificada pela Story 3.12 ou fazer a RPC recusar com código próprio quando as linhas da Fatura tiverem Série ou Pagamento.
   evidence: Low hoje. A 3.11 simplificada apaga todas as linhas da Fatura; uma FK nova sem cascata faz a RPC falhar com erro genérico (nada é apagado, a transação desfaz), e uma com cascata apagaria Séries ou Pagamentos. Só a nota no `epics.md` (Story 3.12) lembra disso.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-3-classificar-em-lote.md`
+  summary: Rodar no CI (ou no Supabase local) a migração `20261113120000_classificar_em_lote.sql` e `test/integracao/lote.test.ts`, e conferir `database.types.ts` com `supabase gen types`.
+  evidence: Medium não verificado. Esta máquina não tem Docker nem a CLI do Supabase: a RPC foi exercitada só num Postgres em memória (pglite) com uma tabela simplificada (tudo ou nada, recusas, `null`, lista vazia, 1001 itens), e a entrada de `classificar_em_lote` em `database.types.ts` foi escrita à mão no formato do gerado. RLS e Realtime só o teste de integração prova.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-3-classificar-em-lote.md`
+  summary: Conferir no iPad a barra de lote (altura, toast acima dela, caixas de 44 pt) e se o VoiceOver anuncia a contagem `role="status"` quando a barra aparece já com "1 selecionado".
+  evidence: Low. O jsdom só confere o DOM e as classes; uma região `role="status"` que nasce junto com a barra pode não ser anunciada na primeira marcação (só nas mudanças seguintes). Junta-se à pendência do VoiceOver da 2.4.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-3-classificar-em-lote.md`
+  summary: Se o Realtime trouxer, durante o lote, uma versão mais nova de uma linha do lote, o `Desfazer` (valores de antes das colunas mudadas) a sobrescreve por coluna.
+  evidence: Low. Segue o AD-3 (vale a última gravação por coluna): o retrato guarda só as colunas que o lote mudou, então o Desfazer não toca nas outras, mas desfaz também a mudança de outro aparelho nessas colunas feita dentro dos 6 s.

@@ -3,7 +3,11 @@ import {
   textoSugestao,
   TEXTOS_REVISAR,
   rotuloAjusteDoItem,
+  rotuloAplicarA,
   rotuloClassificados,
+  rotuloClassificadosSemSugestao,
+  rotuloSelecionados,
+  rotuloSelecionarGrupo,
   rotuloFaixaImportacao,
   rotuloFaltam,
   rotuloMesDoItem,
@@ -633,5 +637,25 @@ describe("textos da fila do Revisar (História 3.2)", () => {
     expect(rotuloFaixaImportacao("2026-11", "✓ Conferido", { lancamentos: 47, classificados: 30, paraRevisar: 17 })).toBe(
       "Importação de novembro · ✓ Conferido · 47 lançamentos · 30 classificados · 17 para revisar",
     );
+  });
+});
+
+describe("textos do lote do Revisar (História 3.3)", () => {
+  it("barra de lote e janelas", () => {
+    expect(rotuloSelecionados(1)).toBe("1 selecionado");
+    expect(rotuloSelecionados(3)).toBe("3 selecionados");
+    expect(rotuloAplicarA(3)).toBe("Aplicar a 3");
+    expect(TEXTOS_REVISAR.responsavel_lote).toBe("Responsável…");
+    expect(TEXTOS_REVISAR.tipo_lote).toBe("Tipo…");
+    expect(TEXTOS_REVISAR.aplicar_sugestoes).toBe("Aplicar sugestões");
+    expect(TEXTOS_REVISAR.limpar).toBe("Limpar");
+    expect(TEXTOS_REVISAR.selecionar_todos).toBe("Selecionar todos");
+    expect(rotuloSelecionarGrupo("SHOPEE")).toBe("Selecionar todos de SHOPEE");
+  });
+
+  it("aviso do lote: 'N classificados · M sem sugestão completa'", () => {
+    expect(rotuloClassificadosSemSugestao(5, 2)).toBe("5 classificados · 2 sem sugestão completa");
+    expect(rotuloClassificadosSemSugestao(1, 1)).toBe("1 classificado · 1 sem sugestão completa");
+    expect(rotuloClassificados(3)).toBe("3 classificados");
   });
 });

@@ -9,15 +9,17 @@ import {
   rotuloConfirmarItem,
   rotuloMesDoItem,
   rotuloMudarItem,
+  rotuloSelecionar,
 } from "@/domain/mensagens";
 import type { ItemDaFila } from "@/domain/revisar";
 import { Botao } from "@/ui/Botao";
 import { cn } from "@/ui/cn";
+import { CaixaLote } from "./CaixaLote";
 
 // Item da fila do Revisar (`review-item`, UX-DR): 64 pt de altura, colunas
 // fixas 30 / 1fr / 210 / 84 / 104 para os botões se alinharem em todas as
-// linhas. A 1ª coluna fica reservada à caixa do lote (História 3.3) e, por
-// ora, vazia. Toque de 44 pt nos botões. Variantes: sugestão, com dúvida e
+// linhas. A 1ª coluna leva a caixa do lote (História 3.3, toque de 44 pt); o
+// item marcado tem o fundo `selection`. Toque de 44 pt nos botões. Variantes: sugestão, com dúvida e
 // sem sugestão. Os Ajustes da mãe aparecem como linhas menores sob o Nome.
 //
 // ✓ ("Confirmar") só existe se a sugestão completa Responsável e Tipo;
@@ -31,11 +33,14 @@ export type PropsItemRevisar = {
   comMes: boolean;
   /** Uma gravação do item está em curso: os botões ficam desligados. */
   ocupado?: boolean;
+  /** O item está marcado para o lote. */
+  marcado: boolean;
+  aoMarcar: (item: ItemDaFila) => void;
   aoConfirmar: (item: ItemDaFila) => void;
   aoMudar: (item: ItemDaFila) => void;
 };
 
-export function ItemRevisar({ item, comMes, ocupado = false, aoConfirmar, aoMudar }: PropsItemRevisar) {
+export function ItemRevisar({ item, comMes, ocupado = false, marcado, aoMarcar, aoConfirmar, aoMudar }: PropsItemRevisar) {
   const parcela = formatarParcela(item.parcelaN, item.parcelaTotal);
   const detalhe = [comMes ? rotuloMesDoItem(item.mes) : null, parcela || null, formatarDinheiro(item.valorCentavos)]
     .filter((p): p is string => p !== null)
@@ -44,10 +49,13 @@ export function ItemRevisar({ item, comMes, ocupado = false, aoConfirmar, aoMuda
   return (
     <li
       data-variante={item.variante}
-      className={cn("grid min-h-16 items-center gap-3 border-b border-border-subtle px-3.5 py-2.5", COLUNAS_ITEM_REVISAR)}
+      className={cn(
+        "grid min-h-16 items-center gap-3 border-b border-border-subtle px-3.5 py-2.5",
+        COLUNAS_ITEM_REVISAR,
+        marcado && "bg-selection",
+      )}
     >
-      {/* Reservada à caixa de seleção do lote (3.3). */}
-      <span aria-hidden />
+      <CaixaLote rotulo={rotuloSelecionar(item.nome)} estado={marcado ? "todos" : "nenhum"} aoMudar={() => aoMarcar(item)} />
       <div className="min-w-0">
         <p className="truncate texto-body-strong">{item.nome}</p>
         <p className="texto-number text-text-muted">{detalhe}</p>

@@ -34,15 +34,29 @@
 // quando a linha volta a ela. `devolverAFila` é o "Desfazer" do Confirmar e do
 // "Mudar". A tela Revisar usa uma segunda instância (`repoLancamentosRevisar`)
 // ligada ao gerenciador da fila.
+//
+// Lote (História 3.3): `classificarEmLote` grava todas as linhas (mães e
+// Ajustes) numa chamada só à RPC `classificar_em_lote`, em transação: tudo ou
+// nada. O que cada linha grava sai do núcleo (`planejarLote`, a mesma regra de
+// `atualizar` via `planejarGravacao`). Com otimismo; falha desfaz e nada muda.
+// Depois da RPC, um evento de Regra por mãe (`aprender` em lista), sem esperar
+// e sem desfazer o lote se falhar. `desfazerLote` é a mesma RPC com os valores
+// de antes; a Regra aprendida não é desfeita.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MudancaCampo, NovoLancamento } from "@/domain/lancamento";
+import {
+  planejarGravacao,
+  planejarLote,
+  type CamposDoLote,
+  type EntradaDoLote,
+  type ItemDoLote,
+} from "@/domain/lote";
 import type { EventoAprender } from "@/domain/regras";
 import { estaOnline } from "./conexao";
-import type { Database } from "./database.types";
+import type { Database, Json } from "./database.types";
 import { FALHOU, gravarComOtimismo, semConexao, type CodigoFalhaGravacao, type Online } from "./gravacao";
 import { gerenciador, gerenciadorFila, type Gerenciador, type LinhaDe } from "./realtime";
-import { colunasAlteradas } from "./realtime-estado";
 import { repoRegras } from "./regras-repo";
 import { criarClienteNavegador } from "./supabase/navegador";
 
@@ -76,6 +90,9 @@ export type OpcoesGravacao = {
   junto?: readonly string[];
 };
 
+/** Opções do lote: `agora` (padrão, o relógio do aparelho). */
+export type OpcoesLote = { agora?: Date };
+
 /** A mãe a que um Ajuste volta no "Desfazer" do "Desvincular": o id e a classificação atual. */
 export type MaeDoAjuste = Pick<LinhaLancamento, "id" | "tipo_id" | "responsavel_id">;
 
@@ -88,19 +105,17 @@ export type AnteriorDaFila = Pick<
   "responsavel_id" | "tipo_id" | "revisao_motivo" | "revisao_dados" | "revisado_em"
 >;
 
-/** Quem aprende a Regra de uma classificação (`regrasRepo.aprender`). */
-export type Aprender = (evento: EventoAprender) => Promise<unknown>;
+/** Quem aprende a Regra de uma classificação (`regrasRepo.aprender`): um evento ou a lista do lote. */
+export type Aprender = (evento: EventoAprender | readonly EventoAprender[]) => Promise<unknown>;
 
-/** A gravação mexeu na classificação? */
-const mudouClassificacao = (corpo: Partial<LinhaLancamento>) => "responsavel_id" in corpo || "tipo_id" in corpo;
-
-/** A gravação limpou o Responsável ou o Tipo? */
-const limpouClassificacao = (corpo: Partial<LinhaLancamento>) => corpo.responsavel_id === null || corpo.tipo_id === null;
-
-/** A gravação escolheu um Responsável ou um Tipo (não só limpou)? */
-const escolheuClassificacao = (corpo: Partial<LinhaLancamento>) =>
-  (corpo.responsavel_id !== undefined && corpo.responsavel_id !== null) ||
-  (corpo.tipo_id !== undefined && corpo.tipo_id !== null);
+/**
+ * O resultado do lote (e do "Desfazer"): as linhas gravadas e, para o
+ * "Desfazer", o retrato de antes. `gravadas` conta as linhas das entradas
+ * (sem os Ajustes que vão junto); 0 = nada mudou e nada foi gravado.
+ */
+export type ResultadoLote =
+  | { ok: true; linhas: LinhaLancamento[]; gravadas: number; antes: ItemDoLote[] }
+  | { ok: false; codigo: CodigoFalhaGravacao };
 
 export function criarRepoLancamentos(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
@@ -125,6 +140,24 @@ export function criarRepoLancamentos(deps: {
     } catch {
       // A gravação do Lançamento já valeu.
     }
+  }
+
+  /** Ensina as Regras do lote, sem esperar; a falha não chega à gravação. */
+  function ensinarLote(eventos: readonly EventoAprender[]) {
+    if (!aprender || eventos.length === 0) return;
+    try {
+      void aprender(eventos).catch(() => {});
+    } catch {
+      // O lote já valeu.
+    }
+  }
+
+  /** Chama a RPC do lote; as linhas gravadas, ou `null` se o banco recusou ou respondeu pela metade. */
+  async function chamarLote(cliente: SupabaseClient<Database>, itens: readonly ItemDoLote[]): Promise<LinhaLancamento[] | null> {
+    const { data, error } = await cliente.rpc("classificar_em_lote", { p_itens: itens as unknown as Json });
+    if (error || !Array.isArray(data)) return null;
+    const linhas = data as unknown as LinhaLancamento[];
+    return linhas.length === itens.length ? linhas : null;
   }
 
   /** Os ids da gravação: a linha e as que vão junto, sem repetir. */
@@ -185,7 +218,72 @@ export function criarRepoLancamentos(deps: {
     }
   }
 
+  function classificarEmLote(ids: readonly string[], campos: CamposDoLote, opcoes?: OpcoesLote): Promise<ResultadoLote>;
+  function classificarEmLote(entradas: readonly EntradaDoLote[], opcoes?: OpcoesLote): Promise<ResultadoLote>;
+  async function classificarEmLote(
+    primeiro: readonly string[] | readonly EntradaDoLote[],
+    segundo?: CamposDoLote | OpcoesLote,
+    terceiro?: OpcoesLote,
+  ): Promise<ResultadoLote> {
+    const porIds = primeiro.length > 0 && typeof primeiro[0] === "string";
+    const entradas: EntradaDoLote[] = porIds
+      ? (primeiro as readonly string[]).map((id) => ({ id, campos: (segundo ?? {}) as CamposDoLote }))
+      : (primeiro as readonly EntradaDoLote[]).slice();
+    const opcoes = (porIds ? terceiro : segundo) as OpcoesLote | undefined;
+    const bloqueio = semConexao(online);
+    if (bloqueio) return bloqueio;
+    const agora = (opcoes?.agora ?? new Date()).toISOString();
+    const plano = planejarLote(entradas, memoria.linhas(), agora);
+    // Nada muda (já estava assim, ou as linhas saíram da memória): nada é gravado.
+    if (plano.itens.length === 0) return { ok: true, linhas: [], gravadas: 0, antes: [] };
+    // Numa caixa: o TS não acompanha a atribuição feita dentro do callback.
+    const gravadas: { linhas: LinhaLancamento[] } = { linhas: [] };
+    const r = await gravarComOtimismo(
+      obterCliente,
+      memoria,
+      plano.itens.map((i) => ({ id: i.id, ...i.corpo }) as Partial<LinhaLancamento> & { id: string }),
+      async (cliente) => {
+        const linhas = await chamarLote(cliente, plano.itens);
+        if (linhas) gravadas.linhas = linhas;
+        return linhas;
+      },
+      online,
+    );
+    if (!r.ok) return r;
+    ensinarLote(plano.eventos);
+    return { ok: true, linhas: gravadas.linhas, gravadas: plano.gravadas, antes: plano.antes };
+  }
+
   return {
+    /**
+     * Classifica várias linhas numa gravação só (História 3.3): `(ids, campos)`
+     * dá os mesmos campos a todas; `(entradas)` dá campos a cada uma
+     * ("Aplicar sugestões"). Tudo ou nada: falhou, nada mudou. Devolve as
+     * linhas gravadas e o retrato de antes para o `desfazerLote`.
+     */
+    classificarEmLote,
+
+    /**
+     * "Desfazer" do lote: a mesma RPC com os valores de antes de cada linha
+     * (mães e Ajustes). As linhas já saíram da fila: grava sem otimismo e a
+     * resposta as devolve. A Regra aprendida não é desfeita (a contagem só soma).
+     */
+    async desfazerLote(antes: readonly ItemDoLote[]): Promise<ResultadoLote> {
+      const bloqueio = semConexao(online);
+      if (bloqueio) return bloqueio;
+      if (antes.length === 0) return { ok: true, linhas: [], gravadas: 0, antes: [] };
+      const cliente = obterCliente();
+      if (!cliente) return FALHOU;
+      try {
+        const linhas = await chamarLote(cliente, antes);
+        if (!linhas) return FALHOU;
+        memoria.aplicarLote(linhas);
+        return { ok: true, linhas, gravadas: antes.length, antes: [] };
+      } catch {
+        return FALHOU;
+      }
+    },
+
     /**
      * Só as colunas que mudaram (em relação à linha `id`) e `editado_em`.
      * Com `junto` (os Ajustes da mãe, ao mudar Tipo ou Responsável), as
@@ -196,54 +294,25 @@ export function criarRepoLancamentos(deps: {
       if (bloqueio) return bloqueio;
       const atual = memoria.linha(id);
       if (!atual) return FALHOU;
-      const corpo: Partial<LinhaLancamento> = colunasAlteradas<MudancaLancamento>(atual, mudanca);
       const agora = (opcoes.agora ?? new Date()).toISOString();
-      const naFila = atual.revisao_motivo != null || atual.revisao_dados != null;
-      // Quem pede Responsável ou Tipo a uma linha da fila que já os tem (o
-      // ✓ de uma linha completa) ainda precisa tirá-la da fila.
-      const pedeClassificacao = mudanca.responsavel_id !== undefined || mudanca.tipo_id !== undefined;
-      const fechaFila = naFila && pedeClassificacao;
-      if (Object.keys(corpo).length === 0 && !(fechaFila && atual.responsavel_id !== null && atual.tipo_id !== null)) {
-        return { ok: true, linha: atual };
-      }
-      const classificou = mudouClassificacao(corpo) || fechaFila;
-      /** Colunas só da linha principal (nunca dos Ajustes `junto`). */
-      let soDaPrincipal: Partial<LinhaLancamento> | null = null;
-      if (classificou) {
-        const depois = { ...atual, ...corpo };
-        if (depois.responsavel_id !== null && depois.tipo_id !== null) {
-          // Com Responsável e Tipo, sai da fila do Revisar na mesma gravação e
-          // marca quando (`revisado_em`). O corpo vai também aos Ajustes `junto`:
-          // neles o motivo e a sugestão já são nulos.
-          if (naFila) {
-            corpo.revisao_motivo = null;
-            corpo.revisao_dados = null;
-            corpo.revisado_em = agora;
-          }
-        } else if (
-          limpouClassificacao(corpo) &&
-          atual.revisao_motivo == null &&
-          atual.fatura_id != null &&
-          atual.ajuste_de_id == null
-        ) {
-          // Linha da Fatura que a gravação deixa sem Responsável ou sem Tipo volta à fila.
-          soDaPrincipal = { revisao_motivo: "sem_classificacao", revisao_dados: null, revisado_em: null };
-        }
-      }
+      // O que gravar sai do núcleo (a mesma regra do lote): só as colunas que
+      // mudam, a saída da fila e `editado_em`.
+      const plano = planejarGravacao<LinhaLancamento>(atual, mudanca, agora);
+      if (plano.vazio) return { ok: true, linha: atual };
+      const { corpo, soDaPrincipal } = plano;
       const ids = todos(id, (opcoes.junto ?? []).filter((j) => memoria.linha(j)));
-      const editado_em = agora;
       let r: ResultadoLancamento;
       if (soDaPrincipal && ids.length === 1) {
-        r = await gravar(ids, { ...corpo, ...soDaPrincipal, editado_em });
+        r = await gravar(ids, { ...corpo, ...soDaPrincipal });
       } else {
-        r = await gravar(ids, { ...corpo, editado_em });
+        r = await gravar(ids, corpo);
         if (r.ok && soDaPrincipal) {
           // A classificação já valeu (mãe e Ajustes juntos); a fila é só da mãe.
-          const fila = await gravar([id], { ...soDaPrincipal, editado_em });
+          const fila = await gravar([id], { ...soDaPrincipal, editado_em: agora });
           if (fila.ok) r = fila;
         }
       }
-      if (r.ok && escolheuClassificacao(corpo)) ensinar(atual.nome, atual.responsavel_id, r.linha);
+      if (r.ok && plano.ensina) ensinar(atual.nome, atual.responsavel_id, r.linha);
       return r;
     },
 
