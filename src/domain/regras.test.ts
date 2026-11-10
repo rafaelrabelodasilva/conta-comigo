@@ -4,10 +4,13 @@ import {
   PREFIXOS_ADQUIRENTE,
   PREFIXOS_COM_ESPACO,
   VERSAO_NORMALIZACAO,
+  agruparEventosPorChave,
+  aprenderEmLote,
   aprenderRegra,
   avaliarRegra,
   chaveDeRegra,
   lerContagem,
+  type EventoAprender,
   type RegraGravada,
 } from "./regras";
 
@@ -297,5 +300,48 @@ describe("avaliarRegra", () => {
       ],
     });
     expect(avaliarRegra(r, todos)).toEqual({ tipo: "aplicar", responsavel_id: null, tipo_id: "casa" });
+  });
+});
+
+describe("aprenderEmLote (a mesma aprenderRegra, evento a evento)", () => {
+  const evento = (nome: string, depois: string | null, antes: string | null = null, tipo: string | null = "casa"): EventoAprender => ({
+    nome,
+    responsavelAntes: antes,
+    responsavelDepois: depois,
+    tipoDepois: tipo,
+  });
+
+  it("três SHOPEE do Casal somam 3 em uma Regra nova", () => {
+    const r = aprenderEmLote(null, [evento("SHOPEE", "casal"), evento("SHOPEE", "casal"), evento("SHOPEE", "casal")], AGORA);
+    expect(r).toEqual({
+      chave: "SHOPEE",
+      versao_normalizacao: VERSAO_NORMALIZACAO,
+      responsavel_id: "casal",
+      tipo_id: "casa",
+      contagem: [{ responsavel_id: "casal", n: 3 }],
+      ultimo_uso: AGORA,
+    });
+  });
+
+  it("dá o mesmo resultado de N toques seguidos, sobre uma Regra que já existe", () => {
+    const atual = regra({ chave: "SHOPEE", responsavel_id: "rafael", tipo_id: "compras", contagem: [{ responsavel_id: "rafael", n: 2 }] });
+    const eventos = [evento("SHOPEE", "casal", "rafael"), evento("SHOPEE", "casal"), evento("SHOPEE", "rafael", "casal", null)];
+    let sequencial: RegraGravada | null = atual;
+    for (const e of eventos) sequencial = aprenderRegra(sequencial, e, AGORA) as RegraGravada;
+    expect(aprenderEmLote(atual, eventos, AGORA)).toEqual(sequencial);
+  });
+
+  it("sem eventos, não há o que aprender", () => {
+    expect(aprenderEmLote(regra(), [], AGORA)).toBeNull();
+  });
+});
+
+describe("agruparEventosPorChave", () => {
+  it("nomes diferentes com a mesma chave juntam; chaves diferentes, grupos diferentes (na ordem)", () => {
+    const e = (nome: string): EventoAprender => ({ nome, responsavelAntes: null, responsavelDepois: "casal", tipoDepois: null });
+    const grupos = agruparEventosPorChave([e("DM*SPOTIFY P4750"), e("SHOPEE"), e("EBN SPOTIFY"), e("SPOTIFY")]);
+    expect([...grupos.keys()]).toEqual(["SPOTIFY", "SHOPEE"]);
+    expect(grupos.get("SPOTIFY")!.map((x) => x.nome)).toEqual(["DM*SPOTIFY P4750", "EBN SPOTIFY", "SPOTIFY"]);
+    expect(agruparEventosPorChave([]).size).toBe(0);
   });
 });

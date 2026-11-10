@@ -24,6 +24,8 @@ import {
 
 // Aviso inferior (`toast`): faixa escura de raio md, centralizada embaixo, 6 s na tela,
 // um substitui o outro, "Desfazer" opcional. As regras estão em `toast-estado.ts`.
+// Sobe acima da barra de lote enquanto ela existe: a barra publica a altura em
+// `--altura-barra-inferior` (sem barra, vale 0).
 
 type ApiToast = {
   mostrar: (novo: NovoToast) => void;
@@ -86,7 +88,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div
         aria-live="polite"
         aria-atomic="true"
-        className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(1.5rem+var(--altura-barra-inferior,0px))] z-50 flex justify-center px-4"
       >
         {atual ? (
           <div

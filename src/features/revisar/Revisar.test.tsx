@@ -10,6 +10,8 @@ import {
   rotuloConfirmarItem,
   rotuloFaltam,
   rotuloMudarItem,
+  rotuloSelecionar,
+  rotuloSelecionarGrupo,
 } from "@/domain/mensagens";
 import { ToastProvider } from "@/ui/Toast";
 import { Revisar } from "./Revisar";
@@ -30,6 +32,8 @@ const falso = vi.hoisted(() => ({
   recarregar: vi.fn(),
   atualizar: vi.fn(),
   devolverAFila: vi.fn(),
+  classificarEmLote: vi.fn(),
+  desfazerLote: vi.fn(),
   contarUsos: vi.fn(),
 }));
 
@@ -70,7 +74,12 @@ function avisar() {
   for (const o of falso.ouvintes) o();
 }
 vi.mock("@/data/lancamentos-repo", () => ({
-  repoLancamentosRevisar: () => ({ atualizar: falso.atualizar, devolverAFila: falso.devolverAFila }),
+  repoLancamentosRevisar: () => ({
+    atualizar: falso.atualizar,
+    devolverAFila: falso.devolverAFila,
+    classificarEmLote: falso.classificarEmLote,
+    desfazerLote: falso.desfazerLote,
+  }),
 }));
 vi.mock("@/data/cadastros-repo", () => ({ repoCadastros: () => ({ contarUsos: falso.contarUsos }) }));
 
@@ -158,6 +167,19 @@ beforeEach(() => {
     avisar();
     return { ok: true, linha: linha(id, anterior) };
   });
+  // O banco do lote: aplica os campos; a linha que fica com os dois sai da fila.
+  falso.classificarEmLote.mockImplementation(async (entradas: { id: string; campos: Record<string, unknown> }[]) => {
+    const antes = entradas.map((e) => ({ id: e.id, corpo: { responsavel_id: null } }));
+    falso.fila = falso.fila.flatMap((l) => {
+      const e = entradas.find((x) => x.id === l.id);
+      if (!e) return [l];
+      const nova = { ...l, ...e.campos };
+      return nova.responsavel_id && nova.tipo_id ? [] : [nova];
+    });
+    avisar();
+    return { ok: true, linhas: [], gravadas: entradas.length, antes };
+  });
+  falso.desfazerLote.mockResolvedValue({ ok: true, linhas: [], gravadas: 0, antes: [] });
 });
 
 describe("Revisar: a fila", () => {
@@ -444,5 +466,253 @@ describe("Revisar: tempo real", () => {
     });
     expect(screen.getByText(T.tudo_revisado)).toBeTruthy();
     expect(screen.queryByText(/Falt/)).toBeNull();
+  });
+});
+
+// Lote (História 3.3): caixas, "Selecionar todos", barra, janelas, Desfazer.
+describe("Revisar: lote", () => {
+  const MIL = (t: string) => t.replaceAll("\u00a0", " ");
+  const caixa = (nome: string) => screen.getByRole("checkbox", { name: rotuloSelecionar(nome) }) as HTMLInputElement;
+  const barra = () => screen.queryByRole("region", { name: T.barra_lote });
+  const contagem = () => MIL(within(barra()!).getByRole("status").textContent ?? "");
+
+  it("sem marcação não há barra; marcar um item mostra 'N selecionados · R$ total' e o fundo selection", async () => {
+    preparar([linha("a1", { valor_centavos: 6970 }), linha("a2", { valor_centavos: 3000 })]);
+    renderizar();
+    expect(barra()).toBeNull();
+    const u = userEvent.setup();
+    await u.click(caixa("LOJA A1"));
+    expect(contagem()).toBe("1 selecionado · R$ 69,70");
+    expect(screen.getAllByRole("listitem")[0].className).toContain("bg-selection");
+    expect(screen.getAllByRole("listitem")[1].className).not.toContain("bg-selection");
+    await u.click(caixa("LOJA A2"));
+    expect(contagem()).toBe("2 selecionados · R$ 99,70");
+  });
+
+  it("o total é líquido: a mãe mais os Ajustes", async () => {
+    const ajuste = linha("aj", { nome: "LOJA A1", ajuste_de_id: "a1", revisao_motivo: null, valor_centavos: -8 });
+    preparar([linha("a1", { valor_centavos: 114074 }), ajuste]);
+    renderizar();
+    await userEvent.setup().click(caixa("LOJA A1"));
+    expect(contagem()).toBe("1 selecionado · R$ 1.140,66");
+  });
+
+  it("'Selecionar todos' marca e desmarca todos os Meses da fila; a caixa fica parcial no meio", async () => {
+    preparar([linha("a1", { mes: "2026-10" }), linha("a2", { mes: "2026-11" }), linha("a3", { mes: "2026-11" })]);
+    renderizar();
+    const u = userEvent.setup();
+    const todos = screen.getByRole("checkbox", { name: T.selecionar_todos }) as HTMLInputElement;
+    expect(todos.checked).toBe(false);
+    await u.click(caixa("LOJA A1"));
+    expect(todos.indeterminate).toBe(true);
+    await u.click(todos);
+    expect(todos.checked).toBe(true);
+    expect(contagem()).toMatch(/^3 selecionados/);
+    await u.click(todos);
+    expect(barra()).toBeNull();
+  });
+
+  it("a caixa do grupo (NOME · N lançamentos) tem três estados e marca ou desmarca o grupo", async () => {
+    preparar([linha("a1", { nome: "SHOPEE" }), linha("a2", { nome: "SHOPEE" }), linha("a3", { nome: "COBASI" })]);
+    renderizar();
+    const u = userEvent.setup();
+    const grupo = screen.getByRole("checkbox", { name: rotuloSelecionarGrupo("SHOPEE") }) as HTMLInputElement;
+    expect(screen.queryByRole("checkbox", { name: rotuloSelecionarGrupo("COBASI") })).toBeNull(); // grupo de 1: sem título
+    await u.click(screen.getAllByRole("checkbox", { name: rotuloSelecionar("SHOPEE") })[0]);
+    expect(grupo.indeterminate).toBe(true);
+    await u.click(grupo);
+    expect(grupo.checked).toBe(true);
+    expect(contagem()).toMatch(/^2 selecionados/);
+    expect(caixa("COBASI").checked).toBe(false);
+    await u.click(grupo);
+    expect(barra()).toBeNull();
+  });
+
+  it("Limpar tira a marcação e a barra", async () => {
+    preparar([linha("a1"), linha("a2")]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("checkbox", { name: T.selecionar_todos }));
+    await u.click(screen.getByRole("button", { name: T.limpar }));
+    expect(barra()).toBeNull();
+    expect(caixa("LOJA A1").checked).toBe(false);
+  });
+
+  it("'Responsável…': escolhe na janela e grava os marcados numa chamada só; 'N classificados · Desfazer'", async () => {
+    preparar([
+      linha("a1", { nome: "SHOPEE", tipo_id: "casa" }),
+      linha("a2", { nome: "SHOPEE", tipo_id: "casa" }),
+      linha("a3", { nome: "SHOPEE", tipo_id: "casa" }),
+      linha("a4", { nome: "COBASI" }),
+    ]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("checkbox", { name: rotuloSelecionarGrupo("SHOPEE") }));
+    await u.click(screen.getByRole("button", { name: T.responsavel_lote }));
+    const janela = screen.getByRole("dialog", { name: T.titulo_lote_responsavel });
+    expect(within(janela).getByText("3 selecionados")).toBeTruthy();
+    await u.selectOptions(within(janela).getByLabelText(T.responsavel), "casal");
+    await u.click(within(janela).getByRole("button", { name: "Aplicar a 3" }));
+    expect(falso.classificarEmLote).toHaveBeenCalledExactlyOnceWith([
+      { id: "a1", campos: { responsavel_id: "casal" } },
+      { id: "a2", campos: { responsavel_id: "casal" } },
+      { id: "a3", campos: { responsavel_id: "casal" } },
+    ]);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // As 3 saíram da fila e da marcação; "Faltam" e a barra acompanham.
+    expect(itens()).toHaveLength(1);
+    expect(screen.getByText(rotuloFaltam(1))).toBeTruthy();
+    await waitFor(() => expect(barra()).toBeNull());
+    expect(screen.getByText("3 classificados")).toBeTruthy();
+    expect(screen.getByRole("button", { name: ROTULOS.desfazer })).toBeTruthy();
+  });
+
+  it("'Tipo…' grava só o Tipo; o item sem Responsável continua na fila e marcado", async () => {
+    preparar([linha("a1"), linha("a2", { responsavel_id: "casal" })]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("checkbox", { name: T.selecionar_todos }));
+    await u.click(screen.getByRole("button", { name: T.tipo_lote }));
+    await u.selectOptions(screen.getByLabelText(T.tipo), "saude");
+    await u.click(screen.getByRole("button", { name: "Aplicar a 2" }));
+    expect(falso.classificarEmLote).toHaveBeenCalledWith([
+      { id: "a1", campos: { tipo_id: "saude" } },
+      { id: "a2", campos: { tipo_id: "saude" } },
+    ]);
+    await waitFor(() => expect(itens()).toHaveLength(1));
+    expect(caixa("LOJA A1").checked).toBe(true);
+    expect(contagem()).toMatch(/^1 selecionado/);
+  });
+
+  it("'Aplicar sugestões' grava os de sugestão completa (também com dúvida); os outros ficam marcados e o aviso conta", async () => {
+    const duvida = linha("a2", {
+      revisao_motivo: "sugestao_duvida",
+      revisao_dados: { ...SUGESTAO, outros_responsaveis: ["rafael"] },
+    });
+    preparar([sugerida("a1"), duvida, linha("a3"), linha("a4"), sugerida("a5"), linha("a6")]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("checkbox", { name: T.selecionar_todos }));
+    await u.click(caixa("LOJA A6")); // desmarca um
+    await u.click(screen.getByRole("button", { name: T.aplicar_sugestoes }));
+    expect(falso.classificarEmLote).toHaveBeenCalledExactlyOnceWith([
+      { id: "a1", campos: { responsavel_id: "casal", tipo_id: "casa" } },
+      { id: "a2", campos: { responsavel_id: "casal", tipo_id: "casa" } },
+      { id: "a5", campos: { responsavel_id: "casal", tipo_id: "casa" } },
+    ]);
+    expect(await screen.findByText("3 classificados · 2 sem sugestão completa")).toBeTruthy();
+    await waitFor(() => expect(itens()).toHaveLength(3));
+    expect(contagem()).toMatch(/^2 selecionados/);
+    expect(caixa("LOJA A3").checked).toBe(true);
+    expect(caixa("LOJA A4").checked).toBe(true);
+  });
+
+  it("'Aplicar sugestões' sem nenhuma sugestão completa: nada é gravado e o aviso diz isso", async () => {
+    preparar([linha("a1"), linha("a2")]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("checkbox", { name: T.selecionar_todos }));
+    await u.click(screen.getByRole("button", { name: T.aplicar_sugestoes }));
+    expect(falso.classificarEmLote).not.toHaveBeenCalled();
+    expect(screen.getByText(T.nenhuma_sugestao_completa)).toBeTruthy();
+    expect(contagem()).toMatch(/^2 selecionados/);
+  });
+
+  it("falha: nada muda, a marcação fica (mesmo com o otimismo tirando os itens) e o toast diz o motivo", async () => {
+    preparar([sugerida("a1"), sugerida("a2")]);
+    falso.classificarEmLote.mockImplementation(async () => {
+      const original = falso.fila;
+      falso.fila = []; // otimismo
+      avisar();
+      await new Promise((r) => setTimeout(r, 0));
+      falso.fila = original; // desfeito
+      avisar();
+      return { ok: false, codigo: "conexao.gravar_sem_conexao" };
+    });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("checkbox", { name: T.selecionar_todos }));
+    await u.click(screen.getByRole("button", { name: T.aplicar_sugestoes }));
+    expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
+    expect(itens()).toHaveLength(2);
+    expect(contagem()).toMatch(/^2 selecionados/);
+    expect(caixa("LOJA A1").checked).toBe(true);
+    expect(screen.queryByRole("button", { name: ROTULOS.desfazer })).toBeNull();
+    // As ações voltam a funcionar.
+    expect(screen.getByRole("button", { name: T.aplicar_sugestoes }).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("durante a gravação a barra fica desligada e um segundo toque não grava de novo", async () => {
+    preparar([sugerida("a1")]);
+    let terminar: (v: unknown) => void = () => {};
+    falso.classificarEmLote.mockImplementation(() => new Promise((r) => (terminar = r)));
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(caixa("LOJA A1"));
+    await u.click(screen.getByRole("button", { name: T.aplicar_sugestoes }));
+    expect(screen.getByRole("button", { name: T.aplicar_sugestoes }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: rotuloConfirmarItem("LOJA A1") }).hasAttribute("disabled")).toBe(true);
+    expect(falso.classificarEmLote).toHaveBeenCalledTimes(1);
+    await act(async () => terminar({ ok: true, linhas: [], gravadas: 0, antes: [] }));
+    expect(screen.queryByText(/classificado/)).toBeNull(); // nada mudou: nada a avisar
+  });
+
+  it("item que sai da fila em outro aparelho sai da marcação sem aviso e sem gravar; a barra recalcula", async () => {
+    preparar([linha("a1", { valor_centavos: 1000 }), linha("a2", { valor_centavos: 2500 })]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("checkbox", { name: T.selecionar_todos }));
+    expect(contagem()).toBe("2 selecionados · R$ 35,00");
+    act(() => {
+      falso.fila = falso.fila.filter((l) => l.id !== "a1");
+      avisar();
+    });
+    expect(contagem()).toBe("1 selecionado · R$ 25,00");
+    expect(falso.classificarEmLote).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: ROTULOS.desfazer })).toBeNull();
+    // O último a sair leva a barra.
+    act(() => {
+      falso.fila = [];
+      avisar();
+    });
+    expect(barra()).toBeNull();
+    // E se voltar à fila, não volta marcado.
+    act(() => {
+      falso.fila = [linha("a1")];
+      avisar();
+    });
+    expect(caixa("LOJA A1").checked).toBe(false);
+  });
+
+  it("Desfazer chama desfazerLote com o retrato de antes; falhou, mostra o motivo", async () => {
+    preparar([sugerida("a1"), sugerida("a2")]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("checkbox", { name: T.selecionar_todos }));
+    await u.click(screen.getByRole("button", { name: T.aplicar_sugestoes }));
+    await u.click(await screen.findByRole("button", { name: ROTULOS.desfazer }));
+    expect(falso.desfazerLote).toHaveBeenCalledExactlyOnceWith([
+      { id: "a1", corpo: { responsavel_id: null } },
+      { id: "a2", corpo: { responsavel_id: null } },
+    ]);
+
+    falso.desfazerLote.mockResolvedValue({ ok: false, codigo: "salvar.falhou" });
+    act(() => {
+      preparar([sugerida("b1")]);
+      avisar();
+    });
+    await u.click(caixa("LOJA B1"));
+    await u.click(screen.getByRole("button", { name: T.aplicar_sugestoes }));
+    await u.click(await screen.findByRole("button", { name: ROTULOS.desfazer }));
+    expect(await screen.findByText(mensagem("salvar.falhou"))).toBeTruthy();
+  });
+
+  it("o toast sobe acima da barra: a barra publica a altura enquanto existe", async () => {
+    preparar([linha("a1")]);
+    renderizar();
+    await userEvent.setup().click(caixa("LOJA A1"));
+    expect(document.documentElement.style.getPropertyValue("--altura-barra-inferior")).toMatch(/px$/);
+    await userEvent.setup().click(screen.getByRole("button", { name: T.limpar }));
+    expect(document.documentElement.style.getPropertyValue("--altura-barra-inferior")).toBe("");
   });
 });

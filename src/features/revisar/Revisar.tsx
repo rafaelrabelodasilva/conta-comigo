@@ -2,11 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { conferir } from "@/domain/conferencia";
+import { alternarSelecao, alternarTodos, estadoCaixaCabecalho, selecaoValida } from "@/domain/lancamento";
+import { entradasDeSugestoes, totalDaSelecao, type EntradaDoLote } from "@/domain/lote";
 import {
   TEXTOS_REVISAR as T,
   mensagem,
+  rotuloClassificados,
+  rotuloClassificadosSemSugestao,
   rotuloFaixaImportacao,
   rotuloFaltam,
+  rotuloSelecionarGrupo,
   rotuloSeloConferencia,
 } from "@/domain/mensagens";
 import { ativos as responsaveisAtivos } from "@/domain/responsaveis";
@@ -19,7 +24,10 @@ import { Esqueleto } from "@/ui/Esqueleto";
 import { EstadoVazio } from "@/ui/EstadoVazio";
 import { Tela } from "@/ui/Tela";
 import { useToast } from "@/ui/Toast";
+import { BarraLote } from "./BarraLote";
+import { CaixaLote } from "./CaixaLote";
 import { ItemRevisar } from "./ItemRevisar";
+import { JanelaLote } from "./JanelaLote";
 import { JanelaMudar } from "./JanelaMudar";
 
 // Revisar (História 3.2, FR-13): a fila do que a importação não classificou,
@@ -32,6 +40,14 @@ import { JanelaMudar } from "./JanelaMudar";
 // e ensina a Regra) e mostram "Classificado · Desfazer" (6 s), que devolve
 // a linha à fila. Falhou ao gravar: o item fica e o toast diz o motivo. A
 // faixa de resumo do topo é a da importação do Mês da Fatura mais recente.
+//
+// Lote (História 3.3): cada item tem uma caixa; o grupo com título e o topo
+// ("Selecionar todos", todos os Meses da fila) marcam vários de uma vez. Com
+// 1+ marcado aparece a barra de lote ("Responsável…", "Tipo…", "Aplicar
+// sugestões"), que grava tudo numa RPC só pelo repositório (tudo ou nada) e
+// oferece "Desfazer" (6 s). A marcação se poda sozinha: o item que sai da fila
+// (outro aparelho, ou este lote) sai dela sem aviso e sem gravar; durante uma
+// gravação ela fica como está, para uma falha não perdê-la.
 
 function EsqueletoRevisar() {
   return (
@@ -65,6 +81,10 @@ export function Revisar({ titulo }: { titulo: string }) {
   const emCurso = useRef(new Set<string>());
   // O item aberto no "Mudar" (cópia de quando abriu).
   const [mudando, setMudando] = useState<ItemDaFila | null>(null);
+  // O lote: os itens marcados, a janela de Responsável ou Tipo e a gravação em curso.
+  const [selecao, setSelecao] = useState<ReadonlySet<string>>(() => new Set());
+  const [janelaLote, setJanelaLote] = useState<"responsavel" | "tipo" | null>(null);
+  const [lotando, setLotando] = useState(false);
 
   const fatura = useMemo(() => maisRecente(faturas.linhas), [faturas.linhas]);
   const mesDaFatura = fatura?.mes ?? null;
@@ -78,7 +98,14 @@ export function Revisar({ titulo }: { titulo: string }) {
     [fila.linhas, responsaveis.linhas, tipos.linhas],
   );
   const resumo = resumoDaFila(grupos);
-  const itens = grupos.flatMap((g) => g.itens);
+  const itens = useMemo(() => grupos.flatMap((g) => g.itens), [grupos]);
+  const idsDaFila = useMemo(() => itens.map((i) => i.id), [itens]);
+  // Só os que ainda estão na fila; com a fila pronta e nada sendo gravado, a marcação se poda.
+  const marcados = useMemo(() => selecaoValida(selecao, idsDaFila), [selecao, idsDaFila]);
+  if (fila.status === "pronto" && ocupados.size === 0 && marcados.size !== selecao.size) setSelecao(marcados);
+  // Sem nada marcado, a janela do lote não tem a quem se aplicar.
+  if (janelaLote !== null && marcados.size === 0) setJanelaLote(null);
+  const totalMarcados = useMemo(() => totalDaSelecao(marcados, fila.linhas), [marcados, fila.linhas]);
   // A janela fica enquanto o item está na fila ou a gravação dele está em curso: a
   // gravação otimista tira o item da fila, e se o banco recusar a escolha não se perde.
   // Item que some sem gravação daqui (outro aparelho) fecha a janela.
@@ -143,6 +170,58 @@ export function Revisar({ titulo }: { titulo: string }) {
     return true;
   }
 
+  /** Grava o lote numa chamada só e oferece o "Desfazer"; falhou, nada mudou e a marcação fica. */
+  async function aplicarEntradas(entradas: EntradaDoLote[], semSugestao = 0): Promise<boolean> {
+    const livres = entradas.filter((e) => !emCurso.current.has(e.id));
+    if (livres.length === 0) return false;
+    for (const e of livres) emCurso.current.add(e.id);
+    setOcupados((s) => {
+      const nova = new Set(s);
+      for (const e of livres) nova.add(e.id);
+      return nova;
+    });
+    setLotando(true);
+    const r = await repoLancamentosRevisar().classificarEmLote(livres);
+    for (const e of livres) emCurso.current.delete(e.id);
+    setOcupados((s) => {
+      const nova = new Set(s);
+      for (const e of livres) nova.delete(e.id);
+      return nova;
+    });
+    setLotando(false);
+    if (!r.ok) {
+      toast.mostrar({ texto: mensagem(r.codigo) });
+      return false;
+    }
+    // Nada mudou (já estava assim): nada a avisar.
+    if (r.gravadas === 0) return true;
+    toast.mostrar({
+      texto: semSugestao > 0 ? rotuloClassificadosSemSugestao(r.gravadas, semSugestao) : rotuloClassificados(r.gravadas),
+      aoDesfazer: () => {
+        void repoLancamentosRevisar()
+          .desfazerLote(r.antes)
+          .then((d) => {
+            if (!d.ok) toast.mostrar({ texto: mensagem(d.codigo) });
+          });
+      },
+    });
+    return true;
+  }
+
+  function aplicarSugestoes() {
+    const { entradas, semSugestao } = entradasDeSugestoes(itens.filter((i) => marcados.has(i.id)));
+    if (entradas.length === 0) {
+      toast.mostrar({ texto: T.nenhuma_sugestao_completa });
+      return;
+    }
+    void aplicarEntradas(entradas, semSugestao);
+  }
+
+  function aplicarCadastro(campo: "responsavel" | "tipo", id: string): Promise<boolean> {
+    const campos = campo === "responsavel" ? { responsavel_id: id } : { tipo_id: id };
+    return aplicarEntradas(idsDaFila.filter((i) => marcados.has(i)).map((i) => ({ id: i, campos })));
+  }
+
   let conteudo;
   if (erro) {
     conteudo = (
@@ -161,9 +240,38 @@ export function Revisar({ titulo }: { titulo: string }) {
   } else {
     conteudo = (
       <div aria-label={T.lista} role="group" className="rounded-lg border border-border bg-surface">
+        <div className="flex items-center border-b border-border-subtle px-3.5">
+          <CaixaLote
+            rotulo={T.selecionar_todos}
+            texto={T.selecionar_todos}
+            estado={estadoCaixaCabecalho(marcados, idsDaFila)}
+            aoMudar={() => setSelecao(alternarTodos(marcados, idsDaFila))}
+          />
+        </div>
         {grupos.map((g) => (
           <section key={g.chave}>
-            {g.titulo ? <h2 className="px-3.5 pt-3 pb-1 texto-label text-text-muted">{g.titulo}</h2> : null}
+            {g.titulo ? (
+              <div className="flex items-center gap-3 px-3.5 pt-1">
+                <div className="w-7.5 shrink-0">
+                  <CaixaLote
+                    rotulo={rotuloSelecionarGrupo(g.itens[0].nomeOriginal)}
+                    estado={estadoCaixaCabecalho(
+                      marcados,
+                      g.itens.map((i) => i.id),
+                    )}
+                    aoMudar={() =>
+                      setSelecao(
+                        alternarTodos(
+                          marcados,
+                          g.itens.map((i) => i.id),
+                        ),
+                      )
+                    }
+                  />
+                </div>
+                <h2 className="texto-label text-text-muted">{g.titulo}</h2>
+              </div>
+            ) : null}
             <ul>
               {g.itens.map((item) => (
                 <ItemRevisar
@@ -171,6 +279,8 @@ export function Revisar({ titulo }: { titulo: string }) {
                   item={item}
                   comMes={resumo.variosMeses}
                   ocupado={ocupados.has(item.id)}
+                  marcado={marcados.has(item.id)}
+                  aoMarcar={(i) => setSelecao(alternarSelecao(marcados, i.id))}
                   aoConfirmar={(i) => {
                     if (i.aoConfirmar) void classificar(i, i.aoConfirmar);
                   }}
@@ -202,6 +312,34 @@ export function Revisar({ titulo }: { titulo: string }) {
         <p className="rounded-lg border border-border bg-surface p-3 texto-body">{faixa}</p>
       ) : null}
       {conteudo}
+      {marcados.size > 0 && !erro ? (
+        <>
+          {/* Folga para a barra de lote não cobrir o fim da lista. */}
+          <div aria-hidden style={{ height: "var(--altura-barra-inferior, 5rem)" }} />
+          <BarraLote
+            quantidade={marcados.size}
+            totalCentavos={totalMarcados}
+            ocupado={lotando || ocupados.size > 0}
+            aoLimpar={() => setSelecao(new Set())}
+            aoEscolherResponsavel={() => setJanelaLote("responsavel")}
+            aoEscolherTipo={() => setJanelaLote("tipo")}
+            aoAplicarSugestoes={aplicarSugestoes}
+          />
+        </>
+      ) : null}
+      {janelaLote !== null && marcados.size > 0 ? (
+        <JanelaLote
+          key={janelaLote}
+          campo={janelaLote}
+          quantidade={marcados.size}
+          cadastros={janelaLote === "responsavel" ? responsaveisDaJanela : tiposDaJanela}
+          aberta
+          aoMudar={(aberta) => {
+            if (!aberta) setJanelaLote(null);
+          }}
+          aoAplicar={(id) => aplicarCadastro(janelaLote, id)}
+        />
+      ) : null}
       {itemAberto ? (
         <JanelaMudar
           key={itemAberto.id}

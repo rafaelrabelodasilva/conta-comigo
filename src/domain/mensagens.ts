@@ -462,7 +462,7 @@ export const TEXTOS_REVISAR = {
   sugestao: "Sugestão",
   sem_sugestao: "Sem sugestão",
   carregando: "Carregando…",
-  /** A coluna reservada ao lote da 3.3 fica vazia; este é o nome acessível da lista. */
+  /** O nome acessível da lista. */
   lista: "Fila do Revisar",
   confirmar: "Confirmar",
   mudar: "Mudar",
@@ -472,6 +472,17 @@ export const TEXTOS_REVISAR = {
   responsavel: "Responsável",
   tipo: "Tipo",
   escolha: "Escolha…",
+  /** Lote (História 3.3): caixas, barra de seleção e janelas. */
+  selecionar_todos: "Selecionar todos",
+  barra_lote: "Ações em lote",
+  limpar: "Limpar",
+  responsavel_lote: "Responsável…",
+  tipo_lote: "Tipo…",
+  aplicar_sugestoes: "Aplicar sugestões",
+  titulo_lote_responsavel: "Responsável dos selecionados",
+  titulo_lote_tipo: "Tipo dos selecionados",
+  /** Nenhum dos marcados tem sugestão completa: nada é gravado. */
+  nenhuma_sugestao_completa: "Nenhum dos selecionados tem sugestão completa",
   /** Passo final da importação. */
   ir_para_revisao: "Ir para revisão",
   ver_no_painel: "Ver no Painel",
@@ -500,6 +511,26 @@ export function rotuloConfirmarItem(nome: string): string {
 /** Nome acessível do "Mudar": "Mudar classificação de MSC CRUZEIROS". */
 export function rotuloMudarItem(nome: string): string {
   return `Mudar classificação de ${nome}`;
+}
+
+/** A contagem da barra de lote: "1 selecionado", "3 selecionados". */
+export function rotuloSelecionados(n: number): string {
+  return n === 1 ? "1 selecionado" : `${n} selecionados`;
+}
+
+/** O botão da janela do lote: "Aplicar a 3". */
+export function rotuloAplicarA(n: number): string {
+  return `Aplicar a ${n}`;
+}
+
+/** Nome acessível da caixa do grupo: "Selecionar todos de SHOPEE". */
+export function rotuloSelecionarGrupo(nome: string): string {
+  return `Selecionar todos de ${nome}`;
+}
+
+/** O aviso de "Aplicar sugestões" com itens sem sugestão completa: "5 classificados · 2 sem sugestão completa". */
+export function rotuloClassificadosSemSugestao(classificados: number, semSugestao: number): string {
+  return `${rotuloClassificados(classificados)} · ${semSugestao} sem sugestão completa`;
 }
 
 /** "1 classificado", "30 classificados". */

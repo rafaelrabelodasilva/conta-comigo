@@ -475,6 +475,7 @@ export type Database = {
     }
     Functions: {
       anular_id_jsonb: { Args: { de: string; doc: Json }; Returns: Json }
+      classificar_em_lote: { Args: { p_itens: Json }; Returns: Json }
       contar_usos_cadastro: {
         Args: { cadastro: string }
         Returns: {

@@ -8,6 +8,7 @@ import { criarGerenciador } from "./realtime";
 // Cliente falso: registra o corpo de cada chamada e responde o que o teste
 // mandar; a memória é um gerenciador por Mês de verdade, com outubro aberto.
 
+type ItemRpc = { id: string; corpo: Record<string, unknown> };
 type Chamada = { tipo: "insert" | "update"; corpo: Record<string, unknown>; id?: string; ids?: string[] };
 
 const T1 = "2026-11-08T00:00:00.000001+00:00";
@@ -49,9 +50,10 @@ const linha = (id: string, extra: Partial<LinhaLancamento> = {}): LinhaLancament
 function montar(
   iniciais: LinhaLancamento[],
   responder: (c: Chamada) => { data: unknown; error: unknown },
-  opcoes: { aprender?: Aprender; fila?: boolean } = {},
+  opcoes: { aprender?: Aprender; fila?: boolean; rpc?: (nome: string, args: { p_itens: ItemRpc[] }) => { data: unknown; error: unknown } } = {},
 ) {
   const chamadas: Chamada[] = [];
+  const rpcs: { nome: string; args: { p_itens: ItemRpc[] } }[] = [];
   const consulta = (c: Chamada) => {
     const encadeada = {
       eq(_coluna: string, valor: string) {
@@ -70,6 +72,10 @@ function montar(
     return encadeada;
   };
   const cliente = {
+    rpc: async (nome: string, args: { p_itens: ItemRpc[] }) => {
+      rpcs.push({ nome, args });
+      return opcoes.rpc ? opcoes.rpc(nome, args) : { data: null, error: { code: "x" } };
+    },
     from: () => ({
       select: () => ({
         eq: async () => ({ data: iniciais, error: null }),
@@ -94,7 +100,7 @@ function montar(
     ? criarGerenciador<LinhaLancamento>({ tabela: "lancamentos", obterCliente: () => cliente, pertence: guardadaPelaFila })
     : criarGerenciador<LinhaLancamento>({ tabela: "lancamentos", obterCliente: () => cliente, porMes: true });
   const repo = criarRepoLancamentos({ obterCliente: () => cliente, memoria, aprender: opcoes.aprender });
-  return { chamadas, memoria, repo };
+  return { chamadas, rpcs, memoria, repo };
 }
 
 async function pronto(m: ReturnType<typeof montar>) {
@@ -848,5 +854,219 @@ describe("fila do Revisar (História 3.2)", () => {
       editado_em: AGORA_ISO,
     });
     expect(m.memoria.linha("a")).toMatchObject({ revisao_motivo: "sem_classificacao", revisado_em: null });
+  });
+});
+
+// Lote (História 3.3): `classificarEmLote` e `desfazerLote`, numa RPC só.
+describe("classificar em lote (História 3.3)", () => {
+  const DADOS = { responsavel_id: "r-casal", tipo_id: "t-casa", outros_responsaveis: [] };
+  const AGORA_ISO = "2026-11-08T00:14:00.000Z";
+  const shopee = (id: string, extra: Partial<LinhaLancamento> = {}) =>
+    linha(id, { nome: "SHOPEE X", mes: "2026-11", tipo_id: "t-casa", revisao_motivo: "sem_classificacao", ...extra });
+
+  /** O banco: aplica o corpo de cada item sobre a linha e devolve as linhas (cada chamada, um `updated_at` mais novo). */
+  const banco = (base: LinhaLancamento[]) => {
+    let chamada = 0;
+    return (_nome: string, args: { p_itens: ItemRpc[] }) => {
+      chamada += 1;
+      return {
+        data: args.p_itens.map((i) => ({
+          ...base.find((l) => l.id === i.id)!,
+          ...i.corpo,
+          updated_at: `2026-11-08T00:14:0${chamada}.000000+00:00`,
+        })),
+        error: null,
+      };
+    };
+  };
+  /** O `update` por linha não deve ser usado pelo lote. */
+  const semUpdate = () => ({ data: null, error: { code: "x" } });
+
+  async function aguardar(m: ReturnType<typeof montar>) {
+    m.memoria.assinar(() => {});
+    await new Promise((r) => setTimeout(r, 0));
+    expect(m.memoria.retrato().status).toBe("pronto");
+  }
+
+  it("3 SHOPEE do Casal: uma chamada à RPC, as 3 saem da fila, um evento por mãe numa lista só", async () => {
+    const aprender = vi.fn(async () => ({ ok: true }));
+    const base = [shopee("a"), shopee("b"), shopee("c"), shopee("d")];
+    const m = montar(base, semUpdate, { fila: true, aprender, rpc: banco(base) });
+    await aguardar(m);
+    const r = await m.repo.classificarEmLote(["a", "b", "c"], { responsavel_id: "r-casal" }, { agora: AGORA });
+    expect(m.rpcs).toHaveLength(1);
+    expect(m.chamadas).toEqual([]); // nada de update por linha
+    expect(m.rpcs[0].nome).toBe("classificar_em_lote");
+    expect(m.rpcs[0].args.p_itens).toEqual(
+      ["a", "b", "c"].map((id) => ({
+        id,
+        corpo: {
+          responsavel_id: "r-casal",
+          revisao_motivo: null,
+          revisao_dados: null,
+          revisado_em: AGORA_ISO,
+          editado_em: AGORA_ISO,
+        },
+      })),
+    );
+    expect(r).toMatchObject({ ok: true, gravadas: 3 });
+    expect(m.memoria.linhas().map((l) => l.id)).toEqual(["d"]);
+    expect(aprender).toHaveBeenCalledTimes(1);
+    expect(aprender).toHaveBeenCalledWith(
+      ["a", "b", "c"].map(() => ({ nome: "SHOPEE X", responsavelAntes: null, responsavelDepois: "r-casal", tipoDepois: "t-casa" })),
+    );
+  });
+
+  it("a assinatura (entradas) dá campos diferentes a cada item; o resultado traz o retrato de antes", async () => {
+    const a = shopee("a", { revisao_motivo: "sugestao", revisao_dados: DADOS });
+    const b = shopee("b", { nome: "AMAZON Y", tipo_id: null });
+    const base = [a, b];
+    const m = montar(base, semUpdate, { fila: true, rpc: banco(base) });
+    await aguardar(m);
+    const r = await m.repo.classificarEmLote(
+      [
+        { id: "a", campos: { responsavel_id: "r-casal", tipo_id: "t-casa" } },
+        { id: "b", campos: { responsavel_id: "r-rafael", tipo_id: "t-saude" } },
+      ],
+      { agora: AGORA },
+    );
+    expect(m.rpcs).toHaveLength(1);
+    expect(m.rpcs[0].args.p_itens.map((i) => [i.id, i.corpo.responsavel_id, i.corpo.tipo_id])).toEqual([
+      // `a` já tinha o Tipo: só as colunas que mudam vão.
+      ["a", "r-casal", undefined],
+      ["b", "r-rafael", "t-saude"],
+    ]);
+    expect(r.ok && r.antes).toEqual([
+      {
+        id: "a",
+        corpo: { responsavel_id: null, revisao_motivo: "sugestao", revisao_dados: DADOS, revisado_em: null, editado_em: null },
+      },
+      {
+        id: "b",
+        corpo: { responsavel_id: null, tipo_id: null, revisao_motivo: "sem_classificacao", revisao_dados: null, revisado_em: null, editado_em: null },
+      },
+    ]);
+  });
+
+  it("a mãe leva o Ajuste na mesma chamada; só a mãe ensina a Regra", async () => {
+    const aprender = vi.fn(async () => ({ ok: true }));
+    const mae = shopee("msc", { nome: "MSC CRUZEIROS" });
+    const aj = linha("aj", { nome: "MSC CRUZEIROS", valor_centavos: -8, ajuste_de_id: "msc", mes: "2026-11" });
+    const base = [mae, aj];
+    const m = montar(base, semUpdate, { fila: true, aprender, rpc: banco(base) });
+    await aguardar(m);
+    const r = await m.repo.classificarEmLote(["msc"], { responsavel_id: "r-casal" }, { agora: AGORA });
+    expect(m.rpcs[0].args.p_itens.map((i) => i.id)).toEqual(["msc", "aj"]);
+    expect(m.rpcs[0].args.p_itens[1].corpo).toEqual({ responsavel_id: "r-casal", revisado_em: AGORA_ISO, editado_em: AGORA_ISO });
+    expect(r).toMatchObject({ ok: true, gravadas: 1 });
+    expect(m.memoria.linha("msc")).toBeUndefined();
+    expect(m.memoria.linha("aj")).toMatchObject({ responsavel_id: "r-casal" });
+    expect(aprender).toHaveBeenCalledWith([expect.objectContaining({ nome: "MSC CRUZEIROS" })]);
+  });
+
+  it("falha da RPC: o otimismo é desfeito, nada é ensinado e o código vem na resposta", async () => {
+    const aprender = vi.fn(async () => ({ ok: true }));
+    const base = [shopee("a"), shopee("b")];
+    const m = montar(base, semUpdate, { fila: true, aprender, rpc: () => ({ data: null, error: { code: "P0001" } }) });
+    await aguardar(m);
+    const gravacao = m.repo.classificarEmLote(["a", "b"], { responsavel_id: "r-casal" }, { agora: AGORA });
+    // Otimismo: as duas já saíram da fila (sem motivo).
+    expect(m.memoria.linha("a")).toMatchObject({ responsavel_id: "r-casal", revisao_motivo: null });
+    expect(await gravacao).toEqual({ ok: false, codigo: "salvar.falhou" });
+    expect(m.memoria.linhas().map((l) => l.id)).toEqual(["a", "b"]);
+    expect(m.memoria.linha("a")).toMatchObject({ responsavel_id: null, revisao_motivo: "sem_classificacao" });
+    expect(aprender).not.toHaveBeenCalled();
+  });
+
+  it("resposta pela metade (menos linhas que itens) também é falha", async () => {
+    const base = [shopee("a"), shopee("b")];
+    const m = montar(base, semUpdate, {
+      fila: true,
+      rpc: (_n, args) => ({ data: [{ ...base[0], ...args.p_itens[0].corpo, updated_at: T2 }], error: null }),
+    });
+    await aguardar(m);
+    expect(await m.repo.classificarEmLote(["a", "b"], { responsavel_id: "r-casal" })).toEqual({ ok: false, codigo: "salvar.falhou" });
+    expect(m.memoria.linhas()).toHaveLength(2);
+  });
+
+  it("a falha de aprender não desfaz nem avisa o lote", async () => {
+    const base = [shopee("a")];
+    const m = montar(base, semUpdate, { fila: true, rpc: banco(base), aprender: () => Promise.reject(new Error("x")) });
+    await aguardar(m);
+    expect(await m.repo.classificarEmLote(["a"], { responsavel_id: "r-casal" })).toMatchObject({ ok: true, gravadas: 1 });
+    expect(m.memoria.linhas()).toEqual([]);
+  });
+
+  it("lote vazio (já estava assim, ou linhas que não estão na memória): nada é gravado", async () => {
+    const pronta = shopee("a", { revisao_motivo: null, responsavel_id: "r-casal" });
+    const m = montar([pronta], semUpdate, { fila: true, rpc: banco([pronta]) });
+    await aguardar(m);
+    expect(await m.repo.classificarEmLote(["a"], { responsavel_id: "r-casal" })).toEqual({ ok: true, linhas: [], gravadas: 0, antes: [] });
+    expect(await m.repo.classificarEmLote(["fantasma"], { responsavel_id: "r-casal" })).toMatchObject({ gravadas: 0 });
+    expect(await m.repo.classificarEmLote([], { responsavel_id: "r-casal" })).toMatchObject({ gravadas: 0 });
+    expect(m.rpcs).toEqual([]);
+  });
+
+  it("sem conexão: nada é tentado", async () => {
+    const a = shopee("a");
+    const rpc = vi.fn();
+    const cliente = {
+      rpc,
+      from: () => ({ select: () => ({ then: (r: (v: unknown) => unknown) => Promise.resolve({ data: [a], error: null }).then(r) }) }),
+      channel: () => ({
+        on() {
+          return this;
+        },
+        subscribe(cb: (s: string) => void) {
+          cb("SUBSCRIBED");
+          return this;
+        },
+      }),
+    } as unknown as SupabaseClient<Database>;
+    const memoria = criarGerenciador<LinhaLancamento>({ tabela: "lancamentos", obterCliente: () => cliente, pertence: guardadaPelaFila });
+    const repo = criarRepoLancamentos({ obterCliente: () => cliente, memoria, online: () => false });
+    memoria.assinar(() => {});
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await repo.classificarEmLote(["a"], { responsavel_id: "r-casal" })).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await repo.desfazerLote([{ id: "a", corpo: { responsavel_id: null } }])).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(rpc).not.toHaveBeenCalled();
+    expect(memoria.linha("a")).toMatchObject({ responsavel_id: null });
+  });
+
+  it("desfazerLote: a mesma RPC com os valores de antes (mães e Ajustes); as linhas voltam à fila", async () => {
+    const aprender = vi.fn(async () => ({ ok: true }));
+    const mae = shopee("msc", { nome: "MSC CRUZEIROS", revisao_motivo: "sugestao", revisao_dados: DADOS });
+    const aj = linha("aj", { nome: "MSC CRUZEIROS", valor_centavos: -8, ajuste_de_id: "msc", mes: "2026-11" });
+    const base = [mae, aj];
+    const m = montar(base, semUpdate, { fila: true, aprender, rpc: banco(base) });
+    await aguardar(m);
+    const feito = await m.repo.classificarEmLote(["msc"], { responsavel_id: "r-casal" }, { agora: AGORA });
+    if (!feito.ok) throw new Error("falhou");
+    expect(m.memoria.linha("msc")).toBeUndefined();
+
+    const r = await m.repo.desfazerLote(feito.antes);
+    expect(m.rpcs).toHaveLength(2);
+    expect(m.rpcs[1].nome).toBe("classificar_em_lote");
+    expect(m.rpcs[1].args.p_itens).toEqual(feito.antes);
+    expect(m.rpcs[1].args.p_itens.map((i) => i.id)).toEqual(["msc", "aj"]);
+    expect(r).toMatchObject({ ok: true });
+    expect(m.memoria.linha("msc")).toMatchObject({
+      responsavel_id: null,
+      revisao_motivo: "sugestao",
+      revisao_dados: DADOS,
+      revisado_em: null,
+      editado_em: null,
+    });
+    expect(m.memoria.linha("aj")).toMatchObject({ responsavel_id: null, revisado_em: null, editado_em: null });
+    // A Regra aprendida não é desfeita: nada novo é ensinado nem apagado.
+    expect(aprender).toHaveBeenCalledTimes(1);
+  });
+
+  it("desfazerLote que falha devolve o código", async () => {
+    const base = [shopee("a")];
+    const m = montar(base, semUpdate, { fila: true, rpc: () => ({ data: null, error: { code: "x" } }) });
+    await aguardar(m);
+    expect(await m.repo.desfazerLote([{ id: "a", corpo: { responsavel_id: null } }])).toEqual({ ok: false, codigo: "salvar.falhou" });
+    expect(await m.repo.desfazerLote([])).toMatchObject({ ok: true, gravadas: 0 });
   });
 });

@@ -2,7 +2,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { TEXTOS_REVISAR as T, rotuloConfirmarItem, rotuloMudarItem } from "@/domain/mensagens";
+import { TEXTOS_REVISAR as T, rotuloConfirmarItem, rotuloMudarItem, rotuloSelecionar } from "@/domain/mensagens";
 import { montarFila, type CadastrosDaFila, type ItemDaFila, type LinhaDaFila } from "@/domain/revisar";
 import { COLUNAS_ITEM_REVISAR, ItemRevisar } from "./ItemRevisar";
 
@@ -39,15 +39,24 @@ function item(extra: Partial<LinhaDaFila> = {}, outras: LinhaDaFila[] = []): Ite
   return montarFila([l, ...outras], cadastros)[0].itens[0];
 }
 
-function desenhar(i: ItemDaFila, extras: { comMes?: boolean; ocupado?: boolean } = {}) {
+function desenhar(i: ItemDaFila, extras: { comMes?: boolean; ocupado?: boolean; marcado?: boolean } = {}) {
   const aoConfirmar = vi.fn();
   const aoMudar = vi.fn();
+  const aoMarcar = vi.fn();
   render(
     <ul>
-      <ItemRevisar item={i} comMes={extras.comMes ?? false} ocupado={extras.ocupado} aoConfirmar={aoConfirmar} aoMudar={aoMudar} />
+      <ItemRevisar
+        item={i}
+        comMes={extras.comMes ?? false}
+        ocupado={extras.ocupado}
+        marcado={extras.marcado ?? false}
+        aoMarcar={aoMarcar}
+        aoConfirmar={aoConfirmar}
+        aoMudar={aoMudar}
+      />
     </ul>,
   );
-  return { aoConfirmar, aoMudar };
+  return { aoConfirmar, aoMudar, aoMarcar };
 }
 
 const sugestao = { responsavel_id: "casal", tipo_id: "casa", outros_responsaveis: [] as string[] };
@@ -59,9 +68,35 @@ describe("ItemRevisar", () => {
     expect(linha.className).toContain("min-h-16");
     expect(linha.className).toContain(COLUNAS_ITEM_REVISAR);
     expect(COLUNAS_ITEM_REVISAR).toBe("grid-cols-[30px_minmax(0,1fr)_210px_84px_104px]");
-    // A 1ª coluna (lote da 3.3) existe e está vazia; sobram Nome, sugestão, ✓ e Mudar.
+    // A 1ª coluna leva a caixa do lote (3.3); depois vêm Nome, sugestão, ✓ e Mudar.
     expect(linha.children).toHaveLength(5);
     expect(linha.children[0].textContent).toBe("");
+    expect(linha.children[0].querySelector('input[type="checkbox"]')).not.toBeNull();
+  });
+
+  it("a caixa do lote: 44 pt de toque (coluna de 30 mais o recuo de 14), visual de 18 px, marca pelo toque", async () => {
+    const { aoMarcar } = desenhar(item());
+    const caixa = screen.getByRole("checkbox", { name: rotuloSelecionar("SHOPEE TESHOPVENTION") });
+    expect((caixa as HTMLInputElement).checked).toBe(false);
+    expect(caixa.className).toContain("size-4.5");
+    const rotulo = caixa.closest("label")!;
+    expect(rotulo.className).toContain("min-h-toque");
+    expect(rotulo.className).toContain("-ml-3.5");
+    expect(rotulo.firstElementChild!.className).toContain("w-11");
+    await userEvent.setup().click(caixa);
+    expect(aoMarcar).toHaveBeenCalledOnce();
+    expect(aoMarcar.mock.calls[0][0].id).toBe("a");
+  });
+
+  it("item marcado: caixa marcada e fundo selection; desmarcado, sem o fundo", () => {
+    desenhar(item(), { marcado: true });
+    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("listitem").className).toContain("bg-selection");
+  });
+
+  it("item sem marca não tem o fundo selection", () => {
+    desenhar(item());
+    expect(screen.getByRole("listitem").className).not.toContain("bg-selection");
   });
 
   it("sugestão: 'Sugestão' + 'Casal · Casa', ✓ e Mudar com 44 pt de toque", async () => {

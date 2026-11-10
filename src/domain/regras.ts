@@ -161,6 +161,39 @@ export function aprenderRegra(atual: RegraGravada | null, evento: EventoAprender
   };
 }
 
+/**
+ * A Regra depois de vários eventos da mesma chave, na ordem: a mesma
+ * `aprenderRegra` evento a evento (três SHOPEE do Casal somam 3), com uma
+ * leitura e uma gravação só. Sem eventos, `null` (nada a aprender).
+ */
+export function aprenderEmLote(
+  atual: RegraGravada | null,
+  eventos: readonly EventoAprender[],
+  agora: string,
+): RegraParaGravar | null {
+  let regra: RegraParaGravar | null = null;
+  for (const evento of eventos) {
+    regra = aprenderRegra(regra ?? atual, evento, agora);
+  }
+  return regra;
+}
+
+/**
+ * Os eventos agrupados por `chaveDeRegra`, na ordem em que cada chave
+ * aparece e, dentro dela, na ordem dos eventos. Nomes diferentes com a mesma
+ * chave somam na mesma Regra; chaves diferentes, uma Regra cada.
+ */
+export function agruparEventosPorChave(eventos: readonly EventoAprender[]): Map<string, EventoAprender[]> {
+  const grupos = new Map<string, EventoAprender[]>();
+  for (const evento of eventos) {
+    const chave = chaveDeRegra(evento.nome);
+    const lista = grupos.get(chave);
+    if (lista) lista.push(evento);
+    else grupos.set(chave, [evento]);
+  }
+  return grupos;
+}
+
 /** Os cadastros que podem ser usados (não arquivados e existentes). */
 export type CadastrosAtivos = {
   responsaveis: ReadonlySet<string>;
