@@ -374,3 +374,123 @@ describe("gerenciador por Mês", () => {
     expect(m.g.retrato().mes).toBeUndefined();
   });
 });
+
+// Gerenciador por predicado (a fila do Revisar, História 3.2): guarda só as
+// linhas que `pertence` aceita, lê com `filtrarLeitura` e abre o canal com o
+// nome dado.
+type LF = { id: string; updated_at: string; fila: boolean; nome: string };
+
+function montarPorPredicado(banco: LF[]) {
+  const registro: string[] = [];
+  const canais: string[] = [];
+  let avisarStatus: (s: string) => void = () => {};
+  let aoMudar: (payload: unknown) => void = () => {};
+  const cliente = {
+    from: () => ({
+      select: () => {
+        const consulta = {
+          is: (coluna: string) => {
+            registro.push(`is ${coluna}`);
+            return consulta;
+          },
+          then: (resolver: (r: unknown) => unknown) =>
+            // O servidor devolve uma linha a mais do que o predicado aceita: o gerenciador confere.
+            Promise.resolve({ data: banco, error: null }).then(resolver),
+        };
+        return consulta;
+      },
+    }),
+    channel: (nome: string) => {
+      canais.push(nome);
+      return {
+        on(_tipo: string, _filtro: unknown, cb: (payload: unknown) => void) {
+          aoMudar = cb;
+          return this;
+        },
+        subscribe(cb: (s: string) => void) {
+          avisarStatus = cb;
+          return this;
+        },
+      };
+    },
+    removeChannel: async () => {},
+  } as unknown as SupabaseClient;
+  const g = criarGerenciador<LF>({
+    tabela: "lancamentos",
+    obterCliente: () => cliente,
+    pertence: (l) => l.fila,
+    filtrarLeitura: (c) => c.is("excluido_em", null),
+    canal: "tabela:lancamentos:fila",
+  });
+  return { g, registro, canais, status: (s: string) => avisarStatus(s), evento: (p: unknown) => aoMudar(p) };
+}
+
+const F = (id: string, extra: Partial<LF> = {}): LF => ({ id, updated_at: T1, fila: true, nome: id, ...extra });
+
+describe("gerenciador por predicado", () => {
+  it("abre o canal com o nome dado, lê com o filtro e guarda só o que pertence", async () => {
+    const m = montarPorPredicado([F("a"), F("b", { fila: false })]);
+    m.g.assinar(() => {});
+    m.status("SUBSCRIBED");
+    await esperar();
+    expect(m.canais).toEqual(["tabela:lancamentos:fila"]);
+    expect(m.registro).toEqual(["is excluido_em"]);
+    expect(m.g.linhas().map((l) => l.id)).toEqual(["a"]);
+    expect(m.g.retrato().mes).toBeUndefined();
+  });
+
+  it("evento que põe a linha na fila a guarda; que tira, a remove (se for mais novo)", async () => {
+    const m = montarPorPredicado([F("a")]);
+    m.g.assinar(() => {});
+    m.status("SUBSCRIBED");
+    await esperar();
+
+    m.evento({ eventType: "INSERT", new: F("x", { fila: false, updated_at: T2 }), old: {} });
+    expect(m.g.linha("x")).toBeUndefined();
+    m.evento({ eventType: "UPDATE", new: F("x", { fila: true, updated_at: T2 }), old: {} });
+    expect(m.g.linha("x")).toBeDefined();
+
+    // Fora de ordem: o UPDATE velho não tira.
+    m.evento({ eventType: "UPDATE", new: F("a", { fila: false, updated_at: "2026-11-02T11:00:00+00:00" }), old: {} });
+    expect(m.g.linha("a")).toBeDefined();
+    m.evento({ eventType: "UPDATE", new: F("a", { fila: false, updated_at: T2 }), old: {} });
+    expect(m.g.linha("a")).toBeUndefined();
+    expect(m.g.linhas().map((l) => l.id)).toEqual(["x"]);
+  });
+
+  it("a gravação que tira a linha da fila a remove sem esperar o evento; a que a põe, guarda", async () => {
+    const m = montarPorPredicado([F("a"), F("b")]);
+    let avisos = 0;
+    m.g.assinar(() => avisos++);
+    m.status("SUBSCRIBED");
+    await esperar();
+    const antes = avisos;
+
+    m.g.aplicarLote([F("a", { fila: false, updated_at: T2 })]);
+    expect(m.g.linhas().map((l) => l.id)).toEqual(["b"]);
+    expect(avisos).toBe(antes + 1);
+
+    // Resposta velha de uma linha de fora não tira a que está na memória.
+    m.g.aplicarLote([F("b", { fila: false, updated_at: "2026-11-02T11:00:00+00:00" })]);
+    expect(m.g.linha("b")).toBeDefined();
+
+    // Linha de fora que não está na memória: nada muda.
+    m.g.aplicarLote([F("z", { fila: false, updated_at: T2 })]);
+    expect(avisos).toBe(antes + 1);
+
+    // Voltar à fila (Desfazer): entra de novo.
+    m.g.aplicarLote([F("a", { fila: true, updated_at: "2026-11-02T12:00:09+00:00" })]);
+    expect(m.g.linhas().map((l) => l.id).sort()).toEqual(["a", "b"]);
+  });
+
+  it("a mudança otimista que tira a linha da fila a mantém na memória até a resposta (o desfazer a devolve)", async () => {
+    const m = montarPorPredicado([F("a")]);
+    m.g.assinar(() => {});
+    m.status("SUBSCRIBED");
+    await esperar();
+    const desfazer = m.g.aplicarOtimista([{ id: "a", fila: false }]);
+    expect(m.g.linha("a")?.fila).toBe(false);
+    desfazer();
+    expect(m.g.linha("a")?.fila).toBe(true);
+  });
+});

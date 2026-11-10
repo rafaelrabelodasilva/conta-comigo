@@ -5,6 +5,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Json } from "../../src/data/database.types";
 import { reconhecerAjustes } from "../../src/domain/ajustes";
+import { FILTRO_OR_DA_FILA } from "../../src/data/realtime";
 import { LIMITE_AJUSTE_PADRAO_CENTAVOS } from "../../src/domain/configuracoes";
 import { ligado, supabaseLocal, type Usuario } from "./apoio";
 
@@ -119,6 +120,37 @@ describe.skipIf(!ligado)("lancamentos (painel) no Supabase local", () => {
     expect(data).toEqual([]);
     const { data: linha } = await local.admin.from("lancamentos").select("apelido").eq("id", id).single();
     expect(linha!.apelido).toBe("Correção");
+  });
+
+  // História 3.2: `revisado_em` nasce nulo; o dono o grava ao sair da fila e
+  // o limpa ao voltar; outro dono não o altera.
+  it("revisado_em é nulo por padrão; o dono grava e limpa; RLS de outro dono", async () => {
+    const { data: nova } = await a.cliente.from("lancamentos").select("revisado_em").eq("id", id).single();
+    expect(nova!.revisado_em).toBeNull();
+
+    const quando = "2026-11-12T00:14:00.000Z";
+    const { data: revisada, error } = await a.cliente
+      .from("lancamentos")
+      .update({ revisado_em: quando, revisao_motivo: null, revisao_dados: null })
+      .eq("id", id)
+      .select()
+      .single();
+    expect(error).toBeNull();
+    expect(Date.parse(revisada!.revisado_em!)).toBe(Date.parse(quando));
+
+    const { data: alheia } = await b.cliente.from("lancamentos").update({ revisado_em: null }).eq("id", id).select();
+    expect(alheia).toEqual([]);
+    const { data: guardada } = await local.admin.from("lancamentos").select("revisado_em").eq("id", id).single();
+    expect(Date.parse(guardada!.revisado_em!)).toBe(Date.parse(quando));
+
+    const { data: devolvida } = await a.cliente
+      .from("lancamentos")
+      .update({ revisao_motivo: "sem_classificacao", revisado_em: null })
+      .eq("id", id)
+      .select()
+      .single();
+    expect(devolvida!.revisado_em).toBeNull();
+    expect(devolvida!.revisao_motivo).toBe("sem_classificacao");
   });
 });
 
@@ -321,5 +353,37 @@ describe.skipIf(!ligado)("Ajustes de centavos no Supabase local", () => {
       .not("ajuste_de_id", "is", null);
     expect(depois!.map((l) => [l.id, l.ajuste_de_id!]).sort()).toEqual(doNucleo);
     expect(depois![0].valor_centavos).toBe(-150);
+  });
+
+  // História 3.2: a leitura do gerenciador da fila (`.is("excluido_em", null)` e
+  // `.or(FILTRO_OR_DA_FILA)`, sem filtrar o Mês) traz a linha com motivo e o
+  // Ajuste (que acompanha a mãe), e não traz a linha sem motivo nem a excluída.
+  it("leitura da fila: traz a linha com motivo e o Ajuste; não traz a sem motivo nem a excluída", async () => {
+    const [mae, ajuste, comum, excluida] = await importarSemAjuste(c.cliente, "2026-05", [
+      linha("MSC CRUZEIROS", 114074, 1, "5061", [2, 12]),
+      linha("MSC CRUZEIROS", -8, 2, "5061"),
+      linha("PADARIA", 1000, 3, "5061"),
+      linha("FARMACIA", 2000, 4, "5061"),
+    ]);
+    try {
+      const gravar = async (id: string, corpo: object) => {
+        const { error } = await c.cliente.from("lancamentos").update(corpo).eq("id", id);
+        expect(error).toBeNull();
+      };
+      await gravar(mae.id, { revisao_motivo: "sugestao" });
+      await gravar(ajuste.id, { ajuste_de_id: mae.id });
+      await gravar(excluida.id, { revisao_motivo: "sem_classificacao", excluido_em: "2026-11-12T00:00:00Z" });
+      // `comum` fica sem motivo.
+
+      const { data, error } = await c.cliente.from("lancamentos").select("*").is("excluido_em", null).or(FILTRO_OR_DA_FILA);
+      expect(error).toBeNull();
+      const ids = data!.map((l) => l.id);
+      expect(ids).toContain(mae.id);
+      expect(ids).toContain(ajuste.id);
+      expect(ids).not.toContain(comum.id);
+      expect(ids).not.toContain(excluida.id);
+    } finally {
+      await local.admin.from("lancamentos").delete().in("id", [mae.id, ajuste.id, comum.id, excluida.id]);
+    }
   });
 });

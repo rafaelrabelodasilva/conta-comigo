@@ -9,10 +9,12 @@ import {
   ETAPAS_IMPORTACAO,
   ROTULOS,
   TEXTOS_IMPORTAR as T,
+  TEXTOS_REVISAR,
   avisoReimportar,
   mensagem,
   rotuloDespesasCreditos,
   rotuloReimportado,
+  rotuloResumoClassificacao,
   rotuloTotalAPagar,
   textoExtracaoIncompleta,
 } from "@/domain/mensagens";
@@ -90,6 +92,7 @@ function arquivoPdf(nome = "fatura.pdf") {
 
 const aoMudar = vi.fn();
 const aoImportar = vi.fn();
+const aoIrParaRevisao = vi.fn();
 
 function Montar() {
   const [aberta, setAberta] = useState(true);
@@ -102,6 +105,7 @@ function Montar() {
           setAberta(a);
         }}
         aoImportar={aoImportar}
+        aoIrParaRevisao={aoIrParaRevisao}
       />
     </ToastProvider>
   );
@@ -123,6 +127,15 @@ async function digitarSenha(u: ReturnType<typeof userEvent.setup>, senha: string
 }
 
 const PASSO_3 = "Fatura de outubro · vence 06/10/26";
+
+/**
+ * Depois de gravar com linhas para revisar (sem Regras nem Tipos, todas vão
+ * para a fila), o passo 3 mostra o resumo; "Ver no Painel" fecha a janela.
+ */
+async function verNoPainel() {
+  await userEvent.setup().click(await screen.findByRole("button", { name: TEXTOS_REVISAR.ver_no_painel }));
+  expect(aoMudar).toHaveBeenCalledWith(false);
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -178,7 +191,7 @@ describe("ImportarFatura", () => {
     expect(enviado).toContain("04/09 MSC CRUZEIROS 01/12 1.140,74");
 
     await u.click(screen.getByRole("button", { name: T.importar }));
-    await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
+    await verNoPainel();
     // O Painel abre o Mês importado.
     expect(aoImportar).toHaveBeenCalledExactlyOnceWith("2026-10");
     const gravado: Importacao = falso.importar.mock.calls[0][0];
@@ -276,7 +289,7 @@ describe("ImportarFatura", () => {
     await u.click(await screen.findByRole("button", { name: T.importar }));
     expect((await screen.findByRole("alert")).textContent).toBe(mensagem("fatura.conexao_caiu"));
     await u.click(screen.getByRole("button", { name: ROTULOS.tentar_de_novo }));
-    await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
+    await verNoPainel();
     expect(falso.importar).toHaveBeenCalledTimes(2);
   });
 
@@ -292,7 +305,7 @@ describe("ImportarFatura", () => {
     await u.click(screen.getByRole("button", { name: ROTULOS.fechar }));
     expect(aoMudar).not.toHaveBeenCalledWith(false);
     terminar({ ok: true, quantidade: 49 });
-    await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
+    await verNoPainel();
   });
 
   it("\"Cancelar\" durante a leitura aborta, fecha e não grava", async () => {
@@ -360,7 +373,7 @@ describe("ImportarFatura", () => {
     botao.click();
     expect(falso.importar).toHaveBeenCalledTimes(1);
     terminar({ ok: true, quantidade: 49 });
-    await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
+    await verNoPainel();
     expect(falso.importar).toHaveBeenCalledTimes(1);
   });
 });
@@ -448,7 +461,7 @@ describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
     falso.lerReimportacao.mockResolvedValue(leitura());
     const u = await ateOAviso();
     await u.click(screen.getByRole("button", { name: T.importar_de_novo }));
-    await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
+    await verNoPainel();
     expect(falso.importar).toHaveBeenCalledTimes(1);
     const [gravado, substituir] = falso.importar.mock.calls[0];
     expect((gravado as Importacao).lancamentos).toHaveLength(49);
@@ -463,7 +476,7 @@ describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
     const u = await escolherPdf();
     await digitarSenha(u, "s");
     await u.click(await screen.findByRole("button", { name: T.importar }));
-    await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
+    await verNoPainel();
     expect(falso.importar.mock.calls[0][1]).toBeUndefined();
     expect(falso.lerReimportacao).not.toHaveBeenCalled();
     expect(screen.queryByText(rotuloReimportado("2026-10", 49))).toBeNull();
@@ -505,7 +518,7 @@ describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
     const novo = avisoReimportar("2026-10", { quantidade: 10, mexidos: 0, excluidos: 0 });
     expect(await screen.findByText(novo)).toBeTruthy();
     await u.click(screen.getByRole("button", { name: T.importar_de_novo }));
-    await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
+    await verNoPainel();
     expect(falso.importar.mock.calls[1][1]).toEqual({ faturaId: "f1", atualizadoEm: "2026-10-21T00:00:00+00:00" });
   });
 
@@ -536,7 +549,7 @@ describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: ROTULOS.cancelar }).hasAttribute("disabled")).toBe(true));
     expect(screen.getByRole("button", { name: T.gravando }).hasAttribute("disabled")).toBe(true);
     terminar({ ok: true, quantidade: 49 });
-    await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
+    await verNoPainel();
   });
 });
 
@@ -726,5 +739,105 @@ describe("ImportarFatura: classificação pelas Regras (História 3.1)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("ImportarFatura: depois de gravar (História 3.2)", () => {
+  const msc = { nome: "MSC CRUZEIROS", data: "04/09", finalCartao: "5061", duvida: false };
+  const so1: Extracao = {
+    ...outubro,
+    fatura: { ...outubro.fatura, totalDespesasCentavos: 114074, totalCreditosCentavos: 0 },
+    cartoes: [{ final: "5061", valorTotalCentavos: 114074 }],
+    lancamentos: [{ ...msc, parcelaN: 3, parcelaTotal: 12, valorCentavos: 114074, tipoSugerido: null }],
+  };
+  const regraMsc = {
+    chave: "MSC CRUZEIROS",
+    versao_normalizacao: 1,
+    responsavel_id: "casal",
+    tipo_id: "casa",
+    contagem: [{ responsavel_id: "casal", n: 2 }],
+    ultimo_uso: "2026-10-10T00:00:00Z",
+  };
+
+  async function importarOutubro() {
+    const u = await escolherPdf();
+    await digitarSenha(u, "s");
+    await u.click(await screen.findByRole("button", { name: T.importar }));
+    return u;
+  }
+
+  it("com linhas para revisar: 'N classificados · N para revisar', 'Ir para revisão' (principal) e 'Ver no Painel'", async () => {
+    const u = await importarOutubro();
+    expect(await screen.findByText(rotuloResumoClassificacao(0, 49))).toBeTruthy();
+    expect(screen.getByText("Passo 3 de 3 · Conferir")).toBeTruthy();
+    // O Mês já foi entregue ao Painel; a janela segue aberta no resumo.
+    expect(aoImportar).toHaveBeenCalledExactlyOnceWith("2026-10");
+    expect(aoMudar).not.toHaveBeenCalledWith(false);
+    const ir = screen.getByRole("button", { name: TEXTOS_REVISAR.ir_para_revisao });
+    expect(ir.className).toContain("bg-accent");
+    expect(screen.getByRole("button", { name: TEXTOS_REVISAR.ver_no_painel }).className).not.toContain("bg-accent");
+    expect(screen.queryByRole("button", { name: ROTULOS.cancelar })).toBeNull();
+
+    await u.click(ir);
+    expect(aoIrParaRevisao).toHaveBeenCalledTimes(1);
+    expect(aoMudar).toHaveBeenCalledWith(false);
+    expect(screen.queryByText(rotuloResumoClassificacao(0, 49))).toBeNull();
+  });
+
+  it("'Ver no Painel' fecha sem ir para a revisão", async () => {
+    await importarOutubro();
+    await verNoPainel();
+    expect(aoIrParaRevisao).not.toHaveBeenCalled();
+  });
+
+  it("o ✕ também fecha o resumo", async () => {
+    const u = await importarOutubro();
+    await screen.findByText(rotuloResumoClassificacao(0, 49));
+    await u.click(screen.getByRole("button", { name: ROTULOS.fechar }));
+    expect(aoMudar).toHaveBeenCalledWith(false);
+    expect(aoIrParaRevisao).not.toHaveBeenCalled();
+  });
+
+  it("a reimportação também mostra o resumo depois do toast", async () => {
+    falso.faturas = [{ id: "f0", mes: "2026-10" }];
+    falso.lerReimportacao.mockResolvedValue({
+      ok: true,
+      valor: { faturaId: "f0", atualizadoEm: null, linhas: [], statusPadraoId: null },
+    });
+    const u = await escolherPdf();
+    await digitarSenha(u, "s");
+    await u.click(await screen.findByRole("button", { name: T.importar_de_novo }));
+    expect(await screen.findByText(rotuloResumoClassificacao(0, 49))).toBeTruthy();
+    expect(screen.getByText(rotuloReimportado("2026-10", 49))).toBeTruthy();
+  });
+
+  it("tudo classificado (nenhum para revisar): fecha como antes, sem o resumo", async () => {
+    falso.responsaveis = [{ id: "casal", nome: "Casal", arquivado: false }];
+    falso.tipos = [{ id: "casa", nome: "Casa", arquivado: false }];
+    falso.listarRegras.mockResolvedValue({ ok: true, regras: [regraMsc] });
+    falso.fetch.mockImplementation(async () => resposta(so1));
+    await importarOutubro();
+    await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
+    expect(aoImportar).toHaveBeenCalledExactlyOnceWith("2026-10");
+    expect(screen.queryByRole("button", { name: TEXTOS_REVISAR.ir_para_revisao })).toBeNull();
+    expect(aoIrParaRevisao).not.toHaveBeenCalled();
+  });
+
+  it("o resumo conta só as mães: o Ajuste segue a dele", async () => {
+    falso.responsaveis = [{ id: "casal", nome: "Casal", arquivado: false }];
+    falso.tipos = [{ id: "casa", nome: "Casa", arquivado: false }];
+    falso.listarRegras.mockResolvedValue({ ok: true, regras: [regraMsc] });
+    const comAjuste: Extracao = {
+      ...so1,
+      fatura: { ...so1.fatura, totalCreditosCentavos: 8 },
+      lancamentos: [
+        ...so1.lancamentos,
+        { ...msc, parcelaN: null, parcelaTotal: null, valorCentavos: -8, tipoSugerido: null },
+        { ...msc, nome: "PETZ", parcelaN: null, parcelaTotal: null, valorCentavos: 100, tipoSugerido: null },
+      ],
+    };
+    falso.fetch.mockImplementation(async () => resposta(comAjuste));
+    await importarOutubro();
+    expect(await screen.findByText(rotuloResumoClassificacao(1, 1))).toBeTruthy();
   });
 });

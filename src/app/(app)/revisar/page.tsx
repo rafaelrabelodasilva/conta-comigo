@@ -1,23 +1,18 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { mensagem } from "@/domain/mensagens";
 import { temSessao } from "@/data/supabase/servidor";
-import { EstadoVazio } from "@/ui/EstadoVazio";
+import { Revisar } from "@/features/revisar/Revisar";
 import { itemDaRota } from "@/ui/navegacao";
-import { Tela } from "@/ui/Tela";
 
 const item = itemDaRota("/revisar");
 
 export const metadata: Metadata = { title: `${item.titulo} · Conta Comigo` };
 
-// Tela provisória: o conteúdo chega nas próximas histórias.
+// Revisar: a fila do que a importação não classificou. O conteúdo é o
+// componente cliente, que lê do gerenciador da fila (tempo real).
 export default async function PaginaRevisar() {
   // Confere a sessão aqui também, sem depender só do proxy.
   if (!(await temSessao())) redirect("/entrar");
 
-  return (
-    <Tela titulo={item.titulo}>
-      <EstadoVazio texto={mensagem("app.em_breve")} />
-    </Tela>
-  );
+  return <Revisar titulo={item.titulo} />;
 }

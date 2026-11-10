@@ -17,12 +17,14 @@ import {
   ETAPAS_IMPORTACAO,
   ROTULOS,
   TEXTOS_IMPORTAR as T,
+  TEXTOS_REVISAR,
   avisoReimportar,
   mensagem,
   rotuloConferencia,
   rotuloDespesasCreditos,
   rotuloPassoImportar,
   rotuloReimportado,
+  rotuloResumoClassificacao,
   rotuloSeraoGravados,
   textoExtracaoIncompleta,
   tituloFaturaLida,
@@ -30,6 +32,7 @@ import {
 } from "@/domain/mensagens";
 import type { RegraGravada } from "@/domain/regras";
 import type { Resultado } from "@/domain/resultado";
+import { resumoDaClassificacao } from "@/domain/revisar";
 import { repoFaturas, type Substituir } from "@/data/faturas-repo";
 import { repoRegras } from "@/data/regras-repo";
 import { useLinhas } from "@/data/realtime";
@@ -64,6 +67,11 @@ import { TotalAPagar } from "./TotalAPagar";
 // números (falha ao ler), só o erro e "Tentar de novo", que relê só o
 // resumo. A RPC recebe o id da Fatura e o `updated_at` lidos com o aviso;
 // `fatura.mes_mudou` volta ao erro com "Tentar de novo" (números novos).
+//
+// Depois de gravar (História 3.2): com linhas para revisar, o passo 3 mostra
+// "N classificados · N para revisar" com "Ir para revisão" (principal) e "Ver
+// no Painel"; sem nenhuma, a janela fecha como antes. O Mês importado já foi
+// entregue ao Painel (`aoImportar`) quando o passo aparece.
 
 /** Quanto a etapa "classificando" espera as Regras e os cadastros, em ms. */
 export const LIMITE_CLASSIFICAR_MS = 10_000;
@@ -87,6 +95,8 @@ type Estado =
   | { tipo: "senha"; erro: string | null }
   | { tipo: "processando"; passo: Passo; etapa: EtapaImportacao }
   | { tipo: "falha_leitura"; codigo: string }
+  /** Gravou e há linhas para revisar: o resumo e os dois caminhos. */
+  | { tipo: "concluido"; classificados: number; paraRevisar: number }
   | {
       tipo: "conferir";
       importacao: Importacao;
@@ -115,9 +125,11 @@ export type PropsImportarFatura = {
   aoMudar: (aberta: boolean) => void;
   /** Gravou: o Mês importado (`AAAA-MM`), para o Painel abri-lo. */
   aoImportar?: (mes: string) => void;
+  /** "Ir para revisão", no passo final com linhas para revisar. */
+  aoIrParaRevisao?: () => void;
 };
 
-export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFatura) {
+export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }: PropsImportarFatura) {
   const [estado, setEstado] = useState<Estado>(INICIAL);
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [senha, setSenha] = useState("");
@@ -366,10 +378,16 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
     const r = await repoFaturas().importar(atual.importacao, substituir);
     gravandoAgora.current = false;
     if (r.ok) {
-      reiniciar();
-      aoMudar(false);
+      const resumo = resumoDaClassificacao(atual.importacao.lancamentos);
       if (substituir) toast.mostrar({ texto: rotuloReimportado(mes, r.quantidade) });
       aoImportar?.(mes);
+      if (resumo.paraRevisar > 0) {
+        // Há o que revisar: o passo 3 mostra o resumo e os dois caminhos.
+        setEstado({ tipo: "concluido", ...resumo });
+        return;
+      }
+      reiniciar();
+      aoMudar(false);
       return;
     }
     if (substituir && r.codigo === "fatura.mes_mudou") {
@@ -526,6 +544,26 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar }: PropsImportarFat
           </Botao>
         </>
       );
+  } else if (estado.tipo === "concluido") {
+    corpo = (
+      <p role="status" className="texto-body-strong">
+        {rotuloResumoClassificacao(estado.classificados, estado.paraRevisar)}
+      </p>
+    );
+    acoes = (
+      <>
+        <Botao onClick={fechar}>{TEXTOS_REVISAR.ver_no_painel}</Botao>
+        <Botao
+          variante="primario"
+          onClick={() => {
+            fechar();
+            aoIrParaRevisao?.();
+          }}
+        >
+          {TEXTOS_REVISAR.ir_para_revisao}
+        </Botao>
+      </>
+    );
   } else {
     const { importacao, conferencia, erro, reimportar } = estado;
     const aviso: AvisoReimportar | null =

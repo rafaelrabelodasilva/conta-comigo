@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   textoSugestao,
+  TEXTOS_REVISAR,
+  rotuloAjusteDoItem,
+  rotuloClassificados,
+  rotuloFaixaImportacao,
+  rotuloFaltam,
+  rotuloMesDoItem,
+  rotuloResumoClassificacao,
+  tituloGrupoRevisar,
   MENSAGENS,
   RESPOSTAS_PERGUNTA,
   ROTULOS,
@@ -603,5 +611,27 @@ describe("reimportar um Mês (História 3.11)", () => {
     expect(TEXTOS_IMPORTAR.importar_de_novo).toBe("Importar de novo");
     expect(rotuloReimportado("2026-11", 52)).toBe("Fatura de novembro importada de novo · 52 lançamentos");
     expect(rotuloReimportado("2026-11", 1)).toBe("Fatura de novembro importada de novo · 1 lançamento");
+  });
+});
+
+describe("textos da fila do Revisar (História 3.2)", () => {
+  it("fila vazia, Faltam, grupo e Mês", () => {
+    expect(TEXTOS_REVISAR.tudo_revisado).toBe("Tudo revisado. Nada novo neste mês");
+    expect(rotuloFaltam(17)).toBe("Faltam 17");
+    expect(rotuloFaltam(1)).toBe("Falta 1");
+    expect(tituloGrupoRevisar("SHOPEE", 3)).toBe("SHOPEE · 3 lançamentos");
+    expect(rotuloMesDoItem("2026-10")).toBe("Out/26");
+  });
+
+  it("Ajuste sob a mãe, com o formatador de dinheiro do núcleo", () => {
+    expect(rotuloAjusteDoItem(-8)).toBe(`Ajuste -${ESPACO}R$${ESPACO}0,08`);
+  });
+
+  it("resumo da importação: faixa do topo e passo final", () => {
+    expect(rotuloClassificados(1)).toBe("1 classificado");
+    expect(rotuloResumoClassificacao(30, 17)).toBe("30 classificados · 17 para revisar");
+    expect(rotuloFaixaImportacao("2026-11", "✓ Conferido", { lancamentos: 47, classificados: 30, paraRevisar: 17 })).toBe(
+      "Importação de novembro · ✓ Conferido · 47 lançamentos · 30 classificados · 17 para revisar",
+    );
   });
 });

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { FILTRO_OR_DA_FILA } from "./realtime";
 
 // Os gerenciadores únicos (`gerenciador(tabela)`) com o cliente do navegador
 // e o detector de conexão simulados: a volta da conexão relê todos. O mapa de
@@ -8,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const falso = vi.hoisted(() => ({
   aoVoltar: [] as (() => void)[],
   leituras: [] as string[],
+  canais: [] as string[],
 }));
 
 vi.mock("./conexao", () => ({
@@ -22,6 +24,15 @@ vi.mock("./supabase/navegador", () => {
     from: (tabela: string) => ({
       select: () => {
         const consulta = {
+          // Filtros da fila (`filtrarLeitura`): a leitura que segue é registrada com eles.
+          is: (coluna: string, valor: unknown) => {
+            falso.leituras.push(`${tabela} ${coluna} is ${String(valor)}`);
+            return consulta;
+          },
+          or: (filtro: string) => {
+            falso.leituras.push(`${tabela} or ${filtro}`);
+            return consulta;
+          },
           eq: async (coluna: string, valor: string) => {
             falso.leituras.push(`${tabela} ${coluna}=${valor}`);
             return { data: [], error: null };
@@ -34,7 +45,8 @@ vi.mock("./supabase/navegador", () => {
         return consulta;
       },
     }),
-    channel: () => ({
+    channel: (nome: string) => ({
+      _nome: falso.canais.push(nome),
       on() {
         return this;
       },
@@ -59,6 +71,7 @@ describe("recarregarTodos", () => {
     vi.resetModules();
     falso.aoVoltar.length = 0;
     falso.leituras.length = 0;
+    falso.canais.length = 0;
   });
 
   it("liga ao detector uma vez só, na primeira criação", async () => {
@@ -101,5 +114,32 @@ describe("recarregarTodos", () => {
     expect(falso.leituras).toEqual(["lancamentos mes=2026-10"]);
     expect(gerenciador("lancamentos").mesAberto()).toBe("2026-10");
     expect(gerenciador("tipos").mesAberto()).toBeNull();
+  });
+
+  it("a fila do Revisar tem canal e leitura próprios (todos os Meses, só a fila) e entra no recarregarTodos", async () => {
+    const { gerenciador, gerenciadorFila, recarregarTodos } = await realtimeNovo();
+    gerenciador("lancamentos").abrirMes("2026-10");
+    gerenciador("lancamentos").assinar(() => {});
+    gerenciadorFila().assinar(() => {});
+    await esperar();
+    expect(falso.canais.sort()).toEqual(["tabela:lancamentos", "tabela:lancamentos:fila"]);
+    expect(falso.leituras).toContain("lancamentos mes=2026-10");
+    expect(falso.leituras).toContain("lancamentos excluido_em is null");
+    expect(falso.leituras).toContain(`lancamentos or ${FILTRO_OR_DA_FILA}`);
+    // A fila não é por Mês: a leitura dela não filtra por `mes`.
+    expect(falso.leituras.filter((l) => l.startsWith("lancamentos mes="))).toHaveLength(1);
+    expect(gerenciadorFila().mesAberto()).toBeNull();
+    expect(gerenciadorFila()).toBe(gerenciadorFila());
+
+    falso.leituras.length = 0;
+    await recarregarTodos();
+    expect(falso.leituras).toContain("lancamentos");
+    expect(falso.leituras).toContain(`lancamentos or ${FILTRO_OR_DA_FILA}`);
+  });
+
+  it("criar só a fila já liga ao detector", async () => {
+    const { gerenciadorFila } = await realtimeNovo();
+    gerenciadorFila();
+    expect(falso.aoVoltar).toHaveLength(1);
   });
 });

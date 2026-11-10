@@ -28,6 +28,12 @@
 // A linha da Fatura (não Ajuste) fora da fila em que a gravação limpa o
 // Responsável ou o Tipo volta como `sem_classificacao`; com Ajustes `junto`,
 // isso vai numa segunda requisição só para a mãe (o Ajuste nunca tem motivo).
+//
+// Fila do Revisar (História 3.2): `revisado_em` (o relógio do aparelho, o
+// mesmo de `editado_em`) é gravado junto com a saída da fila e volta a nulo
+// quando a linha volta a ela. `devolverAFila` é o "Desfazer" do Confirmar e do
+// "Mudar". A tela Revisar usa uma segunda instância (`repoLancamentosRevisar`)
+// ligada ao gerenciador da fila.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MudancaCampo, NovoLancamento } from "@/domain/lancamento";
@@ -35,7 +41,7 @@ import type { EventoAprender } from "@/domain/regras";
 import { estaOnline } from "./conexao";
 import type { Database } from "./database.types";
 import { FALHOU, gravarComOtimismo, semConexao, type CodigoFalhaGravacao, type Online } from "./gravacao";
-import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
+import { gerenciador, gerenciadorFila, type Gerenciador, type LinhaDe } from "./realtime";
 import { colunasAlteradas } from "./realtime-estado";
 import { repoRegras } from "./regras-repo";
 import { criarClienteNavegador } from "./supabase/navegador";
@@ -72,6 +78,15 @@ export type OpcoesGravacao = {
 
 /** A mãe a que um Ajuste volta no "Desfazer" do "Desvincular": o id e a classificação atual. */
 export type MaeDoAjuste = Pick<LinhaLancamento, "id" | "tipo_id" | "responsavel_id">;
+
+/**
+ * Como a linha estava antes de Confirmar ou "Mudar" (o "Desfazer" da fila):
+ * a classificação, o motivo, a sugestão e o `revisado_em`.
+ */
+export type AnteriorDaFila = Pick<
+  LinhaLancamento,
+  "responsavel_id" | "tipo_id" | "revisao_motivo" | "revisao_dados" | "revisado_em"
+>;
 
 /** Quem aprende a Regra de uma classificação (`regrasRepo.aprender`). */
 export type Aprender = (evento: EventoAprender) => Promise<unknown>;
@@ -182,19 +197,28 @@ export function criarRepoLancamentos(deps: {
       const atual = memoria.linha(id);
       if (!atual) return FALHOU;
       const corpo: Partial<LinhaLancamento> = colunasAlteradas<MudancaLancamento>(atual, mudanca);
-      if (Object.keys(corpo).length === 0) return { ok: true, linha: atual };
-      const classificou = mudouClassificacao(corpo);
+      const agora = (opcoes.agora ?? new Date()).toISOString();
+      const naFila = atual.revisao_motivo != null || atual.revisao_dados != null;
+      // Quem pede Responsável ou Tipo a uma linha da fila que já os tem (o
+      // ✓ de uma linha completa) ainda precisa tirá-la da fila.
+      const pedeClassificacao = mudanca.responsavel_id !== undefined || mudanca.tipo_id !== undefined;
+      const fechaFila = naFila && pedeClassificacao;
+      if (Object.keys(corpo).length === 0 && !(fechaFila && atual.responsavel_id !== null && atual.tipo_id !== null)) {
+        return { ok: true, linha: atual };
+      }
+      const classificou = mudouClassificacao(corpo) || fechaFila;
       /** Colunas só da linha principal (nunca dos Ajustes `junto`). */
       let soDaPrincipal: Partial<LinhaLancamento> | null = null;
       if (classificou) {
         const depois = { ...atual, ...corpo };
-        const naFila = atual.revisao_motivo != null || atual.revisao_dados != null;
         if (depois.responsavel_id !== null && depois.tipo_id !== null) {
-          // Com Responsável e Tipo, sai da fila do Revisar na mesma gravação
-          // (nos Ajustes `junto` as colunas já são nulas).
+          // Com Responsável e Tipo, sai da fila do Revisar na mesma gravação e
+          // marca quando (`revisado_em`). O corpo vai também aos Ajustes `junto`:
+          // neles o motivo e a sugestão já são nulos.
           if (naFila) {
             corpo.revisao_motivo = null;
             corpo.revisao_dados = null;
+            corpo.revisado_em = agora;
           }
         } else if (
           limpouClassificacao(corpo) &&
@@ -203,11 +227,11 @@ export function criarRepoLancamentos(deps: {
           atual.ajuste_de_id == null
         ) {
           // Linha da Fatura que a gravação deixa sem Responsável ou sem Tipo volta à fila.
-          soDaPrincipal = { revisao_motivo: "sem_classificacao", revisao_dados: null };
+          soDaPrincipal = { revisao_motivo: "sem_classificacao", revisao_dados: null, revisado_em: null };
         }
       }
       const ids = todos(id, (opcoes.junto ?? []).filter((j) => memoria.linha(j)));
-      const editado_em = (opcoes.agora ?? new Date()).toISOString();
+      const editado_em = agora;
       let r: ResultadoLancamento;
       if (soDaPrincipal && ids.length === 1) {
         r = await gravar(ids, { ...corpo, ...soDaPrincipal, editado_em });
@@ -281,7 +305,7 @@ export function criarRepoLancamentos(deps: {
       const semClassificacao = atual.fatura_id != null && (atual.responsavel_id === null || atual.tipo_id === null);
       return gravar([id], {
         ajuste_de_id: null,
-        ...(semClassificacao ? { revisao_motivo: "sem_classificacao" as const, revisao_dados: null } : {}),
+        ...(semClassificacao ? { revisao_motivo: "sem_classificacao" as const, revisao_dados: null, revisado_em: null } : {}),
         editado_em: agora.toISOString(),
       });
     },
@@ -305,6 +329,41 @@ export function criarRepoLancamentos(deps: {
       // Fora da memória (o Mês mudou depois de desvincular): sem otimismo, como `restaurar`.
       return memoria.linha(id) ? gravar([id], corpo) : gravarSemMemoria([id], corpo);
     },
+
+    /**
+     * "Desfazer" do Confirmar e do "Mudar" da fila (História 3.2): devolve a
+     * classificação, o motivo, a sugestão e o `revisado_em` anteriores à mãe
+     * e a classificação e o `revisado_em` aos Ajustes `junto` (eles nunca têm
+     * motivo). A linha já saiu da memória da fila: grava sem otimismo e a
+     * resposta a devolve à fila. A Regra aprendida não é desfeita (a contagem
+     * só soma).
+     */
+    async devolverAFila(
+      id: string,
+      anterior: AnteriorDaFila,
+      opcoes: Pick<OpcoesGravacao, "junto"> = {},
+    ): Promise<ResultadoLancamento> {
+      const bloqueio = semConexao(online);
+      if (bloqueio) return bloqueio;
+      const classificacao = {
+        responsavel_id: anterior.responsavel_id,
+        tipo_id: anterior.tipo_id,
+        revisado_em: anterior.revisado_em,
+      };
+      const gravarAlvos = (alvos: readonly string[], corpo: Partial<LinhaLancamento>) =>
+        alvos.every((i) => memoria.linha(i)) ? gravar(alvos, corpo) : gravarSemMemoria(alvos, corpo);
+      const ajustes = todos(id, opcoes.junto).filter((i) => i !== id);
+      if (ajustes.length > 0) {
+        // Os Ajustes primeiro: a mãe volta à fila já com eles no lugar.
+        const r = await gravarAlvos(ajustes, classificacao);
+        if (!r.ok) return r;
+      }
+      return gravarAlvos([id], {
+        ...classificacao,
+        revisao_motivo: anterior.revisao_motivo,
+        revisao_dados: anterior.revisao_dados,
+      });
+    },
   };
 }
 
@@ -320,4 +379,20 @@ export function repoLancamentos(): RepoLancamentos {
     aprender: (evento) => repoRegras().aprender(evento),
   });
   return repo;
+}
+
+let repoRevisar: RepoLancamentos | null = null;
+
+/**
+ * O repositório da tela Revisar (História 3.2): a segunda instância, ligada
+ * ao gerenciador da fila (que guarda os itens de todos os Meses, não só o Mês
+ * aberto). Grava as mesmas colunas e ensina a Regra do mesmo jeito.
+ */
+export function repoLancamentosRevisar(): RepoLancamentos {
+  repoRevisar ??= criarRepoLancamentos({
+    obterCliente: () => criarClienteNavegador() as SupabaseClient<Database> | null,
+    memoria: gerenciadorFila(),
+    aprender: (evento) => repoRegras().aprender(evento),
+  });
+  return repoRevisar;
 }
