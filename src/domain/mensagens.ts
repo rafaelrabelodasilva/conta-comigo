@@ -7,7 +7,7 @@
 
 import type { PassoPrimeiroUso } from "./primeiro-uso";
 import { partesDaDiferenca, valorDaDiferenca, type Conferencia, type SentidoDiferenca } from "./conferencia";
-import { formatarData, formatarMesExtenso, formatarNomeDoMes } from "./datas";
+import { formatarData, formatarMes, formatarMesExtenso, formatarNomeDoMes } from "./datas";
 import { formatarDinheiro } from "./dinheiro";
 import {
   primeiraDiferenca,
@@ -452,6 +452,86 @@ export function textoSugestao(responsavel: string | null, tipo: string | null, o
   const vezes = outros.filter((o) => o !== "");
   const duvida = vezes.length > 0 ? ` (às vezes ${vezes.join(" ou ")})` : "";
   return `Sugestão: ${partes.join(" · ")}${duvida}`;
+}
+
+/** Textos da fila do Revisar (História 3.2, FR-13) e do passo final da importação. */
+export const TEXTOS_REVISAR = {
+  /** Fila vazia. */
+  tudo_revisado: "Tudo revisado. Nada novo neste mês",
+  /** Rótulo pequeno sobre a sugestão do item. */
+  sugestao: "Sugestão",
+  sem_sugestao: "Sem sugestão",
+  carregando: "Carregando…",
+  /** A coluna reservada ao lote da 3.3 fica vazia; este é o nome acessível da lista. */
+  lista: "Fila do Revisar",
+  confirmar: "Confirmar",
+  mudar: "Mudar",
+  /** Toast do ✓ e do "Mudar": o "Desfazer" vem do próprio toast. */
+  classificado: "Classificado",
+  titulo_mudar: "Mudar classificação",
+  responsavel: "Responsável",
+  tipo: "Tipo",
+  escolha: "Escolha…",
+  /** Passo final da importação. */
+  ir_para_revisao: "Ir para revisão",
+  ver_no_painel: "Ver no Painel",
+} as const;
+
+/** "Faltam 17" (um: "Falta 1"). */
+export function rotuloFaltam(n: number): string {
+  return n === 1 ? "Falta 1" : `Faltam ${n}`;
+}
+
+/** Título do grupo com 2+ itens: "SHOPEE · 3 lançamentos". */
+export function tituloGrupoRevisar(nome: string, quantidade: number): string {
+  return `${nome} · ${rotuloLancamentos(quantidade)}`;
+}
+
+/** Linha menor sob a mãe: "Ajuste - R$ 0,08". */
+export function rotuloAjusteDoItem(valorCentavos: number): string {
+  return `Ajuste ${formatarDinheiro(valorCentavos)}`;
+}
+
+/** Nome acessível do ✓: "Confirmar sugestão de MSC CRUZEIROS". */
+export function rotuloConfirmarItem(nome: string): string {
+  return `Confirmar sugestão de ${nome}`;
+}
+
+/** Nome acessível do "Mudar": "Mudar classificação de MSC CRUZEIROS". */
+export function rotuloMudarItem(nome: string): string {
+  return `Mudar classificação de ${nome}`;
+}
+
+/** "1 classificado", "30 classificados". */
+export function rotuloClassificados(n: number): string {
+  return n === 1 ? "1 classificado" : `${n} classificados`;
+}
+
+/** "17 para revisar". */
+export function rotuloParaRevisar(n: number): string {
+  return `${n} para revisar`;
+}
+
+/** "N classificados · N para revisar": o resumo do passo final da importação. */
+export function rotuloResumoClassificacao(classificados: number, paraRevisar: number): string {
+  return `${rotuloClassificados(classificados)} · ${rotuloParaRevisar(paraRevisar)}`;
+}
+
+/**
+ * A faixa de resumo da importação no topo do Revisar:
+ * "Importação de novembro · ✓ Conferido · 47 lançamentos · 30 classificados · 17 para revisar".
+ */
+export function rotuloFaixaImportacao(
+  mes: string,
+  selo: string,
+  r: { lancamentos: number; classificados: number; paraRevisar: number },
+): string {
+  return `Importação de ${formatarNomeDoMes(mes)} · ${selo} · ${rotuloLancamentos(r.lancamentos)} · ${rotuloResumoClassificacao(r.classificados, r.paraRevisar)}`;
+}
+
+/** Data do item quando a fila tem mais de um Mês: "Out/26" (do núcleo de datas). */
+export function rotuloMesDoItem(mes: string): string {
+  return formatarMes(mes);
 }
 
 /** "Salvo às 21:14". */

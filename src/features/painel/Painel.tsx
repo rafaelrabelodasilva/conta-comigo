@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { idsQueAcompanham, separarAjustes } from "@/domain/ajustes";
 import { conferir } from "@/domain/conferencia";
@@ -92,6 +93,9 @@ import { SeletorMes } from "./SeletorMes";
 // hero e a Conferência continuam com todas as linhas (o Ajuste é crédito).
 // Excluir a mãe exclui os Ajustes dela na mesma gravação; "Desfazer"
 // restaura todos.
+//
+// Fila do Revisar (História 3.2): o passo final da importação leva à tela
+// Revisar ("Ir para revisão") pelo roteador.
 
 const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status"] as const;
 
@@ -152,6 +156,7 @@ export function Painel({ titulo }: { titulo: string }) {
   const [selecao, setSelecao] = useState<ReadonlySet<string>>(() => new Set());
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const toast = useToast();
+  const router = useRouter();
 
   const faturas = useLinhas("faturas");
   const cartoes = useLinhas("fatura_cartoes");
@@ -489,7 +494,12 @@ export function Painel({ titulo }: { titulo: string }) {
             setExcluindo(null);
           }}
         />
-        <ImportarFatura aberta={importando} aoMudar={setImportando} aoImportar={mudarMes} />
+        <ImportarFatura
+          aberta={importando}
+          aoMudar={setImportando}
+          aoImportar={mudarMes}
+          aoIrParaRevisao={() => router.push("/revisar")}
+        />
       </Tela>
     </div>
   );

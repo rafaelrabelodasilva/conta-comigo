@@ -221,6 +221,7 @@ export type Database = {
           parcela_n: number | null
           parcela_total: number | null
           responsavel_id: string | null
+          revisado_em: string | null
           revisao_dados: Json | null
           revisao_motivo: Database["public"]["Enums"]["revisao_motivo"] | null
           status_id: string | null
@@ -249,6 +250,7 @@ export type Database = {
           parcela_n?: number | null
           parcela_total?: number | null
           responsavel_id?: string | null
+          revisado_em?: string | null
           revisao_dados?: Json | null
           revisao_motivo?: Database["public"]["Enums"]["revisao_motivo"] | null
           status_id?: string | null
@@ -277,6 +279,7 @@ export type Database = {
           parcela_n?: number | null
           parcela_total?: number | null
           responsavel_id?: string | null
+          revisado_em?: string | null
           revisao_dados?: Json | null
           revisao_motivo?: Database["public"]["Enums"]["revisao_motivo"] | null
           status_id?: string | null

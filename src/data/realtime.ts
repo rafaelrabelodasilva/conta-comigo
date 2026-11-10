@@ -17,6 +17,14 @@
 // (nunca a tabela inteira, que passaria do limite de 1000 linhas do
 // PostgREST); evento de outro Mês é ignorado, e linha que sai do Mês aberto
 // num UPDATE sai da memória. Sem Mês aberto, nada é lido.
+//
+// Escopo por predicado (`pertence`, História 3.2): a memória guarda só as
+// linhas que o predicado aceita (a fila do Revisar, `lancamentos` inteiro,
+// de todos os Meses). `filtrarLeitura` aplica o mesmo critério na consulta
+// SQL e `canal` dá um nome próprio ao canal (a mesma tabela, outro
+// gerenciador). Evento ou gravação que tira uma linha do predicado a remove
+// da memória (se for mais novo que a versão guardada); linha de fora nunca
+// entra.
 
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { useSyncExternalStore } from "react";
@@ -35,6 +43,7 @@ import {
   type LinhaBase,
   type StatusTabela,
 } from "./realtime-estado";
+import { guardadaPelaFila } from "@/domain/revisar";
 import { aoVoltar } from "./conexao";
 import { criarClienteNavegador } from "./supabase/navegador";
 
@@ -80,13 +89,22 @@ function mesDaLinha(linha: unknown): string | undefined {
   return (linha as { mes?: string } | null)?.mes;
 }
 
+/** A consulta de leitura de uma tabela (`from(tabela).select("*")`), para `filtrarLeitura`. */
+export type ConsultaLeitura = ReturnType<ReturnType<SupabaseClient["from"]>["select"]>;
+
 export function criarGerenciador<L extends LinhaBase>(opcoes: {
   tabela: string;
   obterCliente: () => SupabaseClient | null;
   /** Guarda e relê só o Mês aberto (coluna `mes`). */
   porMes?: boolean;
+  /** Guarda só as linhas que o predicado aceita (memória, eventos e gravações). */
+  pertence?: (linha: L) => boolean;
+  /** O mesmo critério de `pertence` na consulta SQL da releitura. */
+  filtrarLeitura?: (consulta: ConsultaLeitura) => ConsultaLeitura;
+  /** Nome do canal (padrão: `tabela:<tabela>`); dois gerenciadores da mesma tabela precisam de nomes diferentes. */
+  canal?: string;
 }): Gerenciador<L> {
-  const { tabela, obterCliente, porMes = false } = opcoes;
+  const { tabela, obterCliente, porMes = false, pertence, filtrarLeitura, canal: nomeDoCanal = `tabela:${tabela}` } = opcoes;
   let estado: EstadoTabela<L> = estadoInicial<L>();
   let mes: string | null = null;
   const comMes = (r: Omit<Retrato<L>, "mes">): Retrato<L> => (porMes ? { ...r, mes } : r);
@@ -112,8 +130,9 @@ export function criarGerenciador<L extends LinhaBase>(opcoes: {
     for (const ouvinte of ouvintes) ouvinte();
   }
 
-  /** A linha é do escopo da memória (sempre, fora do escopo por Mês). */
-  const doEscopo = (linha: L) => !porMes || (mes !== null && mesDaLinha(linha) === mes);
+  /** A linha é do escopo da memória (sempre, fora do escopo por Mês e por predicado). */
+  const doEscopo = (linha: L) =>
+    (!porMes || (mes !== null && mesDaLinha(linha) === mes)) && (pertence === undefined || pertence(linha));
 
   async function reler(): Promise<void> {
     const cliente = obterCliente();
@@ -132,14 +151,17 @@ export function criarGerenciador<L extends LinhaBase>(opcoes: {
       if (estado.status !== "pronto") mudar(marcarStatus(estado, "erro"));
     };
     try {
-      const consulta = cliente.from(tabela).select("*");
+      let consulta: ConsultaLeitura = cliente.from(tabela).select("*");
+      if (filtrarLeitura) consulta = filtrarLeitura(consulta);
       const { data, error } = await (porMes && lido !== null ? consulta.eq("mes", lido) : consulta);
       if (minha !== leitura) return;
       if (error || !data) {
         falhou();
         return;
       }
-      mudar(aplicarReleitura(estado, data as L[], aplicadasDurante));
+      // O critério da consulta e o predicado são o mesmo; conferir aqui fecha qualquer folga.
+      const lidas = pertence ? (data as L[]).filter(pertence) : (data as L[]);
+      mudar(aplicarReleitura(estado, lidas, aplicadasDurante));
       aplicadasDurante.clear();
     } catch {
       if (minha === leitura) falhou();
@@ -154,7 +176,7 @@ export function criarGerenciador<L extends LinhaBase>(opcoes: {
     }
     conectado = false;
     caiu = false;
-    const novo = cliente.channel(`tabela:${tabela}`);
+    const novo = cliente.channel(nomeDoCanal);
     canal = novo;
     // Ouvintes antes do subscribe(): nenhum evento se perde entre os dois.
     novo.on(
@@ -169,7 +191,7 @@ export function criarGerenciador<L extends LinhaBase>(opcoes: {
               : null;
         if (!evento) return;
         if (evento.tipo !== "DELETE" && !doEscopo(evento.nova)) {
-          // Outro Mês: ignorado. Linha do Mês aberto que mudou de Mês sai.
+          // Outro Mês (ou fora do predicado): ignorado. Linha da memória que saiu do escopo sai.
           // Só se o UPDATE for mais novo que a versão em memória (fora de ordem não tira).
           const atual = estado.porId.get(evento.nova.id);
           if (evento.tipo === "UPDATE" && atual && ehMaisNovo(evento.nova.updated_at, atual.updated_at)) {
@@ -229,10 +251,24 @@ export function criarGerenciador<L extends LinhaBase>(opcoes: {
     linha: (id) => estado.porId.get(id),
     linhas: () => retrato.linhas,
     aplicarLote(linhas) {
-      // Linhas de outro Mês (ex.: importação de outro Mês) não entram.
+      // Linhas de outro Mês (ex.: importação de outro Mês) ou fora do
+      // predicado não entram.
       const doMes = linhas.filter(doEscopo);
       for (const l of doMes) aplicadasDurante.add(l.id);
-      mudar(aplicarLote(estado, doMes));
+      let novo = aplicarLote(estado, doMes);
+      // Sob predicado, a gravação que tira a linha do escopo (ex.: sai da
+      // fila) a tira da memória, se for mais nova que a guardada.
+      if (pertence) {
+        for (const fora of linhas) {
+          if (doEscopo(fora)) continue;
+          const atual = novo.porId.get(fora.id);
+          if (atual && ehMaisNovo(fora.updated_at, atual.updated_at)) {
+            aplicadasDurante.delete(fora.id);
+            novo = aplicarEvento(novo, { tipo: "DELETE", antiga: { id: fora.id } as Partial<L> & { id: string } });
+          }
+        }
+      }
+      mudar(novo);
     },
     aplicarOtimista(mudancas) {
       const r = aplicarOtimista(estado, mudancas);
@@ -285,14 +321,18 @@ export async function recarregarTodos(): Promise<void> {
   await Promise.all([...gerenciadores.values()].map((g) => g.recarregar()));
 }
 
+/** Liga, uma vez, a releitura de todos os gerenciadores à volta da conexão. */
+function ligarAoDetector() {
+  if (ligadoAoDetector) return;
+  ligadoAoDetector = true;
+  aoVoltar(() => void recarregarTodos());
+}
+
 /** O gerenciador único da tabela (criado na primeira chamada). */
 export function gerenciador<T extends TabelaRealtime>(tabela: T): Gerenciador<LinhaDe<T>> {
   let g = gerenciadores.get(tabela);
   if (!g) {
-    if (!ligadoAoDetector) {
-      ligadoAoDetector = true;
-      aoVoltar(() => void recarregarTodos());
-    }
+    ligarAoDetector();
     // Só `lancamentos` tem escopo por Mês; as outras tabelas são lidas inteiras.
     g = criarGerenciador<LinhaBase>({
       tabela,
@@ -302,6 +342,45 @@ export function gerenciador<T extends TabelaRealtime>(tabela: T): Gerenciador<Li
     gerenciadores.set(tabela, g);
   }
   return g as unknown as Gerenciador<LinhaDe<T>>;
+}
+
+/**
+ * `guardadaPelaFila` (a fila e os Ajustes) como filtro do PostgREST, junto de
+ * `.is("excluido_em", null)`: a leitura do gerenciador da fila. Detalhe de
+ * transporte, por isso mora aqui e não no núcleo.
+ */
+export const FILTRO_OR_DA_FILA = "revisao_motivo.not.is.null,ajuste_de_id.not.is.null";
+
+/** A chave do gerenciador da fila no mapa (a mesma tabela `lancamentos`, outro escopo). */
+const CHAVE_FILA = "lancamentos:fila";
+
+/**
+ * O gerenciador da fila do Revisar (História 3.2): as linhas de
+ * `lancamentos` que `ehDaFila` aceita, de todos os Meses, mais os Ajustes
+ * não excluídos (para acompanharem a mãe). Tem canal próprio e entra em
+ * `recarregarTodos`. O de `lancamentos` guarda só o Mês aberto (AD-4); a
+ * fila e o contador do menu valem para todos os Meses.
+ */
+export function gerenciadorFila(): Gerenciador<LinhaDe<"lancamentos">> {
+  let g = gerenciadores.get(CHAVE_FILA);
+  if (!g) {
+    ligarAoDetector();
+    g = criarGerenciador<LinhaDe<"lancamentos">>({
+      tabela: "lancamentos",
+      obterCliente: criarClienteNavegador,
+      pertence: guardadaPelaFila,
+      filtrarLeitura: (consulta) => consulta.is("excluido_em", null).or(FILTRO_OR_DA_FILA),
+      canal: "tabela:lancamentos:fila",
+    }) as unknown as Gerenciador<LinhaBase>;
+    gerenciadores.set(CHAVE_FILA, g);
+  }
+  return g as unknown as Gerenciador<LinhaDe<"lancamentos">>;
+}
+
+/** Linhas da fila do Revisar em memória (todos os Meses), em tempo real. */
+export function useFilaRevisar(): Retrato<LinhaDe<"lancamentos">> {
+  const g = gerenciadorFila();
+  return useSyncExternalStore(g.assinar, g.retrato, () => RETRATO_SERVIDOR);
 }
 
 /** Linhas da tabela em memória, atualizadas em tempo real. */

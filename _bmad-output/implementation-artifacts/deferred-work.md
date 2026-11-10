@@ -60,14 +60,8 @@
   summary: Testar a falha do "Desfazer" do "Desvincular" (religar que falha mostra o toast; mãe excluída não chama `religar`).
   evidence: Low; `PainelLancamento.test.tsx` cobre só o Desfazer que dá certo e a falha do próprio Desvincular; tirar o `if (!d.ok) toast…` ou a guarda de `excluido_em` não quebra nenhum teste.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-regras-que-aprendem-com-a-classificacao.md`
-  summary: Na 3.2, decidir se os Lançamentos já gravados antes da 3.1 (out/26 e nov/26) sem classificação entram na fila do Revisar (marcar `revisao_motivo = 'sem_classificacao'`) ou ficam fora.
-  evidence: A migração da 3.1 cria `revisao_motivo` nulo para as linhas existentes; decisão 8-B do Rafael (09/11/2026) deixou para a 3.2. Marcar só preenche a coluna nova (cerca de 90 linhas hoje, menos as que forem classificadas até lá).
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-regras-que-aprendem-com-a-classificacao.md`
   summary: Na 3.4, decidir se `regras.ultimo_uso` também muda quando a importação aplica a Regra (hoje só `regrasRepo.aprender()` grava, e a Regra que classifica sozinha todo Mês mostra um "último uso" antigo).
   evidence: Definição da 3.1 ("só `aprender` grava em `regras`"); a tela de Regras aprendidas (3.4) mostra "última vez usada".
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-regras-que-aprendem-com-a-classificacao.md`
-  summary: Na 3.2, tratar a linha com `revisao_motivo` de sugestão cujos ids o `substituir_cadastro` anulou (cadastro excluído sem substituto): mostrar como "sem classificação" e ignorar `null` em `outros_responsaveis`.
-  evidence: `anular_id_jsonb` troca o id por `null` e mantém o motivo; o painel da 3.1 já esconde a sugestão vazia, mas a fila da 3.2 lê o motivo.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-11-reimportar-um-mes.md`
   summary: Testar a tradução do ramo `unique_violation` de `importar_fatura` (o `sqlerrm like '%faturas_owner_id_mes_key%'` devolve `fatura.mes_ja_importado` em vez do erro cru).
   evidence: Low. A 3.11 fixou o nome da restrição (teste do insert direto repetido) e o resultado de duas importações em paralelo, mas a trava `pg_advisory_xact_lock` faz a segunda cair na checagem explícita, não no ramo; um erro de digitação no padrão `like` passaria no CI. Só se alcança o ramo contornando a trava.

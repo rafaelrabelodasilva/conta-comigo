@@ -45,7 +45,16 @@ const falsos = vi.hoisted(() => {
   };
   const cliente = {
     from: () => ({
-      select: () => ({ eq: async () => ({ data: [linha], error: null }) }),
+      select: () => {
+        const leitura = {
+          eq: async () => ({ data: [linha], error: null }),
+          // A fila (gerenciadorFila) lê a tabela inteira com os filtros `is` e `or`.
+          is: () => leitura,
+          or: () => leitura,
+          then: (resolver: (r: unknown) => unknown) => Promise.resolve({ data: [linha], error: null }).then(resolver),
+        };
+        return leitura;
+      },
       update: (corpo: Record<string, unknown>) => consulta(corpo),
     }),
     channel: () => ({
@@ -66,8 +75,8 @@ vi.mock("./supabase/navegador", () => ({ criarClienteNavegador: () => falsos.cli
 vi.mock("./conexao", () => ({ estaOnline: () => true, aoVoltar: () => () => {} }));
 vi.mock("./regras-repo", () => ({ repoRegras: () => ({ aprender: falsos.aprender }) }));
 
-import { repoLancamentos } from "./lancamentos-repo";
-import { gerenciador } from "./realtime";
+import { repoLancamentos, repoLancamentosRevisar } from "./lancamentos-repo";
+import { gerenciador, gerenciadorFila } from "./realtime";
 
 describe("repoLancamentos() do navegador", () => {
   beforeEach(() => falsos.aprender.mockClear());
@@ -81,6 +90,30 @@ describe("repoLancamentos() do navegador", () => {
 
     const r = await repoLancamentos().atualizar("a", { responsavel_id: "r-rafael" });
     expect(r.ok).toBe(true);
+    expect(falsos.aprender).toHaveBeenCalledTimes(1);
+    expect(falsos.aprender).toHaveBeenCalledWith({
+      nome: "COBASI CRICIUMA",
+      responsavelAntes: null,
+      responsavelDepois: "r-rafael",
+      tipoDepois: "t-gatos",
+    });
+  });
+});
+
+// A tela Revisar usa a segunda instância, ligada ao gerenciador da fila:
+// trocar a memória por a do Mês aberto, ou tirar `aprender`, quebra este teste.
+describe("repoLancamentosRevisar() do navegador", () => {
+  beforeEach(() => falsos.aprender.mockClear());
+
+  it("atualiza a linha da memória da fila (e ela sai de lá) e ensina a Regra", async () => {
+    const fila = gerenciadorFila();
+    fila.assinar(() => {});
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fila.linha("a")).toBeTruthy();
+
+    const r = await repoLancamentosRevisar().atualizar("a", { responsavel_id: "r-rafael", tipo_id: "t-gatos" });
+    expect(r.ok).toBe(true);
+    expect(fila.linha("a")).toBeUndefined();
     expect(falsos.aprender).toHaveBeenCalledTimes(1);
     expect(falsos.aprender).toHaveBeenCalledWith({
       nome: "COBASI CRICIUMA",

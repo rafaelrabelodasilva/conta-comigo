@@ -4,9 +4,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { mensagem } from "@/domain/mensagens";
 
-// O menu usa o roteador do Next, que não existe no teste; aqui só importa
-// o que o layout mostra em cada largura.
-vi.mock("@/ui/NavRail", () => ({ NavRail: () => <nav data-teste="menu" /> }));
+// O menu usa o roteador do Next e o gerenciador da fila, que não existem no
+// teste; aqui só importa o que o layout mostra em cada largura.
+vi.mock("@/features/revisar/MenuLateral", () => ({ MenuLateral: () => <nav data-teste="menu" /> }));
 // O tema usa o gerenciador de Realtime; aqui só importa que é montado.
 vi.mock("@/features/configuracoes/AplicarTema", () => ({ AplicarTema: () => <i data-teste="tema" /> }));
 // A faixa lê o detector de conexão; aqui só importa onde ela fica.

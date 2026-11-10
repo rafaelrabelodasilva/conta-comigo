@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "./database.types";
 import { criarRepoLancamentos, mudancaDaColuna, type Aprender, type LinhaLancamento } from "./lancamentos-repo";
+import { guardadaPelaFila } from "@/domain/revisar";
 import { criarGerenciador } from "./realtime";
 
 // Cliente falso: registra o corpo de cada chamada e responde o que o teste
@@ -39,6 +40,7 @@ const linha = (id: string, extra: Partial<LinhaLancamento> = {}): LinhaLancament
     ajuste_de_id: null,
     revisao_motivo: null,
     revisao_dados: null,
+    revisado_em: null,
     created_at: T1,
     updated_at: T1,
     ...extra,
@@ -47,7 +49,7 @@ const linha = (id: string, extra: Partial<LinhaLancamento> = {}): LinhaLancament
 function montar(
   iniciais: LinhaLancamento[],
   responder: (c: Chamada) => { data: unknown; error: unknown },
-  opcoes: { aprender?: Aprender } = {},
+  opcoes: { aprender?: Aprender; fila?: boolean } = {},
 ) {
   const chamadas: Chamada[] = [];
   const consulta = (c: Chamada) => {
@@ -69,7 +71,11 @@ function montar(
   };
   const cliente = {
     from: () => ({
-      select: () => ({ eq: async () => ({ data: iniciais, error: null }) }),
+      select: () => ({
+        eq: async () => ({ data: iniciais, error: null }),
+        // A fila (sem escopo por Mês) lê a tabela inteira, sem `eq`.
+        then: (resolver: (r: unknown) => unknown) => Promise.resolve({ data: iniciais, error: null }).then(resolver),
+      }),
       insert: (corpo: Record<string, unknown>) => consulta({ tipo: "insert", corpo }),
       update: (corpo: Record<string, unknown>) => consulta({ tipo: "update", corpo }),
     }),
@@ -84,7 +90,9 @@ function montar(
     }),
   } as unknown as SupabaseClient<Database>;
 
-  const memoria = criarGerenciador<LinhaLancamento>({ tabela: "lancamentos", obterCliente: () => cliente, porMes: true });
+  const memoria = opcoes.fila
+    ? criarGerenciador<LinhaLancamento>({ tabela: "lancamentos", obterCliente: () => cliente, pertence: guardadaPelaFila })
+    : criarGerenciador<LinhaLancamento>({ tabela: "lancamentos", obterCliente: () => cliente, porMes: true });
   const repo = criarRepoLancamentos({ obterCliente: () => cliente, memoria, aprender: opcoes.aprender });
   return { chamadas, memoria, repo };
 }
@@ -358,7 +366,13 @@ describe("Ajustes de centavos (História 2.8)", () => {
     await m.repo.desvincular("aj", AGORA);
     expect(m.chamadas[0]).toEqual({
       tipo: "update",
-      corpo: { ajuste_de_id: null, revisao_motivo: "sem_classificacao", revisao_dados: null, editado_em: "2026-11-08T00:14:00.000Z" },
+      corpo: {
+        ajuste_de_id: null,
+        revisao_motivo: "sem_classificacao",
+        revisao_dados: null,
+        revisado_em: null,
+        editado_em: "2026-11-08T00:14:00.000Z",
+      },
       id: "aj",
     });
     expect(m.memoria.linha("aj")).toMatchObject({ ajuste_de_id: null, revisao_motivo: "sem_classificacao" });
@@ -514,6 +528,7 @@ describe("Regras que aprendem com a classificação (História 3.1)", () => {
       responsavel_id: "r-casal",
       revisao_motivo: null,
       revisao_dados: null,
+      revisado_em: "2026-11-08T00:14:00.000Z",
       editado_em: "2026-11-08T00:14:00.000Z",
     });
     expect(m.memoria.linha("a")).toMatchObject({ revisao_motivo: null, revisao_dados: null });
@@ -544,7 +559,13 @@ describe("Regras que aprendem com a classificação (História 3.1)", () => {
     expect(m.chamadas).toEqual([
       {
         tipo: "update",
-        corpo: { tipo_id: null, revisao_motivo: "sem_classificacao", revisao_dados: null, editado_em: "2026-11-08T00:14:00.000Z" },
+        corpo: {
+          tipo_id: null,
+          revisao_motivo: "sem_classificacao",
+          revisao_dados: null,
+          revisado_em: null,
+          editado_em: "2026-11-08T00:14:00.000Z",
+        },
         id: "a",
       },
     ]);
@@ -591,7 +612,12 @@ describe("Regras que aprendem com a classificação (História 3.1)", () => {
       { tipo: "update", corpo: { tipo_id: null, editado_em: "2026-11-08T00:14:00.000Z" }, ids: ["msc", "aj1"] },
       {
         tipo: "update",
-        corpo: { revisao_motivo: "sem_classificacao", revisao_dados: null, editado_em: "2026-11-08T00:14:00.000Z" },
+        corpo: {
+          revisao_motivo: "sem_classificacao",
+          revisao_dados: null,
+          revisado_em: null,
+          editado_em: "2026-11-08T00:14:00.000Z",
+        },
         id: "msc",
       },
     ]);
@@ -609,5 +635,218 @@ describe("Regras que aprendem com a classificação (História 3.1)", () => {
     expect(r).toMatchObject({ ok: true, linha: { id: "msc", tipo_id: null } });
     expect(m.memoria.linha("msc")).toMatchObject({ tipo_id: null, revisao_motivo: null });
     expect(m.memoria.linha("aj1")).toMatchObject({ tipo_id: null, revisao_motivo: null });
+  });
+});
+
+// Fila do Revisar (História 3.2): a segunda instância do repositório, ligada
+// ao gerenciador da fila (todos os Meses; a linha que sai da fila sai da
+// memória), `revisado_em` e o "Desfazer" (`devolverAFila`).
+describe("fila do Revisar (História 3.2)", () => {
+  const DADOS = { responsavel_id: "r-casal", tipo_id: "t-casa", outros_responsaveis: [] };
+  const sugerida = (id: string, extra: Partial<LinhaLancamento> = {}) =>
+    linha(id, { mes: "2026-11", revisao_motivo: "sugestao", revisao_dados: DADOS, ...extra });
+  const AGORA_ISO = "2026-11-08T00:14:00.000Z";
+
+  async function aguardar(m: ReturnType<typeof montar>) {
+    m.memoria.assinar(() => {});
+    await new Promise((r) => setTimeout(r, 0));
+    expect(m.memoria.retrato().status).toBe("pronto");
+  }
+
+  it("Confirmar: grava Responsável, Tipo, limpa motivo e dados, marca revisado_em e ensina a Regra; o item sai da memória da fila", async () => {
+    const aprender = vi.fn(async () => ({ ok: true }));
+    const a = sugerida("a");
+    const b = sugerida("b");
+    const m = montar([a, b], (c) => ({ data: linha("a", { ...a, ...c.corpo, updated_at: T2 }), error: null }), {
+      aprender,
+      fila: true,
+    });
+    await aguardar(m);
+    expect(m.memoria.linhas().map((l) => l.id)).toEqual(["a", "b"]);
+
+    const r = await m.repo.atualizar("a", { responsavel_id: "r-casal", tipo_id: "t-casa" }, { agora: AGORA });
+    expect(m.chamadas).toEqual([
+      {
+        tipo: "update",
+        corpo: {
+          responsavel_id: "r-casal",
+          tipo_id: "t-casa",
+          revisao_motivo: null,
+          revisao_dados: null,
+          revisado_em: AGORA_ISO,
+          editado_em: AGORA_ISO,
+        },
+        id: "a",
+      },
+    ]);
+    expect(r).toMatchObject({ ok: true, linha: { id: "a", revisao_motivo: null, revisado_em: AGORA_ISO } });
+    expect(m.memoria.linhas().map((l) => l.id)).toEqual(["b"]);
+    expect(aprender).toHaveBeenCalledWith({
+      nome: "BELLA PIETRA",
+      responsavelAntes: null,
+      responsavelDepois: "r-casal",
+      tipoDepois: "t-casa",
+    });
+  });
+
+  it("a Regra aplicou o Responsável: o ✓ grava só o Tipo e fecha o item", async () => {
+    const a = sugerida("a", { responsavel_id: "r-casal", revisao_dados: { ...DADOS, responsavel_id: null } });
+    const m = montar([a], (c) => ({ data: linha("a", { ...a, ...c.corpo, updated_at: T2 }), error: null }), { fila: true });
+    await aguardar(m);
+    await m.repo.atualizar("a", { responsavel_id: "r-casal", tipo_id: "t-casa" }, { agora: AGORA });
+    expect(m.chamadas[0].corpo).toEqual({
+      tipo_id: "t-casa",
+      revisao_motivo: null,
+      revisao_dados: null,
+      revisado_em: AGORA_ISO,
+      editado_em: AGORA_ISO,
+    });
+    expect(m.memoria.linhas()).toEqual([]);
+  });
+
+  it("linha da fila que já tem os dois: confirmar ainda a tira da fila", async () => {
+    const a = sugerida("a", { responsavel_id: "r-casal", tipo_id: "t-casa" });
+    const m = montar([a], (c) => ({ data: linha("a", { ...a, ...c.corpo, updated_at: T2 }), error: null }), { fila: true });
+    await aguardar(m);
+    await m.repo.atualizar("a", { responsavel_id: "r-casal", tipo_id: "t-casa" }, { agora: AGORA });
+    expect(m.chamadas[0].corpo).toEqual({
+      revisao_motivo: null,
+      revisao_dados: null,
+      revisado_em: AGORA_ISO,
+      editado_em: AGORA_ISO,
+    });
+    expect(m.memoria.linhas()).toEqual([]);
+  });
+
+  it("mãe com Ajuste: mãe e Ajuste classificados na mesma requisição; só a mãe ensina", async () => {
+    const aprender = vi.fn(async () => ({ ok: true }));
+    const mae = sugerida("msc", { nome: "MSC CRUZEIROS" });
+    const aj = linha("aj", { nome: "MSC CRUZEIROS", valor_centavos: -8, ajuste_de_id: "msc", mes: "2026-11" });
+    const m = montar([mae, aj], (c) => ({ data: (c.ids ?? []).map((id) => (id === "aj" ? { ...aj, ...c.corpo, updated_at: T2 } : { ...mae, ...c.corpo, updated_at: T2 })), error: null }), {
+      aprender,
+      fila: true,
+    });
+    await aguardar(m);
+    const r = await m.repo.atualizar("msc", { responsavel_id: "r-casal", tipo_id: "t-casa" }, { agora: AGORA, junto: ["aj"] });
+    expect(m.chamadas).toHaveLength(1);
+    expect(m.chamadas[0].ids).toEqual(["msc", "aj"]);
+    expect(m.chamadas[0].corpo).toMatchObject({ responsavel_id: "r-casal", tipo_id: "t-casa", revisado_em: AGORA_ISO });
+    expect(r.ok).toBe(true);
+    // A mãe saiu; o Ajuste (que acompanha a mãe) continua na memória, classificado.
+    expect(m.memoria.linha("msc")).toBeUndefined();
+    expect(m.memoria.linha("aj")).toMatchObject({ responsavel_id: "r-casal", tipo_id: "t-casa" });
+    expect(aprender).toHaveBeenCalledTimes(1);
+  });
+
+  it("falha ao gravar: o item fica na fila e nada é ensinado", async () => {
+    const aprender = vi.fn(async () => ({ ok: true }));
+    const a = sugerida("a");
+    const m = montar([a], () => ({ data: null, error: { code: "08006" } }), { aprender, fila: true });
+    await aguardar(m);
+    const r = await m.repo.atualizar("a", { responsavel_id: "r-casal", tipo_id: "t-casa" }, { agora: AGORA });
+    expect(r).toEqual({ ok: false, codigo: "salvar.falhou" });
+    expect(m.memoria.linha("a")).toMatchObject({ revisao_motivo: "sugestao", revisado_em: null });
+    expect(aprender).not.toHaveBeenCalled();
+  });
+
+  it("sem conexão: nada é tentado", async () => {
+    const a = sugerida("a");
+    const chamadas: unknown[] = [];
+    const cliente = {
+      from: () => ({
+        select: () => ({ then: (r: (v: unknown) => unknown) => Promise.resolve({ data: [a], error: null }).then(r) }),
+        update: () => chamadas.push("update"),
+      }),
+      channel: () => ({
+        on() {
+          return this;
+        },
+        subscribe(cb: (s: string) => void) {
+          cb("SUBSCRIBED");
+          return this;
+        },
+      }),
+    } as unknown as SupabaseClient<Database>;
+    const memoria = criarGerenciador<LinhaLancamento>({ tabela: "lancamentos", obterCliente: () => cliente, pertence: guardadaPelaFila });
+    const repo = criarRepoLancamentos({ obterCliente: () => cliente, memoria, online: () => false });
+    memoria.assinar(() => {});
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await repo.atualizar("a", { responsavel_id: "r-casal", tipo_id: "t-casa" })).toEqual({
+      ok: false,
+      codigo: "conexao.gravar_sem_conexao",
+    });
+    expect(await repo.devolverAFila("a", a)).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(chamadas).toEqual([]);
+    expect(memoria.linha("a")).toMatchObject({ revisao_motivo: "sugestao" });
+  });
+
+  it("devolverAFila (Desfazer): devolve classificação, motivo, dados e revisado_em e o item volta à fila", async () => {
+    const a = sugerida("a");
+    let versao = 1;
+    const m = montar([a], (c) => ({ data: linha("a", { ...a, ...c.corpo, updated_at: `2026-11-08T00:14:0${++versao}.000000+00:00` }), error: null }), {
+      fila: true,
+    });
+    await aguardar(m);
+    const anterior = { responsavel_id: null, tipo_id: null, revisao_motivo: a.revisao_motivo, revisao_dados: a.revisao_dados, revisado_em: null };
+    await m.repo.atualizar("a", { responsavel_id: "r-casal", tipo_id: "t-casa" }, { agora: AGORA });
+    expect(m.memoria.linha("a")).toBeUndefined();
+
+    const r = await m.repo.devolverAFila("a", anterior);
+    expect(m.chamadas[1]).toEqual({
+      tipo: "update",
+      corpo: {
+        responsavel_id: null,
+        tipo_id: null,
+        revisado_em: null,
+        revisao_motivo: "sugestao",
+        revisao_dados: DADOS,
+      },
+      id: "a",
+    });
+    expect(r).toMatchObject({ ok: true, linha: { id: "a", responsavel_id: null, revisao_motivo: "sugestao" } });
+    expect(m.memoria.linha("a")).toMatchObject({ revisao_motivo: "sugestao", responsavel_id: null });
+  });
+
+  it("devolverAFila com Ajustes: eles voltam primeiro (só a classificação), depois a mãe com o motivo", async () => {
+    const mae = sugerida("msc");
+    const aj = linha("aj", { ajuste_de_id: "msc", mes: "2026-11", responsavel_id: "r-casal", tipo_id: "t-casa", revisado_em: AGORA_ISO });
+    const m = montar([aj], (c) => ({
+      data: c.ids ? c.ids.map((id) => linha(id, { ...aj, ...c.corpo, updated_at: T2 })) : linha("msc", { ...mae, ...c.corpo, updated_at: T2 }),
+      error: null,
+    }), { fila: true });
+    await aguardar(m);
+    const anterior = { responsavel_id: null, tipo_id: null, revisao_motivo: mae.revisao_motivo, revisao_dados: mae.revisao_dados, revisado_em: null };
+    const r = await m.repo.devolverAFila("msc", anterior, { junto: ["aj"] });
+    // Ajuste em memória: um `in (ids)` só com ele? Um id só vai por `eq`.
+    expect(m.chamadas.map((c) => c.corpo)).toEqual([
+      { responsavel_id: null, tipo_id: null, revisado_em: null },
+      { responsavel_id: null, tipo_id: null, revisado_em: null, revisao_motivo: "sugestao", revisao_dados: DADOS },
+    ]);
+    expect(r).toMatchObject({ ok: true, linha: { id: "msc", revisao_motivo: "sugestao" } });
+    expect(m.memoria.linha("aj")).toMatchObject({ responsavel_id: null, tipo_id: null, revisado_em: null });
+  });
+
+  it("devolverAFila: se os Ajustes falham, a mãe nem é tocada", async () => {
+    const aj = linha("aj", { ajuste_de_id: "msc", mes: "2026-11" });
+    const m = montar([aj], () => ({ data: null, error: { code: "08006" } }), { fila: true });
+    await aguardar(m);
+    const anterior = { responsavel_id: null, tipo_id: null, revisao_motivo: "sugestao" as const, revisao_dados: DADOS, revisado_em: null };
+    expect(await m.repo.devolverAFila("msc", anterior, { junto: ["aj"] })).toEqual({ ok: false, codigo: "salvar.falhou" });
+    expect(m.chamadas).toHaveLength(1);
+  });
+
+  it("limpar o Tipo de uma linha revisada (Painel): volta à fila com revisado_em nulo", async () => {
+    const revisada = linha("a", { responsavel_id: "r-casal", tipo_id: "t-casa", revisado_em: AGORA_ISO });
+    const m = montar([revisada], (c) => ({ data: linha("a", { ...revisada, ...c.corpo, updated_at: T2 }), error: null }));
+    await pronto(m);
+    await m.repo.atualizar("a", { tipo_id: null }, { agora: AGORA });
+    expect(m.chamadas[0].corpo).toEqual({
+      tipo_id: null,
+      revisao_motivo: "sem_classificacao",
+      revisao_dados: null,
+      revisado_em: null,
+      editado_em: AGORA_ISO,
+    });
+    expect(m.memoria.linha("a")).toMatchObject({ revisao_motivo: "sem_classificacao", revisado_em: null });
   });
 });

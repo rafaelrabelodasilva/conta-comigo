@@ -105,10 +105,27 @@ vi.mock("@/data/lancamentos-repo", () => ({
   repoLancamentos: () => repoL,
   mudancaDaColuna: (m: { coluna: string; valor: unknown }) => ({ [m.coluna]: m.valor }),
 }));
+// O roteador do Next não existe no teste: "Ir para revisão" só registra o destino.
+const roteador = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => roteador }));
 vi.mock("@/features/importar/ImportarFatura", () => ({
-  ImportarFatura: ({ aberta, aoImportar }: { aberta: boolean; aoImportar: (mes: string) => void }) => {
+  ImportarFatura: ({
+    aberta,
+    aoImportar,
+    aoIrParaRevisao,
+  }: {
+    aberta: boolean;
+    aoImportar: (mes: string) => void;
+    aoIrParaRevisao: () => void;
+  }) => {
     falso.importarMes = aoImportar;
-    return aberta ? <div data-testid="janela-importar" /> : null;
+    return aberta ? (
+      <div data-testid="janela-importar">
+        <button type="button" onClick={aoIrParaRevisao}>
+          ir-para-revisao-teste
+        </button>
+      </div>
+    ) : null;
   },
 }));
 
@@ -354,6 +371,14 @@ describe("Painel do Mês", () => {
     expect(screen.queryByTestId("janela-importar")).toBeNull();
     await userEvent.setup().click(botoes[1]);
     expect(screen.getByTestId("janela-importar")).toBeTruthy();
+  });
+
+  it("'Ir para revisão' da janela de importação leva à tela Revisar", async () => {
+    renderizar();
+    roteador.push.mockClear();
+    await userEvent.setup().click(screen.getAllByRole("button", { name: TEXTOS_IMPORTAR.botao })[0]);
+    await userEvent.setup().click(screen.getByRole("button", { name: "ir-para-revisao-teste" }));
+    expect(roteador.push).toHaveBeenCalledExactlyOnceWith("/revisar");
   });
 
   it("sem nenhuma Fatura, a grade vazia chama para importar a primeira", () => {
