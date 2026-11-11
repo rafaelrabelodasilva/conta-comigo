@@ -14,10 +14,17 @@
 //   `mes = somarMeses(Mês da Fatura, k)`, `lancado_por = 'sistema'` e a mesma
 //   classificação da linha real. Meses que já têm Fatura ficam de fora (a 3.6
 //   casa o que chegar).
+// - Casamento (História 3.6, FR-45, AD-8): `casarPrevistos` junta, 1-para-1 e
+//   de forma determinística, as parcelas reais da Fatura aos previstos do
+//   Mês pela chave `(nome_normalizado, parcela_n, parcela_total)`; os reais na
+//   ordem da fatura, os previstos por Valor igual primeiro e depois por
+//   `ocorrencia`. `aplicarCasamento` dá ao casado a classificação e o motivo
+//   ("Valor mudou" quando o Valor difere e a linha já está classificada).
 // - Propagação (decisão 4-A): quando a parcela real é reclassificada, os
 //   previstos vazios recebem sozinhos; os que já têm outro valor só mudam se
 //   Rafael responder "Aplicar a todos", e só se a parcela já tinha valor.
 
+import type { DadosRevisao, DadosValorMudou, MotivoRevisao } from "./classificacao";
 import { somarMeses } from "./ciclo";
 
 /** A linha é um previsto? (`lancado_por = 'sistema'`: o app a criou, a fatura ainda não chegou.) */
@@ -215,4 +222,148 @@ export function juntarMudancas(...listas: readonly (readonly MudancaDoPrevisto[]
     for (const m of lista) porId.set(m.id, { ...porId.get(m.id), ...m.corpo });
   }
   return [...porId].map(([id, corpo]) => ({ id, corpo }));
+}
+
+/** O que o casamento usa de uma linha real da Fatura. */
+export type RealParaCasar = Pick<
+  LinhaParaSerie,
+  "nome_normalizado" | "valor_centavos" | "parcela_n" | "parcela_total" | "ordem_fatura" | "ajuste_de_ordem"
+>;
+
+/** Um previsto do Mês importado: `sistema`, não excluído, com a `ocorrencia` da Série. */
+export type PrevistoParaCasar = {
+  id: string;
+  nome_normalizado: string;
+  parcela_n: number;
+  parcela_total: number;
+  valor_centavos: number;
+  ocorrencia: number;
+  responsavel_id: string | null;
+  tipo_id: string | null;
+  /** A chave da Série do previsto; com ela, a parcela real sem par não cai numa Série já ocupada. */
+  serie?: ChaveDaSerie;
+};
+
+export type ParCasado = {
+  /** A `ordem_fatura` da linha real. */
+  ordem_fatura: number;
+  previsto_id: string;
+};
+
+export type ResultadoDoCasamento = {
+  casados: ParCasado[];
+  /** Ids dos previstos que a Fatura não trouxe ("Não veio na fatura"). */
+  semPar: string[];
+};
+
+/**
+ * Casa os reais da Fatura (só parcelas de Série, sem Ajuste) com os previstos
+ * do Mês, 1-para-1 (AD-8). Em cada grupo `(nome_normalizado, parcela_n,
+ * parcela_total)`: 1ª passada, cada real na ordem da fatura pega o previsto
+ * livre de Valor igual com menor `ocorrencia`; 2ª passada, os reais que
+ * sobraram pegam, na ordem, o livre de menor `ocorrencia` (Valor diferente).
+ * O que sobra de previsto é `semPar`. Não depende da ordem de entrada dos
+ * previstos nem de dados fora dos argumentos.
+ */
+export function casarPrevistos(
+  extraidos: readonly RealParaCasar[],
+  previstos: readonly PrevistoParaCasar[],
+): ResultadoDoCasamento {
+  const chave = (l: { nome_normalizado: string; parcela_n: number | null; parcela_total: number | null }) =>
+    JSON.stringify([l.nome_normalizado, l.parcela_n, l.parcela_total]);
+  const livres = new Map<string, PrevistoParaCasar[]>();
+  for (const p of [...previstos].sort((a, b) => a.ocorrencia - b.ocorrencia || (a.id < b.id ? -1 : 1))) {
+    const k = chave(p);
+    const lista = livres.get(k);
+    if (lista) lista.push(p);
+    else livres.set(k, [p]);
+  }
+  const reais = extraidos.filter(ehParcelaDeSerie).sort((a, b) => a.ordem_fatura - b.ordem_fatura);
+  const casados = new Map<number, string>();
+
+  for (const r of reais) {
+    const lista = livres.get(chave(r));
+    const i = lista?.findIndex((p) => p.valor_centavos === r.valor_centavos) ?? -1;
+    if (lista && i >= 0) casados.set(r.ordem_fatura, lista.splice(i, 1)[0].id);
+  }
+  for (const r of reais) {
+    if (casados.has(r.ordem_fatura)) continue;
+    const lista = livres.get(chave(r));
+    if (lista && lista.length > 0) casados.set(r.ordem_fatura, lista.shift()!.id);
+  }
+
+  const usados = new Set(casados.values());
+  return {
+    casados: reais.flatMap((r) => {
+      const id = casados.get(r.ordem_fatura);
+      return id === undefined ? [] : [{ ordem_fatura: r.ordem_fatura, previsto_id: id }];
+    }),
+    semPar: previstos.filter((p) => !usados.has(p.id)).map((p) => p.id).sort(),
+  };
+}
+
+/** A classificação e o motivo que a importação calculou para uma linha. */
+export type ClassificacaoCalculada = {
+  responsavel_id: string | null;
+  tipo_id: string | null;
+  revisao_motivo: MotivoRevisao | null;
+  revisao_dados: DadosRevisao | DadosValorMudou | null;
+};
+
+/**
+ * Aplica o casamento às linhas já classificadas pelas Regras. A linha casada
+ * guarda `previsto_id` e perde a chave da Série (a Série é a do previsto);
+ * Responsável e Tipo são os do previsto, e o campo vazio recebe o que as
+ * Regras calcularam. Completa e com Valor igual: sem motivo. Completa e com
+ * Valor diferente: `valor_mudou` com `{ antes_centavos }`. Incompleta: o
+ * motivo da classificação normal (decisão Q2-A).
+ */
+export function aplicarCasamento<
+  L extends ClassificacaoCalculada & RealParaCasar & { serie: ChaveDaSerie | null },
+>(
+  lancamentos: readonly L[],
+  casamento: ResultadoDoCasamento,
+  previstos: readonly PrevistoParaCasar[],
+): (L & { previsto_id: string | null })[] {
+  const previstoDe = new Map(previstos.map((p) => [p.id, p]));
+  const idDoPar = new Map(casamento.casados.map((c) => [c.ordem_fatura, c.previsto_id]));
+  const aplicadas = lancamentos.map((l) => {
+    const previsto = previstoDe.get(idDoPar.get(l.ordem_fatura) ?? "");
+    if (!previsto) return { ...l, previsto_id: null };
+    const responsavel_id = previsto.responsavel_id ?? l.responsavel_id;
+    const tipo_id = previsto.tipo_id ?? l.tipo_id;
+    const completa = responsavel_id !== null && tipo_id !== null;
+    const mudou = previsto.valor_centavos !== l.valor_centavos;
+    let revisao_motivo: MotivoRevisao | null;
+    let revisao_dados: DadosRevisao | DadosValorMudou | null = null;
+    if (!completa) {
+      revisao_motivo = l.revisao_motivo ?? "sem_classificacao";
+      revisao_dados = l.revisao_dados;
+    } else if (mudou) {
+      revisao_motivo = "valor_mudou";
+      revisao_dados = { antes_centavos: previsto.valor_centavos } satisfies DadosValorMudou;
+    } else {
+      revisao_motivo = null;
+    }
+    return { ...l, serie: null, responsavel_id, tipo_id, revisao_motivo, revisao_dados, previsto_id: previsto.id };
+  });
+  // Parcela real sem previsto: a Série calculada pode já ter essa parcela num previsto do Mês (compras
+  // idênticas em que um previsto foi excluído ou casou com outra ocorrencia). Sobe a `ocorrencia` até uma
+  // Série livre, para a RPC não recusar a importação inteira.
+  const chaveDaParcela = (k: ChaveDaSerie, n: number | null) =>
+    JSON.stringify([k.nome_normalizado, k.parcela_total, k.valor_parcela_centavos, k.mes_primeira_parcela, k.ocorrencia, n]);
+  const ocupadas = new Set(previstos.flatMap((p) => (p.serie ? [chaveDaParcela(p.serie, p.parcela_n)] : [])));
+  const livres = aplicadas.map((l) => {
+    if (l.previsto_id !== null || l.serie === null) return l;
+    let serie = l.serie;
+    while (ocupadas.has(chaveDaParcela(serie, l.parcela_n))) serie = { ...serie, ocorrencia: serie.ocorrencia + 1 };
+    ocupadas.add(chaveDaParcela(serie, l.parcela_n));
+    return serie === l.serie ? l : { ...l, serie };
+  });
+  // O Ajuste de centavos segue a mãe: recebe a classificação final dela (a do previsto, se casou).
+  const porOrdem = new Map(livres.map((l) => [l.ordem_fatura, l]));
+  return livres.map((l) => {
+    const mae = l.ajuste_de_ordem === null ? undefined : porOrdem.get(l.ajuste_de_ordem);
+    return mae ? { ...l, responsavel_id: mae.responsavel_id, tipo_id: mae.tipo_id } : l;
+  });
 }

@@ -23,11 +23,21 @@
 //   os do Mês aberto entram na memória (as outras linhas chegam quando o Mês
 //   for aberto). `lerReimportacao` conta no banco os previstos que a
 //   reimportação apagaria (`sistema`, sem edição, não excluídos).
+// - Casamento (História 3.6): `lerPrevistosDoMes` lê do banco, de uma vez, os
+//   previstos do Mês importado (`sistema`, não excluídos, sem Fatura) com a
+//   `ocorrencia` da Série e o `updated_at` mais novo do Mês; o núcleo
+//   (`casarPrevistos`) calcula o casamento com eles e `importar` manda esse
+//   mesmo `updated_at` como trava (se um previsto mudou em outro aparelho, a
+//   RPC recusa com `fatura.mes_mudou`). A RPC devolve os casados em
+//   `lancamentos` e os previstos sem par em `previstos`; só os do Mês aberto
+//   entram na memória. `lerReimportacao` conta as linhas casadas: com elas a
+//   RPC recusa a reimportação (`fatura.reimportacao_com_casados`).
 // - "Dispensar" o alerta da Conferência (e o "Desfazer"): grava só
 //   `faturas.alerta_dispensado_em`, com otimismo.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Importacao, LinhaParaReimportar } from "@/domain/importacao-fatura";
+import type { PrevistoParaCasar } from "@/domain/previstos";
 import { estaOnline } from "./conexao";
 import type { Database, Json } from "./database.types";
 import { FALHOU, SEM_CONEXAO, gravarComOtimismo, type Online, type ResultadoGravacao } from "./gravacao";
@@ -44,6 +54,7 @@ const CODIGOS_DA_RPC = new Set([
   "fatura.mes_ja_importado",
   "fatura.mes_mudou",
   "fatura.previstos_sem_casamento",
+  "fatura.reimportacao_com_casados",
   "auth.sessao_expirou",
 ]);
 
@@ -76,6 +87,13 @@ export type LeituraReimportacao = Substituir & {
  */
 export type ResultadoLeituraReimportacao =
   | { ok: true; valor: LeituraReimportacao | null }
+  | { ok: false; codigo: string };
+
+/** Os previstos do Mês importado e o `updated_at` mais novo do Mês, lidos juntos. */
+export type LeituraDePrevistos = { previstos: PrevistoParaCasar[]; atualizadoEm: string | null };
+
+export type ResultadoLeituraDePrevistos =
+  | ({ ok: true } & LeituraDePrevistos)
   | { ok: false; codigo: string };
 
 type Removidos = { fatura_id: string; cartoes: string[]; lancamentos: string[]; previstos?: string[] };
@@ -118,7 +136,11 @@ function ehGravados(dados: unknown): dados is Gravados {
   );
 }
 
-const COLUNAS_REIMPORTACAO = "id, fatura_id, excluido_em, responsavel_id, tipo_id, observacao, status_id, updated_at";
+const COLUNAS_REIMPORTACAO =
+  "id, fatura_id, excluido_em, responsavel_id, tipo_id, observacao, status_id, casado_em, updated_at";
+
+const COLUNAS_DO_MES =
+  "id, fatura_id, excluido_em, lancado_por, nome_normalizado, parcela_n, parcela_total, valor_centavos, responsavel_id, tipo_id, serie_id, updated_at";
 
 /** O `updated_at` mais novo dos Lançamentos do Mês entre as linhas dadas (null se nenhum). */
 export function ultimaAlteracaoDoMes(linhas: readonly LinhaLancamento[], mes: string): string | null {
@@ -238,17 +260,82 @@ export function criarRepoFaturas(deps: {
         if (lidosPrevistos.error || !lidosPrevistos.data) return falhou(lidosPrevistos.error);
         const linhas = lidasLinhas.data
           .filter((l) => l.fatura_id === faturaId)
-          .map(({ excluido_em, responsavel_id, tipo_id, observacao, status_id }) => ({
+          .map(({ excluido_em, responsavel_id, tipo_id, observacao, status_id, casado_em }) => ({
             excluido_em,
             responsavel_id,
             tipo_id,
             observacao,
             status_id,
+            casado_em,
           }));
         return {
           ok: true,
           valor: { faturaId, atualizadoEm, linhas, statusPadraoId, previstosAApagar: lidosPrevistos.data.length },
         };
+      } catch {
+        return { ok: false, codigo: "carregar.falhou" };
+      }
+    },
+
+    /**
+     * Para o casamento (História 3.6): os previstos do Mês (`sistema`, não
+     * excluídos, sem Fatura, com parcela e Série) e o `updated_at` mais novo
+     * de todos os Lançamentos do Mês (inclusive excluídos, como a RPC
+     * compara), tudo do banco e numa leitura só do Mês.
+     */
+    async lerPrevistosDoMes(mes: string): Promise<ResultadoLeituraDePrevistos> {
+      if (!online()) return SEM_CONEXAO;
+      const cliente = obterCliente();
+      if (!cliente) return { ok: false, codigo: "carregar.falhou" };
+      try {
+        const lidas = await cliente.from("lancamentos").select(COLUNAS_DO_MES).eq("mes", mes);
+        if (lidas.error || !lidas.data) return { ok: false, codigo: "carregar.falhou" };
+        let atualizadoEm: string | null = null;
+        for (const l of lidas.data) {
+          if (atualizadoEm === null || ehMaisNovo(l.updated_at, atualizadoEm)) atualizadoEm = l.updated_at;
+        }
+        const candidatos = lidas.data.filter(
+          (l) =>
+            l.lancado_por === "sistema" &&
+            l.excluido_em === null &&
+            l.fatura_id === null &&
+            l.serie_id !== null &&
+            l.parcela_n !== null &&
+            l.parcela_total !== null,
+        );
+        if (candidatos.length === 0) return { ok: true, previstos: [], atualizadoEm };
+        const idsDasSeries = [...new Set(candidatos.map((l) => l.serie_id as string))];
+        const series = await cliente
+          .from("series")
+          .select("id, ocorrencia, nome_normalizado, parcela_total, valor_parcela_centavos, mes_primeira_parcela")
+          .in("id", idsDasSeries);
+        if (series.error || !series.data) return { ok: false, codigo: "carregar.falhou" };
+        const dasSeries = new Map(series.data.map((s) => [s.id, s]));
+        const previstos: PrevistoParaCasar[] = candidatos.flatMap((l) => {
+          const serie = dasSeries.get(l.serie_id as string);
+          if (serie === undefined) return [];
+          const ocorrencia = serie.ocorrencia;
+          return [
+            {
+              id: l.id,
+              nome_normalizado: l.nome_normalizado,
+              parcela_n: l.parcela_n as number,
+              parcela_total: l.parcela_total as number,
+              valor_centavos: l.valor_centavos,
+              ocorrencia,
+              responsavel_id: l.responsavel_id,
+              tipo_id: l.tipo_id,
+              serie: {
+                nome_normalizado: serie.nome_normalizado,
+                parcela_total: serie.parcela_total,
+                valor_parcela_centavos: serie.valor_parcela_centavos,
+                mes_primeira_parcela: serie.mes_primeira_parcela,
+                ocorrencia,
+              },
+            },
+          ];
+        });
+        return { ok: true, previstos, atualizadoEm };
       } catch {
         return { ok: false, codigo: "carregar.falhou" };
       }
@@ -269,7 +356,12 @@ export function criarRepoFaturas(deps: {
      * Com `substituir` (reimportação), a RPC apaga a Fatura confirmada e as
      * linhas dela; os ids apagados saem da memória antes.
      */
-    async importar(importacao: Importacao, substituir?: Substituir): Promise<ResultadoImportacao> {
+    async importar(
+      importacao: Importacao,
+      substituir?: Substituir,
+      /** O `updated_at` do Mês lido junto dos previstos do casamento (`lerPrevistosDoMes`); sem ele, lê agora. */
+      lidoJuntoDosPrevistos?: string | null,
+    ): Promise<ResultadoImportacao> {
       if (!online()) return SEM_CONEXAO;
       const cliente = obterCliente();
       if (!cliente) return FALHOU;
@@ -277,6 +369,8 @@ export function criarRepoFaturas(deps: {
         let lidoEm: string | null;
         if (substituir) {
           lidoEm = substituir.atualizadoEm;
+        } else if (lidoJuntoDosPrevistos !== undefined) {
+          lidoEm = lidoJuntoDosPrevistos;
         } else {
           const lida = await lerUltimaAlteracao(cliente, importacao.fatura.mes);
           if (!lida.ok) return { ok: false, codigo: lida.codigo };
@@ -287,6 +381,7 @@ export function criarRepoFaturas(deps: {
           dados_cartoes: importacao.cartoes as unknown as Json,
           dados_lancamentos: importacao.lancamentos as unknown as Json,
           dados_previstos: importacao.previstos as unknown as Json,
+          previstos_sem_par: (importacao.previstos_sem_par ?? []) as unknown as Json,
           ...(lidoEm === null ? {} : { lancamentos_atualizados_em: lidoEm }),
           ...(substituir ? { substituir_fatura_id: substituir.faturaId } : {}),
         });

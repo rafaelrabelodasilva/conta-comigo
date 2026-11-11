@@ -94,9 +94,11 @@ export const MENSAGENS = {
   "fatura.mes_ja_importado": "A fatura deste Mês já foi importada. Nada foi gravado.",
   "fatura.mes_mudou":
     "Os lançamentos deste Mês mudaram em outro aparelho. Nada foi gravado. Tente de novo.",
-  // História 3.5: o casamento do previsto com a parcela real é da 3.6.
+  // História 3.6: o casamento junta os previstos à fatura; este erro só sobra se os previstos do Mês mudaram durante a importação.
   "fatura.previstos_sem_casamento":
-    "Este Mês já tem parcelas previstas de compras parceladas, e o app ainda não sabe juntá-las às da fatura. Nada foi gravado.",
+    "As parcelas previstas deste Mês mudaram durante a importação. Nada foi gravado. Importe a fatura de novo.",
+  "fatura.reimportacao_com_casados":
+    "Esta fatura tem parcelas que vieram de previstos, e importar de novo ainda não mantém a classificação delas. Nada foi gravado.",
   "lancamento.nome_vazio": "Preencha o nome.",
   "lancamento.nome_longo": "Use até 200 caracteres.",
   "lancamento.valor_vazio": "Preencha o valor.",
@@ -229,6 +231,29 @@ export function avisoReimportar(mes: string, r: ResumoReimportacao): string {
         ? " Apaga também o 1 previsto que ela criou e você não mexeu."
         : ` Apaga também os ${r.previstos} previstos que ela criou e você não mexeu.`;
   return `Esta fatura já foi importada. Importar de novo apaga ${linhas} (${mexidos}) e importa tudo de novo.${excluidos}${previstos}`;
+}
+
+/**
+ * Aviso do passo 3 quando a Fatura do Mês já tem parcelas casadas com
+ * previstos (História 3.6): reimportar apagaria o `id` e a classificação delas
+ * (a reimportação que mantém a classificação é a História 3.12). Só "Cancelar".
+ */
+export function avisoReimportarBloqueado(mes: string, casados: number): string {
+  const quais =
+    casados === 1
+      ? "1 lançamento de " + formatarNomeDoMes(mes) + " veio de uma parcela prevista"
+      : `${casados} lançamentos de ${formatarNomeDoMes(mes)} vieram de parcelas previstas`;
+  return `Esta fatura já foi importada e ${quais}. Importar de novo apagaria a classificação deles, e a reimportação que mantém a classificação ainda não existe. Nada será apagado.`;
+}
+
+/** Passo 3 e resumo final: "3 previstos casaram com a fatura" (um: "1 previsto casou com a fatura"). */
+export function rotuloPrevistosCasados(n: number): string {
+  return n === 1 ? "1 previsto casou com a fatura" : `${n} previstos casaram com a fatura`;
+}
+
+/** Passo 3 e resumo final: "2 previstos não vieram na fatura" (um: "1 previsto não veio na fatura"). */
+export function rotuloPrevistosNaoVieram(n: number): string {
+  return n === 1 ? "1 previsto não veio na fatura" : `${n} previstos não vieram na fatura`;
 }
 
 /** Passo 3: "17 parcelas previstas serão criadas nos próximos meses" (uma: "1 parcela prevista será criada…"). */
@@ -529,6 +554,16 @@ export const TEXTOS_REVISAR = {
   titulo_lote_tipo: "Tipo dos selecionados",
   /** Nenhum dos marcados tem sugestão completa: nada é gravado. */
   nenhuma_sugestao_completa: "Nenhum dos selecionados tem sugestão completa",
+  /** Variante "Valor mudou" (História 3.6): o ✓ mantém a classificação. */
+  valor_mudou: "Valor mudou",
+  manter_classificacao: "Manter classificação",
+  /** Variante "Não veio na fatura" (História 3.6): o previsto sem par. */
+  nao_veio: "Não veio na fatura",
+  previsto: "Previsto",
+  remover_previsto: "Remover previsto",
+  manter: "Manter",
+  previsto_removido: "Previsto removido",
+  previsto_mantido: "Previsto mantido",
   /** Passo final da importação. */
   ir_para_revisao: "Ir para revisão",
   ver_no_painel: "Ver no Painel",
@@ -618,6 +653,27 @@ export function rotuloAjusteDoItem(valorCentavos: number): string {
 /** Nome acessível do ✓: "Confirmar sugestão de MSC CRUZEIROS". */
 export function rotuloConfirmarItem(nome: string): string {
   return `Confirmar sugestão de ${nome}`;
+}
+
+/** "Antes R$ 445,89 → agora R$ 449,10" (variante "Valor mudou", História 3.6). */
+export function textoValorMudou(antesCentavos: number | null, agoraCentavos: number): string {
+  const agora = `agora ${formatarDinheiro(agoraCentavos)}`;
+  return antesCentavos === null ? `Valor mudou → ${agora}` : `Antes ${formatarDinheiro(antesCentavos)} → ${agora}`;
+}
+
+/** Nome acessível do ✓ de "Valor mudou": "Manter classificação de MAGALU". */
+export function rotuloManterClassificacao(nome: string): string {
+  return `Manter classificação de ${nome}`;
+}
+
+/** Nome acessível de "Remover previsto": "Remover previsto de MAGALU". */
+export function rotuloRemoverPrevisto(nome: string): string {
+  return `Remover previsto de ${nome}`;
+}
+
+/** Nome acessível de "Manter": "Manter previsto de MAGALU". */
+export function rotuloManterPrevisto(nome: string): string {
+  return `Manter previsto de ${nome}`;
 }
 
 /** Nome acessível do "Mudar": "Mudar classificação de MSC CRUZEIROS". */

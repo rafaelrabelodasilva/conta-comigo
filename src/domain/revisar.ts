@@ -16,9 +16,9 @@
 // - Grupos por `normalizarNome` (o Nome manda, o Apelido só aparece).
 
 import { idsQueAcompanham } from "./ajustes";
-import { lerDadosRevisao, type MotivoRevisao } from "./classificacao";
+import { lerDadosRevisao, lerValorAntes, type MotivoRevisao } from "./classificacao";
 import { normalizarNome } from "./importacao-fatura";
-import { TEXTOS_REVISAR, textoSugestao, tituloGrupoRevisar } from "./mensagens";
+import { TEXTOS_REVISAR, textoSugestao, textoValorMudou, tituloGrupoRevisar } from "./mensagens";
 import { nomeExibido } from "./painel";
 
 /** O que a fila usa de uma linha de `lancamentos`. */
@@ -39,6 +39,8 @@ export type LinhaDaFila = {
   revisao_motivo: MotivoRevisao | null;
   revisao_dados: unknown;
   ordem_fatura: number | null;
+  /** A Fatura da linha; nulo no previsto (História 3.6). */
+  fatura_id?: string | null;
 };
 
 type SoParaPertencer = Pick<LinhaDaFila, "excluido_em" | "ajuste_de_id" | "revisao_motivo">;
@@ -67,7 +69,14 @@ export type CadastrosDaFila = {
   tipos: readonly { id: string; nome: string; arquivado: boolean }[];
 };
 
-export type VarianteDoItem = "sugestao" | "sugestao_duvida" | "sem_sugestao";
+export type VarianteDoItem =
+  | "sugestao"
+  | "sugestao_duvida"
+  | "sem_sugestao"
+  /** Casado com o Valor da Fatura diferente do previsto (História 3.6): ✓ "Manter classificação". */
+  | "valor_mudou"
+  /** Previsto que a Fatura não trouxe (História 3.6): "Remover previsto" / "Manter". */
+  | "nao_veio";
 
 /** O que a gravação do ✓ deixa na linha (e nos Ajustes). */
 export type ClassificacaoCompleta = { responsavel_id: string; tipo_id: string };
@@ -104,6 +113,12 @@ export type ItemDaFila = {
   ajustes: AjusteDoItem[];
   /** "2 de 3" quando há itens iguais (Mês, data, parcela e valor) no mesmo grupo; senão null. */
   repeticao: { posicao: number; total: number } | null;
+  /** O item vem da Fatura do Mês (a faixa de resumo conta só estes); false no previsto sem par. */
+  daFatura: boolean;
+  /** O item entra no lote? Não, se é "Não veio na fatura" (só tem "Remover previsto" e "Manter"). */
+  selecionavel: boolean;
+  /** "Valor mudou": o Valor do previsto antes da Fatura (null nas outras variantes). */
+  valorAntesCentavos: number | null;
 };
 
 export type GrupoDaFila = {
@@ -125,6 +140,63 @@ function porPosicao(a: LinhaDaFila, b: LinhaDaFila): number {
 function montarItem(l: LinhaDaFila, linhas: readonly LinhaDaFila[], cadastros: CadastrosDaFila): ItemDaFila {
   const responsaveis = new Map(cadastros.responsaveis.filter((r) => !r.arquivado).map((r) => [r.id, r.nome]));
   const tipos = new Map(cadastros.tipos.filter((t) => !t.arquivado).map((t) => [t.id, t.nome]));
+
+  const comum = {
+    id: l.id,
+    nome: nomeExibido(l),
+    nomeOriginal: l.nome,
+    mes: l.mes,
+    data: l.data ?? null,
+    valorCentavos: l.valor_centavos,
+    parcelaN: l.parcela_n,
+    parcelaTotal: l.parcela_total,
+    ajustes: idsQueAcompanham(l.id, linhas).flatMap((id) => {
+      const a = linhas.find((x) => x.id === id);
+      return a ? [{ id, valorCentavos: a.valor_centavos }] : [];
+    }),
+    repeticao: null,
+    daFatura: (l.fatura_id ?? null) !== null,
+    selecionavel: true,
+    valorAntesCentavos: null,
+  };
+
+  // Previsto que a Fatura não trouxe: sem classificação a confirmar, só "Remover previsto" e "Manter".
+  if (l.revisao_motivo === "nao_veio_na_fatura") {
+    return {
+      ...comum,
+      variante: "nao_veio",
+      sugestao: null,
+      duvida: null,
+      texto: TEXTOS_REVISAR.nao_veio,
+      confirmavel: false,
+      aoConfirmar: null,
+      preenchido: { responsavel_id: l.responsavel_id, tipo_id: l.tipo_id },
+      selecionavel: false,
+    };
+  }
+
+  // Casado com Valor diferente: a classificação é a da linha; o ✓ a mantém.
+  if (l.revisao_motivo === "valor_mudou") {
+    const proprioR = l.responsavel_id !== null && responsaveis.has(l.responsavel_id) ? l.responsavel_id : null;
+    const proprioT = l.tipo_id !== null && tipos.has(l.tipo_id) ? l.tipo_id : null;
+    const completa = proprioR !== null && proprioT !== null;
+    const nomes = [proprioR, proprioT].flatMap((id, i) => {
+      const nome = id === null ? null : (i === 0 ? responsaveis : tipos).get(id);
+      return nome ? [nome] : [];
+    });
+    const antes = lerValorAntes(l.revisao_dados);
+    return {
+      ...comum,
+      variante: "valor_mudou",
+      sugestao: nomes.length > 0 ? nomes.join(" · ") : null,
+      duvida: null,
+      texto: textoValorMudou(antes, l.valor_centavos),
+      confirmavel: completa,
+      aoConfirmar: completa ? { responsavel_id: proprioR, tipo_id: proprioT } : null,
+      preenchido: { responsavel_id: proprioR, tipo_id: proprioT },
+      valorAntesCentavos: antes,
+    };
+  }
 
   // `sem_classificacao` não tem sugestão; as outras leem `revisao_dados`.
   const dados = l.revisao_motivo === "sem_classificacao" ? null : lerDadosRevisao(l.revisao_dados);
@@ -158,14 +230,7 @@ function montarItem(l: LinhaDaFila, linhas: readonly LinhaDaFila[], cadastros: C
   const texto = semSugestao ? null : textoSugestao(nomeR, nomeT, duvidaOutros);
 
   return {
-    id: l.id,
-    nome: nomeExibido(l),
-    nomeOriginal: l.nome,
-    mes: l.mes,
-    data: l.data ?? null,
-    valorCentavos: l.valor_centavos,
-    parcelaN: l.parcela_n,
-    parcelaTotal: l.parcela_total,
+    ...comum,
     variante,
     sugestao: semSugestao ? null : [nomeR, nomeT].filter((p): p is string => p !== null).join(" · "),
     duvida: duvidaOutros.length > 0 ? `às vezes ${duvidaOutros.join(" ou ")}` : null,
@@ -173,11 +238,6 @@ function montarItem(l: LinhaDaFila, linhas: readonly LinhaDaFila[], cadastros: C
     confirmavel: completa,
     aoConfirmar: completa ? { responsavel_id: responsavelFinal, tipo_id: tipoFinal } : null,
     preenchido: { responsavel_id: responsavelFinal, tipo_id: tipoFinal },
-    ajustes: idsQueAcompanham(l.id, linhas).flatMap((id) => {
-      const a = linhas.find((x) => x.id === id);
-      return a ? [{ id, valorCentavos: a.valor_centavos }] : [];
-    }),
-    repeticao: null,
   };
 }
 
@@ -266,14 +326,18 @@ export function resumoDaImportacao(
 
 /**
  * O passo final da importação: quantas linhas (sem os Ajustes, que seguem a
- * mãe) entram classificadas e quantas vão para a fila.
+ * mãe) entram classificadas e quantas vão para a fila, quantos previstos
+ * casaram (`previsto_id`) e quantos previstos a Fatura não trouxe
+ * (`previstosSemPar`, que também vão para a fila, História 3.6).
  */
 export function resumoDaClassificacao(
-  lancamentos: readonly { ajuste_de_ordem: number | null; revisao_motivo: MotivoRevisao | null }[],
-): { classificados: number; paraRevisar: number } {
+  lancamentos: readonly { ajuste_de_ordem: number | null; revisao_motivo: MotivoRevisao | null; previsto_id?: string | null }[],
+  previstosSemPar = 0,
+): { classificados: number; paraRevisar: number; casados: number; naoVieram: number } {
   const maes = lancamentos.filter((l) => l.ajuste_de_ordem === null);
   const paraRevisar = maes.filter((l) => l.revisao_motivo !== null).length;
-  return { classificados: maes.length - paraRevisar, paraRevisar };
+  const casados = maes.filter((l) => (l.previsto_id ?? null) !== null).length;
+  return { classificados: maes.length - paraRevisar, paraRevisar, casados, naoVieram: previstosSemPar };
 }
 
 /**

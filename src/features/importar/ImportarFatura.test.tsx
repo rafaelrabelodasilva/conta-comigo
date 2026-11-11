@@ -11,8 +11,11 @@ import {
   TEXTOS_IMPORTAR as T,
   TEXTOS_REVISAR,
   avisoReimportar,
+  avisoReimportarBloqueado,
   mensagem,
   rotuloDespesasCreditos,
+  rotuloPrevistosCasados,
+  rotuloPrevistosNaoVieram,
   rotuloReimportado,
   rotuloResumoClassificacao,
   rotuloTotalAPagar,
@@ -30,6 +33,7 @@ const falso = vi.hoisted(() => ({
   fetch: vi.fn(),
   importar: vi.fn(),
   lerReimportacao: vi.fn(),
+  lerPrevistosDoMes: vi.fn(),
   faturas: [] as { id: string; mes: string }[],
   configuracoes: [] as { limite_ajuste_centavos: number; status_padrao_id?: string | null }[],
   responsaveis: [] as { id: string; nome: string; arquivado: boolean }[],
@@ -66,7 +70,11 @@ vi.mock("@/data/realtime", async () => {
   };
 });
 vi.mock("@/data/faturas-repo", () => ({
-  repoFaturas: () => ({ importar: falso.importar, lerReimportacao: falso.lerReimportacao }),
+  repoFaturas: () => ({
+    importar: falso.importar,
+    lerReimportacao: falso.lerReimportacao,
+    lerPrevistosDoMes: falso.lerPrevistosDoMes,
+  }),
 }));
 vi.mock("@/data/regras-repo", () => ({
   repoRegras: () => ({ listar: falso.listarRegras, marcarUso: falso.marcarUso }),
@@ -159,6 +167,7 @@ beforeEach(() => {
   falso.fetch.mockImplementation(async () => resposta());
   falso.importar.mockResolvedValue({ ok: true, quantidade: 49 });
   falso.lerReimportacao.mockResolvedValue({ ok: true, valor: null });
+  falso.lerPrevistosDoMes.mockResolvedValue({ ok: true, previstos: [], atualizadoEm: null });
 });
 
 describe("ImportarFatura", () => {
@@ -417,6 +426,145 @@ describe("ImportarFatura", () => {
     terminar({ ok: true, quantidade: 49 });
     await verNoPainel();
     expect(falso.importar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ImportarFatura: casamento dos previstos (História 3.6)", () => {
+  // A primeira parcela a vir de outubro vira o previsto que a Fatura traz; "NUNCA VEIO" é o que a Fatura não traz.
+  const real = outubro.lancamentos.find((l) => l.parcelaN !== null && l.parcelaTotal !== null && l.valorCentavos > 0)!;
+  const prevDaFatura = (valor = real.valorCentavos) => ({
+    id: "p-casa",
+    nome_normalizado: real.nome.normalize("NFD").replace(/\p{M}/gu, "").toUpperCase().replace(/\s+/g, " ").trim(),
+    parcela_n: real.parcelaN as number,
+    parcela_total: real.parcelaTotal as number,
+    valor_centavos: valor,
+    ocorrencia: 1,
+    responsavel_id: "casal",
+    tipo_id: "casa",
+  });
+  const semPar = {
+    id: "p-sumiu",
+    nome_normalizado: "NUNCA VEIO",
+    parcela_n: 4,
+    parcela_total: 6,
+    valor_centavos: 5000,
+    ocorrencia: 1,
+    responsavel_id: null,
+    tipo_id: null,
+  };
+  const T_MES = "2026-10-20T10:00:00.000009+00:00";
+
+  beforeEach(() => {
+    falso.responsaveis = [{ id: "casal", nome: "Casal", arquivado: false }];
+    falso.tipos = [{ id: "casa", nome: "Casa", arquivado: false }];
+  });
+
+  async function ateOPasso3() {
+    const u = await escolherPdf();
+    await digitarSenha(u, "s");
+    await screen.findByText(PASSO_3);
+    return u;
+  }
+
+  it("a parcela real pega o previsto do Mês: manda previsto_id, tira a Série dela e conta 'casou'; o que a Fatura não trouxe vai em previstos_sem_par", async () => {
+    falso.lerPrevistosDoMes.mockResolvedValue({ ok: true, previstos: [prevDaFatura(), semPar], atualizadoEm: T_MES });
+    const u = await ateOPasso3();
+    expect(falso.lerPrevistosDoMes).toHaveBeenCalledExactlyOnceWith("2026-10");
+    expect(screen.getByText(rotuloPrevistosCasados(1))).toBeTruthy();
+    expect(screen.getByText(rotuloPrevistosNaoVieram(1))).toBeTruthy();
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    await screen.findByText(rotuloPrevistosCasados(1));
+    const chamada = falso.importar.mock.calls[0] as unknown[];
+    const gravado = chamada[0] as Importacao;
+    const substituir = chamada[1];
+    const lidoEm = chamada[2];
+    const casadas = gravado.lancamentos.filter((l) => l.previsto_id);
+    expect(casadas).toHaveLength(1);
+    expect(casadas[0]).toMatchObject({ previsto_id: "p-casa", serie: null, responsavel_id: "casal", tipo_id: "casa", revisao_motivo: null });
+    expect(gravado.previstos_sem_par).toEqual(["p-sumiu"]);
+    // A trava é o updated_at lido junto dos previstos.
+    expect(substituir).toBeUndefined();
+    expect(lidoEm).toBe(T_MES);
+  });
+
+  it("Valor diferente: a linha entra na fila como 'valor_mudou' com o antes do previsto", async () => {
+    falso.lerPrevistosDoMes.mockResolvedValue({ ok: true, previstos: [prevDaFatura(real.valorCentavos - 321)], atualizadoEm: null });
+    const u = await ateOPasso3();
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    await screen.findByText(rotuloPrevistosCasados(1));
+    const casada = (falso.importar.mock.calls[0][0] as Importacao).lancamentos.find((l) => l.previsto_id)!;
+    expect(casada).toMatchObject({ revisao_motivo: "valor_mudou", revisao_dados: { antes_centavos: real.valorCentavos - 321 } });
+  });
+
+  it("depois de gravar, o resumo diz quantos previstos casaram e quantos não vieram, e oferece a revisão", async () => {
+    falso.lerPrevistosDoMes.mockResolvedValue({ ok: true, previstos: [prevDaFatura(), semPar], atualizadoEm: T_MES });
+    const u = await ateOPasso3();
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    expect(await screen.findByText(rotuloPrevistosCasados(1))).toBeTruthy();
+    expect(screen.getByText(rotuloPrevistosNaoVieram(1))).toBeTruthy();
+    expect(screen.getByRole("button", { name: TEXTOS_REVISAR.ir_para_revisao })).toBeTruthy();
+  });
+
+  it("falha ao ler os previstos: importa sem casar, sem bloquear", async () => {
+    falso.lerPrevistosDoMes.mockResolvedValue({ ok: false, codigo: "carregar.falhou" });
+    const u = await ateOPasso3();
+    expect(screen.queryByText(/casou com a fatura|casaram com a fatura/)).toBeNull();
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    await verNoPainel();
+    const chamada = falso.importar.mock.calls[0] as unknown[];
+    expect((chamada[0] as Importacao).lancamentos.every((l) => !l.previsto_id)).toBe(true);
+    expect(chamada[2]).toBeUndefined();
+  });
+
+  it("sem previstos no Mês, nada de casamento no passo 3", async () => {
+    await ateOPasso3();
+    expect(screen.queryByText(/previsto.* (casou|casaram|não veio|não vieram)/)).toBeNull();
+  });
+
+  it("fatura.mes_mudou: relê os previstos, refaz o casamento e o 'Tentar de novo' grava com o plano e a trava novos", async () => {
+    falso.lerPrevistosDoMes.mockResolvedValueOnce({ ok: true, previstos: [prevDaFatura()], atualizadoEm: T_MES });
+    const novoDeOutroAparelho = { ...prevDaFatura(), id: "p-novo" };
+    const T_NOVO = "2026-10-21T08:00:00.000003+00:00";
+    falso.lerPrevistosDoMes.mockResolvedValueOnce({ ok: true, previstos: [novoDeOutroAparelho], atualizadoEm: T_NOVO });
+    falso.importar.mockResolvedValueOnce({ ok: false, codigo: "fatura.mes_mudou" });
+    const u = await ateOPasso3();
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    expect((await screen.findByRole("alert")).textContent).toBe(mensagem("fatura.mes_mudou"));
+    expect(falso.lerPrevistosDoMes).toHaveBeenCalledTimes(2);
+    await u.click(screen.getByRole("button", { name: ROTULOS.tentar_de_novo }));
+    await screen.findByText(rotuloPrevistosCasados(1));
+    expect(falso.importar).toHaveBeenCalledTimes(2);
+    const segunda = falso.importar.mock.calls[1] as unknown[];
+    expect((segunda[0] as Importacao).lancamentos.find((l) => l.previsto_id)?.previsto_id).toBe("p-novo");
+    expect(segunda[2]).toBe(T_NOVO);
+  });
+
+  it("'fatura.reimportacao_com_casados' mostra a mensagem e só deixa Cancelar", async () => {
+    falso.importar.mockResolvedValue({ ok: false, codigo: "fatura.reimportacao_com_casados" });
+    const u = await ateOPasso3();
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    expect((await screen.findByRole("alert")).textContent).toBe(mensagem("fatura.reimportacao_com_casados"));
+    expect(screen.queryByRole("button", { name: ROTULOS.tentar_de_novo })).toBeNull();
+    expect(screen.getByRole("button", { name: ROTULOS.cancelar })).toBeTruthy();
+  });
+
+  it("Fatura do Mês com linhas casadas: o aviso bloqueia a reimportação, só 'Cancelar' (sem 'Importar de novo')", async () => {
+    falso.faturas = [{ id: "f0", mes: "2026-10" }];
+    falso.configuracoes = [];
+    const limpa: LinhaParaReimportar = { excluido_em: null, responsavel_id: null, tipo_id: null, observacao: null, status_id: "nao-pago" };
+    falso.lerReimportacao.mockResolvedValue({
+      ok: true,
+      valor: {
+        faturaId: "f0",
+        atualizadoEm: T_MES,
+        statusPadraoId: "nao-pago",
+        linhas: [limpa, { ...limpa, casado_em: "2026-12-05T10:00:00Z" }, { ...limpa, casado_em: "2026-12-05T10:00:00Z" }],
+      },
+    });
+    await ateOPasso3();
+    expect((await screen.findByRole("alert")).textContent).toBe(avisoReimportarBloqueado("2026-10", 2));
+    expect(screen.queryByRole("button", { name: T.importar_de_novo })).toBeNull();
+    expect(screen.getByRole("button", { name: ROTULOS.cancelar })).toBeTruthy();
   });
 });
 

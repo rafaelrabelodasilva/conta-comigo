@@ -135,7 +135,8 @@ export function Revisar({ titulo }: { titulo: string }) {
   );
   const resumo = resumoDaFila(grupos);
   const itens = useMemo(() => grupos.flatMap((g) => g.itens), [grupos]);
-  const idsDaFila = useMemo(() => itens.map((i) => i.id), [itens]);
+  // Só estes entram no lote ("Não veio na fatura" tem os seus botões).
+  const idsDaFila = useMemo(() => itens.filter((i) => i.selecionavel).map((i) => i.id), [itens]);
   // Só os que ainda estão na fila; com a fila pronta e nada sendo gravado, a marcação se poda.
   const marcados = useMemo(() => selecaoValida(selecao, idsDaFila), [selecao, idsDaFila]);
   if (fila.status === "pronto" && ocupados.size === 0 && marcados.size !== selecao.size) setSelecao(marcados);
@@ -163,7 +164,8 @@ export function Revisar({ titulo }: { titulo: string }) {
     }
     const doMes = lancamentos.linhas.filter((l) => l.mes === fatura.mes);
     const conferencia = conferir(fatura, cartoes.linhas, doMes);
-    const paraRevisar = itens.filter((i) => i.mes === fatura.mes).length;
+    // A faixa conta as linhas da Fatura; o previsto que "não veio" não é linha dela (História 3.6).
+    const paraRevisar = itens.filter((i) => i.mes === fatura.mes && i.daFatura).length;
     return rotuloFaixaImportacao(fatura.mes, rotuloSeloConferencia(conferencia), resumoDaImportacao(doMes, fatura.id, paraRevisar));
   }, [fatura, lancamentos.status, lancamentos.mes, lancamentos.linhas, cartoes.status, cartoes.linhas, itens]);
 
@@ -279,6 +281,70 @@ export function Revisar({ titulo }: { titulo: string }) {
     return true;
   }
 
+  /** "Remover previsto": exclui o previsto que a Fatura não trouxe, com "Desfazer". */
+  async function removerPrevisto(item: ItemDaFila) {
+    if (emCurso.current.has(item.id)) return;
+    emCurso.current.add(item.id);
+    setOcupados((s) => new Set(s).add(item.id));
+    const r = await repoLancamentosRevisar().excluir(item.id);
+    emCurso.current.delete(item.id);
+    setOcupados((s) => {
+      const nova = new Set(s);
+      nova.delete(item.id);
+      return nova;
+    });
+    if (!r.ok) {
+      toast.mostrar({ texto: mensagem(r.codigo) });
+      return;
+    }
+    toast.mostrar({
+      texto: T.previsto_removido,
+      aoDesfazer: () => {
+        void repoLancamentosRevisar()
+          .restaurar(item.id)
+          .then((d) => {
+            if (!d.ok) toast.mostrar({ texto: mensagem(d.codigo) });
+          });
+      },
+    });
+  }
+
+  /** "Manter": o previsto sai da fila e continua previsto (sem Regra), com "Desfazer". */
+  async function manterPrevisto(item: ItemDaFila) {
+    const atual = fila.linhas.find((l) => l.id === item.id);
+    if (!atual || emCurso.current.has(item.id)) return;
+    emCurso.current.add(item.id);
+    const anterior: AnteriorDaFila = {
+      responsavel_id: atual.responsavel_id,
+      tipo_id: atual.tipo_id,
+      revisao_motivo: atual.revisao_motivo,
+      revisao_dados: atual.revisao_dados,
+      revisado_em: atual.revisado_em,
+    };
+    setOcupados((s) => new Set(s).add(item.id));
+    const r = await repoLancamentosRevisar().manterPrevisto(item.id);
+    emCurso.current.delete(item.id);
+    setOcupados((s) => {
+      const nova = new Set(s);
+      nova.delete(item.id);
+      return nova;
+    });
+    if (!r.ok) {
+      toast.mostrar({ texto: mensagem(r.codigo) });
+      return;
+    }
+    toast.mostrar({
+      texto: T.previsto_mantido,
+      aoDesfazer: () => {
+        void repoLancamentosRevisar()
+          .devolverAFila(item.id, anterior)
+          .then((d) => {
+            if (!d.ok) toast.mostrar({ texto: mensagem(d.codigo) });
+          });
+      },
+    });
+  }
+
   function aplicarSugestoes() {
     const { entradas, semSugestao } = entradasDeSugestoes(itens.filter((i) => marcados.has(i.id)));
     if (entradas.length === 0) {
@@ -328,13 +394,13 @@ export function Revisar({ titulo }: { titulo: string }) {
                     rotulo={rotuloSelecionarGrupo(g.itens[0].nomeOriginal)}
                     estado={estadoCaixaCabecalho(
                       marcados,
-                      g.itens.map((i) => i.id),
+                      g.itens.filter((i) => i.selecionavel).map((i) => i.id),
                     )}
                     aoMudar={() =>
                       setSelecao(
                         alternarTodos(
                           marcados,
-                          g.itens.map((i) => i.id),
+                          g.itens.filter((i) => i.selecionavel).map((i) => i.id),
                         ),
                       )
                     }
@@ -356,6 +422,8 @@ export function Revisar({ titulo }: { titulo: string }) {
                     if (i.aoConfirmar) void classificar(i, i.aoConfirmar);
                   }}
                   aoMudar={(i) => setMudando(i)}
+                  aoRemoverPrevisto={(i) => void removerPrevisto(i)}
+                  aoManterPrevisto={(i) => void manterPrevisto(i)}
                 />
               ))}
             </ul>

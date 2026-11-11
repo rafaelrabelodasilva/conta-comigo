@@ -419,6 +419,17 @@ describe("resumirReimportacao (História 3.11)", () => {
     ).toEqual({ quantidade: 1, mexidos: 1, excluidos: 0 });
   });
 
+  it("conta as linhas casadas com previstos e não conta as excluídas (História 3.6)", () => {
+    const linhas: LinhaParaReimportar[] = [
+      limpa,
+      { ...limpa, casado_em: "2026-12-05T10:00:00Z" },
+      { ...limpa, casado_em: "2026-12-05T10:00:00Z" },
+      { ...limpa, casado_em: "2026-12-05T10:00:00Z", excluido_em: "2026-12-06T00:00:00Z" },
+    ];
+    expect(resumirReimportacao(linhas, PADRAO)).toEqual({ quantidade: 3, mexidos: 0, excluidos: 1, casados: 2 });
+    expect(resumirReimportacao([limpa], PADRAO).casados).toBeUndefined();
+  });
+
   it("sem linhas: tudo zero", () => {
     expect(resumirReimportacao([], PADRAO)).toEqual({ quantidade: 0, mexidos: 0, excluidos: 0 });
   });

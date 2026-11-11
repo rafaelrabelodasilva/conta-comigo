@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { MotivoRevisao } from "./classificacao";
 import {
+  aplicarCasamento,
   atribuirSeries,
+  casarPrevistos,
   ehParcelaDeSerie,
   gerarPrevistos,
   juntarMudancas,
@@ -210,5 +213,190 @@ describe("planejarPropagacao", () => {
     expect(juntarMudancas(plano.silenciosos, plano.aPerguntar)).toEqual([
       { id: "p1", corpo: { tipo_id: "t1", responsavel_id: "r2" } },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Casamento (História 3.6)
+
+describe("casarPrevistos", () => {
+  const real = (ordem: number, valor: number, over: Partial<Parameters<typeof casarPrevistos>[0][number]> = {}) => ({
+    nome_normalizado: "MAGALU",
+    valor_centavos: valor,
+    parcela_n: 7,
+    parcela_total: 10,
+    ordem_fatura: ordem,
+    ajuste_de_ordem: null,
+    ...over,
+  });
+  const prev = (id: string, valor: number, ocorrencia: number, over: Partial<Parameters<typeof casarPrevistos>[1][number]> = {}) => ({
+    id,
+    nome_normalizado: "MAGALU",
+    parcela_n: 7,
+    parcela_total: 10,
+    valor_centavos: valor,
+    ocorrencia,
+    responsavel_id: null,
+    tipo_id: null,
+    ...over,
+  });
+
+  it("casa um real com o previsto de mesmo Valor", () => {
+    const r = casarPrevistos([real(3, 44589)], [prev("p1", 44589, 1)]);
+    expect(r).toEqual({ casados: [{ ordem_fatura: 3, previsto_id: "p1" }], semPar: [] });
+  });
+
+  it("duas compras idênticas casam na ordem da fatura e da ocorrencia", () => {
+    const r = casarPrevistos([real(5, 100), real(2, 100)], [prev("p2", 100, 2), prev("p1", 100, 1)]);
+    expect(r.casados).toEqual([
+      { ordem_fatura: 2, previsto_id: "p1" },
+      { ordem_fatura: 5, previsto_id: "p2" },
+    ]);
+    expect(r.semPar).toEqual([]);
+  });
+
+  it("Valor igual vem primeiro, mesmo contra a ocorrencia", () => {
+    const r = casarPrevistos([real(1, 200), real(2, 100)], [prev("p1", 100, 1), prev("p2", 200, 2)]);
+    expect(r.casados).toEqual([
+      { ordem_fatura: 1, previsto_id: "p2" },
+      { ordem_fatura: 2, previsto_id: "p1" },
+    ]);
+  });
+
+  it("um Valor diferente não rouba o par de quem tem Valor igual", () => {
+    const r = casarPrevistos([real(1, 150), real(2, 100)], [prev("p1", 100, 1), prev("p2", 200, 2)]);
+    expect(r.casados).toEqual([
+      { ordem_fatura: 1, previsto_id: "p2" },
+      { ordem_fatura: 2, previsto_id: "p1" },
+    ]);
+  });
+
+  it("sem previsto de Valor igual, usa a menor ocorrencia", () => {
+    const r = casarPrevistos([real(1, 44910)], [prev("p2", 44589, 2), prev("p1", 44589, 1)]);
+    expect(r.casados).toEqual([{ ordem_fatura: 1, previsto_id: "p1" }]);
+    expect(r.semPar).toEqual(["p2"]);
+  });
+
+  it("menos reais que previstos: o que sobra é sem par", () => {
+    const r = casarPrevistos([real(1, 100)], [prev("p1", 100, 1), prev("p2", 100, 2)]);
+    expect(r.semPar).toEqual(["p2"]);
+  });
+
+  it("mais reais que previstos: o real que sobra fica sem par de previsto", () => {
+    const r = casarPrevistos([real(1, 100), real(2, 100)], [prev("p1", 100, 1)]);
+    expect(r.casados).toEqual([{ ordem_fatura: 1, previsto_id: "p1" }]);
+  });
+
+  it("só casa dentro da chave (Nome, parcela, total)", () => {
+    const r = casarPrevistos(
+      [real(1, 100, { parcela_n: 8 }), real(2, 100, { nome_normalizado: "OUTRA" }), real(3, 100, { parcela_total: 12 })],
+      [prev("p1", 100, 1)],
+    );
+    expect(r.casados).toEqual([]);
+    expect(r.semPar).toEqual(["p1"]);
+  });
+
+  it("ignora Ajuste, crédito e linha sem parcela", () => {
+    const r = casarPrevistos(
+      [real(1, 100, { ajuste_de_ordem: 9 }), real(2, -100), real(3, 100, { parcela_n: null, parcela_total: null })],
+      [prev("p1", 100, 1)],
+    );
+    expect(r.casados).toEqual([]);
+  });
+
+  it("não depende da ordem em que os previstos chegam", () => {
+    const a = casarPrevistos([real(1, 100), real(2, 100)], [prev("p1", 100, 1), prev("p2", 100, 2)]);
+    const b = casarPrevistos([real(1, 100), real(2, 100)], [prev("p2", 100, 2), prev("p1", 100, 1)]);
+    expect(b).toEqual(a);
+  });
+});
+
+describe("aplicarCasamento", () => {
+  const base = {
+    nome_normalizado: "MAGALU",
+    parcela_n: 7,
+    parcela_total: 10,
+    ordem_fatura: 1,
+    ajuste_de_ordem: null,
+    valor_centavos: 44910,
+    responsavel_id: null as string | null,
+    tipo_id: null as string | null,
+    revisao_motivo: "sem_classificacao" as MotivoRevisao | null,
+    revisao_dados: null,
+    serie: { nome_normalizado: "MAGALU", parcela_total: 10, valor_parcela_centavos: 44910, mes_primeira_parcela: "2026-06", ocorrencia: 1 },
+  };
+  const previsto = (over: Partial<Parameters<typeof aplicarCasamento>[2][number]> = {}) => ({
+    id: "p1",
+    nome_normalizado: "MAGALU",
+    parcela_n: 7,
+    parcela_total: 10,
+    valor_centavos: 44589,
+    ocorrencia: 1,
+    responsavel_id: "r1" as string | null,
+    tipo_id: "t1" as string | null,
+    ...over,
+  });
+  const par = { casados: [{ ordem_fatura: 1, previsto_id: "p1" }], semPar: [] };
+
+  it("linha sem par fica como está, sem previsto_id", () => {
+    const [l] = aplicarCasamento([base], { casados: [], semPar: ["p1"] }, [previsto()]);
+    expect(l.previsto_id).toBeNull();
+    expect(l.serie).toBe(base.serie);
+  });
+
+  it("Valor igual e classificado: mantém a classificação, sem motivo, e perde a chave da Série", () => {
+    const [l] = aplicarCasamento([{ ...base, valor_centavos: 44589 }], par, [previsto()]);
+    expect(l).toMatchObject({ previsto_id: "p1", serie: null, responsavel_id: "r1", tipo_id: "t1", revisao_motivo: null, revisao_dados: null });
+  });
+
+  it("Valor diferente e classificado: 'valor_mudou' com o antes", () => {
+    const [l] = aplicarCasamento([base], par, [previsto()]);
+    expect(l).toMatchObject({ valor_centavos: 44910, revisao_motivo: "valor_mudou", revisao_dados: { antes_centavos: 44589 } });
+  });
+
+  it("previsto vazio: recebe o que as Regras calcularam e, se completo, sai da fila", () => {
+    const [l] = aplicarCasamento([{ ...base, valor_centavos: 44589, responsavel_id: "r2", tipo_id: "t2", revisao_motivo: null }], par, [
+      previsto({ responsavel_id: null, tipo_id: null }),
+    ]);
+    expect(l).toMatchObject({ responsavel_id: "r2", tipo_id: "t2", revisao_motivo: null });
+  });
+
+  it("a classificação do previsto vale sobre a das Regras; a Regra completa só o que falta", () => {
+    const [l] = aplicarCasamento([{ ...base, valor_centavos: 44589, responsavel_id: "r2", tipo_id: "t2", revisao_motivo: null }], par, [
+      previsto({ tipo_id: null }),
+    ]);
+    expect(l).toMatchObject({ responsavel_id: "r1", tipo_id: "t2", revisao_motivo: null });
+  });
+
+  it("o Ajuste de centavos da mãe casada recebe a classificação final dela, sem motivo", () => {
+    const ajuste = { ...base, ordem_fatura: 2, ajuste_de_ordem: 1, parcela_n: null, parcela_total: null, valor_centavos: -8, revisao_motivo: null, serie: null };
+    const [mae, aj] = aplicarCasamento([{ ...base, valor_centavos: 44589 }, ajuste], par, [previsto()]);
+    expect(mae).toMatchObject({ responsavel_id: "r1", tipo_id: "t1" });
+    expect(aj).toMatchObject({ responsavel_id: "r1", tipo_id: "t1", revisao_motivo: null, previsto_id: null });
+  });
+
+  it("compras idênticas com um previsto só: a parcela sem par sobe a ocorrencia para uma Série livre", () => {
+    const chave = (ocorrencia: number) => ({ ...base.serie, ocorrencia });
+    const real1 = { ...base, valor_centavos: 44589, ordem_fatura: 1, serie: chave(1) };
+    const real2 = { ...base, valor_centavos: 44589, ordem_fatura: 2, serie: chave(2) };
+    // Só sobrou o previsto da ocorrencia 2 (o da 1 foi excluído): o 1º real casa com ele e o 2º ficaria na mesma Série.
+    const p2 = previsto({ serie: chave(2), responsavel_id: null, tipo_id: null });
+    const casamento = casarPrevistos([real1, real2], [p2]);
+    const [a, b] = aplicarCasamento([real1, real2], casamento, [p2]);
+    expect(a.previsto_id).toBe("p1");
+    expect(a.serie).toBeNull();
+    expect(b.previsto_id).toBeNull();
+    expect(b.serie?.ocorrencia).toBe(3);
+  });
+
+  it("sem conflito de Série a ocorrencia calculada fica como está", () => {
+    const real = { ...base, ordem_fatura: 1 };
+    const [l] = aplicarCasamento([real], { casados: [], semPar: [] }, [previsto({ serie: { ...base.serie, ocorrencia: 7 } })]);
+    expect(l.serie?.ocorrencia).toBe(1);
+  });
+
+  it("incompleto com Valor diferente: vale o motivo de classificação (Q2-A)", () => {
+    const [l] = aplicarCasamento([base], par, [previsto({ responsavel_id: null, tipo_id: null })]);
+    expect(l).toMatchObject({ valor_centavos: 44910, revisao_motivo: "sem_classificacao", revisao_dados: null });
   });
 });

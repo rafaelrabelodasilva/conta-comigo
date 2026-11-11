@@ -9,7 +9,10 @@ import {
   mensagem,
   rotuloConfirmarItem,
   rotuloFaltam,
+  rotuloManterClassificacao,
+  rotuloManterPrevisto,
   rotuloMudarItem,
+  rotuloRemoverPrevisto,
   rotuloSelecionar,
   rotuloSelecionarGrupo,
 } from "@/domain/mensagens";
@@ -37,6 +40,9 @@ const falso = vi.hoisted(() => ({
   contarUsos: vi.fn(),
   propagarAosPrevistos: vi.fn(),
   aplicarAosPrevistos: vi.fn(),
+  excluir: vi.fn(),
+  restaurar: vi.fn(),
+  manterPrevisto: vi.fn(),
 }));
 
 vi.mock("@/data/realtime", async () => {
@@ -83,6 +89,9 @@ vi.mock("@/data/lancamentos-repo", () => ({
     desfazerLote: falso.desfazerLote,
     propagarAosPrevistos: falso.propagarAosPrevistos,
     aplicarAosPrevistos: falso.aplicarAosPrevistos,
+    excluir: falso.excluir,
+    restaurar: falso.restaurar,
+    manterPrevisto: falso.manterPrevisto,
   }),
 }));
 vi.mock("@/data/cadastros-repo", () => ({ repoCadastros: () => ({ contarUsos: falso.contarUsos }) }));
@@ -186,6 +195,18 @@ beforeEach(() => {
   falso.desfazerLote.mockResolvedValue({ ok: true, linhas: [], gravadas: 0, antes: [] });
   falso.propagarAosPrevistos.mockResolvedValue({ ok: true, preenchidos: 0, aPerguntar: [] });
   falso.aplicarAosPrevistos.mockImplementation(async (itens: unknown[]) => ({ ok: true, gravados: itens.length }));
+  // "Remover previsto" e "Manter" tiram o previsto da fila; o "Desfazer" o devolve.
+  falso.excluir.mockImplementation(async (id: string) => {
+    falso.fila = falso.fila.filter((x) => x.id !== id);
+    avisar();
+    return { ok: true, linha: linha(id) };
+  });
+  falso.restaurar.mockResolvedValue({ ok: true, linha: linha("x") });
+  falso.manterPrevisto.mockImplementation(async (id: string) => {
+    falso.fila = falso.fila.filter((x) => x.id !== id);
+    avisar();
+    return { ok: true, linha: linha(id) };
+  });
 });
 
 describe("Revisar: a fila", () => {
@@ -788,5 +809,108 @@ describe("Revisar: previstos da Série (História 3.5)", () => {
     expect(screen.getByText(T.classificado)).toBeTruthy();
     expect(screen.queryByText(mensagem("salvar.falhou"))).toBeNull();
     expect(screen.getByRole("button", { name: ROTULOS.desfazer })).toBeTruthy();
+  });
+});
+
+// Casamento (História 3.6): "Valor mudou" e "Não veio na fatura".
+describe("Revisar: variantes do casamento", () => {
+  const valorMudou = (id: string, extra: Record<string, unknown> = {}) =>
+    linha(id, {
+      revisao_motivo: "valor_mudou",
+      revisao_dados: { antes_centavos: 44589 },
+      valor_centavos: 44910,
+      responsavel_id: "casal",
+      tipo_id: "casa",
+      ...extra,
+    });
+  const naoVeio = (id: string, extra: Record<string, unknown> = {}) =>
+    linha(id, { revisao_motivo: "nao_veio_na_fatura", fatura_id: null, lancado_por: "sistema", responsavel_id: "casal", tipo_id: "casa", ...extra });
+
+  it("'Valor mudou' mostra Antes → agora e ✓ 'Manter classificação' grava a mesma classificação (com Desfazer)", async () => {
+    preparar([valorMudou("a1")]);
+    renderizar();
+    expect(screen.getByText(T.valor_mudou)).toBeTruthy();
+    expect(screen.getByText(/Antes R\$\s445,89 → agora R\$\s449,10/)).toBeTruthy();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: rotuloManterClassificacao("LOJA A1") }));
+    expect(falso.atualizar).toHaveBeenCalledExactlyOnceWith("a1", { responsavel_id: "casal", tipo_id: "casa" }, {});
+    await waitFor(() => expect(itens()).toHaveLength(0));
+    expect(screen.getByRole("button", { name: ROTULOS.desfazer })).toBeTruthy();
+  });
+
+  it("'Não veio na fatura' tem 'Remover previsto' e 'Manter', sem ✓, sem 'Mudar' e sem caixa de lote", () => {
+    preparar([naoVeio("a1")]);
+    renderizar();
+    expect(screen.getByText(T.nao_veio)).toBeTruthy();
+    expect(screen.getByRole("button", { name: rotuloRemoverPrevisto("LOJA A1") }).textContent).toBe(T.remover_previsto);
+    expect(screen.getByRole("button", { name: rotuloManterPrevisto("LOJA A1") }).textContent).toBe(T.manter);
+    expect(screen.queryByRole("button", { name: rotuloConfirmarItem("LOJA A1") })).toBeNull();
+    expect(screen.queryByRole("button", { name: rotuloMudarItem("LOJA A1") })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: rotuloSelecionar("LOJA A1") })).toBeNull();
+  });
+
+  it("'Remover previsto' exclui o previsto, baixa o 'Faltam' e o Desfazer o restaura", async () => {
+    preparar([naoVeio("a1"), sugerida("a2")]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: rotuloRemoverPrevisto("LOJA A1") }));
+    expect(falso.excluir).toHaveBeenCalledExactlyOnceWith("a1");
+    await waitFor(() => expect(itens()).toHaveLength(1));
+    expect(screen.getByText(rotuloFaltam(1))).toBeTruthy();
+    expect(screen.getByText(T.previsto_removido)).toBeTruthy();
+    await u.click(screen.getByRole("button", { name: ROTULOS.desfazer }));
+    expect(falso.restaurar).toHaveBeenCalledExactlyOnceWith("a1");
+  });
+
+  it("'Manter' só tira da fila (sem Regra) e o Desfazer devolve o motivo anterior", async () => {
+    preparar([naoVeio("a1", { revisado_em: null })]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: rotuloManterPrevisto("LOJA A1") }));
+    expect(falso.manterPrevisto).toHaveBeenCalledExactlyOnceWith("a1");
+    expect(falso.atualizar).not.toHaveBeenCalled();
+    await waitFor(() => expect(itens()).toHaveLength(0));
+    expect(screen.getByText(T.previsto_mantido)).toBeTruthy();
+    await u.click(screen.getByRole("button", { name: ROTULOS.desfazer }));
+    expect(falso.devolverAFila).toHaveBeenCalledExactlyOnceWith("a1", {
+      responsavel_id: "casal",
+      tipo_id: "casa",
+      revisao_motivo: "nao_veio_na_fatura",
+      revisao_dados: null,
+      revisado_em: null,
+    });
+  });
+
+  it("falha ao remover ou manter: o item fica e o toast traz a mensagem do código", async () => {
+    preparar([naoVeio("a1")]);
+    falso.excluir.mockResolvedValue({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    renderizar();
+    await userEvent.setup().click(screen.getByRole("button", { name: rotuloRemoverPrevisto("LOJA A1") }));
+    expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
+    expect(itens()).toHaveLength(1);
+  });
+
+  it("'Selecionar todos' e a caixa do grupo ignoram o 'Não veio na fatura'", async () => {
+    preparar([sugerida("a1", { nome: "MAGALU" }), naoVeio("a2", { nome: "Magalu" })]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("checkbox", { name: T.selecionar_todos }));
+    expect(screen.getByText(/^1 selecionado ·/)).toBeTruthy();
+  });
+
+  it("a faixa da importação conta só as linhas da Fatura; o previsto que não veio fica fora", async () => {
+    const classificada = (id: string) => linha(id, { revisao_motivo: null, responsavel_id: "casal", tipo_id: "casa" });
+    const lancs = [classificada("c1"), classificada("c2"), classificada("c3"), linha("a1"), linha("a2")];
+    preparar([linha("a1"), linha("a2"), naoVeio("p1")], {
+      lancamentos: lancs,
+      faturas: [novembro] as Linha[],
+    });
+    falso.mesLancamentos = "2026-11";
+    renderizar();
+    await waitFor(() => expect(falso.abrirMes).toHaveBeenCalledWith("2026-11"));
+    expect(
+      screen.getByText("Importação de novembro · ✓ Conferido · 5 lançamentos · 3 classificados · 2 para revisar"),
+    ).toBeTruthy();
+    expect(screen.getByText(rotuloFaltam(3))).toBeTruthy();
   });
 });

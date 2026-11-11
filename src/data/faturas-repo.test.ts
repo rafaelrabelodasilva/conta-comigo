@@ -221,6 +221,7 @@ describe("repositório da importação da Fatura", () => {
           dados_cartoes: importacao.cartoes,
           dados_lancamentos: importacao.lancamentos,
           dados_previstos: importacao.previstos,
+          previstos_sem_par: [],
         },
       },
     ]);
@@ -440,6 +441,21 @@ describe("reimportar um Mês (História 3.11)", () => {
     expect(r.ok && r.valor?.previstosAApagar).toBe(2);
   });
 
+  it("lerReimportacao devolve o casado_em de cada linha da Fatura (a tela bloqueia a reimportação, História 3.6)", async () => {
+    const m = montar(
+      {
+        ...banco,
+        lancamentos: [
+          linhaDb("a", { casado_em: "2026-12-05T10:00:00Z" }),
+          linhaDb("b", { casado_em: null }),
+        ],
+      },
+      () => ({ data: null, error: null }),
+    );
+    const r = await m.repo.lerReimportacao("2026-10");
+    expect(r.ok && r.valor?.linhas.map((l) => l.casado_em ?? null)).toEqual(["2026-12-05T10:00:00Z", null]);
+  });
+
   it("lerReimportacao: sem configuracoes no banco, o Status padrão é null", async () => {
     const m = montar({ ...banco, configuracoes: [] }, () => ({ data: null, error: null }));
     const r = await m.repo.lerReimportacao("2026-10");
@@ -486,6 +502,7 @@ describe("reimportar um Mês (História 3.11)", () => {
       dados_cartoes: importacao.cartoes,
       dados_lancamentos: importacao.lancamentos,
       dados_previstos: importacao.previstos,
+      previstos_sem_par: [],
       // O do aviso, não o mais novo da memória (o do "m").
       lancamentos_atualizados_em: T1,
       substituir_fatura_id: "f0",
@@ -613,5 +630,115 @@ describe("dispensar o alerta da Conferência (História 2.5)", () => {
     await pronto(m);
     expect(await m.repo.dispensarAlerta("f99", AGORA)).toEqual({ ok: false, codigo: "salvar.falhou" });
     expect(m.atualizacoes).toEqual([]);
+  });
+});
+
+describe("casamento dos previstos (História 3.6)", () => {
+  const previsto = (id: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    mes: "2026-11",
+    fatura_id: null,
+    excluido_em: null,
+    lancado_por: "sistema",
+    nome_normalizado: "MAGALU",
+    parcela_n: 7,
+    parcela_total: 10,
+    valor_centavos: 44589,
+    responsavel_id: null,
+    tipo_id: null,
+    serie_id: "s1",
+    updated_at: T1,
+    ...extra,
+  });
+  const serieDe = (id: string, ocorrencia: number) => ({
+    id,
+    ocorrencia,
+    nome_normalizado: "MAGALU",
+    parcela_total: 10,
+    valor_parcela_centavos: 44589,
+    mes_primeira_parcela: "2026-05",
+  });
+  const series = [serieDe("s1", 1), serieDe("s2", 2)];
+  const chave = (ocorrencia: number) => ({
+    nome_normalizado: "MAGALU",
+    parcela_total: 10,
+    valor_parcela_centavos: 44589,
+    mes_primeira_parcela: "2026-05",
+    ocorrencia,
+  });
+
+  it("lerPrevistosDoMes: só os previstos do Mês, com a ocorrencia da Série, e o updated_at mais novo", async () => {
+    const m = montar(
+      {
+        lancamentos: [
+          previsto("p1"),
+          previsto("p2", { serie_id: "s2", updated_at: T2 }),
+          previsto("excluido", { excluido_em: "2026-11-01T00:00:00Z" }),
+          previsto("real", { lancado_por: "fatura", fatura_id: "f1" }),
+          previsto("outro-mes", { mes: "2026-12" }),
+          previsto("sem-serie", { serie_id: null }),
+        ],
+        series,
+      },
+      () => ({ data: null, error: null }),
+    );
+    const r = await m.repo.lerPrevistosDoMes("2026-11");
+    expect(r).toEqual({
+      ok: true,
+      atualizadoEm: T2,
+      previstos: [
+        { id: "p1", nome_normalizado: "MAGALU", parcela_n: 7, parcela_total: 10, valor_centavos: 44589, ocorrencia: 1, responsavel_id: null, tipo_id: null, serie: chave(1) },
+        { id: "p2", nome_normalizado: "MAGALU", parcela_n: 7, parcela_total: 10, valor_centavos: 44589, ocorrencia: 2, responsavel_id: null, tipo_id: null, serie: chave(2) },
+      ],
+    });
+  });
+
+  it("lerPrevistosDoMes: Mês sem previstos devolve lista vazia, sem ler as Séries", async () => {
+    const m = montar({ lancamentos: [previsto("real", { lancado_por: "fatura", fatura_id: "f1" })], series }, () => ({ data: null, error: null }));
+    expect(await m.repo.lerPrevistosDoMes("2026-11")).toEqual({ ok: true, previstos: [], atualizadoEm: T1 });
+    expect(m.leituras.some((l) => l.tabela === "series")).toBe(false);
+  });
+
+  it("lerPrevistosDoMes: sem conexão e erro de leitura viram falha", async () => {
+    const semRede = montar({}, () => ({ data: null, error: null }), () => false);
+    expect((await semRede.repo.lerPrevistosDoMes("2026-11")).ok).toBe(false);
+    const erro = montar({}, () => ({ data: null, error: null }), () => true, { errosDeTabela: { lancamentos: { code: "XX" } } });
+    expect(await erro.repo.lerPrevistosDoMes("2026-11")).toEqual({ ok: false, codigo: "carregar.falhou" });
+  });
+
+  it("importar manda os previstos sem par e usa o updated_at lido junto dos previstos, sem reler", async () => {
+    const m = montar({}, () => ({ data: gravados, error: null }));
+    await pronto(m);
+    const comSemPar: Importacao = { ...importacao, previstos_sem_par: ["p9"] };
+    expect(await m.repo.importar(comSemPar, undefined, T1)).toEqual({ ok: true, quantidade: 2 });
+    expect(m.chamadas[0].args.previstos_sem_par).toEqual(["p9"]);
+    expect(m.chamadas[0].args.lancamentos_atualizados_em).toBe(T1);
+    expect(leiturasDoMes(m)).toEqual([]);
+  });
+
+  it("importar com updated_at lido junto nulo (Mês sem linhas) não manda a trava", async () => {
+    const m = montar({}, () => ({ data: gravados, error: null }));
+    await pronto(m);
+    await m.repo.importar(importacao, undefined, null);
+    expect("lancamentos_atualizados_em" in m.chamadas[0].args).toBe(false);
+  });
+
+  it("a recusa da reimportação com casados chega à tela com o código da RPC", async () => {
+    const m = montar({}, () => ({ data: null, error: { message: "fatura.reimportacao_com_casados", code: "P0001" } }));
+    await pronto(m);
+    expect(await m.repo.importar(importacao, { faturaId: "f0", atualizadoEm: T1 })).toEqual({
+      ok: false,
+      codigo: "fatura.reimportacao_com_casados",
+    });
+  });
+
+  it("os casados e os previstos sem par devolvidos entram na memória do Mês aberto", async () => {
+    const m = montar({}, () => ({
+      data: { ...gravados, previstos: [{ id: "sem-par", mes: "2026-10", ordem_fatura: null, updated_at: T2 }] },
+      error: null,
+    }));
+    await pronto(m);
+    await m.repo.importar(importacao);
+    expect(m.lancamentos.linhas().map((l) => l.id).sort()).toEqual(["l1", "l2", "sem-par"]);
   });
 });

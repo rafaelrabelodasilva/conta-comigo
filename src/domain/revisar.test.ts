@@ -349,14 +349,91 @@ describe("resumoDaImportacao", () => {
   });
 });
 
+describe("variantes do casamento (História 3.6)", () => {
+  it("'Valor mudou': mostra Antes → agora e o ✓ mantém a classificação da linha", () => {
+    const item = itemUnico(
+      linha({
+        revisao_motivo: "valor_mudou",
+        revisao_dados: { antes_centavos: 44589 },
+        valor_centavos: 44910,
+        responsavel_id: CASAL,
+        tipo_id: CASA,
+        fatura_id: "f1",
+      }),
+    );
+    expect(item).toMatchObject({
+      variante: "valor_mudou",
+      texto: "Antes R$\u00a0445,89 → agora R$\u00a0449,10",
+      sugestao: "Casal · Casa",
+      confirmavel: true,
+      aoConfirmar: { responsavel_id: CASAL, tipo_id: CASA },
+      valorAntesCentavos: 44589,
+      daFatura: true,
+      selecionavel: true,
+    });
+  });
+
+  it("'Valor mudou' com cadastro arquivado ou incompleto: sem ✓, só 'Mudar'", () => {
+    const arquivado = itemUnico(
+      linha({ revisao_motivo: "valor_mudou", revisao_dados: { antes_centavos: 1 }, responsavel_id: LUCAS, tipo_id: CASA }),
+    );
+    expect(arquivado.confirmavel).toBe(false);
+    expect(arquivado.aoConfirmar).toBeNull();
+  });
+
+  it("'Valor mudou' com revisao_dados inválido ainda aparece, sem o antes", () => {
+    const item = itemUnico(linha({ revisao_motivo: "valor_mudou", revisao_dados: "x", responsavel_id: CASAL, tipo_id: CASA }));
+    expect(item.valorAntesCentavos).toBeNull();
+    expect(item.texto).toContain("agora");
+  });
+
+  it("'Não veio na fatura': sem ✓, fora do lote e fora da faixa da Fatura", () => {
+    const item = itemUnico(linha({ revisao_motivo: "nao_veio_na_fatura", fatura_id: null, responsavel_id: CASAL, tipo_id: CASA }));
+    expect(item).toMatchObject({
+      variante: "nao_veio",
+      texto: "Não veio na fatura",
+      confirmavel: false,
+      aoConfirmar: null,
+      selecionavel: false,
+      daFatura: false,
+    });
+  });
+
+  it("os dois motivos novos entram na fila e no contador como os outros", () => {
+    const linhas = [
+      linha({ revisao_motivo: "valor_mudou" }),
+      linha({ revisao_motivo: "nao_veio_na_fatura" }),
+      linha({ revisao_motivo: "nao_veio_na_fatura", excluido_em: "2026-12-02T10:00:00Z" }),
+    ];
+    expect(contarFila(linhas)).toBe(2);
+    expect(linhas.map(ehDaFila)).toEqual([true, true, false]);
+  });
+});
+
 describe("resumoDaClassificacao (passo final da importação)", () => {
   it("conta as linhas com e sem motivo e deixa os Ajustes de fora", () => {
     const l = (ajuste_de_ordem: number | null, revisao_motivo: "sugestao" | null) => ({ ajuste_de_ordem, revisao_motivo });
     expect(resumoDaClassificacao([l(null, null), l(null, null), l(null, "sugestao"), l(1, null)])).toEqual({
       classificados: 2,
       paraRevisar: 1,
+      casados: 0,
+      naoVieram: 0,
     });
-    expect(resumoDaClassificacao([])).toEqual({ classificados: 0, paraRevisar: 0 });
+    expect(resumoDaClassificacao([])).toEqual({ classificados: 0, paraRevisar: 0, casados: 0, naoVieram: 0 });
+  });
+
+  it("conta os previstos que casaram e os que não vieram (História 3.6)", () => {
+    const l = (revisao_motivo: "valor_mudou" | null, previsto_id: string | null) => ({
+      ajuste_de_ordem: null,
+      revisao_motivo,
+      previsto_id,
+    });
+    expect(resumoDaClassificacao([l(null, "p1"), l("valor_mudou", "p2"), l(null, null)], 2)).toEqual({
+      classificados: 2,
+      paraRevisar: 1,
+      casados: 2,
+      naoVieram: 2,
+    });
   });
 });
 
