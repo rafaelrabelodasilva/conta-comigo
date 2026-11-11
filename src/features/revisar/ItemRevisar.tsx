@@ -1,5 +1,6 @@
 "use client";
 
+import { formatarDiaMes } from "@/domain/datas";
 import { formatarDinheiro } from "@/domain/dinheiro";
 import { formatarParcela } from "@/domain/importacao-fatura";
 import {
@@ -9,6 +10,7 @@ import {
   rotuloConfirmarItem,
   rotuloMesDoItem,
   rotuloMudarItem,
+  rotuloRepeticao,
   rotuloSelecionar,
 } from "@/domain/mensagens";
 import type { ItemDaFila } from "@/domain/revisar";
@@ -42,7 +44,14 @@ export type PropsItemRevisar = {
 
 export function ItemRevisar({ item, comMes, ocupado = false, marcado, aoMarcar, aoConfirmar, aoMudar }: PropsItemRevisar) {
   const parcela = formatarParcela(item.parcelaN, item.parcelaTotal);
-  const detalhe = [comMes ? rotuloMesDoItem(item.mes) : null, parcela || null, formatarDinheiro(item.valorCentavos)]
+  // "Mês · DD/MM · Parcela · Valor · 2 de 3": a data e a posição separam compras iguais da Fatura.
+  const detalhe = [
+    comMes ? rotuloMesDoItem(item.mes) : null,
+    item.data ? formatarDiaMes(item.data) : null,
+    parcela || null,
+    formatarDinheiro(item.valorCentavos),
+    item.repeticao ? rotuloRepeticao(item.repeticao.posicao, item.repeticao.total) : null,
+  ]
     .filter((p): p is string => p !== null)
     .join(" · ");
   const semSugestao = item.variante === "sem_sugestao";

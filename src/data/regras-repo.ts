@@ -12,20 +12,29 @@
 //   leitura e um upsert por chave, cada chave na sua fila.
 // - `listar()`: as Regras do dono, para a importação classificar.
 //
-// Não guarda nada em memória (a tela de Regras chega na 3.4). Falha não
-// lança: devolve `{ ok: false }`, e quem chama decide (a gravação do
-// Lançamento não é desfeita nem avisada).
+// Tela Regras aprendidas (História 3.4): `editar` (Responsável e/ou Tipo, a
+// contagem sai do núcleo `editarRegra`) e `excluir` entram na mesma fila por
+// chave do `aprender`; `marcarUso` só muda `ultimo_uso` (a importação usou a
+// Regra). A tela lê o gerenciador de Realtime de `regras` (`memoria`).
+//
+// `aprender` e `listar` não guardam nada em memória. Falha não lança:
+// devolve `{ ok: false }`, e quem chama decide (a gravação do Lançamento não
+// é desfeita nem avisada).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   agruparEventosPorChave,
   aprenderEmLote,
   chaveDeRegra,
+  editarRegra,
+  type EdicaoRegra,
   type EventoAprender,
   type RegraGravada,
 } from "@/domain/regras";
+import { estaOnline } from "./conexao";
 import type { Database, Json } from "./database.types";
-import type { LinhaDe } from "./realtime";
+import { FALHOU, gravarComOtimismo, semConexao, type CodigoFalhaGravacao, type Online } from "./gravacao";
+import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
 import { criarClienteNavegador } from "./supabase/navegador";
 
 export type LinhaRegra = LinhaDe<"regras">;
@@ -34,6 +43,12 @@ export type ResultadoAprender = { ok: true; regra: LinhaRegra } | { ok: false };
 /** O lote: `ok` só se todas as chaves gravaram (as que gravaram valem mesmo assim). */
 export type ResultadoAprenderLote = { ok: true; regras: LinhaRegra[] } | { ok: false };
 export type ResultadoListar = { ok: true; regras: LinhaRegra[] } | { ok: false };
+/** `regra: null` = a edição não mudava nada (nada foi gravado). */
+export type ResultadoEditar =
+  | { ok: true; regra: LinhaRegra | null }
+  | { ok: false; codigo: CodigoFalhaGravacao | "regra.vazia" };
+export type ResultadoExcluir = { ok: true } | { ok: false; codigo: CodigoFalhaGravacao };
+export type ResultadoMarcarUso = { ok: true } | { ok: false };
 
 /** Linhas por página na leitura (o PostgREST devolve até 1000). */
 const PAGINA = 1000;
@@ -42,8 +57,12 @@ export function criarRepoRegras(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
   /** O relógio (`ultimo_uso`); nos testes, fixo. */
   agora?: () => Date;
+  /** O gerenciador de Realtime de `regras` (a tela de Regras); sem ele, `editar` e `excluir` recusam. */
+  memoria?: Gerenciador<LinhaRegra>;
+  /** Há conexão? Padrão: o detector único (`conexao.ts`). */
+  online?: Online;
 }) {
-  const { obterCliente, agora = () => new Date() } = deps;
+  const { obterCliente, agora = () => new Date(), memoria, online = estaOnline } = deps;
   /** A última gravação de cada chave: a próxima espera por ela. */
   const filas = new Map<string, Promise<unknown>>();
 
@@ -67,15 +86,64 @@ export function criarRepoRegras(deps: {
     }
   }
 
-  /** Põe a gravação da chave na fila dela (uma de cada vez, na ordem). */
-  function naFila(chave: string, eventos: readonly EventoAprender[]): Promise<ResultadoAprender> {
+  /** Põe a tarefa da chave na fila dela (uma de cada vez, na ordem). */
+  function naFilaDe<T>(chave: string, tarefa: () => Promise<T>): Promise<T> {
     const anterior = filas.get(chave) ?? Promise.resolve();
-    const esta = anterior.then(() => gravar(chave, eventos));
+    const esta = anterior.then(tarefa);
     filas.set(chave, esta);
     void esta.finally(() => {
       if (filas.get(chave) === esta) filas.delete(chave);
     });
     return esta;
+  }
+
+  /** Põe a gravação da chave na fila dela. */
+  function naFila(chave: string, eventos: readonly EventoAprender[]): Promise<ResultadoAprender> {
+    return naFilaDe(chave, () => gravar(chave, eventos));
+  }
+
+  /** Lê a Regra pelo id, calcula a edição no núcleo e grava (dentro da fila da chave). */
+  async function gravarEdicao(id: string, edicao: EdicaoRegra): Promise<ResultadoEditar> {
+    const cliente = obterCliente();
+    if (!cliente || !memoria) return FALHOU;
+    try {
+      const lida = await cliente.from("regras").select("*").eq("id", id).maybeSingle();
+      if (lida.error || !lida.data) return FALHOU;
+      const plano = editarRegra(lida.data as RegraGravada, edicao);
+      if (!plano.ok) return { ok: false, codigo: "regra.vazia" };
+      if (plano.valor === null) return { ok: true, regra: null };
+      const corpo = { ...plano.valor, contagem: plano.valor.contagem as unknown as NonNullable<Json> };
+      const gravada: { linha: LinhaRegra | null } = { linha: null };
+      const r = await gravarComOtimismo(
+        obterCliente,
+        memoria,
+        [{ id, ...corpo }],
+        async (c) => {
+          const { data, error } = await c.from("regras").update(corpo).eq("id", id).select().single();
+          if (error || !data) return null;
+          gravada.linha = data;
+          return [data];
+        },
+        online,
+      );
+      return r.ok ? { ok: true, regra: gravada.linha } : r;
+    } catch {
+      return FALHOU;
+    }
+  }
+
+  /** Apaga a Regra pelo id (dentro da fila da chave) e a tira da memória. */
+  async function gravarExclusao(id: string): Promise<ResultadoExcluir> {
+    const cliente = obterCliente();
+    if (!cliente || !memoria) return FALHOU;
+    try {
+      const { error } = await cliente.from("regras").delete().eq("id", id);
+      if (error) return FALHOU;
+      memoria.remover([id]);
+      return { ok: true };
+    } catch {
+      return FALHOU;
+    }
   }
 
   function aprender(evento: EventoAprender): Promise<ResultadoAprender>;
@@ -102,6 +170,51 @@ export function criarRepoRegras(deps: {
   return {
     /** Aprende uma classificação ou uma lista delas (em fila por chave). */
     aprender,
+
+    /**
+     * Edita o Responsável e/ou o Tipo da Regra (História 3.4). A contagem e o
+     * resto saem do núcleo (`editarRegra`); `ultimo_uso` não muda. Com
+     * otimismo; sem mudança, não grava. Ao menos um dos dois fica preenchido.
+     */
+    editar(id: string, edicao: EdicaoRegra): Promise<ResultadoEditar> {
+      const bloqueio = semConexao(online);
+      if (bloqueio) return Promise.resolve(bloqueio);
+      const atual = memoria?.linha(id);
+      if (!atual) return Promise.resolve(FALHOU);
+      return naFilaDe(atual.chave, () => gravarEdicao(id, edicao));
+    },
+
+    /** Exclui a Regra (a tela já pediu confirmação). Os lançamentos não mudam. */
+    excluir(id: string): Promise<ResultadoExcluir> {
+      const bloqueio = semConexao(online);
+      if (bloqueio) return Promise.resolve(bloqueio);
+      const atual = memoria?.linha(id);
+      if (!atual) return Promise.resolve(FALHOU);
+      return naFilaDe(atual.chave, () => gravarExclusao(id));
+    },
+
+    /**
+     * A importação usou estas Regras (chaves): muda só o `ultimo_uso`, sem
+     * contagem. Em páginas de 50 chaves; falha devolve `{ ok: false }`.
+     */
+    async marcarUso(chaves: readonly string[]): Promise<ResultadoMarcarUso> {
+      if (chaves.length === 0) return { ok: true };
+      const cliente = obterCliente();
+      if (!cliente) return { ok: false };
+      try {
+        const quando = agora().toISOString();
+        for (let i = 0; i < chaves.length; i += 50) {
+          const { error } = await cliente
+            .from("regras")
+            .update({ ultimo_uso: quando })
+            .in("chave", chaves.slice(i, i + 50));
+          if (error) return { ok: false };
+        }
+        return { ok: true };
+      } catch {
+        return { ok: false };
+      }
+    },
 
     /** Todas as Regras do dono (RLS), em páginas de 1000. */
     async listar(): Promise<ResultadoListar> {
@@ -134,6 +247,7 @@ let repo: RepoRegras | null = null;
 export function repoRegras(): RepoRegras {
   repo ??= criarRepoRegras({
     obterCliente: () => criarClienteNavegador() as SupabaseClient<Database> | null,
+    memoria: gerenciador("regras"),
   });
   return repo;
 }

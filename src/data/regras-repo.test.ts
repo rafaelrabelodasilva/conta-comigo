@@ -166,3 +166,139 @@ describe("repositório de Regras", () => {
     expect(await montar({ falharLeitura: true }).repo.listar()).toEqual({ ok: false });
   });
 });
+
+// Editar, excluir e marcar uso (História 3.4): cliente falso por id e uma memória mínima.
+
+function montarEdicao(opcoes: { falharUpdate?: boolean; falharDelete?: boolean; online?: boolean } = {}) {
+  const base = {
+    id: "r1",
+    chave: "SPOTIFY",
+    versao_normalizacao: 1,
+    responsavel_id: "casal",
+    tipo_id: "casa",
+    contagem: [
+      { responsavel_id: "casal", n: 3 },
+      { responsavel_id: "rafael", n: 1 },
+    ],
+    ultimo_uso: "2026-10-01T00:00:00.000Z",
+  } as unknown as LinhaRegra;
+  const tabela = new Map<string, LinhaRegra>([[base.id, base]]);
+  const memoria = new Map<string, LinhaRegra>([[base.id, base]]);
+  const updates: { corpo: Record<string, unknown>; filtro: string }[] = [];
+  const usos: { corpo: Record<string, unknown>; chaves: string[] }[] = [];
+  const cliente = {
+    from: () => ({
+      select: () => ({
+        eq: (_c: string, id: string) => ({
+          maybeSingle: async () => {
+            await tique();
+            return { data: tabela.get(id) ?? null, error: null };
+          },
+        }),
+      }),
+      update: (corpo: Record<string, unknown>) => ({
+        eq: (_c: string, id: string) => ({
+          select: () => ({
+            single: async () => {
+              await tique();
+              updates.push({ corpo, filtro: id });
+              if (opcoes.falharUpdate) return { data: null, error: { code: "x" } };
+              const linha = { ...tabela.get(id)!, ...corpo } as LinhaRegra;
+              tabela.set(id, linha);
+              return { data: linha, error: null };
+            },
+          }),
+        }),
+        in: async (_c: string, chaves: string[]) => {
+          usos.push({ corpo, chaves });
+          return { error: null };
+        },
+      }),
+      delete: () => ({
+        eq: async (_c: string, id: string) => {
+          await tique();
+          if (opcoes.falharDelete) return { error: { code: "x" } };
+          tabela.delete(id);
+          return { error: null };
+        },
+      }),
+    }),
+  } as unknown as SupabaseClient<Database>;
+  const gerenciadorFalso = {
+    linha: (id: string) => memoria.get(id),
+    aplicarOtimista: (mudancas: (Partial<LinhaRegra> & { id: string })[]) => {
+      const antes = mudancas.map((m) => memoria.get(m.id)!);
+      for (const m of mudancas) memoria.set(m.id, { ...memoria.get(m.id)!, ...m });
+      return () => {
+        for (const a of antes) memoria.set(a.id, a);
+      };
+    },
+    aplicarLote: (linhas: LinhaRegra[]) => {
+      for (const l of linhas) memoria.set(l.id, l);
+    },
+    remover: (ids: string[]) => {
+      for (const id of ids) memoria.delete(id);
+    },
+  } as unknown as Parameters<typeof criarRepoRegras>[0]["memoria"];
+  const repo = criarRepoRegras({
+    obterCliente: () => cliente,
+    agora: () => AGORA,
+    memoria: gerenciadorFalso,
+    online: () => opcoes.online ?? true,
+  });
+  return { repo, tabela, memoria, updates, usos };
+}
+
+describe("repositório de Regras: editar, excluir e marcar uso", () => {
+  it("editar o Responsável grava Responsável e contagem (soma antiga), sem tocar em ultimo_uso, e atualiza a memória", async () => {
+    const m = montarEdicao();
+    const r = await m.repo.editar("r1", { responsavel_id: "rafael" });
+    expect(r.ok).toBe(true);
+    expect(m.updates).toEqual([
+      {
+        corpo: { responsavel_id: "rafael", tipo_id: "casa", contagem: [{ responsavel_id: "rafael", n: 4 }] },
+        filtro: "r1",
+      },
+    ]);
+    expect(m.memoria.get("r1")?.responsavel_id).toBe("rafael");
+    expect(m.tabela.get("r1")?.ultimo_uso).toBe("2026-10-01T00:00:00.000Z");
+  });
+
+  it("editar sem mudança não grava; limpar os dois recusa com regra.vazia", async () => {
+    const m = montarEdicao();
+    expect(await m.repo.editar("r1", { responsavel_id: "casal" })).toEqual({ ok: true, regra: null });
+    expect(await m.repo.editar("r1", { responsavel_id: null, tipo_id: null })).toEqual({ ok: false, codigo: "regra.vazia" });
+    expect(m.updates).toEqual([]);
+  });
+
+  it("falha no banco desfaz o otimismo; sem conexão não tenta; id desconhecido falha", async () => {
+    const falha = montarEdicao({ falharUpdate: true });
+    expect(await falha.repo.editar("r1", { tipo_id: "saude" })).toEqual({ ok: false, codigo: "salvar.falhou" });
+    expect(falha.memoria.get("r1")?.tipo_id).toBe("casa");
+    const off = montarEdicao({ online: false });
+    expect(await off.repo.editar("r1", { tipo_id: "saude" })).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(off.updates).toEqual([]);
+    expect(await off.repo.excluir("r1")).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(await montarEdicao().repo.editar("nao-existe", { tipo_id: "x" })).toEqual({ ok: false, codigo: "salvar.falhou" });
+  });
+
+  it("excluir apaga no banco e tira da memória; falha deixa tudo como estava", async () => {
+    const m = montarEdicao();
+    expect(await m.repo.excluir("r1")).toEqual({ ok: true });
+    expect(m.tabela.has("r1")).toBe(false);
+    expect(m.memoria.has("r1")).toBe(false);
+    const falha = montarEdicao({ falharDelete: true });
+    expect(await falha.repo.excluir("r1")).toEqual({ ok: false, codigo: "salvar.falhou" });
+    expect(falha.memoria.has("r1")).toBe(true);
+  });
+
+  it("marcarUso muda só o ultimo_uso, em páginas de 50 chaves; lista vazia não chama", async () => {
+    const m = montarEdicao();
+    const chaves = Array.from({ length: 120 }, (_, i) => `C${i}`);
+    expect(await m.repo.marcarUso(chaves)).toEqual({ ok: true });
+    expect(m.usos.map((u) => u.chaves.length)).toEqual([50, 50, 20]);
+    expect(m.usos[0].corpo).toEqual({ ultimo_uso: "2026-11-09T12:00:00.000Z" });
+    await m.repo.marcarUso([]);
+    expect(m.usos).toHaveLength(3);
+  });
+});

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import extracaoOutubro from "../../test/fixtures/extracao-2026-10.json";
-import { classificarImportacao, lerDadosRevisao, type CadastrosParaClassificar, type LinhaParaClassificar } from "./classificacao";
+import { chavesDeRegrasUsadas, classificarImportacao, lerDadosRevisao, type CadastrosParaClassificar, type LinhaParaClassificar } from "./classificacao";
 import type { Extracao, LancamentoExtraido } from "./extracao-fatura";
 import { prepararImportacao } from "./importacao-fatura";
 import type { RegraGravada } from "./regras";
@@ -232,5 +232,26 @@ describe("lerDadosRevisao", () => {
     expect(
       lerDadosRevisao({ responsavel_id: "casal", tipo_id: "saude", outros_responsaveis: ["casal", "rafael", "rafael", "mae"] }),
     ).toEqual({ responsavel_id: "casal", tipo_id: "saude", outros_responsaveis: ["rafael", "mae"] });
+  });
+});
+
+describe("chavesDeRegrasUsadas (3.4)", () => {
+  it("as Regras ativas que a importação usou; Ajuste e Regra de cadastro arquivado não contam", () => {
+    const regras = [
+      regra("SPOTIFY", { responsavel_id: "casal", tipo_id: "musica" }),
+      regra("FANTASMA", { responsavel_id: "ze" }),
+      regra("AMAZON", { tipo_id: "casa" }),
+    ];
+    const usadas = chavesDeRegrasUsadas(
+      [
+        { nome: "DM*SPOTIFY", ajuste_de_ordem: null },
+        { nome: "EBN SPOTIFY", ajuste_de_ordem: null },
+        { nome: "FANTASMA", ajuste_de_ordem: null },
+        { nome: "AMAZON", ajuste_de_ordem: 1 },
+      ],
+      regras,
+      cadastros,
+    );
+    expect(usadas).toEqual(["SPOTIFY"]);
   });
 });

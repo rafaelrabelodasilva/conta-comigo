@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   dois,
   formatarData,
+  formatarDiaMes,
   formatarHora,
   formatarMes,
   formatarMesExtenso,
@@ -107,5 +108,13 @@ describe("instanteEmMicros", () => {
   it("formato desconhecido ou sem fuso: NaN", () => {
     expect(instanteEmMicros("ontem")).toBeNaN();
     expect(instanteEmMicros("2026-11-02T12:00:00")).toBeNaN();
+  });
+});
+
+describe("formatarDiaMes (História 3.4)", () => {
+  it("AAAA-MM-DD vira DD/MM", () => {
+    expect(formatarDiaMes("2026-10-01")).toBe("01/10");
+    expect(formatarDiaMes("2026-11-30")).toBe("30/11");
+    expect(() => formatarDiaMes("01/10")).toThrow();
   });
 });

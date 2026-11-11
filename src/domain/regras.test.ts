@@ -9,7 +9,13 @@ import {
   aprenderRegra,
   avaliarRegra,
   chaveDeRegra,
+  editarRegra,
+  entradasDaReaplicacao,
+  filtrarRegras,
   lerContagem,
+  ordenarRegras,
+  outrosResponsaveisDaRegra,
+  regrasUsadas,
   type EventoAprender,
   type RegraGravada,
 } from "./regras";
@@ -343,5 +349,142 @@ describe("agruparEventosPorChave", () => {
     expect([...grupos.keys()]).toEqual(["SPOTIFY", "SHOPEE"]);
     expect(grupos.get("SPOTIFY")!.map((x) => x.nome)).toEqual(["DM*SPOTIFY P4750", "EBN SPOTIFY", "SPOTIFY"]);
     expect(agruparEventosPorChave([]).size).toBe(0);
+  });
+});
+
+describe("editarRegra (3.4)", () => {
+  const base = regra({
+    responsavel_id: "casal",
+    tipo_id: "casa",
+    contagem: [
+      { responsavel_id: "casal", n: 3 },
+      { responsavel_id: "rafael", n: 1 },
+    ],
+  });
+
+  it("mudar o Responsável deixa a contagem só com ele (soma das antigas)", () => {
+    const r = editarRegra(base, { responsavel_id: "rafael" });
+    expect(r).toEqual({
+      ok: true,
+      valor: { responsavel_id: "rafael", tipo_id: "casa", contagem: [{ responsavel_id: "rafael", n: 4 }] },
+    });
+    // Já não há dúvida na importação.
+    if (r.ok && r.valor) {
+      const nova = { ...base, ...r.valor };
+      expect(avaliarRegra(nova, ativos(["casal", "rafael"], ["casa"])).tipo).toBe("aplicar");
+    }
+  });
+
+  it("mudar só o Tipo não mexe na contagem", () => {
+    const r = editarRegra(base, { tipo_id: "saude" });
+    expect(r).toEqual({
+      ok: true,
+      valor: { responsavel_id: "casal", tipo_id: "saude", contagem: lerContagem(base.contagem) },
+    });
+  });
+
+  it("Responsável sem histórico recebe n mínimo 1", () => {
+    const r = editarRegra(regra({ responsavel_id: null, tipo_id: "casa", contagem: [] }), { responsavel_id: "rafael" });
+    expect(r).toEqual({
+      ok: true,
+      valor: { responsavel_id: "rafael", tipo_id: "casa", contagem: [{ responsavel_id: "rafael", n: 1 }] },
+    });
+  });
+
+  it("limpar o Responsável zera a contagem; limpar os dois recusa", () => {
+    expect(editarRegra(base, { responsavel_id: null })).toEqual({
+      ok: true,
+      valor: { responsavel_id: null, tipo_id: "casa", contagem: [] },
+    });
+    expect(editarRegra(base, { responsavel_id: null, tipo_id: null })).toEqual({
+      ok: false,
+      erro: { codigo: "regra.vazia" },
+    });
+  });
+
+  it("nada muda: null", () => {
+    expect(editarRegra(base, { responsavel_id: "casal", tipo_id: "casa" })).toEqual({ ok: true, valor: null });
+    expect(editarRegra(base, {})).toEqual({ ok: true, valor: null });
+  });
+});
+
+describe("filtrarRegras e ordenarRegras (3.4)", () => {
+  const nomes = {
+    responsaveis: new Map([["casal", "Casal"]]),
+    tipos: new Map([["saude", "Saúde"]]),
+  };
+  const lista = [
+    { chave: "SPOTIFY", responsavel_id: "casal", tipo_id: null, ultimo_uso: "2026-11-01T00:00:00Z" },
+    { chave: "FARMACIA SAO JOAO", responsavel_id: null, tipo_id: "saude", ultimo_uso: "2026-11-05T00:00:00Z" },
+    { chave: "AMAZON", responsavel_id: null, tipo_id: null, ultimo_uso: "2026-11-05T00:00:00Z" },
+  ];
+
+  it("busca na chave, no Responsável e no Tipo, sem acento nem maiúsculas", () => {
+    expect(filtrarRegras(lista, "spot", nomes).map((r) => r.chave)).toEqual(["SPOTIFY"]);
+    expect(filtrarRegras(lista, "CASAL", nomes).map((r) => r.chave)).toEqual(["SPOTIFY"]);
+    expect(filtrarRegras(lista, "saude", nomes).map((r) => r.chave)).toEqual(["FARMACIA SAO JOAO"]);
+    expect(filtrarRegras(lista, "zzz", nomes)).toEqual([]);
+    expect(filtrarRegras(lista, "  ", nomes)).toHaveLength(3);
+  });
+
+  it("mais recentes primeiro, empate pela chave", () => {
+    expect(ordenarRegras(lista).map((r) => r.chave)).toEqual(["AMAZON", "FARMACIA SAO JOAO", "SPOTIFY"]);
+  });
+
+  it("os outros Responsáveis da contagem, do mais frequente", () => {
+    const r = regra({
+      responsavel_id: "casal",
+      contagem: [
+        { responsavel_id: "casal", n: 5 },
+        { responsavel_id: "ana", n: 1 },
+        { responsavel_id: "rafael", n: 2 },
+      ],
+    });
+    expect(outrosResponsaveisDaRegra(r)).toEqual(["rafael", "ana"]);
+  });
+});
+
+describe("entradasDaReaplicacao (3.4)", () => {
+  const linha = (id: string, nome: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    nome,
+    mes: "2026-11",
+    responsavel_id: null as string | null,
+    tipo_id: null as string | null,
+    ajuste_de_id: null as string | null,
+    excluido_em: null as string | null,
+    ...extra,
+  });
+  const chave = chaveDeRegra("SHOPEE *TESHOP");
+
+  it("só as do Mês, da chave, não excluídas, não Ajuste e que diferem; só os campos editados", () => {
+    const linhas = [
+      linha("a", "SHOPEE *TESHOP 01/03"),
+      linha("b", "SHOPEE *TESHOP", { responsavel_id: "rafael", tipo_id: "casa" }),
+      linha("c", "SHOPEE *TESHOP", { responsavel_id: "casal" }),
+      linha("d", "SHOPEE *TESHOP", { mes: "2026-10" }),
+      linha("e", "SHOPEE *TESHOP", { excluido_em: "2026-11-02T00:00:00Z" }),
+      linha("f", "SHOPEE *TESHOP", { ajuste_de_id: "a" }),
+      linha("g", "AMAZON"),
+    ];
+    expect(entradasDaReaplicacao(chave, { responsavel_id: "casal" }, linhas, "2026-11")).toEqual([
+      { id: "a", campos: { responsavel_id: "casal" } },
+      { id: "b", campos: { responsavel_id: "casal" } },
+    ]);
+  });
+
+  it("sem campos editados, nada", () => {
+    expect(entradasDaReaplicacao(chave, {}, [linha("a", "SHOPEE *TESHOP")], "2026-11")).toEqual([]);
+  });
+});
+
+describe("regrasUsadas (3.4)", () => {
+  it("as chaves que aplicaram ou sugeriram, sem repetir", () => {
+    const regras = [
+      regra({ chave: "SPOTIFY", responsavel_id: "casal", tipo_id: "casa", contagem: [{ responsavel_id: "casal", n: 1 }] }),
+      regra({ chave: "OUTRA", responsavel_id: "arquivado", tipo_id: null, contagem: [] }),
+    ];
+    const usadas = regrasUsadas(["DM*SPOTIFY", "EBN SPOTIFY", "OUTRA", "SEM REGRA"], regras, ativos(["casal"], ["casa"]));
+    expect(usadas).toEqual(["SPOTIFY"]);
   });
 });

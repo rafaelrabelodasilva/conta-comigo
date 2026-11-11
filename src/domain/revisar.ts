@@ -27,6 +27,8 @@ export type LinhaDaFila = {
   nome: string;
   apelido: string | null;
   mes: string;
+  /** `AAAA-MM-DD`: o item mostra o DD/MM (a Fatura repete Nome, Valor e Parcela). */
+  data?: string | null;
   valor_centavos: number;
   parcela_n: number | null;
   parcela_total: number | null;
@@ -80,6 +82,8 @@ export type ItemDaFila = {
   /** O Nome da Fatura (nunca muda). */
   nomeOriginal: string;
   mes: string;
+  /** `AAAA-MM-DD` da compra (null se a linha não tem). */
+  data: string | null;
   valorCentavos: number;
   parcelaN: number | null;
   parcelaTotal: number | null;
@@ -98,6 +102,8 @@ export type ItemDaFila = {
   preenchido: { responsavel_id: string | null; tipo_id: string | null };
   /** Os Ajustes que vão junto numa gravação. */
   ajustes: AjusteDoItem[];
+  /** "2 de 3" quando há itens iguais (Mês, data, parcela e valor) no mesmo grupo; senão null. */
+  repeticao: { posicao: number; total: number } | null;
 };
 
 export type GrupoDaFila = {
@@ -156,6 +162,7 @@ function montarItem(l: LinhaDaFila, linhas: readonly LinhaDaFila[], cadastros: C
     nome: nomeExibido(l),
     nomeOriginal: l.nome,
     mes: l.mes,
+    data: l.data ?? null,
     valorCentavos: l.valor_centavos,
     parcelaN: l.parcela_n,
     parcelaTotal: l.parcela_total,
@@ -170,6 +177,7 @@ function montarItem(l: LinhaDaFila, linhas: readonly LinhaDaFila[], cadastros: C
       const a = linhas.find((x) => x.id === id);
       return a ? [{ id, valorCentavos: a.valor_centavos }] : [];
     }),
+    repeticao: null,
   };
 }
 
@@ -189,10 +197,32 @@ export function montarFila(linhas: readonly LinhaDaFila[], cadastros: CadastrosD
     if (grupo) grupo.itens.push(item);
     else grupos.set(chave, { chave, titulo: null, itens: [item] });
   }
-  return [...grupos.values()].map((g) => ({
-    ...g,
-    titulo: g.itens.length >= 2 ? tituloGrupoRevisar(g.itens[0].nomeOriginal, g.itens.length) : null,
-  }));
+  return [...grupos.values()].map((g) => {
+    marcarRepeticoes(g.itens);
+    const meses = [...new Set(g.itens.map((i) => i.mes))].sort();
+    return {
+      ...g,
+      titulo: g.itens.length >= 2 ? tituloGrupoRevisar(g.itens[0].nomeOriginal, g.itens.length, meses) : null,
+    };
+  });
+}
+
+/**
+ * Itens do mesmo grupo iguais em Mês, data, parcela e valor (compras repetidas
+ * da Fatura, indistinguíveis na tela) ganham "k de n" na ordem da Fatura.
+ */
+function marcarRepeticoes(itens: ItemDaFila[]): void {
+  const chave = (i: ItemDaFila) => [i.mes, i.data ?? "", i.parcelaN ?? "", i.parcelaTotal ?? "", i.valorCentavos].join("|");
+  const total = new Map<string, number>();
+  for (const i of itens) total.set(chave(i), (total.get(chave(i)) ?? 0) + 1);
+  const visto = new Map<string, number>();
+  for (const i of itens) {
+    const k = chave(i);
+    const n = total.get(k) ?? 1;
+    const posicao = (visto.get(k) ?? 0) + 1;
+    visto.set(k, posicao);
+    if (n > 1) i.repeticao = { posicao, total: n };
+  }
 }
 
 export type ResumoDaFila = {

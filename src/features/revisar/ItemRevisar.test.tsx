@@ -151,6 +151,30 @@ describe("ItemRevisar", () => {
     expect(screen.getByText("Nov/26 · 05/10 · R$ 445,89", { normalizer: (t) => t.replaceAll("\u00a0", " ") })).toBeTruthy();
   });
 
+  it("mostra a data DD/MM e, nas compras repetidas, 'k de n' (História 3.4)", () => {
+    const sem = (t: string) => t.replaceAll("\u00a0", " ");
+    const compra = (id: string, ordem: number): LinhaDaFila => ({
+      id,
+      nome: "SHOPEE X",
+      apelido: null,
+      mes: "2026-10",
+      data: "2026-10-01",
+      valor_centavos: 5990,
+      parcela_n: null,
+      parcela_total: null,
+      responsavel_id: null,
+      tipo_id: null,
+      ajuste_de_id: null,
+      excluido_em: null,
+      revisao_motivo: "sem_classificacao",
+      revisao_dados: null,
+      ordem_fatura: ordem,
+    });
+    const itens = montarFila([compra("a", 1), compra("b", 2), compra("c", 3)], cadastros)[0].itens;
+    desenhar(itens[1], { comMes: true });
+    expect(screen.getByText("Out/26 · 01/10 · R$ 59,90 · 2 de 3", { normalizer: sem })).toBeTruthy();
+  });
+
   it("os Ajustes da mãe aparecem como linhas menores, sem botão próprio", () => {
     const mae = item(
       { id: "msc", nome: "MSC CRUZEIROS", revisao_motivo: "sugestao", revisao_dados: sugestao },

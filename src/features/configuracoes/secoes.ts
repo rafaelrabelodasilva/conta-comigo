@@ -7,6 +7,7 @@ export const CHAVES_SECAO = [
   "status",
   "ciclo",
   "conferencia",
+  "regras",
   "aparencia",
 ] as const;
 

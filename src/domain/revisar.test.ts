@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { linhasDoMes } from "./painel";
 import {
   contarFila,
   ehDaFila,
@@ -383,5 +384,80 @@ describe("ordenarPorUso", () => {
 
   it("item sem uso conta 0", () => {
     expect(ordenarPorUso(itens, new Map([["c", 2]])).map((i) => i.id)).toEqual(["c", "a", "b"]);
+  });
+});
+
+// Ajuste da 3.2/3.3 na 3.4: a Fatura repete Nome, Valor e Parcela, e o Nome aparece em
+// Meses diferentes; o item mostra a data, "k de n" e o título lista os Meses.
+describe("fila: data, compras repetidas e Meses no título (História 3.4)", () => {
+  it("o item traz a data da compra", () => {
+    expect(itemUnico(linha({ data: "2026-10-01" })).data).toBe("2026-10-01");
+    expect(itemUnico(linha()).data).toBeNull();
+  });
+
+  it("3 compras iguais na mesma Fatura: '1 de 3' a '3 de 3' na ordem da Fatura; datas ou valores diferentes não contam", () => {
+    const base = { nome: "SHOPEE X", mes: "2026-10", valor_centavos: 5990, data: "2026-10-01" };
+    const linhas = [
+      linha({ ...base, ordem_fatura: 12 }),
+      linha({ ...base, ordem_fatura: 14 }),
+      linha({ ...base, ordem_fatura: 13 }),
+      linha({ ...base, data: "2026-10-02", ordem_fatura: 15 }),
+      linha({ ...base, valor_centavos: 100, ordem_fatura: 16 }),
+    ];
+    const itens = montarFila(linhas, cadastros)[0].itens;
+    expect(itens.map((i) => i.repeticao)).toEqual([
+      { posicao: 1, total: 3 },
+      { posicao: 2, total: 3 },
+      { posicao: 3, total: 3 },
+      null,
+      null,
+    ]);
+    // A ordem é a da Fatura: o 2º é a linha de ordem 13.
+    expect(itens[1].id).toBe(linhas[2].id);
+  });
+
+  it("o mesmo Nome em dois Meses é um grupo com os dois Meses no título; um Mês só não lista Mês", () => {
+    const doisMeses = montarFila(
+      [linha({ nome: "SPOTIFY", mes: "2026-10", ordem_fatura: 1 }), linha({ nome: "SPOTIFY", mes: "2026-11", ordem_fatura: 1 })],
+      cadastros,
+    );
+    expect(doisMeses).toHaveLength(1);
+    expect(doisMeses[0].titulo).toBe("SPOTIFY · 2 lançamentos · Out/26 e Nov/26");
+    const umMes = montarFila(
+      [linha({ nome: "SPOTIFY", ordem_fatura: 1 }), linha({ nome: "SPOTIFY", ordem_fatura: 2 })],
+      cadastros,
+    );
+    expect(umMes[0].titulo).toBe("SPOTIFY · 2 lançamentos");
+  });
+
+  it("cada item do Revisar existe no Painel do mesmo Mês, com o mesmo id (e só as não classificadas)", () => {
+    const todas: LinhaDaFila[] = [
+      // out/26: compras repetidas, uma já classificada, uma excluída e um Ajuste
+      linha({ id: "o1", nome: "SHOPEE X", mes: "2026-10", data: "2026-10-01", ordem_fatura: 1 }),
+      linha({ id: "o2", nome: "SHOPEE X", mes: "2026-10", data: "2026-10-01", ordem_fatura: 2 }),
+      linha({ id: "o3", nome: "SPOTIFY", mes: "2026-10", ordem_fatura: 3, revisao_motivo: null, responsavel_id: CASAL, tipo_id: CASA }),
+      linha({ id: "o4", nome: "AMAZON", mes: "2026-10", ordem_fatura: 4, excluido_em: "2026-11-02T00:00:00Z" }),
+      // nov/26: o Nome de out/26 de novo, mais um Ajuste de mãe na fila
+      linha({ id: "n1", nome: "SPOTIFY", mes: "2026-11", data: "2026-11-05", ordem_fatura: 1 }),
+      linha({ id: "n2", nome: "SHOPEE X", mes: "2026-11", ordem_fatura: 2 }),
+      linha({ id: "n3", nome: "FARMACIA", mes: "2026-11", ordem_fatura: 3 }),
+      linha({ id: "n3a", nome: "FARMACIA", mes: "2026-11", ordem_fatura: 4, ajuste_de_id: "n3", revisao_motivo: null }),
+    ];
+    const itens = montarFila(todas, cadastros).flatMap((g) => g.itens);
+    expect(itens.map((i) => i.id).sort()).toEqual(["n1", "n2", "n3", "o1", "o2"]);
+    for (const item of itens) {
+      const painel = linhasDoMes(todas, item.mes);
+      const naTela = painel.find((l) => l.id === item.id);
+      expect(naTela, `${item.id} falta no Painel de ${item.mes}`).toBeDefined();
+      // A mesma linha: o item é a visão não classificada dela.
+      expect(naTela?.nome).toBe(item.nomeOriginal);
+      expect(naTela?.valor_centavos).toBe(item.valorCentavos);
+      expect(ehDaFila(naTela!)).toBe(true);
+    }
+    // O Ajuste aparece sob a mãe no item, e também está no Painel do Mês.
+    expect(itens.find((i) => i.id === "n3")?.ajustes.map((a) => a.id)).toEqual(["n3a"]);
+    expect(linhasDoMes(todas, "2026-11").some((l) => l.id === "n3a")).toBe(true);
+    // O Painel nunca mostra a excluída.
+    expect(linhasDoMes(todas, "2026-10").map((l) => l.id)).toEqual(["o1", "o2", "o3"]);
   });
 });

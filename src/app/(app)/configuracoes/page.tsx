@@ -6,6 +6,7 @@ import { temSessao } from "@/data/supabase/servidor";
 import { SecaoAparencia } from "@/features/configuracoes/SecaoAparencia";
 import { SecaoCiclo } from "@/features/configuracoes/SecaoCiclo";
 import { SecaoConferencia } from "@/features/configuracoes/SecaoConferencia";
+import { SecaoRegras } from "@/features/configuracoes/SecaoRegras";
 import { SecaoResponsaveis } from "@/features/configuracoes/SecaoResponsaveis";
 import { SecaoStatus } from "@/features/configuracoes/SecaoStatus";
 import { SecaoTipos } from "@/features/configuracoes/SecaoTipos";
@@ -27,6 +28,7 @@ const CONTEUDO_SECAO: Record<ChaveSecao, { rotulo: string; Conteudo: () => React
   status: { rotulo: ROTULOS.status, Conteudo: SecaoStatus },
   ciclo: { rotulo: ROTULOS.ciclo, Conteudo: SecaoCiclo },
   conferencia: { rotulo: ROTULOS.conferencia, Conteudo: SecaoConferencia },
+  regras: { rotulo: ROTULOS.regras_aprendidas, Conteudo: SecaoRegras },
   aparencia: { rotulo: ROTULOS.aparencia, Conteudo: SecaoAparencia },
 };
 

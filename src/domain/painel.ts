@@ -41,6 +41,14 @@ export function mesAtual(hoje: string): string {
 }
 
 /**
+ * Os Lançamentos que o Painel mostra de um Mês: os desse Mês, não excluídos
+ * (mães e Ajustes). É a regra única: o Revisar mostra um subconjunto disto.
+ */
+export function linhasDoMes<L extends { mes: string; excluido_em: string | null }>(linhas: readonly L[], mes: string): L[] {
+  return linhas.filter((l) => l.mes === mes && l.excluido_em === null);
+}
+
+/**
  * Meses da lista do seletor, do mais antigo para o mais novo: do Mês mais
  * antigo com Fatura (ou do Mês atual, sem Fatura) até o Mês atual + 1. O
  * Mês aberto entra mesmo fora desse intervalo (as setas andam sem limite).

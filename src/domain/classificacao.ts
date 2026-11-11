@@ -18,7 +18,7 @@
 //   recebe a classificação calculada da mãe, sem motivo.
 
 import { normalizarNome } from "./importacao-fatura";
-import { avaliarRegra, chaveDeRegra, type CadastrosAtivos, type RegraGravada } from "./regras";
+import { avaliarRegra, chaveDeRegra, regrasUsadas, type CadastrosAtivos, type RegraGravada } from "./regras";
 
 /** Por que a linha está na fila do Revisar (enum `revisao_motivo` do banco). */
 export type MotivoRevisao = "sem_classificacao" | "sugestao" | "sugestao_duvida";
@@ -156,6 +156,23 @@ export function classificarImportacao<L extends LinhaParaClassificar>(
       revisao_dados: null,
     };
   });
+}
+
+/**
+ * As chaves das Regras que a importação usou (aplicou ou sugeriu), para
+ * `regrasRepo.marcarUso` mudar o `ultimo_uso` (História 3.4). Ajustes não têm
+ * Regra própria e não entram.
+ */
+export function chavesDeRegrasUsadas(
+  lancamentos: readonly Pick<LinhaParaClassificar, "nome" | "ajuste_de_ordem">[],
+  regras: readonly RegraGravada[],
+  cadastros: CadastrosParaClassificar,
+): string[] {
+  return regrasUsadas(
+    lancamentos.filter((l) => l.ajuste_de_ordem === null).map((l) => l.nome),
+    regras,
+    ativos(cadastros),
+  );
 }
 
 /**

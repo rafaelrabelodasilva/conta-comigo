@@ -62,6 +62,7 @@ export const MENSAGENS = {
   "status.nao_arquivado": "Este Status não está arquivado.",
   "status.lista_vazia": "Crie os Status das suas contas, como Não pago e Pago.",
   "status.padrao_nao_arquiva": "Escolha outro Status padrão antes de arquivar.",
+  "regra.vazia": "Deixe ao menos o Responsável ou o Tipo.",
   "cadastro.em_uso": "Está em uso. Escolha um substituto ou arquive.",
   "cadastro.sem_substituto": "Escolha um substituto.",
   "cadastro.substituto_invalido": "Escolha um substituto ativo.",
@@ -488,14 +489,80 @@ export const TEXTOS_REVISAR = {
   ver_no_painel: "Ver no Painel",
 } as const;
 
+/** Textos da tela Configurações → Regras aprendidas (História 3.4, FR-12). */
+export const TEXTOS_REGRAS = {
+  vazio: "As Regras aparecem conforme você classifica os lançamentos",
+  nenhuma_encontrada: "Nenhuma Regra encontrada",
+  buscar: "Buscar Regra",
+  carregando: "Carregando…",
+  coluna_chave: "Nome",
+  coluna_responsavel: "Responsável",
+  coluna_tipo: "Tipo",
+  coluna_divisao: "Divisão",
+  coluna_ultimo_uso: "Última vez usada",
+  /** A Divisão chega na 3.8. */
+  sem_divisao: "—",
+  sem_valor: "—",
+  editar: "Editar",
+  excluir: "Excluir",
+  titulo_editar: "Editar Regra",
+  responsavel: "Responsável",
+  tipo: "Tipo",
+  nenhum: "Nenhum",
+  salvar: "Salvar",
+  regra_salva: "Regra salva",
+  confirmar_excluir: "Excluir Regra",
+  /** Toast depois de "Aplicar a todos"; o "Desfazer" vem do próprio toast. */
+  reaplicada: "Regra reaplicada",
+} as const;
+
+/** "às vezes Rafael" / "às vezes Rafael ou Casal". */
+export function rotuloAsVezes(nomes: readonly string[]): string {
+  return `às vezes ${nomes.join(" ou ")}`;
+}
+
+/** "Reaplicar aos lançamentos de Nov/26?" */
+export function perguntaReaplicar(mes: string, quantos: number): string {
+  const n = quantos === 1 ? "1 muda" : `${quantos} mudam`;
+  return `Reaplicar aos lançamentos de ${formatarMes(mes)}? (${n})`;
+}
+
+/** Título da confirmação de excluir. */
+export function tituloExcluirRegra(chave: string): string {
+  return `Excluir a Regra de ${chave}?`;
+}
+
+export const DESCRICAO_EXCLUIR_REGRA =
+  "Os lançamentos não mudam. As próximas importações deixam de usar esta Regra.";
+
+/** Nome acessível dos botões da linha. */
+export function rotuloEditarRegra(chave: string): string {
+  return `Editar a Regra de ${chave}`;
+}
+export function rotuloExcluirRegra(chave: string): string {
+  return `Excluir a Regra de ${chave}`;
+}
+
 /** "Faltam 17" (um: "Falta 1"). */
 export function rotuloFaltam(n: number): string {
   return n === 1 ? "Falta 1" : `Faltam ${n}`;
 }
 
-/** Título do grupo com 2+ itens: "SHOPEE · 3 lançamentos". */
-export function tituloGrupoRevisar(nome: string, quantidade: number): string {
-  return `${nome} · ${rotuloLancamentos(quantidade)}`;
+/**
+ * Título do grupo com 2+ itens: "SHOPEE · 3 lançamentos". Quando o grupo
+ * junta Meses diferentes, eles vêm no fim: "SHOPEE · 3 lançamentos · Out/26 e Nov/26".
+ */
+export function tituloGrupoRevisar(nome: string, quantidade: number, meses: readonly string[] = []): string {
+  const base = `${nome} · ${rotuloLancamentos(quantidade)}`;
+  if (meses.length < 2) return base;
+  const nomes = meses.map((m) => formatarMes(m));
+  const ultimo = nomes[nomes.length - 1];
+  return `${base} · ${nomes.length === 2 ? nomes[0] : nomes.slice(0, -1).join(", ")} e ${ultimo}`;
+}
+
+/** "2 de 3": o item é o 2º de 3 iguais no mesmo grupo (mesmo Mês, data, parcela e valor). */
+export function rotuloRepeticao(posicao: number, total: number): string {
+  return `${posicao} de ${total}`;
 }
 
 /** Linha menor sob a mãe: "Ajuste - R$ 0,08". */
@@ -700,6 +767,7 @@ export const ROTULOS = {
   voltar: "Voltar",
   voltar_para_salvar: "Voltar para salvar",
   descartar: "Descartar",
+  regras_aprendidas: "Regras aprendidas",
 } as const;
 
 /**
