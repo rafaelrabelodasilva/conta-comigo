@@ -20,12 +20,17 @@
 //   ordem da fatura, os previstos por Valor igual primeiro e depois por
 //   `ocorrencia`. `aplicarCasamento` dá ao casado a classificação e o motivo
 //   ("Valor mudou" quando o Valor difere e a linha já está classificada).
+// - Herança (História 3.7, FR-8): a parcela real que sobrou sem previsto
+//   procura a n−1/N do Mês anterior (`heranca.ts`) e, se achar, entra na Série
+//   dela e herda a classificação; `aplicarCasamento` faz isso depois do
+//   casamento e antes de subir a `ocorrencia`.
 // - Propagação (decisão 4-A): quando a parcela real é reclassificada, os
 //   previstos vazios recebem sozinhos; os que já têm outro valor só mudam se
 //   Rafael responder "Aplicar a todos", e só se a parcela já tinha valor.
 
 import type { DadosRevisao, DadosValorMudou, MotivoRevisao } from "./classificacao";
 import { somarMeses } from "./ciclo";
+import { emprestaAlgo, escolherCandidatas, mesclarHerdada, type CandidataParaHerdar } from "./heranca";
 
 /** A linha é um previsto? (`lancado_por = 'sistema'`: o app a criou, a fatura ainda não chegou.) */
 export function ehPrevisto(l: { lancado_por: string }): boolean {
@@ -110,6 +115,9 @@ export type LinhaParaPrever = {
   ordem_fatura: number;
   responsavel_id: string | null;
   tipo_id: string | null;
+  /** Herdados da parcela anterior (3.7); os previstos seguintes os copiam. */
+  apelido?: string | null;
+  observacao?: string | null;
   serie: ChaveDaSerie | null;
 };
 
@@ -151,14 +159,14 @@ export function gerarPrevistos(
         ordem_origem: l.ordem_fatura,
         nome: l.nome,
         nome_normalizado: l.nome_normalizado,
-        apelido: null,
+        apelido: l.apelido ?? null,
         valor_centavos: l.valor_centavos,
         parcela_n: l.parcela_n + k,
         parcela_total: l.parcela_total,
         mes,
         responsavel_id: l.responsavel_id,
         tipo_id: l.tipo_id,
-        observacao: null,
+        observacao: l.observacao ?? null,
       });
     }
   }
@@ -310,26 +318,35 @@ export type ClassificacaoCalculada = {
   revisao_dados: DadosRevisao | DadosValorMudou | null;
 };
 
+/** O que a herança (3.7) acrescenta a cada linha devolvida por `aplicarCasamento`. */
+export type MarcaDeHeranca = { herdado_de_id: string | null };
+
 /**
  * Aplica o casamento às linhas já classificadas pelas Regras. A linha casada
  * guarda `previsto_id` e perde a chave da Série (a Série é a do previsto);
  * Responsável e Tipo são os do previsto, e o campo vazio recebe o que as
  * Regras calcularam. Completa e com Valor igual: sem motivo. Completa e com
  * Valor diferente: `valor_mudou` com `{ antes_centavos }`. Incompleta: o
- * motivo da classificação normal (decisão Q2-A).
+ * motivo da classificação normal (decisão Q2-A da 3.6).
+ *
+ * Depois do casamento, a parcela real n > 1 que ficou sem previsto herda da
+ * parcela n−1 do Mês anterior (`candidatas`, História 3.7): entra na Série
+ * dela e a classificação dela vale campo a campo sobre a das Regras.
+ * `herdado_de_id` só é preenchido quando a candidata emprestou algum campo.
  */
 export function aplicarCasamento<
-  L extends ClassificacaoCalculada & RealParaCasar & { serie: ChaveDaSerie | null },
+  L extends ClassificacaoCalculada & RealParaCasar & { serie: ChaveDaSerie | null; apelido?: string | null; observacao?: string | null },
 >(
   lancamentos: readonly L[],
   casamento: ResultadoDoCasamento,
   previstos: readonly PrevistoParaCasar[],
-): (L & { previsto_id: string | null })[] {
+  candidatas: readonly CandidataParaHerdar[] = [],
+): (L & { previsto_id: string | null } & MarcaDeHeranca)[] {
   const previstoDe = new Map(previstos.map((p) => [p.id, p]));
   const idDoPar = new Map(casamento.casados.map((c) => [c.ordem_fatura, c.previsto_id]));
-  const aplicadas = lancamentos.map((l) => {
+  const aplicadas = lancamentos.map((l): L & { previsto_id: string | null } & MarcaDeHeranca => {
     const previsto = previstoDe.get(idDoPar.get(l.ordem_fatura) ?? "");
-    if (!previsto) return { ...l, previsto_id: null };
+    if (!previsto) return { ...l, previsto_id: null, herdado_de_id: null };
     const responsavel_id = previsto.responsavel_id ?? l.responsavel_id;
     const tipo_id = previsto.tipo_id ?? l.tipo_id;
     const completa = responsavel_id !== null && tipo_id !== null;
@@ -345,16 +362,45 @@ export function aplicarCasamento<
     } else {
       revisao_motivo = null;
     }
-    return { ...l, serie: null, responsavel_id, tipo_id, revisao_motivo, revisao_dados, previsto_id: previsto.id };
+    return { ...l, serie: null, responsavel_id, tipo_id, revisao_motivo, revisao_dados, previsto_id: previsto.id, herdado_de_id: null };
   });
-  // Parcela real sem previsto: a Série calculada pode já ter essa parcela num previsto do Mês (compras
-  // idênticas em que um previsto foi excluído ou casou com outra ocorrencia). Sobe a `ocorrencia` até uma
-  // Série livre, para a RPC não recusar a importação inteira.
+
   const chaveDaParcela = (k: ChaveDaSerie, n: number | null) =>
     JSON.stringify([k.nome_normalizado, k.parcela_total, k.valor_parcela_centavos, k.mes_primeira_parcela, k.ocorrencia, n]);
   const ocupadas = new Set(previstos.flatMap((p) => (p.serie ? [chaveDaParcela(p.serie, p.parcela_n)] : [])));
-  const livres = aplicadas.map((l) => {
-    if (l.previsto_id !== null || l.serie === null) return l;
+
+  // Herança (3.7): as parcelas n > 1 que sobraram sem previsto procuram a n−1 do Mês anterior.
+  const semPrevisto = aplicadas.filter((l) => l.previsto_id === null && l.serie !== null && l.parcela_n !== null && l.parcela_n > 1);
+  const escolhidas = escolherCandidatas(
+    semPrevisto.map((l) => ({
+      ordem_fatura: l.ordem_fatura,
+      nome_normalizado: l.nome_normalizado,
+      valor_centavos: l.valor_centavos,
+      parcela_n: l.parcela_n as number,
+      parcela_total: l.parcela_total as number,
+    })),
+    candidatas,
+  );
+  const naSerieDaCandidata = new Set<number>();
+  const herdadas = aplicadas.map((l) => {
+    const c = escolhidas.get(l.ordem_fatura);
+    if (!c || l.previsto_id !== null) return l;
+    // Entra na Série da candidata (a chave dela, inclusive a `ocorrencia`); sem Série, fica a da 3.5.
+    let serie = l.serie;
+    if (c.serie !== null) {
+      serie = c.serie;
+      naSerieDaCandidata.add(l.ordem_fatura);
+      ocupadas.add(chaveDaParcela(c.serie, l.parcela_n));
+    }
+    if (!emprestaAlgo(c)) return { ...l, serie };
+    return { ...l, serie, ...mesclarHerdada(l, c), herdado_de_id: c.id };
+  });
+
+  // Parcela real sem par: a Série calculada pode já ter essa parcela num previsto do Mês (compras
+  // idênticas em que um previsto foi excluído ou casou com outra ocorrencia) ou na Série de uma
+  // herdeira. Sobe a `ocorrencia` até uma Série livre, para a RPC não recusar a importação inteira.
+  const livres = herdadas.map((l) => {
+    if (l.previsto_id !== null || l.serie === null || naSerieDaCandidata.has(l.ordem_fatura)) return l;
     let serie = l.serie;
     while (ocupadas.has(chaveDaParcela(serie, l.parcela_n))) serie = { ...serie, ocorrencia: serie.ocorrencia + 1 };
     ocupadas.add(chaveDaParcela(serie, l.parcela_n));

@@ -119,3 +119,27 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-6-casar-os-previstos-com-a-fatura-real.md`
   summary: Reimportar a Fatura de um Mês apaga em silêncio os previstos "Não veio na fatura" dos Meses seguintes que ela criou (origem na Fatura apagada, ainda `sistema` e sem edição), sem a pergunta que "Manter" evitaria.
   evidence: Low. É a regra da reimportação simplificada (3.5, decisão 3-A): os previstos intocados são apagados e recriados só nos Meses sem Fatura. Com a 3.12 isso muda (previstos que tinham casado voltam a `sistema`).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-herdar-parcelas-sem-previsto.md`
+  summary: Rodar no CI a migração `20261116120000_herdar_parcelas.sql` (a RPC `importar_fatura` passa a gravar `apelido` e `observacao`) e `test/integracao/heranca.test.ts`.
+  evidence: Medium não verificado. Esta máquina não tem Docker: a migração e os cenários (herdeiras com e sem Série, compras idênticas, previsto excluído, reimportação, casado mantendo o Apelido) rodaram só no Postgres em memória (pglite) com todas as migrações em ordem; RLS e Realtime só o CI prova. A assinatura da RPC não mudou, então `database.types.ts` não muda.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-herdar-parcelas-sem-previsto.md`
+  summary: Conferir a herança de verdade na primeira Fatura em que ela aparece: classificar parcelas de out/26 e reimportar nov/26 (ou importar dez/26) e ver "N parcelas herdaram a classificação da parcela anterior" no passo 3, o contador do Revisar menor e a classificação certa na grade.
+  evidence: Medium não verificado em produção. Hoje nenhuma linha está classificada, então reimportar nov/26 agora não herda nada (a candidata não tem classificação). Na importação mensal normal quase toda parcela n > 1 já chega com previsto (3.6); a herança vale para a primeira importação com histórico, para a 3.10 (planilha) e para a 3.12 (reimportar mantendo a classificação).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-herdar-parcelas-sem-previsto.md`
+  summary: Acrescentar a Divisão à lista de campos herdados (`CAMPOS_HERDADOS` em `src/domain/heranca.ts`) e aos previstos seguintes quando a 3.8 criar a coluna `divisao`.
+  evidence: A 3.7 herda Responsável, Tipo, Apelido e Observação; a Divisão não tem coluna até a 3.8 (AC da 3.7 e AD-8 pedem que ela também seja herdada). Sem isso, uma parcela dividida herdaria só Responsável e Tipo.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-herdar-parcelas-sem-previsto.md`
+  summary: Decidir o que fazer com a parcela cujo Valor mudou entre n−1 e n (juros, reajuste): hoje não herda e não entra na Série da anterior (a chave da Série inclui o Valor), então segue as Regras e a fila.
+  evidence: Low. Decisão Q4-A da 3.7 (FR-8 pede o mesmo Valor). O "Valor mudou" só existe para previsto casado (3.6); a parcela real com Valor novo vira Série nova e o previsto dela, se houver, fica "Não veio".
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-herdar-parcelas-sem-previsto.md`
+  summary: Herdar "para trás" (importar um Mês mais antigo que a parcela já gravada, ex.: out/26 depois de nov/26) ou de mais de um Mês antes (n−2 quando falta o Mês anterior).
+  evidence: Low. A 3.7 só olha a n−1 do Mês imediatamente anterior (decisão Q5-A). Importar fora de ordem entra na Série pela chave (sem previsto, pois o Mês seguinte já tem Fatura, decisão 1-A), mas só com as Regras.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-herdar-parcelas-sem-previsto.md`
+  summary: Na 3.12 (reimportar mantendo a classificação), dar prioridade à edição manual da linha antiga sobre a herança recalculada, e lembrar que a herança lê o Mês anterior como está na hora da reimportação.
+  evidence: Low. A reimportação simplificada recalcula a herança, mas apaga a edição manual de uma herdeira (a herdeira não tem `casado_em`, então a trava da 3.6 não a protege). O aviso "X já estão classificados à mão" cobre o caso.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-herdar-parcelas-sem-previsto.md`
+  summary: `regrasUsadas`/`chavesDeRegrasUsadas` marcam o `ultimo_uso` da Regra mesmo quando a herança sobrepôs a classificação dela na linha.
+  evidence: Low. A importação calcula as Regras usadas antes da herança; a Regra aparece como usada embora a linha tenha ficado com a classificação da parcela anterior.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-herdar-parcelas-sem-previsto.md`
+  summary: Conferir no iPad se o VoiceOver lê com sentido a linha nova do passo 3 ("N parcelas herdaram a classificação da parcela anterior").
+  evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4; o jsdom só confere o texto.

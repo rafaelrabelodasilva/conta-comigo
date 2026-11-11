@@ -328,16 +328,18 @@ export function resumoDaImportacao(
  * O passo final da importação: quantas linhas (sem os Ajustes, que seguem a
  * mãe) entram classificadas e quantas vão para a fila, quantos previstos
  * casaram (`previsto_id`) e quantos previstos a Fatura não trouxe
- * (`previstosSemPar`, que também vão para a fila, História 3.6).
+ * (`previstosSemPar`, que também vão para a fila, História 3.6) e quantas
+ * herdaram a classificação da parcela anterior (`herdado_de_id`, História 3.7).
  */
 export function resumoDaClassificacao(
-  lancamentos: readonly { ajuste_de_ordem: number | null; revisao_motivo: MotivoRevisao | null; previsto_id?: string | null }[],
+  lancamentos: readonly { ajuste_de_ordem: number | null; revisao_motivo: MotivoRevisao | null; previsto_id?: string | null; herdado_de_id?: string | null }[],
   previstosSemPar = 0,
-): { classificados: number; paraRevisar: number; casados: number; naoVieram: number } {
+): { classificados: number; paraRevisar: number; casados: number; naoVieram: number; herdadas: number } {
   const maes = lancamentos.filter((l) => l.ajuste_de_ordem === null);
   const paraRevisar = maes.filter((l) => l.revisao_motivo !== null).length;
   const casados = maes.filter((l) => (l.previsto_id ?? null) !== null).length;
-  return { classificados: maes.length - paraRevisar, paraRevisar, casados, naoVieram: previstosSemPar };
+  const herdadas = maes.filter((l) => (l.herdado_de_id ?? null) !== null).length;
+  return { classificados: maes.length - paraRevisar, paraRevisar, casados, naoVieram: previstosSemPar, herdadas };
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   avisoReimportarBloqueado,
   mensagem,
   rotuloDespesasCreditos,
+  rotuloParcelasHerdadas,
   rotuloPrevistosCasados,
   rotuloPrevistosNaoVieram,
   rotuloReimportado,
@@ -34,6 +35,7 @@ const falso = vi.hoisted(() => ({
   importar: vi.fn(),
   lerReimportacao: vi.fn(),
   lerPrevistosDoMes: vi.fn(),
+  lerParcelasDoMesAnterior: vi.fn(),
   faturas: [] as { id: string; mes: string }[],
   configuracoes: [] as { limite_ajuste_centavos: number; status_padrao_id?: string | null }[],
   responsaveis: [] as { id: string; nome: string; arquivado: boolean }[],
@@ -74,6 +76,7 @@ vi.mock("@/data/faturas-repo", () => ({
     importar: falso.importar,
     lerReimportacao: falso.lerReimportacao,
     lerPrevistosDoMes: falso.lerPrevistosDoMes,
+    lerParcelasDoMesAnterior: falso.lerParcelasDoMesAnterior,
   }),
 }));
 vi.mock("@/data/regras-repo", () => ({
@@ -168,6 +171,7 @@ beforeEach(() => {
   falso.importar.mockResolvedValue({ ok: true, quantidade: 49 });
   falso.lerReimportacao.mockResolvedValue({ ok: true, valor: null });
   falso.lerPrevistosDoMes.mockResolvedValue({ ok: true, previstos: [], atualizadoEm: null });
+  falso.lerParcelasDoMesAnterior.mockResolvedValue({ ok: true, candidatas: [] });
 });
 
 describe("ImportarFatura", () => {
@@ -1054,5 +1058,99 @@ describe("ImportarFatura: depois de gravar (História 3.2)", () => {
     falso.fetch.mockImplementation(async () => resposta(comAjuste));
     await importarOutubro();
     expect(await screen.findByText(rotuloResumoClassificacao(1, 1))).toBeTruthy();
+  });
+});
+
+describe("ImportarFatura: herança das parcelas sem previsto (História 3.7)", () => {
+  // Uma parcela n > 1 de outubro que não tem previsto: a n−1 do Mês anterior (set/26) empresta a classificação.
+  const real = outubro.lancamentos.find((l) => l.parcelaN !== null && l.parcelaN > 1 && l.parcelaTotal !== null && l.parcelaN < l.parcelaTotal && l.valorCentavos > 0)!;
+  const nomeNormalizado = real.nome.normalize("NFD").replace(/\p{M}/gu, "").toUpperCase().replace(/\s+/g, " ").trim();
+  const candidata = (extra: Record<string, unknown> = {}) => ({
+    id: "c-anterior",
+    nome_normalizado: nomeNormalizado,
+    parcela_n: (real.parcelaN as number) - 1,
+    parcela_total: real.parcelaTotal as number,
+    valor_centavos: real.valorCentavos,
+    ordem_fatura: 7,
+    responsavel_id: "casal",
+    tipo_id: "casa",
+    apelido: "Sofá",
+    observacao: "10x",
+    serie: {
+      nome_normalizado: nomeNormalizado,
+      parcela_total: real.parcelaTotal as number,
+      valor_parcela_centavos: real.valorCentavos,
+      mes_primeira_parcela: "2026-01",
+      ocorrencia: 2,
+    },
+    proxima_ocupada: false,
+    ...extra,
+  });
+
+  beforeEach(() => {
+    falso.responsaveis = [{ id: "casal", nome: "Casal", arquivado: false }];
+    falso.tipos = [{ id: "casa", nome: "Casa", arquivado: false }];
+  });
+
+  async function ateOPasso3() {
+    const u = await escolherPdf();
+    await digitarSenha(u, "s");
+    await screen.findByText(PASSO_3);
+    return u;
+  }
+
+  it("lê as parcelas do mês anterior ao importado, herda a classificação e conta no passo 3 e no resumo final", async () => {
+    falso.lerParcelasDoMesAnterior.mockResolvedValue({ ok: true, candidatas: [candidata()] });
+    const u = await ateOPasso3();
+    expect(falso.lerParcelasDoMesAnterior).toHaveBeenCalledExactlyOnceWith("2026-10");
+    expect(screen.getByText(rotuloParcelasHerdadas(1))).toBeTruthy();
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    await screen.findByText(rotuloParcelasHerdadas(1));
+    const herdadas = (falso.importar.mock.calls[0][0] as Importacao).lancamentos.filter((l) => l.herdado_de_id);
+    expect(herdadas).toHaveLength(1);
+    expect(herdadas[0]).toMatchObject({
+      herdado_de_id: "c-anterior",
+      responsavel_id: "casal",
+      tipo_id: "casa",
+      apelido: "Sofá",
+      observacao: "10x",
+      revisao_motivo: null,
+      previsto_id: null,
+    });
+    expect(herdadas[0].serie?.ocorrencia).toBe(2);
+    expect(herdadas[0].serie?.mes_primeira_parcela).toBe("2026-01");
+  });
+
+  it("os previstos seguintes da herdeira copiam a classificação, o Apelido e a Observação", async () => {
+    falso.lerParcelasDoMesAnterior.mockResolvedValue({ ok: true, candidatas: [candidata()] });
+    const u = await ateOPasso3();
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    await screen.findByText(rotuloParcelasHerdadas(1));
+    const previstos = (falso.importar.mock.calls[0][0] as Importacao).previstos.filter((p) => p.nome_normalizado === nomeNormalizado);
+    expect(previstos.length).toBeGreaterThan(0);
+    expect(previstos[0]).toMatchObject({ responsavel_id: "casal", tipo_id: "casa", apelido: "Sofá", observacao: "10x" });
+  });
+
+  it("falha ao ler o mês anterior: importa sem herdar, sem bloquear", async () => {
+    falso.lerParcelasDoMesAnterior.mockResolvedValue({ ok: false, codigo: "carregar.falhou" });
+    const u = await ateOPasso3();
+    expect(screen.queryByText(/herdou|herdaram/)).toBeNull();
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    await verNoPainel();
+    expect((falso.importar.mock.calls[0][0] as Importacao).lancamentos.every((l) => !l.herdado_de_id)).toBe(true);
+  });
+
+  it("candidata sem classificação: entra na Série mas não conta como herança", async () => {
+    falso.lerParcelasDoMesAnterior.mockResolvedValue({
+      ok: true,
+      candidatas: [candidata({ responsavel_id: null, tipo_id: null, apelido: null, observacao: null })],
+    });
+    await ateOPasso3();
+    expect(screen.queryByText(/herdou|herdaram/)).toBeNull();
+  });
+
+  it("sem candidatas, nada de herança no passo 3", async () => {
+    await ateOPasso3();
+    expect(screen.queryByText(/herdou|herdaram/)).toBeNull();
   });
 });

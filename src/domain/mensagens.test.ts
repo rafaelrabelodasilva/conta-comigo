@@ -41,6 +41,7 @@ import {
   avisoReimportarBloqueado,
   rotuloManterClassificacao,
   rotuloManterPrevisto,
+  rotuloParcelasHerdadas,
   rotuloPrevistosCasados,
   rotuloPrevistosNaoVieram,
   rotuloRemoverPrevisto,
@@ -725,6 +726,11 @@ describe("textos da História 3.6 (casamento)", () => {
     expect(rotuloPrevistosCasados(21)).toBe("21 previstos casaram com a fatura");
     expect(rotuloPrevistosNaoVieram(1)).toBe("1 previsto não veio na fatura");
     expect(rotuloPrevistosNaoVieram(3)).toBe("3 previstos não vieram na fatura");
+  });
+
+  it("o resumo conta as parcelas que herdaram a classificação da anterior", () => {
+    expect(rotuloParcelasHerdadas(1)).toBe("1 parcela herdou a classificação da parcela anterior");
+    expect(rotuloParcelasHerdadas(20)).toBe("20 parcelas herdaram a classificação da parcela anterior");
   });
 
   it("'Valor mudou' mostra o antes e o agora", () => {
