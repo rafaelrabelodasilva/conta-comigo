@@ -23,7 +23,7 @@ import type { Importacao, LancamentoParaGravar } from "../../src/domain/importac
 import { aplicarCasamento, atribuirSeries, casarPrevistos, gerarPrevistos } from "../../src/domain/previstos";
 import { ligado, supabaseLocal, type Cliente, type Usuario } from "./apoio";
 
-type Linha = { nome: string; n: number | null; total: number | null; valor: number };
+type Linha = { nome: string; n: number | null; total: number | null; valor: number; ajusteDe?: number };
 
 function base(mes: string, linhas: Linha[]): LancamentoParaGravar[] {
   return linhas.map((p, i) => ({
@@ -36,11 +36,12 @@ function base(mes: string, linhas: Linha[]): LancamentoParaGravar[] {
     final_cartao: "5061",
     ordem_fatura: i + 1,
     duvida_extracao: false,
-    ajuste_de_ordem: null,
+    // Ajuste de centavos: aponta para a ordem da mãe e não tem motivo próprio.
+    ajuste_de_ordem: p.ajusteDe ?? null,
     tipo_sugerido: null,
     responsavel_id: null,
     tipo_id: null,
-    revisao_motivo: "sem_classificacao",
+    revisao_motivo: p.ajusteDe === undefined ? "sem_classificacao" : null,
     revisao_dados: null,
     serie: null,
   }));
@@ -189,7 +190,7 @@ describe.skipIf(!ligado)("Divisão de um Lançamento no Supabase local", () => {
         "2026-08",
         [
           { nome: "PARCELA", n: 1, total: 3, valor: 11407 },
-          { nome: "PARCELA", n: null, total: null, valor: -8 },
+          { nome: "PARCELA", n: null, total: null, valor: -8, ajusteDe: 1 },
           { nome: "SOLTA", n: null, total: null, valor: 5000 },
         ],
         false,
@@ -246,7 +247,7 @@ describe.skipIf(!ligado)("Divisão de um Lançamento no Supabase local", () => {
   });
 
   it("importação: a Regra com Divisão cria a mãe com as filhas; o previsto nasce dividido; a reimportação apaga as filhas junto", async () => {
-    const imp = montar("2026-07", [{ nome: "JIM COM", n: 1, total: 3, valor: 46600 }], true);
+    const imp = montar("2027-01", [{ nome: "JIM COM", n: 1, total: 3, valor: 46600 }], true);
     expect(imp.lancamentos[0].divisao?.regra_chave).toBe("JIM COM");
     const r = await importar(a.cliente, imp);
     expect(r.error).toBeNull();
@@ -265,8 +266,8 @@ describe.skipIf(!ligado)("Divisão de um Lançamento no Supabase local", () => {
       expect(fs.reduce((s, f) => s + f.valor_centavos, 0)).toBe(p.valor_centavos);
     }
     // Reimportar o Mês (sem casados): mãe, filhas e os previstos intocados saem; a nova importação recria.
-    const imp2 = montar("2026-07", [{ nome: "JIM COM", n: 1, total: 3, valor: 46600 }], true);
-    const { data: ult } = await local.admin.from("lancamentos").select("updated_at").eq("owner_id", a.id).eq("mes", "2026-07").order("updated_at", { ascending: false }).limit(1);
+    const imp2 = montar("2027-01", [{ nome: "JIM COM", n: 1, total: 3, valor: 46600 }], true);
+    const { data: ult } = await local.admin.from("lancamentos").select("updated_at").eq("owner_id", a.id).eq("mes", "2027-01").order("updated_at", { ascending: false }).limit(1);
     const r2 = await a.cliente.rpc("importar_fatura", {
       dados_fatura: imp2.fatura as unknown as Json,
       dados_cartoes: imp2.cartoes as unknown as Json,
