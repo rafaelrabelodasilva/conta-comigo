@@ -373,6 +373,48 @@ describe("Painel do Mês", () => {
     expect(screen.getByTestId("janela-importar")).toBeTruthy();
   });
 
+  const previsto = (mes: string, extra: Partial<LinhaLancamento> = {}) =>
+    lanc(mes, {
+      nome: "MAGALU",
+      lancado_por: "sistema",
+      fatura_id: null,
+      final_cartao: null,
+      ordem_fatura: null,
+      parcela_n: 6,
+      parcela_total: 10,
+      valor_centavos: 44589,
+      ...extra,
+    } as Partial<LinhaLancamento>);
+
+  it("História 3.5: Mês futuro sem Fatura mostra os previstos na grade, com o selo, sem Conferência", () => {
+    definir({ faturas: [outubro], lancamentos: [lanc("2026-10"), previsto("2026-11")] });
+    renderizar();
+    expect(screen.getByText(TEXTOS_PAINEL.sem_fatura)).toBeTruthy();
+    const linhas = linhasDaGrade();
+    expect(linhas).toHaveLength(1);
+    expect(linhas[0].querySelector("[data-previsto]")?.textContent).toBe("Previsto");
+    expect(screen.queryByText(/Conferido|Diferença/)).toBeNull();
+    expect(screen.queryByRole("button", { name: TEXTOS_CONFERENCIA.verificar })).toBeNull();
+    expect(rodape()).toContain("R$ 445,89");
+  });
+
+  it("História 3.5: num Mês com Fatura, o previsto aparece na grade mas não muda a Conferência nem o Total a pagar", () => {
+    const nov = faturaQueBate(novembro, 46);
+    definir({
+      faturas: [outubro, novembro],
+      fatura_cartoes: [cartao(outubro), cartao(novembro)],
+      lancamentos: [...nov, previsto("2026-11", { nome: "RENNER" })],
+    });
+    renderizar();
+    const hero = screen.getByRole("region", { name: "Fatura de novembro · vence 06/11/26" });
+    expect(sem(hero.querySelector(".texto-hero-value")?.textContent)).toBe("Total a pagar R$ 7.351,42");
+    expect(within(hero).getByText("✓ Bate com o total a pagar")).toBeTruthy();
+    expect(sem(within(hero).getByText(TEXTOS_CONFERENCIA.conferido).parentElement?.textContent)).toBe("✓ Conferido·46 lançamentos");
+    expect(document.querySelector(".bg-verify")).toBeNull();
+    // A grade tem as 46 da Fatura e o previsto.
+    expect(linhasDaGrade()).toHaveLength(47);
+  });
+
   it("'Ir para revisão' da janela de importação leva à tela Revisar", async () => {
     renderizar();
     roteador.push.mockClear();

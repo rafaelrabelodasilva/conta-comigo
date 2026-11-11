@@ -25,11 +25,13 @@ import {
   rotuloPassoImportar,
   rotuloReimportado,
   rotuloResumoClassificacao,
+  rotuloPrevistosCriados,
   rotuloSeraoGravados,
   textoExtracaoIncompleta,
   tituloFaturaLida,
   type EtapaImportacao,
 } from "@/domain/mensagens";
+import { gerarPrevistos } from "@/domain/previstos";
 import type { RegraGravada } from "@/domain/regras";
 import type { Resultado } from "@/domain/resultado";
 import { resumoDaClassificacao } from "@/domain/revisar";
@@ -239,9 +241,16 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     if (minha !== geracao.current) return;
     const { responsaveis: r, tipos: t } = cadastros.current;
     const paraClassificar = prontos ? { responsaveis: r, tipos: t } : { responsaveis: [], tipos: [] };
+    const lancamentosClassificados = classificarImportacao(importacao.valor.lancamentos, lidas, paraClassificar);
+    // Previstos (História 3.5): copiam a classificação já calculada; Mês que já tem Fatura fica de fora.
     const classificada: Importacao = {
       ...importacao.valor,
-      lancamentos: classificarImportacao(importacao.valor.lancamentos, lidas, paraClassificar),
+      lancamentos: lancamentosClassificados,
+      previstos: gerarPrevistos(
+        lancamentosClassificados,
+        mes,
+        atuais.current.faturas.map((f) => f.mes),
+      ),
     };
     // As Regras que esta importação usou: ganham `ultimo_uso` quando a Fatura for gravada.
     regrasUsadasNaImportacao.current = chavesDeRegrasUsadas(importacao.valor.lancamentos, lidas, paraClassificar);
@@ -254,8 +263,8 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
       const r = await repoFaturas().lerReimportacao(mes);
       if (!r.ok) return { tipo: "falhou", codigo: r.codigo };
       if (!r.valor) return { tipo: "sem_fatura" };
-      const { linhas, statusPadraoId, ...substituir } = r.valor;
-      return { tipo: "pronto", substituir, resumo: resumirReimportacao(linhas, statusPadraoId) };
+      const { linhas, statusPadraoId, previstosAApagar, ...substituir } = r.valor;
+      return { tipo: "pronto", substituir, resumo: resumirReimportacao(linhas, statusPadraoId, previstosAApagar) };
     } catch {
       return AVISO_NO_LIMITE;
     }
@@ -604,6 +613,9 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
           </p>
         )}
         <p className="texto-body">{rotuloSeraoGravados(importacao.lancamentos.length)}</p>
+        {importacao.previstos.length > 0 ? (
+          <p className="texto-body text-text-muted">{rotuloPrevistosCriados(importacao.previstos.length)}</p>
+        ) : null}
         {aviso?.tipo === "pronto" ? (
           <p role="alert" className="rounded-lg border border-alert-warning-border bg-alert-warning-bg p-3 texto-body">
             {avisoReimportar(f.mes, aviso.resumo)}
@@ -643,7 +655,9 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
           ? T.importar_mesmo_assim
           : T.importar;
     const sessaoExpirou = erro === "auth.sessao_expirou" || (aviso?.tipo === "falhou" && aviso.codigo === "auth.sessao_expirou");
-    acoes = sessaoExpirou || aviso?.tipo === "lendo" ? (
+    // Repetir não resolve: a 3.6 (casamento) é que destrava (História 3.5).
+    const semCasamento = erro === "fatura.previstos_sem_casamento";
+    acoes = sessaoExpirou || semCasamento || aviso?.tipo === "lendo" ? (
       cancelar
     ) : aviso?.tipo === "falhou" ? (
       <>

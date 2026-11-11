@@ -126,4 +126,28 @@ insert into public.regras (
    '[{"responsavel_id": "b0000000-0000-4000-8000-000000000101", "n": 2}, {"responsavel_id": "b0000000-0000-4000-8000-000000000102", "n": 1}]',
    '2026-11-04 12:00:00+00');
 
+-- Séries e previstos (História 3.5): a Série de uma parcela 2/12, a linha real
+-- e o previsto 3/12 do Mês seguinte, que aponta para ela.
+insert into public.series (
+  id, owner_id, nome_normalizado, parcela_total, valor_parcela_centavos, mes_primeira_parcela, ocorrencia
+) values
+  ('b0000000-0000-4000-8000-000000000a01', 'b0000000-0000-4000-8000-000000000001',
+   'MAGALU', 12, 44589, '2026-09', 1);
+
+insert into public.lancamentos (
+  id, owner_id, nome, nome_normalizado, valor_centavos, data, parcela_n, parcela_total, final_cartao, mes,
+  fatura_id, ordem_fatura, lancado_por, serie_id
+) values
+  ('b0000000-0000-4000-8000-000000000805', 'b0000000-0000-4000-8000-000000000001',
+   'MAGALU', 'MAGALU', 44589, '2026-09-20', 2, 12, '5061', '2026-10',
+   'b0000000-0000-4000-8000-000000000601', 40, 'fatura', 'b0000000-0000-4000-8000-000000000a01');
+
+insert into public.lancamentos (
+  id, owner_id, nome, nome_normalizado, valor_centavos, parcela_n, parcela_total, mes,
+  lancado_por, serie_id, origem_lancamento_id
+) values
+  ('b0000000-0000-4000-8000-000000000806', 'b0000000-0000-4000-8000-000000000001',
+   'MAGALU', 'MAGALU', 44589, 3, 12, '2026-11',
+   'sistema', 'b0000000-0000-4000-8000-000000000a01', 'b0000000-0000-4000-8000-000000000805');
+
 commit;

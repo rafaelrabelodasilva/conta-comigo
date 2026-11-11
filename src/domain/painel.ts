@@ -6,7 +6,7 @@
 import { mesDaData, somarMeses } from "./ciclo";
 import { ordenarDuvidasPrimeiro } from "./conferencia";
 import { formatarDinheiro } from "./dinheiro";
-import { TEXTOS_CONFERENCIA, rotuloAjusteDe, rotuloLiquido, rotuloParcelaFalada } from "./mensagens";
+import { ROTULO_PREVISTO, TEXTOS_CONFERENCIA, rotuloAjusteDe, rotuloLiquido, rotuloParcelaFalada } from "./mensagens";
 
 /** O que a grade usa de um Lançamento (as colunas da tabela `lancamentos`). */
 export type LancamentoGrade = {
@@ -224,11 +224,14 @@ export function rotuloLinhaAcessivel(partes: {
   responsavel: string;
   status: string | null;
   verificar?: boolean;
+  /** Previsto (História 3.5): "Nome, previsto, Valor, …". */
+  previsto?: boolean;
   ajuste?: { nomeMae: string; liquidoCentavos: number };
 }): string {
   const ajuste = partes.ajuste;
   return [
     ajuste ? rotuloAjusteDe(ajuste.nomeMae) : partes.nome,
+    partes.previsto ? ROTULO_PREVISTO.toLowerCase() : "",
     formatarDinheiro(partes.valorCentavos),
     ajuste ? rotuloLiquido(ajuste.liquidoCentavos) : rotuloParcelaFalada(partes.parcelaN, partes.parcelaTotal),
     partes.responsavel,

@@ -470,3 +470,38 @@ describe("Ajustes de centavos (História 2.8)", () => {
     expect(within(pe).getAllByRole("cell").map((c) => sem(c.textContent))).toContain("R$ 1.141,16");
   });
 });
+
+describe("previstos (História 3.5)", () => {
+  const PREVISTO = lanc("p", {
+    nome: "MAGALU",
+    parcela_n: 6,
+    parcela_total: 10,
+    valor_centavos: 44589,
+    lancado_por: "sistema",
+    fatura_id: null,
+    final_cartao: null,
+    ordem_fatura: null,
+  });
+
+  it("o previsto leva o selo 'Previsto' junto do Nome, com o texto mais claro; a linha da fatura não", () => {
+    render(<Montar linhas={[...LINHAS, PREVISTO]} />);
+    const linhas = corpo();
+    const previsto = linhas.find((l) => within(l).queryByText("MAGALU"))!;
+    expect(previsto.querySelector("[data-previsto]")?.textContent).toBe("Previsto");
+    expect(within(previsto).getByText("MAGALU").className).toContain("text-text-muted");
+    expect(celulas(previsto)).toContain("MAGALUPrevisto");
+    const daFatura = linhas.find((l) => within(l).queryAllByText("MSC CRUZEIROS").length > 0)!;
+    expect(daFatura.querySelector("[data-previsto]")).toBeNull();
+  });
+
+  it("o nome acessível diz 'previsto' depois do Nome", () => {
+    render(<Montar linhas={[PREVISTO]} />);
+    const [linha] = corpo();
+    expect(sem(linha.getAttribute("aria-label"))).toBe("MAGALU, previsto, R$ 445,89, parcela 6 de 10, Sem responsável");
+  });
+
+  it("os previstos ficam no fim na ordem da fatura (sem ordem_fatura)", () => {
+    render(<Montar linhas={[PREVISTO, ...LINHAS]} />);
+    expect(corpo().map((l) => celulas(l)[1])).toEqual(["MSC CRUZEIROS", "MSC CRUZEIROS", "Lava e seca · MAGALU MAGALU", "MAGALUPrevisto"]);
+  });
+});

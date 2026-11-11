@@ -6,6 +6,7 @@ import type { ValorFiltro } from "@/domain/filtros-grade";
 import { formatarDinheiro } from "@/domain/dinheiro";
 import { formatarParcela } from "@/domain/importacao-fatura";
 import { estadoCaixaCabecalho, type EstadoCaixa } from "@/domain/lancamento";
+import { ehPrevisto } from "@/domain/previstos";
 import {
   COLUNAS_GRADE as C,
   ROTULOS_LANCADO_POR,
@@ -17,6 +18,7 @@ import {
   rotuloAjusteDe,
   rotuloFiltrarPor,
   rotuloSelecionar,
+  ROTULO_PREVISTO,
 } from "@/domain/mensagens";
 import {
   nomeExibido,
@@ -266,6 +268,7 @@ function LinhaGrade({
   const responsavel = l.responsavel_id === null ? undefined : cadastros.responsaveis.get(l.responsavel_id);
   const status = l.status_id === null ? undefined : cadastros.status.get(l.status_id);
   const nome = nomeExibido(l);
+  const previsto = ehPrevisto(l);
   // Com Apelido, o Nome original vai ao lado, em cinza.
   const temApelido = nome !== l.nome;
   const rotulo = rotuloLinhaAcessivel({
@@ -276,6 +279,7 @@ function LinhaGrade({
     responsavel: responsavel?.nome ?? T.sem_responsavel,
     status: status?.nome ?? null,
     verificar,
+    previsto,
     ajuste: mae ? { nomeMae: nomeExibido(mae), liquidoCentavos: liquidoCentavos(mae, ajustesDaMae) } : undefined,
   });
   const textoNome = (
@@ -287,9 +291,16 @@ function LinhaGrade({
           <span className="texto-body-strong">{nome}</span>{" "}
           <span className="text-text-muted">· {l.nome}</span>
         </>
+      ) : previsto ? (
+        <span className="text-text-muted">{l.nome}</span>
       ) : (
         l.nome
       )}
+      {previsto ? (
+        <span data-previsto className="ml-1.5 rounded-sm border border-border px-1.5 texto-caption text-text-muted">
+          {ROTULO_PREVISTO}
+        </span>
+      ) : null}
     </>
   );
   const fundo = selecionada ? "bg-selection" : "bg-surface";

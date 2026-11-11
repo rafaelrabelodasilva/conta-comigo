@@ -7,21 +7,31 @@ import { entradasDeSugestoes, totalDaSelecao, type EntradaDoLote } from "@/domai
 import {
   TEXTOS_REVISAR as T,
   mensagem,
+  perguntaAplicarAosPrevistos,
   rotuloClassificados,
   rotuloClassificadosSemSugestao,
   rotuloFaixaImportacao,
   rotuloFaltam,
+  rotuloPrevistosAtualizados,
   rotuloSelecionarGrupo,
   rotuloSeloConferencia,
 } from "@/domain/mensagens";
+import type { MudancaDoPrevisto } from "@/domain/previstos";
 import { ativos as responsaveisAtivos } from "@/domain/responsaveis";
 import { montarFila, resumoDaFila, resumoDaImportacao, type ItemDaFila } from "@/domain/revisar";
 import { ativos as tiposAtivos } from "@/domain/tipos";
-import { repoLancamentosRevisar, type AnteriorDaFila } from "@/data/lancamentos-repo";
+import {
+  repoLancamentosRevisar,
+  type AnteriorDaFila,
+  type LinhaLancamento,
+  type ParcelaReclassificada,
+  type ResultadoLote,
+} from "@/data/lancamentos-repo";
 import { gerenciador, gerenciadorFila, useFilaRevisar, useLinhas } from "@/data/realtime";
 import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
 import { Esqueleto } from "@/ui/Esqueleto";
 import { EstadoVazio } from "@/ui/EstadoVazio";
+import { FaixaPergunta } from "@/ui/FaixaPergunta";
 import { Tela } from "@/ui/Tela";
 import { useToast } from "@/ui/Toast";
 import { BarraLote } from "./BarraLote";
@@ -48,6 +58,30 @@ import { JanelaMudar } from "./JanelaMudar";
 // oferece "Desfazer" (6 s). A marcação se poda sozinha: o item que sai da fila
 // (outro aparelho, ou este lote) sai dela sem aviso e sem gravar; durante uma
 // gravação ela fica como está, para uma falha não perdê-la.
+//
+// Previstos (História 3.5): classificar uma parcela real preenche sozinho os
+// previstos vazios da Série; se algum tem outro valor (✓ e "Mudar"), a faixa
+// "Só este" / "Aplicar a todos" pergunta. No lote, só o preenchimento.
+
+/** As parcelas do lote com Série, com a classificação de antes (o corpo de `antes` só tem o que mudou). */
+function parcelasDoLote(r: Extract<ResultadoLote, { ok: true }>): ParcelaReclassificada[] {
+  const antesDe = new Map(r.antes.map((i) => [i.id, i.corpo as Partial<Pick<LinhaLancamento, "responsavel_id" | "tipo_id">>]));
+  return r.linhas
+    .filter((l) => l.serie_id !== null)
+    .map((l) => {
+      const a = antesDe.get(l.id);
+      return {
+        serie_id: l.serie_id,
+        parcela_n: l.parcela_n,
+        lancado_por: l.lancado_por,
+        antes: {
+          responsavel_id: a && "responsavel_id" in a ? (a.responsavel_id ?? null) : l.responsavel_id,
+          tipo_id: a && "tipo_id" in a ? (a.tipo_id ?? null) : l.tipo_id,
+        },
+        depois: { responsavel_id: l.responsavel_id, tipo_id: l.tipo_id },
+      };
+    });
+}
 
 function EsqueletoRevisar() {
   return (
@@ -77,6 +111,8 @@ export function Revisar({ titulo }: { titulo: string }) {
   const cartoes = useLinhas("fatura_cartoes");
   const lancamentos = useLinhas("lancamentos");
   const [ocupados, setOcupados] = useState<ReadonlySet<string>>(() => new Set());
+  // Previstos com outro valor, à espera do "Só este" / "Aplicar a todos" (História 3.5).
+  const [aPerguntar, setAPerguntar] = useState<MudancaDoPrevisto[]>([]);
   // Numa ref: dois toques seguidos veem o mesmo estado e gravam uma vez só.
   const emCurso = useRef(new Set<string>());
   // O item aberto no "Mudar" (cópia de quando abriu).
@@ -131,6 +167,28 @@ export function Revisar({ titulo }: { titulo: string }) {
     return rotuloFaixaImportacao(fatura.mes, rotuloSeloConferencia(conferencia), resumoDaImportacao(doMes, fatura.id, paraRevisar));
   }, [fatura, lancamentos.status, lancamentos.mes, lancamentos.linhas, cartoes.status, cartoes.linhas, itens]);
 
+  /**
+   * Previstos da Série das parcelas classificadas (decisão 4-A): os vazios
+   * recebem sozinhos; com `perguntar`, os que têm outro valor viram a faixa
+   * "Só este" / "Aplicar a todos" (no lote, ficam como estão).
+   */
+  async function propagar(parcelas: ParcelaReclassificada[], perguntar: boolean) {
+    const comSerie = parcelas.filter((p) => p.serie_id);
+    if (comSerie.length === 0) return;
+    const r = await repoLancamentosRevisar().propagarAosPrevistos(comSerie);
+    // A falha não tira o "Desfazer" da classificação, que já valeu (como o `aprender`); os previstos ficam como estão.
+    if (!r.ok) return;
+    if (perguntar && r.aPerguntar.length > 0) setAPerguntar(r.aPerguntar);
+  }
+
+  async function responderPrevistos(resposta: "so_este" | "aplicar_a_todos") {
+    const pendentes = aPerguntar;
+    setAPerguntar([]);
+    if (resposta === "so_este" || pendentes.length === 0) return;
+    const r = await repoLancamentosRevisar().aplicarAosPrevistos(pendentes);
+    toast.mostrar({ texto: r.ok ? rotuloPrevistosAtualizados(r.gravados) : mensagem(r.codigo) });
+  }
+
   /** Grava Responsável e Tipo (limpa o motivo e ensina a Regra) e oferece o "Desfazer". */
   async function classificar(item: ItemDaFila, escolha: { responsavel_id: string; tipo_id: string }): Promise<boolean> {
     const atual = fila.linhas.find((l) => l.id === item.id);
@@ -157,6 +215,18 @@ export function Revisar({ titulo }: { titulo: string }) {
       toast.mostrar({ texto: mensagem(r.codigo) });
       return false;
     }
+    void propagar(
+      [
+        {
+          serie_id: r.linha.serie_id,
+          parcela_n: r.linha.parcela_n,
+          lancado_por: r.linha.lancado_por,
+          antes: { responsavel_id: anterior.responsavel_id, tipo_id: anterior.tipo_id },
+          depois: { responsavel_id: r.linha.responsavel_id, tipo_id: r.linha.tipo_id },
+        },
+      ],
+      true,
+    );
     toast.mostrar({
       texto: T.classificado,
       aoDesfazer: () => {
@@ -195,6 +265,7 @@ export function Revisar({ titulo }: { titulo: string }) {
     }
     // Nada mudou (já estava assim): nada a avisar.
     if (r.gravadas === 0) return true;
+    void propagar(parcelasDoLote(r), false);
     toast.mostrar({
       texto: semSugestao > 0 ? rotuloClassificadosSemSugestao(r.gravadas, semSugestao) : rotuloClassificados(r.gravadas),
       aoDesfazer: () => {
@@ -310,6 +381,12 @@ export function Revisar({ titulo }: { titulo: string }) {
     >
       {faixa && !erro ? (
         <p className="rounded-lg border border-border bg-surface p-3 texto-body">{faixa}</p>
+      ) : null}
+      {aPerguntar.length > 0 ? (
+        <FaixaPergunta
+          pergunta={perguntaAplicarAosPrevistos(aPerguntar.length)}
+          aoResponder={(resposta) => void responderPrevistos(resposta)}
+        />
       ) : null}
       {conteudo}
       {marcados.size > 0 && !erro ? (

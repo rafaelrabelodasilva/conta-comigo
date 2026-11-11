@@ -48,6 +48,7 @@ const importacao: Importacao = {
       tipo_id: null,
       revisao_motivo: "sem_classificacao",
       revisao_dados: null,
+      serie: null,
     },
     {
       nome: "MSC CRUZEIROS",
@@ -66,8 +67,10 @@ const importacao: Importacao = {
       tipo_id: null,
       revisao_motivo: null,
       revisao_dados: null,
+      serie: null,
     },
   ],
+  previstos: [],
 };
 
 const lancamento = (id: string, mes: string, updated_at: string) =>
@@ -112,6 +115,16 @@ function montar(
           eq(coluna: string, valor: unknown) {
             leitura.filtros.push(`${coluna}=${String(valor)}`);
             linhas = linhas.filter((l) => l[coluna] === valor);
+            return consulta;
+          },
+          in(coluna: string, valores: unknown[]) {
+            leitura.filtros.push(`${coluna} in ${valores.join(",")}`);
+            linhas = linhas.filter((l) => valores.includes(l[coluna]));
+            return consulta;
+          },
+          is(coluna: string, valor: unknown) {
+            leitura.filtros.push(`${coluna} is ${String(valor)}`);
+            linhas = linhas.filter((l) => (l[coluna] ?? null) === valor);
             return consulta;
           },
           order(coluna: string, o: { ascending: boolean }) {
@@ -207,6 +220,7 @@ describe("repositório da importação da Fatura", () => {
           dados_fatura: importacao.fatura,
           dados_cartoes: importacao.cartoes,
           dados_lancamentos: importacao.lancamentos,
+          dados_previstos: importacao.previstos,
         },
       },
     ]);
@@ -388,13 +402,42 @@ describe("reimportar um Mês (História 3.11)", () => {
           { excluido_em: null, responsavel_id: null, tipo_id: null, observacao: null, status_id: PADRAO },
         ],
         statusPadraoId: PADRAO,
+        previstosAApagar: 0,
       },
     });
     expect(m.leituras.map((l) => [l.tabela, l.colunas, l.filtros])).toEqual([
       ["faturas", "id", ["mes=2026-10"]],
       ["lancamentos", expect.any(String), ["mes=2026-10"]],
       ["configuracoes", "status_padrao_id", []],
+      // Os previstos que a Fatura criou (História 3.5): só as linhas dela.
+      [
+        "lancamentos",
+        "id",
+        ["origem_lancamento_id in a,b,c", "lancado_por=sistema", "editado_em is null", "excluido_em is null"],
+      ],
     ]);
+  });
+
+  it("lerReimportacao conta só os previstos da Fatura que ninguém tocou (sistema, sem edição, não excluídos)", async () => {
+    const previsto = (id: string, extra: Record<string, unknown>) =>
+      linhaDb(id, { mes: "2026-11", fatura_id: null, lancado_por: "sistema", origem_lancamento_id: "a", editado_em: null, ...extra });
+    const m = montar(
+      {
+        ...banco,
+        lancamentos: [
+          ...banco.lancamentos,
+          previsto("p1", {}),
+          previsto("p2", { origem_lancamento_id: "c" }),
+          previsto("p3", { editado_em: T1 }),
+          previsto("p4", { excluido_em: T1 }),
+          previsto("p5", { origem_lancamento_id: "m" }),
+          previsto("p6", { lancado_por: "manual" }),
+        ],
+      },
+      () => ({ data: null, error: null }),
+    );
+    const r = await m.repo.lerReimportacao("2026-10");
+    expect(r.ok && r.valor?.previstosAApagar).toBe(2);
   });
 
   it("lerReimportacao: sem configuracoes no banco, o Status padrão é null", async () => {
@@ -442,6 +485,7 @@ describe("reimportar um Mês (História 3.11)", () => {
       dados_fatura: importacao.fatura,
       dados_cartoes: importacao.cartoes,
       dados_lancamentos: importacao.lancamentos,
+      dados_previstos: importacao.previstos,
       // O do aviso, não o mais novo da memória (o do "m").
       lancamentos_atualizados_em: T1,
       substituir_fatura_id: "f0",
@@ -461,6 +505,51 @@ describe("reimportar um Mês (História 3.11)", () => {
     });
     expect(m.chamadas[0].args).not.toHaveProperty("lancamentos_atualizados_em");
     expect(m.chamadas[0].args.substituir_fatura_id).toBe("f0");
+  });
+
+  it("previstos (História 3.5): vão na RPC; só os do Mês aberto entram na memória; os apagados saem", async () => {
+    const previstos = [
+      { id: "p10", mes: "2026-10", updated_at: T2, ordem_fatura: null },
+      { id: "p11", mes: "2026-11", updated_at: T2, ordem_fatura: null },
+    ];
+    const comPrevistos: Importacao = {
+      ...importacao,
+      previstos: [
+        {
+          ordem_origem: 1,
+          nome: "MSC CRUZEIROS",
+          nome_normalizado: "MSC CRUZEIROS",
+          apelido: null,
+          valor_centavos: 114074,
+          parcela_n: 3,
+          parcela_total: 12,
+          mes: "2026-11",
+          responsavel_id: null,
+          tipo_id: null,
+          observacao: null,
+        },
+      ],
+    };
+    const m = montar(
+      { lancamentos: [{ id: "velho", mes: "2026-10", updated_at: T1, ordem_fatura: 9 }] },
+      () => ({
+        data: { ...gravados, previstos, removidos: { fatura_id: "f0", cartoes: [], lancamentos: [], previstos: ["velho"] } },
+        error: null,
+      }),
+    );
+    await pronto(m);
+    expect(await m.repo.importar(comPrevistos, { faturaId: "f0", atualizadoEm: T1 })).toEqual({ ok: true, quantidade: 2 });
+    expect(m.chamadas[0].args.dados_previstos).toEqual(comPrevistos.previstos);
+    expect(m.lancamentos.linhas().map((l) => l.id).sort()).toEqual(["l1", "l2", "p10"]);
+  });
+
+  it("removidos.previstos com forma errada: salvar.falhou sem mexer na memória", async () => {
+    const m = montar({}, () => ({
+      data: { ...gravados, removidos: { fatura_id: "f0", cartoes: [], lancamentos: [], previstos: "x" } },
+      error: null,
+    }));
+    await pronto(m);
+    expect(await m.repo.importar(importacao, { faturaId: "f0", atualizadoEm: null })).toEqual({ ok: false, codigo: "salvar.falhou" });
   });
 
   it("removidos com forma errada: salvar.falhou sem mexer na memória", async () => {

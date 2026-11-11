@@ -35,6 +35,8 @@ const falso = vi.hoisted(() => ({
   classificarEmLote: vi.fn(),
   desfazerLote: vi.fn(),
   contarUsos: vi.fn(),
+  propagarAosPrevistos: vi.fn(),
+  aplicarAosPrevistos: vi.fn(),
 }));
 
 vi.mock("@/data/realtime", async () => {
@@ -79,6 +81,8 @@ vi.mock("@/data/lancamentos-repo", () => ({
     devolverAFila: falso.devolverAFila,
     classificarEmLote: falso.classificarEmLote,
     desfazerLote: falso.desfazerLote,
+    propagarAosPrevistos: falso.propagarAosPrevistos,
+    aplicarAosPrevistos: falso.aplicarAosPrevistos,
   }),
 }));
 vi.mock("@/data/cadastros-repo", () => ({ repoCadastros: () => ({ contarUsos: falso.contarUsos }) }));
@@ -180,6 +184,8 @@ beforeEach(() => {
     return { ok: true, linhas: [], gravadas: entradas.length, antes };
   });
   falso.desfazerLote.mockResolvedValue({ ok: true, linhas: [], gravadas: 0, antes: [] });
+  falso.propagarAosPrevistos.mockResolvedValue({ ok: true, preenchidos: 0, aPerguntar: [] });
+  falso.aplicarAosPrevistos.mockImplementation(async (itens: unknown[]) => ({ ok: true, gravados: itens.length }));
 });
 
 describe("Revisar: a fila", () => {
@@ -714,5 +720,73 @@ describe("Revisar: lote", () => {
     expect(document.documentElement.style.getPropertyValue("--altura-barra-inferior")).toMatch(/px$/);
     await userEvent.setup().click(screen.getByRole("button", { name: T.limpar }));
     expect(document.documentElement.style.getPropertyValue("--altura-barra-inferior")).toBe("");
+  });
+});
+
+describe("Revisar: previstos da Série (História 3.5)", () => {
+  it("✓ numa parcela com Série preenche os previstos vazios (sem perguntar nem avisar)", async () => {
+    preparar([sugerida("a1", { serie_id: "s1", parcela_n: 5, parcela_total: 10, lancado_por: "fatura" })]);
+    renderizar();
+    await userEvent.setup().click(screen.getByRole("button", { name: rotuloConfirmarItem("LOJA A1") }));
+    await waitFor(() => expect(falso.propagarAosPrevistos).toHaveBeenCalledTimes(1));
+    expect(falso.propagarAosPrevistos).toHaveBeenCalledWith([
+      {
+        serie_id: "s1",
+        parcela_n: 5,
+        lancado_por: "fatura",
+        antes: { responsavel_id: null, tipo_id: null },
+        depois: { responsavel_id: "casal", tipo_id: "casa" },
+      },
+    ]);
+    expect(screen.queryByRole("group", { name: /previstos/ })).toBeNull();
+  });
+
+  it("linha sem Série não chama a propagação", async () => {
+    preparar([sugerida("a1")]);
+    renderizar();
+    await userEvent.setup().click(screen.getByRole("button", { name: rotuloConfirmarItem("LOJA A1") }));
+    await waitFor(() => expect(itens()).toHaveLength(0));
+    expect(falso.propagarAosPrevistos).not.toHaveBeenCalled();
+  });
+
+  it("previstos com outro valor: a faixa pergunta; 'Aplicar a todos' grava e avisa", async () => {
+    const pend = [{ id: "p6", corpo: { responsavel_id: "casal" } }];
+    falso.propagarAosPrevistos.mockResolvedValue({ ok: true, preenchidos: 0, aPerguntar: pend });
+    preparar([sugerida("a1", { serie_id: "s1", parcela_n: 5, parcela_total: 10, lancado_por: "fatura" })]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: rotuloConfirmarItem("LOJA A1") }));
+    const faixa = await screen.findByRole("group", { name: "Aplicar também ao 1 previsto desta compra?" });
+    await u.click(within(faixa).getByRole("button", { name: "Aplicar a todos" }));
+    expect(falso.aplicarAosPrevistos).toHaveBeenCalledWith(pend);
+    expect(await screen.findByText("1 previsto atualizado")).toBeTruthy();
+    expect(screen.queryByRole("group", { name: /previstos/ })).toBeNull();
+  });
+
+  it("'Só este' fecha a faixa sem gravar", async () => {
+    falso.propagarAosPrevistos.mockResolvedValue({
+      ok: true,
+      preenchidos: 0,
+      aPerguntar: [{ id: "p6", corpo: { tipo_id: "casa" } }],
+    });
+    preparar([sugerida("a1", { serie_id: "s1", parcela_n: 5, parcela_total: 10, lancado_por: "fatura" })]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: rotuloConfirmarItem("LOJA A1") }));
+    const faixa = await screen.findByRole("group", { name: "Aplicar também ao 1 previsto desta compra?" });
+    await u.click(within(faixa).getByRole("button", { name: "Só este" }));
+    expect(falso.aplicarAosPrevistos).not.toHaveBeenCalled();
+    expect(screen.queryByRole("group", { name: /previstos/ })).toBeNull();
+  });
+
+  it("falha na propagação: a classificação já valeu e o 'Desfazer' continua", async () => {
+    falso.propagarAosPrevistos.mockResolvedValue({ ok: false, codigo: "salvar.falhou" });
+    preparar([sugerida("a1", { serie_id: "s1", parcela_n: 5, parcela_total: 10, lancado_por: "fatura" })]);
+    renderizar();
+    await userEvent.setup().click(screen.getByRole("button", { name: rotuloConfirmarItem("LOJA A1") }));
+    await waitFor(() => expect(falso.propagarAosPrevistos).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(T.classificado)).toBeTruthy();
+    expect(screen.queryByText(mensagem("salvar.falhou"))).toBeNull();
+    expect(screen.getByRole("button", { name: ROTULOS.desfazer })).toBeTruthy();
   });
 });

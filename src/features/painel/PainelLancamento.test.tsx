@@ -705,3 +705,110 @@ describe("sugestão da fila (História 3.1)", () => {
     expect(screen.queryByText(/Antigo/)).toBeNull();
   });
 });
+
+describe("previstos (História 3.5)", () => {
+  const previsto = (extra: Partial<LinhaLancamento> = {}) =>
+    linha({
+      lancado_por: "sistema",
+      fatura_id: null,
+      final_cartao: null,
+      nome: "MAGALU",
+      parcela_n: 6,
+      parcela_total: 10,
+      mes: "2026-11",
+      origem_lancamento_id: "origem",
+      ...extra,
+    } as Partial<LinhaLancamento>);
+
+  it("o previsto mostra o selo e a origem lida do banco", async () => {
+    const m = montarRepo();
+    m.memoria.atual = previsto();
+    const lerOrigem = vi.fn(async () => ({
+      ok: true as const,
+      origem: { nome: "MAGALU", parcela_n: 5, parcela_total: 10, vencimento: "2026-10-06" },
+    }));
+    (m.repo as unknown as { lerOrigem: typeof lerOrigem }).lerOrigem = lerOrigem;
+    renderizar(<Editar m={m} />);
+    expect(await screen.findByText("criado a partir da parcela 05/10 de MAGALU na Fatura de 06/10/26")).toBeTruthy();
+    expect(lerOrigem).toHaveBeenCalledWith("origem");
+    expect(document.querySelector("[data-previsto]")?.textContent).toBe("Previsto");
+  });
+
+  it("origem apagada na reimportação: frase genérica, sem consultar o banco", () => {
+    const m = montarRepo();
+    m.memoria.atual = previsto({ origem_lancamento_id: null } as Partial<LinhaLancamento>);
+    const lerOrigem = vi.fn();
+    (m.repo as unknown as { lerOrigem: typeof lerOrigem }).lerOrigem = lerOrigem;
+    renderizar(<Editar m={m} />);
+    expect(screen.getByText("criado a partir de uma parcela anterior desta compra")).toBeTruthy();
+    expect(lerOrigem).not.toHaveBeenCalled();
+  });
+
+  it("linha da fatura não tem selo nem origem", () => {
+    const m = montarRepo();
+    renderizar(<Editar m={m} />);
+    expect(document.querySelector("[data-previsto]")).toBeNull();
+  });
+
+  function comSerie(m: ReturnType<typeof montarRepo>, respostas: { aPerguntar: { id: string; corpo: object }[] }) {
+    m.memoria.atual = linha({ serie_id: "s1", responsavel_id: "r-rafael" } as Partial<LinhaLancamento>);
+    const propagar = vi.fn(async () => ({ ok: true as const, preenchidos: 0, aPerguntar: respostas.aPerguntar }));
+    const aplicar = vi.fn(async (itens: unknown[]) => ({ ok: true as const, gravados: itens.length }));
+    Object.assign(m.repo, { propagarAosPrevistos: propagar, aplicarAosPrevistos: aplicar });
+    return { propagar, aplicar };
+  }
+
+  it("mudar o Responsável de uma parcela com Série propaga; sem previstos com outro valor, não pergunta", async () => {
+    const m = montarRepo();
+    const { propagar } = comSerie(m, { aPerguntar: [] });
+    renderizar(<Editar m={m} />);
+    await userEvent.setup().selectOptions(screen.getByLabelText("Responsável"), "r-casal");
+    expect(propagar).toHaveBeenCalledWith([
+      {
+        serie_id: "s1",
+        parcela_n: 5,
+        lancado_por: "fatura",
+        antes: { responsavel_id: "r-rafael", tipo_id: null },
+        depois: { responsavel_id: "r-casal", tipo_id: null },
+      },
+    ]);
+    expect(screen.queryByRole("group", { name: /previstos/ })).toBeNull();
+  });
+
+  it("previstos com outro valor: a faixa pergunta; 'Aplicar a todos' grava e avisa; 'Só este' não grava", async () => {
+    const pend = [
+      { id: "p6", corpo: { responsavel_id: "r-casal" } },
+      { id: "p7", corpo: { responsavel_id: "r-casal" } },
+    ];
+    const m = montarRepo();
+    const { aplicar } = comSerie(m, { aPerguntar: pend });
+    renderizar(<Editar m={m} />);
+    const u = userEvent.setup();
+    await u.selectOptions(screen.getByLabelText("Responsável"), "r-casal");
+    const faixa = await screen.findByRole("group", { name: "Aplicar também aos 2 previstos desta compra?" });
+    await u.click(within(faixa).getByRole("button", { name: "Aplicar a todos" }));
+    expect(aplicar).toHaveBeenCalledWith(pend);
+    expect(await screen.findByText("2 previstos atualizados")).toBeTruthy();
+    expect(screen.queryByRole("group", { name: /previstos/ })).toBeNull();
+  });
+
+  it("'Só este' fecha a faixa sem gravar nada", async () => {
+    const m = montarRepo();
+    const { aplicar } = comSerie(m, { aPerguntar: [{ id: "p6", corpo: { responsavel_id: "r-casal" } }] });
+    renderizar(<Editar m={m} />);
+    const u = userEvent.setup();
+    await u.selectOptions(screen.getByLabelText("Responsável"), "r-casal");
+    const faixa = await screen.findByRole("group", { name: "Aplicar também ao 1 previsto desta compra?" });
+    await u.click(within(faixa).getByRole("button", { name: "Só este" }));
+    expect(aplicar).not.toHaveBeenCalled();
+    expect(screen.queryByRole("group", { name: /previstos/ })).toBeNull();
+  });
+
+  it("mudar o Status ou o Valor não propaga", async () => {
+    const m = montarRepo();
+    const { propagar } = comSerie(m, { aPerguntar: [] });
+    renderizar(<Editar m={m} />);
+    await userEvent.setup().selectOptions(screen.getByLabelText("Status"), "s-pago");
+    expect(propagar).not.toHaveBeenCalled();
+  });
+});

@@ -38,6 +38,11 @@ import {
   ETAPAS_IMPORTACAO,
   TEXTOS_IMPORTAR,
   avisoReimportar,
+  ROTULO_PREVISTO,
+  perguntaAplicarAosPrevistos,
+  rotuloOrigemPrevisto,
+  rotuloPrevistosAtualizados,
+  rotuloPrevistosCriados,
   rotuloReimportado,
   rotuloComposicaoTotal,
   rotuloConferencia,
@@ -657,5 +662,39 @@ describe("textos do lote do Revisar (História 3.3)", () => {
     expect(rotuloClassificadosSemSugestao(5, 2)).toBe("5 classificados · 2 sem sugestão completa");
     expect(rotuloClassificadosSemSugestao(1, 1)).toBe("1 classificado · 1 sem sugestão completa");
     expect(rotuloClassificados(3)).toBe("3 classificados");
+  });
+});
+
+describe("previstos (História 3.5)", () => {
+  it("selo e origem do previsto", () => {
+    expect(ROTULO_PREVISTO).toBe("Previsto");
+    expect(rotuloOrigemPrevisto({ nome: "MAGALU", parcela: "05/10", vencimento: "2026-10-06" })).toBe(
+      "criado a partir da parcela 05/10 de MAGALU na Fatura de 06/10/26",
+    );
+    expect(rotuloOrigemPrevisto({ nome: "MAGALU", parcela: "", vencimento: null })).toBe("criado a partir de MAGALU");
+    expect(rotuloOrigemPrevisto(null)).toBe("criado a partir de uma parcela anterior desta compra");
+  });
+
+  it("pergunta, toast e passo 3", () => {
+    expect(perguntaAplicarAosPrevistos(1)).toBe("Aplicar também ao 1 previsto desta compra?");
+    expect(perguntaAplicarAosPrevistos(4)).toBe("Aplicar também aos 4 previstos desta compra?");
+    expect(rotuloPrevistosAtualizados(1)).toBe("1 previsto atualizado");
+    expect(rotuloPrevistosAtualizados(3)).toBe("3 previstos atualizados");
+    expect(rotuloPrevistosCriados(1)).toBe("1 parcela prevista será criada nos próximos meses");
+    expect(rotuloPrevistosCriados(17)).toBe("17 parcelas previstas serão criadas nos próximos meses");
+  });
+
+  it("o aviso de reimportar só cita os previstos quando há", () => {
+    expect(avisoReimportar("2026-10", { quantidade: 49, mexidos: 0, excluidos: 0, previstos: 5 })).toBe(
+      "Esta fatura já foi importada. Importar de novo apaga os 49 lançamentos de outubro vindos da fatura (0 já classificados ou marcados à mão) e importa tudo de novo. Apaga também os 5 previstos que ela criou e você não mexeu.",
+    );
+    expect(avisoReimportar("2026-10", { quantidade: 1, mexidos: 0, excluidos: 1, previstos: 1 })).toBe(
+      "Esta fatura já foi importada. Importar de novo apaga o 1 lançamento de outubro vindo da fatura (0 já classificados ou marcados à mão) e importa tudo de novo. O 1 excluído volta. Apaga também o 1 previsto que ela criou e você não mexeu.",
+    );
+    expect(avisoReimportar("2026-10", { quantidade: 49, mexidos: 0, excluidos: 0, previstos: 0 })).not.toContain("previsto");
+  });
+
+  it("a recusa sem casamento diz que nada foi gravado", () => {
+    expect(mensagem("fatura.previstos_sem_casamento")).toContain("Nada foi gravado");
   });
 });

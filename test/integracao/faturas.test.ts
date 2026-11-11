@@ -49,6 +49,7 @@ function pequena(mes: string, extra: Partial<Importacao["lancamentos"][number]> 
     responsavel_id: null,
     tipo_id: null,
     revisao_dados: null,
+    serie: null,
   };
   return {
     fatura: {
@@ -83,6 +84,7 @@ function pequena(mes: string, extra: Partial<Importacao["lancamentos"][number]> 
         ...extra,
       },
     ],
+    previstos: [],
   };
 }
 

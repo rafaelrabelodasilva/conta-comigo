@@ -20,6 +20,10 @@
 //   `classificarImportacao` (`classificacao.ts`), antes de gravar.
 // - Reimportação (História 3.11 simplificada): `resumirReimportacao` dá os
 //   números do aviso a partir das linhas da Fatura do Mês lidas do banco.
+// - Séries e previstos (História 3.5): `prepararImportacao` dá a cada parcela
+//   a chave da Série (`atribuirSeries`, `previstos.ts`); depois de classificar,
+//   a tela chama `gerarPrevistos` com a classificação já calculada e grava o
+//   resultado em `Importacao.previstos`.
 
 import { reconhecerAjustes } from "./ajustes";
 import type { DadosRevisao, MotivoRevisao } from "./classificacao";
@@ -33,6 +37,7 @@ import {
   type SomaConferencia,
   type LancamentoExtraido,
 } from "./extracao-fatura";
+import { atribuirSeries, type ChaveDaSerie, type PrevistoParaGravar } from "./previstos";
 import type { Resultado } from "./resultado";
 
 /** Aceite de outubro/2026 (vence 06/10/26), do Épico 2. */
@@ -138,12 +143,16 @@ export type LancamentoParaGravar = {
   tipo_id: string | null;
   revisao_motivo: MotivoRevisao | null;
   revisao_dados: DadosRevisao | null;
+  /** Série da parcela (História 3.5); null à vista, em crédito e no Ajuste. */
+  serie: ChaveDaSerie | null;
 };
 
 export type Importacao = {
   fatura: FaturaParaGravar;
   cartoes: CartaoParaGravar[];
   lancamentos: LancamentoParaGravar[];
+  /** Parcelas previstas dos Meses seguintes (vazio até a tela chamar `gerarPrevistos`). */
+  previstos: PrevistoParaGravar[];
 };
 
 const LEITURA_FALHOU = (detalhe: string): Resultado<never> => ({
@@ -193,6 +202,7 @@ export function prepararImportacao(
       tipo_id: null,
       revisao_motivo: "sem_classificacao",
       revisao_dados: null,
+      serie: null,
     });
   }
   for (const par of reconhecerAjustes(lancamentos, limiteAjusteCentavos)) {
@@ -200,6 +210,8 @@ export function prepararImportacao(
     // O Ajuste não tem motivo próprio: segue a mãe.
     lancamentos[par.ajuste].revisao_motivo = null;
   }
+  const mesDaFatura = vencimento.slice(0, 7);
+  const comSeries = atribuirSeries(lancamentos, mesDaFatura);
 
   const porFinal = new Map<string, number>();
   for (const c of extracao.cartoes) porFinal.set(c.final, (porFinal.get(c.final) ?? 0) + c.valorTotalCentavos);
@@ -208,7 +220,7 @@ export function prepararImportacao(
     ok: true,
     valor: {
       fatura: {
-        mes: vencimento.slice(0, 7),
+        mes: mesDaFatura,
         vencimento,
         fechamento,
         total_despesas_centavos: f.totalDespesasCentavos,
@@ -218,7 +230,8 @@ export function prepararImportacao(
         total_a_pagar_centavos: f.totalAPagarCentavos,
       },
       cartoes: [...porFinal].map(([final, total]) => ({ final, total_centavos: total })),
-      lancamentos,
+      lancamentos: comSeries,
+      previstos: [],
     },
   };
 }
@@ -363,6 +376,8 @@ export type ResumoReimportacao = {
   mexidos: number;
   /** Linhas excluídas da Fatura, que voltam na importação nova. */
   excluidos: number;
+  /** Previstos que a Fatura criou, ainda `sistema`, sem edição e não excluídos: a reimportação os apaga (História 3.5). */
+  previstos?: number;
 };
 
 /**
@@ -374,6 +389,7 @@ export type ResumoReimportacao = {
 export function resumirReimportacao(
   linhas: readonly LinhaParaReimportar[],
   statusPadraoId: string | null,
+  previstosAApagar = 0,
 ): ResumoReimportacao {
   let quantidade = 0;
   let mexidos = 0;
@@ -391,5 +407,5 @@ export function resumirReimportacao(
       l.status_id !== statusPadraoId;
     if (mexido) mexidos++;
   }
-  return { quantidade, mexidos, excluidos };
+  return previstosAApagar > 0 ? { quantidade, mexidos, excluidos, previstos: previstosAApagar } : { quantidade, mexidos, excluidos };
 }

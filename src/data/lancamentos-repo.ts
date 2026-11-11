@@ -42,6 +42,15 @@
 // Depois da RPC, um evento de Regra por mãe (`aprender` em lista), sem esperar
 // e sem desfazer o lote se falhar. `desfazerLote` é a mesma RPC com os valores
 // de antes; a Regra aprendida não é desfeita.
+//
+// Previstos (História 3.5): `propagarAosPrevistos` lê do banco os previstos
+// (`sistema`, não excluídos) da Série de cada parcela reclassificada, deixa o
+// núcleo (`planejarPropagacao`) separar os vazios (gravados na hora, sem
+// perguntar) dos que têm outro valor (devolvidos para a tela perguntar) e grava
+// pela mesma RPC do lote, sem `editado_em` e sem ensinar Regra. Os previstos
+// são de outros Meses: a memória (só o Mês aberto) guarda apenas os do Mês
+// aberto. `aplicarAosPrevistos` grava a resposta "Aplicar a todos".
+// `lerOrigem` lê a linha que gerou um previsto e o vencimento da Fatura dela.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MudancaCampo, NovoLancamento } from "@/domain/lancamento";
@@ -52,6 +61,12 @@ import {
   type EntradaDoLote,
   type ItemDoLote,
 } from "@/domain/lote";
+import {
+  juntarMudancas,
+  planejarPropagacao,
+  type ClassificacaoDaParcela,
+  type MudancaDoPrevisto,
+} from "@/domain/previstos";
 import type { EventoAprender } from "@/domain/regras";
 import { estaOnline } from "./conexao";
 import type { Database, Json } from "./database.types";
@@ -120,6 +135,31 @@ export type Aprender = (evento: EventoAprender | readonly EventoAprender[]) => P
 export type ResultadoLote =
   | { ok: true; linhas: LinhaLancamento[]; gravadas: number; antes: ItemDoLote[] }
   | { ok: false; codigo: CodigoFalhaGravacao };
+
+/** Uma parcela real que mudou de classificação (as colunas que a propagação olha). */
+export type ParcelaReclassificada = {
+  serie_id: string | null;
+  parcela_n: number | null;
+  lancado_por: LinhaLancamento["lancado_por"];
+  antes: ClassificacaoDaParcela;
+  depois: ClassificacaoDaParcela;
+};
+
+/** O que a propagação fez: quantos previstos vazios foram preenchidos e o que fica para perguntar. */
+export type ResultadoPropagacao =
+  | { ok: true; preenchidos: number; aPerguntar: MudancaDoPrevisto[] }
+  | { ok: false; codigo: CodigoFalhaGravacao };
+
+/** A linha que gerou um previsto (null no `origem`: ela foi apagada na reimportação). */
+export type OrigemDoPrevisto = {
+  nome: string;
+  parcela_n: number | null;
+  parcela_total: number | null;
+  /** Vencimento da Fatura dela (`AAAA-MM-DD`), se a Fatura existe. */
+  vencimento: string | null;
+};
+
+export type ResultadoOrigem = { ok: true; origem: OrigemDoPrevisto | null } | { ok: false; codigo: CodigoFalhaGravacao };
 
 export function criarRepoLancamentos(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
@@ -222,6 +262,22 @@ export function criarRepoLancamentos(deps: {
     }
   }
 
+  /** Grava as mudanças dos previstos pela RPC do lote (sem `editado_em`) e aplica o que voltar na memória. */
+  async function gravarPrevistos(mudancas: readonly MudancaDoPrevisto[]): Promise<{ ok: true } | { ok: false; codigo: CodigoFalhaGravacao }> {
+    if (mudancas.length === 0) return { ok: true };
+    const cliente = obterCliente();
+    if (!cliente) return FALHOU;
+    try {
+      const linhas = await chamarLote(cliente, mudancas.map((m) => ({ id: m.id, corpo: m.corpo })) as unknown as ItemDoLote[]);
+      if (!linhas) return FALHOU;
+      // De outro Mês, o gerenciador (só o Mês aberto) não guarda.
+      memoria.aplicarLote(linhas);
+      return { ok: true };
+    } catch {
+      return FALHOU;
+    }
+  }
+
   function classificarEmLote(ids: readonly string[], campos: CamposDoLote, opcoes?: OpcoesLote): Promise<ResultadoLote>;
   function classificarEmLote(entradas: readonly EntradaDoLote[], opcoes?: OpcoesLote): Promise<ResultadoLote>;
   async function classificarEmLote(
@@ -318,6 +374,84 @@ export function criarRepoLancamentos(deps: {
       }
       if (r.ok && plano.ensina) ensinar(atual.nome, atual.responsavel_id, r.linha);
       return r;
+    },
+
+    /**
+     * Previstos de uma parcela reclassificada (História 3.5, decisão 4-A):
+     * preenche já os previstos vazios e devolve em `aPerguntar` os que têm
+     * outro valor (para "Só este" / "Aplicar a todos"). Linha sem Série, ou
+     * que é ela mesma um previsto, não propaga. Não ensina Regra.
+     */
+    async propagarAosPrevistos(parcelas: readonly ParcelaReclassificada[]): Promise<ResultadoPropagacao> {
+      const alvos = parcelas.filter(
+        (p) => p.serie_id !== null && p.parcela_n !== null && p.lancado_por !== "sistema",
+      );
+      if (alvos.length === 0) return { ok: true, preenchidos: 0, aPerguntar: [] };
+      const bloqueio = semConexao(online);
+      if (bloqueio) return bloqueio;
+      const cliente = obterCliente();
+      if (!cliente) return FALHOU;
+      try {
+        const { data, error } = await cliente
+          .from("lancamentos")
+          .select("id, serie_id, parcela_n, responsavel_id, tipo_id")
+          .in("serie_id", [...new Set(alvos.map((p) => p.serie_id as string))])
+          .eq("lancado_por", "sistema")
+          .is("excluido_em", null);
+        if (error || !data) return FALHOU;
+        const silenciosos: MudancaDoPrevisto[][] = [];
+        const aPerguntar: MudancaDoPrevisto[][] = [];
+        for (const p of alvos) {
+          const seguintes = data.filter(
+            (l) => l.serie_id === p.serie_id && l.parcela_n !== null && l.parcela_n > (p.parcela_n as number),
+          );
+          const plano = planejarPropagacao(p.antes, p.depois, seguintes);
+          silenciosos.push(plano.silenciosos);
+          aPerguntar.push(plano.aPerguntar);
+        }
+        const preencher = juntarMudancas(...silenciosos);
+        const gravou = await gravarPrevistos(preencher);
+        if (!gravou.ok) return gravou;
+        return { ok: true, preenchidos: preencher.length, aPerguntar: juntarMudancas(...aPerguntar) };
+      } catch {
+        return FALHOU;
+      }
+    },
+
+    /** "Aplicar a todos": grava as mudanças que `propagarAosPrevistos` deixou para perguntar. */
+    async aplicarAosPrevistos(mudancas: readonly MudancaDoPrevisto[]): Promise<{ ok: true; gravados: number } | { ok: false; codigo: CodigoFalhaGravacao }> {
+      if (mudancas.length === 0) return { ok: true, gravados: 0 };
+      const bloqueio = semConexao(online);
+      if (bloqueio) return bloqueio;
+      const r = await gravarPrevistos(mudancas);
+      return r.ok ? { ok: true, gravados: mudancas.length } : r;
+    },
+
+    /** A linha que gerou o previsto e o vencimento da Fatura dela, lidos do banco. */
+    async lerOrigem(origemId: string): Promise<ResultadoOrigem> {
+      const cliente = obterCliente();
+      if (!cliente) return FALHOU;
+      try {
+        const { data, error } = await cliente
+          .from("lancamentos")
+          .select("nome, parcela_n, parcela_total, fatura_id")
+          .eq("id", origemId)
+          .maybeSingle();
+        if (error) return FALHOU;
+        if (!data) return { ok: true, origem: null };
+        let vencimento: string | null = null;
+        if (data.fatura_id !== null) {
+          const f = await cliente.from("faturas").select("vencimento").eq("id", data.fatura_id).maybeSingle();
+          if (f.error) return FALHOU;
+          vencimento = f.data?.vencimento ?? null;
+        }
+        return {
+          ok: true,
+          origem: { nome: data.nome, parcela_n: data.parcela_n, parcela_total: data.parcela_total, vencimento },
+        };
+      } catch {
+        return FALHOU;
+      }
     },
 
     /** Insere (sem otimismo: o id vem do banco) e aplica a linha devolvida. */
