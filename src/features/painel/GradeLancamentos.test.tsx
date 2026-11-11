@@ -505,3 +505,115 @@ describe("previstos (História 3.5)", () => {
     expect(corpo().map((l) => celulas(l)[1])).toEqual(["MSC CRUZEIROS", "MSC CRUZEIROS", "Lava e seca · MAGALU MAGALU", "MAGALUPrevisto"]);
   });
 });
+
+describe("Divisão (História 3.8)", () => {
+  const divisao = {
+    modo: "proporcao",
+    partes: [
+      { responsavel_id: "r-casal", numerador: 2, denominador: 3, filha_id: "f1" },
+      { responsavel_id: "r-rafael", numerador: 1, denominador: 3, filha_id: "f2" },
+    ],
+  };
+  const mae = lanc("jim", { ordem_fatura: 1, nome: "JIM COM", valor_centavos: 46600, tipo_id: "t-viagem", divisao, status_id: "s-nao" });
+  const f1 = lanc("f1", { ordem_fatura: 1, nome: "JIM COM", valor_centavos: 31067, tipo_id: "t-viagem", responsavel_id: "r-casal", status_id: "s-pago", dividido_de_id: "jim" });
+  const f2 = lanc("f2", { ordem_fatura: 1, nome: "JIM COM", valor_centavos: 15533, tipo_id: "t-viagem", responsavel_id: "r-rafael", status_id: "s-nao", dividido_de_id: "jim" });
+  const padaria = lanc("pad", { ordem_fatura: 2, nome: "PADARIA", valor_centavos: 500 });
+
+  function MontarComDivisao({
+    linhas = [f2, padaria, f1],
+    aoDividir,
+    selecao = new Set<string>(),
+  }: {
+    linhas?: LancamentoGrade[];
+    aoDividir?: (id: string) => void;
+    selecao?: ReadonlySet<string>;
+  }) {
+    const [ordem, setOrdem] = useState<Ordem>(ORDEM_PADRAO);
+    return (
+      <GradeLancamentos
+        linhas={linhas}
+        maesDivididas={new Map([["jim", mae]])}
+        aoDividir={aoDividir}
+        cadastros={cadastros}
+        ordem={ordem}
+        aoOrdenar={(c) => setOrdem((o) => alternarOrdem(o, c))}
+        escolhidos={[]}
+        aoFiltrar={() => {}}
+        vazio=""
+        selecao={selecao}
+      />
+    );
+  }
+
+  const linhasDaGrade = () => {
+    const [, corpo] = screen.getAllByRole("rowgroup");
+    return within(corpo).getAllByRole("row");
+  };
+  const papeis = () => linhasDaGrade().map((r) => r.dataset.papel ?? "linha");
+
+  it("a mãe vira cabeçalho antes das partes (na ordem das partes), sem caixa, com 'Dividido' e o Valor apagado", () => {
+    render(<MontarComDivisao />);
+    expect(papeis()).toEqual(["cabecalho", "parte", "parte", "linha"]);
+    const [cab, p1, p2] = linhasDaGrade();
+    const celulasCab = within(cab).getAllByRole("cell");
+    expect(celulasCab[0].querySelector("input")).toBeNull();
+    expect(sem(celulasCab[3].textContent)).toBe("R$ 466,00");
+    expect(celulasCab[3].className).toContain("text-text-muted");
+    expect(sem(celulasCab[5].textContent)).toBe("Dividido");
+    expect(sem(cab.getAttribute("aria-label"))).toBe("JIM COM, dividido, R$ 466,00");
+    // As partes: caixa própria, "↳" e recuo, Responsável e Status delas.
+    expect(within(p1).getAllByRole("cell")[0].querySelector("input")).not.toBeNull();
+    const nome = within(p1).getAllByRole("cell")[1].querySelector("[data-nome]")!;
+    expect(sem(nome.textContent)).toBe("↳JIM COM");
+    expect(nome.className).toContain("pl-4");
+    expect(sem(within(p1).getAllByRole("cell")[3].textContent)).toBe("R$ 310,67");
+    expect(sem(within(p1).getAllByRole("cell")[5].textContent)).toBe("Casal");
+    expect(sem(within(p2).getAllByRole("cell")[5].textContent)).toBe("Rafael");
+    expect(sem(p1.getAttribute("aria-label"))).toBe("Parte de JIM COM, R$ 310,67, Casal, Pago");
+  });
+
+  it("o rodapé soma as partes e não a mãe: R$ 310,67 + R$ 155,33 + R$ 5,00 = R$ 471,00", () => {
+    render(<MontarComDivisao />);
+    const [, , pe] = screen.getAllByRole("rowgroup");
+    expect(within(pe).getAllByRole("cell").map((c) => sem(c.textContent))).toContain("R$ 471,00");
+  });
+
+  it("filtrada por Responsável, só a parte que passou vem, sob a mãe", () => {
+    render(<MontarComDivisao linhas={[f2]} />);
+    expect(papeis()).toEqual(["cabecalho", "parte"]);
+    expect(sem(within(linhasDaGrade()[1]).getAllByRole("cell")[3].textContent)).toBe("R$ 155,33");
+  });
+
+  it("sem nenhuma parte nos filtros, a mãe não aparece", () => {
+    render(<MontarComDivisao linhas={[padaria]} />);
+    expect(papeis()).toEqual(["linha"]);
+  });
+
+  it("ordenada por Valor, as partes continuam juntas sob a mãe", () => {
+    render(<MontarComDivisao />);
+    fireEvent.click(screen.getByRole("button", { name: COLUNAS_GRADE.valor }));
+    expect(linhasDaGrade().map((r) => r.getAttribute("aria-label")!.split(",")[0])).toEqual(["PADARIA", "JIM COM", "Parte de JIM COM", "Parte de JIM COM"]);
+  });
+
+  it("o cabeçalho conta fora do 'Selecionar todos': só as partes e as linhas têm caixa", () => {
+    render(<MontarComDivisao />);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(4);
+  });
+
+  it("menu ⋯: a mãe tem 'Editar divisão'; a parte não tem Excluir; a linha comum tem 'Dividir'", async () => {
+    const u = userEvent.setup();
+    const aoDividir = vi.fn();
+    render(<MontarComDivisao aoDividir={aoDividir} />);
+    const [cab, p1, , pad] = linhasDaGrade();
+    await u.click(within(cab).getByRole("button", { name: /Ações de/ }));
+    await u.click(screen.getByRole("menuitem", { name: "Editar divisão" }));
+    expect(aoDividir).toHaveBeenCalledWith("jim");
+    await u.click(within(p1).getByRole("button", { name: /Ações de/ }));
+    expect(screen.queryByRole("menuitem", { name: TEXTOS_LANCAMENTO.excluir })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: TEXTOS_LANCAMENTO.abrir })).toBeTruthy();
+    await u.keyboard("{Escape}");
+    await u.click(within(pad).getByRole("button", { name: /Ações de/ }));
+    await u.click(screen.getByRole("menuitem", { name: "Dividir" }));
+    expect(aoDividir).toHaveBeenCalledWith("pad");
+  });
+});

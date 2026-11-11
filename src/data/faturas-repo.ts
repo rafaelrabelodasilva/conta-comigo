@@ -41,6 +41,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { somarMeses } from "@/domain/ciclo";
+import { lerDivisao } from "@/domain/divisao";
 import type { CandidataParaHerdar } from "@/domain/heranca";
 import type { Importacao, LinhaParaReimportar } from "@/domain/importacao-fatura";
 import type { PrevistoParaCasar } from "@/domain/previstos";
@@ -150,13 +151,13 @@ function ehGravados(dados: unknown): dados is Gravados {
 }
 
 const COLUNAS_REIMPORTACAO =
-  "id, fatura_id, excluido_em, responsavel_id, tipo_id, observacao, status_id, casado_em, updated_at";
+  "id, fatura_id, excluido_em, responsavel_id, tipo_id, observacao, status_id, casado_em, dividido_de_id, divisao, updated_at";
 
 const COLUNAS_CANDIDATAS =
-  "id, nome_normalizado, parcela_n, parcela_total, valor_centavos, ordem_fatura, responsavel_id, tipo_id, apelido, observacao, serie_id, excluido_em, dividido_de_id, ajuste_de_id";
+  "id, nome_normalizado, parcela_n, parcela_total, valor_centavos, ordem_fatura, responsavel_id, tipo_id, apelido, observacao, divisao, serie_id, excluido_em, dividido_de_id, ajuste_de_id";
 
 const COLUNAS_DO_MES =
-  "id, fatura_id, excluido_em, lancado_por, nome_normalizado, parcela_n, parcela_total, valor_centavos, responsavel_id, tipo_id, serie_id, updated_at";
+  "id, fatura_id, excluido_em, lancado_por, nome_normalizado, parcela_n, parcela_total, valor_centavos, responsavel_id, tipo_id, serie_id, divisao, dividido_de_id, updated_at";
 
 /** O `updated_at` mais novo dos Lançamentos do Mês entre as linhas dadas (null se nenhum). */
 export function ultimaAlteracaoDoMes(linhas: readonly LinhaLancamento[], mes: string): string | null {
@@ -271,18 +272,21 @@ export function criarRepoFaturas(deps: {
                 .select("id")
                 .in("origem_lancamento_id", idsDaFatura)
                 .eq("lancado_por", "sistema")
+                .is("dividido_de_id", null)
                 .is("editado_em", null)
                 .is("excluido_em", null);
         if (lidosPrevistos.error || !lidosPrevistos.data) return falhou(lidosPrevistos.error);
         const linhas = lidasLinhas.data
           .filter((l) => l.fatura_id === faturaId)
-          .map(({ excluido_em, responsavel_id, tipo_id, observacao, status_id, casado_em }) => ({
+          .map(({ excluido_em, responsavel_id, tipo_id, observacao, status_id, casado_em, dividido_de_id, divisao }) => ({
             excluido_em,
             responsavel_id,
             tipo_id,
             observacao,
             status_id,
             casado_em,
+            dividido_de_id,
+            divisao,
           }));
         return {
           ok: true,
@@ -315,6 +319,7 @@ export function criarRepoFaturas(deps: {
             l.lancado_por === "sistema" &&
             l.excluido_em === null &&
             l.fatura_id === null &&
+            (l.dividido_de_id ?? null) === null &&
             l.serie_id !== null &&
             l.parcela_n !== null &&
             l.parcela_total !== null,
@@ -341,6 +346,7 @@ export function criarRepoFaturas(deps: {
               ocorrencia,
               responsavel_id: l.responsavel_id,
               tipo_id: l.tipo_id,
+              divisao: lerDivisao(l.divisao),
               serie: {
                 nome_normalizado: serie.nome_normalizado,
                 parcela_total: serie.parcela_total,
@@ -374,7 +380,7 @@ export function criarRepoFaturas(deps: {
         const maes = lidas.data.filter(
           (l) =>
             l.excluido_em === null &&
-            l.dividido_de_id === null &&
+            (l.dividido_de_id ?? null) === null &&
             l.ajuste_de_id === null &&
             l.parcela_n !== null &&
             l.parcela_total !== null &&
@@ -424,6 +430,7 @@ export function criarRepoFaturas(deps: {
             tipo_id: l.tipo_id,
             apelido: l.apelido,
             observacao: l.observacao,
+            divisao: lerDivisao(l.divisao),
             serie,
             proxima_ocupada: l.serie_id !== null && ocupadas.has(JSON.stringify([l.serie_id, (l.parcela_n as number) + 1])),
           };
@@ -496,7 +503,8 @@ export function criarRepoFaturas(deps: {
         faturas.aplicarLote([data.fatura]);
         cartoes.aplicarLote(data.cartoes);
         lancamentos.aplicarLote([...data.lancamentos, ...(data.previstos ?? [])]);
-        return { ok: true, quantidade: data.lancamentos.length };
+        // As filhas de uma Divisão não são lançamentos a mais: a mãe é que conta.
+        return { ok: true, quantidade: data.lancamentos.filter((l) => (l.dividido_de_id ?? null) === null).length };
       } catch {
         return { ok: false, codigo: "fatura.conexao_caiu" };
       }

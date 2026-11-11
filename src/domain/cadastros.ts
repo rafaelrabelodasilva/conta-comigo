@@ -54,6 +54,9 @@ export const REFERENCIAS_JSONB: readonly Referencia[] = [
   { cadastro: "responsavel", tabela: "regras", coluna: "contagem", contaUso: false },
   { cadastro: "responsavel", tabela: "lancamentos", coluna: "revisao_dados", contaUso: false },
   { cadastro: "tipo", tabela: "lancamentos", coluna: "revisao_dados", contaUso: false },
+  // História 3.8: as partes da Divisão da linha-mãe e da Regra (as filhas e a Regra é que contam uso).
+  { cadastro: "responsavel", tabela: "lancamentos", coluna: "divisao", contaUso: false },
+  { cadastro: "responsavel", tabela: "regras", coluna: "divisao", contaUso: false },
 ];
 
 /**

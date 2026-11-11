@@ -136,6 +136,45 @@ describe("SecaoRegras (História 3.4)", () => {
     expect(within(itens[1]).getByText(T.sem_divisao)).toBeTruthy();
   });
 
+  it("História 3.8: a coluna Divisão mostra as partes em frações, e por valor mostra porcentagens", () => {
+    estado.regras = [
+      regra("r1", "JIM COM", {
+        divisao: { modo: "proporcao", partes: [{ responsavel_id: "casal", numerador: 2, denominador: 3 }, { responsavel_id: "rafael", numerador: 1, denominador: 3 }] },
+        ultimo_uso: "2026-11-10T15:00:00+00:00",
+      }),
+      regra("r2", "MONJARO", {
+        divisao: { modo: "valor", partes: [{ responsavel_id: "casal", numerador: 31067, denominador: 46600 }, { responsavel_id: "rafael", numerador: 15533, denominador: 46600 }] },
+        ultimo_uso: "2026-11-09T15:00:00+00:00",
+      }),
+    ];
+    abrir();
+    const itens = screen.getAllByRole("listitem");
+    expect(within(itens[0]).getByText("Casal 2/3 · Rafael 1/3")).toBeTruthy();
+    expect(within(itens[1]).getByText("Casal 66,67% · Rafael 33,33%")).toBeTruthy();
+  });
+
+  it("História 3.8: 'Remover divisão' na edição manda limpar só a Divisão", async () => {
+    estado.regras = [
+      regra("r1", "JIM COM", {
+        divisao: { modo: "proporcao", partes: [{ responsavel_id: "casal", numerador: 1, denominador: 2 }, { responsavel_id: "rafael", numerador: 1, denominador: 2 }] },
+      }),
+    ];
+    const u = abrir();
+    await u.click(screen.getByRole("button", { name: rotuloEditarRegra("JIM COM") }));
+    const janela = screen.getByRole("dialog");
+    expect(within(janela).getByText("Casal 1/2 · Rafael 1/2")).toBeTruthy();
+    await u.click(within(janela).getByRole("button", { name: "Remover divisão" }));
+    await u.click(within(janela).getByRole("button", { name: T.salvar }));
+    expect(estado.editar).toHaveBeenCalledWith("r1", { divisao: null });
+  });
+
+  it("História 3.8: sem Divisão a janela de edição não mostra a linha da Divisão", async () => {
+    estado.regras = [regra("r1", "SPOTIFY")];
+    const u = abrir();
+    await u.click(screen.getByRole("button", { name: rotuloEditarRegra("SPOTIFY") }));
+    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Remover divisão" })).toBeNull();
+  });
+
   it("a busca filtra por chave, Responsável ou Tipo; sem resultado, 'Nenhuma Regra encontrada'", async () => {
     estado.regras = [regra("r1", "SPOTIFY"), regra("r2", "FARMACIA", { responsavel_id: "rafael", tipo_id: "saude" })];
     const u = abrir();

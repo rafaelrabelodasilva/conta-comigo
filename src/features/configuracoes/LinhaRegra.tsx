@@ -10,10 +10,10 @@ import {
 import { Botao } from "@/ui/Botao";
 
 // Uma linha da lista de Regras aprendidas (História 3.4): chave, Responsável
-// (e "às vezes X" quando a contagem tem outros), Tipo, Divisão (sempre "—"
-// até a 3.8), última vez usada e os botões Editar e Excluir (44 pt).
+// (e "às vezes X" quando a contagem tem outros), Tipo, Divisão ("Mãe 2/3 ·
+// Rafael 1/3", ou "—" sem Divisão, História 3.8), última vez usada e os botões Editar e Excluir (44 pt).
 
-export const COLUNAS_REGRA = "grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_56px_88px_184px]";
+export const COLUNAS_REGRA = "grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_88px_184px]";
 
 export type PropsLinhaRegra = {
   chave: string;
@@ -21,6 +21,8 @@ export type PropsLinhaRegra = {
   /** Nomes dos outros Responsáveis da contagem. */
   outrosResponsaveis: readonly string[];
   tipo: string | null;
+  /** A Divisão em texto ("Mãe 2/3 · Rafael 1/3"); null = sem Divisão. */
+  divisao?: string | null;
   /** O instante do último uso (ISO). */
   ultimoUso: string;
   aoEditar: () => void;
@@ -33,7 +35,7 @@ function dataDoUso(instante: string): string {
   return Number.isNaN(d.getTime()) ? T.sem_valor : formatarData(hojeEmSaoPaulo(d));
 }
 
-export function LinhaRegra({ chave, responsavel, outrosResponsaveis, tipo, ultimoUso, aoEditar, aoExcluir }: PropsLinhaRegra) {
+export function LinhaRegra({ chave, responsavel, outrosResponsaveis, tipo, divisao = null, ultimoUso, aoEditar, aoExcluir }: PropsLinhaRegra) {
   return (
     <li className={`grid min-h-16 items-center gap-3 border-b border-border-subtle px-3.5 py-2 last:border-b-0 ${COLUNAS_REGRA}`}>
       <p className="min-w-0 truncate texto-body-strong">{chave}</p>
@@ -44,7 +46,9 @@ export function LinhaRegra({ chave, responsavel, outrosResponsaveis, tipo, ultim
         ) : null}
       </div>
       <p className="min-w-0 truncate texto-body">{tipo ?? T.sem_valor}</p>
-      <p className="texto-body text-text-muted">{T.sem_divisao}</p>
+      <p className="min-w-0 truncate texto-body text-text-muted" title={divisao ?? undefined}>
+        {divisao ?? T.sem_divisao}
+      </p>
       <p className="texto-number text-text-muted">{dataDoUso(ultimoUso)}</p>
       <div className="flex justify-end gap-2">
         <Botao aria-label={rotuloEditarRegra(chave)} onClick={aoEditar}>

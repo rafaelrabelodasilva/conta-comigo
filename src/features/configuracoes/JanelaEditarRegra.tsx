@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ROTULOS, TEXTOS_REGRAS as T, mensagem, rotuloAsVezes } from "@/domain/mensagens";
+import { ROTULOS, TEXTOS_DIVISAO as TD, TEXTOS_REGRAS as T, mensagem, rotuloAsVezes } from "@/domain/mensagens";
 import type { EdicaoRegra } from "@/domain/regras";
 import { Botao } from "@/ui/Botao";
 import { Janela } from "@/ui/Janela";
@@ -21,6 +21,8 @@ export type PropsJanelaEditarRegra = {
   outrosResponsaveis: readonly string[];
   responsaveis: readonly CadastroDaRegra[];
   tipos: readonly CadastroDaRegra[];
+  /** A Divisão da Regra em texto ("Mãe 2/3 · Rafael 1/3"); null = sem Divisão. */
+  divisao?: string | null;
   aberta: boolean;
   aoMudar: (aberta: boolean) => void;
   /** Grava a edição; devolve se deu certo (a janela fecha). */
@@ -37,6 +39,7 @@ export function JanelaEditarRegra({
   outrosResponsaveis,
   responsaveis,
   tipos,
+  divisao = null,
   aberta,
   aoMudar,
   aoSalvar,
@@ -46,6 +49,8 @@ export function JanelaEditarRegra({
   const [responsavelId, setResponsavelId] = useState(() => inicial(regra.responsavel_id, ativosR));
   const [tipoId, setTipoId] = useState(() => inicial(regra.tipo_id, ativosT));
   const [salvando, setSalvando] = useState(false);
+  // "Remover divisão": só vale ao salvar (a Divisão não se edita aqui).
+  const [removerDivisao, setRemoverDivisao] = useState(false);
 
   const vazio = responsavelId === "" && tipoId === "";
 
@@ -60,6 +65,7 @@ export function JanelaEditarRegra({
     if (tipoId !== inicial(regra.tipo_id, ativosT)) {
       edicao.tipo_id = tipoId === "" ? null : tipoId;
     }
+    if (removerDivisao) edicao.divisao = null;
     const ok = await aoSalvar(edicao);
     setSalvando(false);
     if (ok) aoMudar(false);
@@ -96,6 +102,22 @@ export function JanelaEditarRegra({
           onChange={(e) => setTipoId(e.target.value)}
           opcoes={[{ valor: "", rotulo: T.nenhum }, ...ativosT.map((t) => ({ valor: t.id, rotulo: t.nome }))]}
         />
+        {divisao !== null ? (
+          <div className="flex flex-col gap-1">
+            <span className="texto-label text-text">{TD.divisao_da_regra}</span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className={removerDivisao ? "texto-body text-text-muted line-through" : "texto-body text-text"}>{divisao}</span>
+              <Botao
+                tamanho="compacto"
+                variante={removerDivisao ? "secundario" : "destrutivo"}
+                aria-pressed={removerDivisao}
+                onClick={() => setRemoverDivisao((v) => !v)}
+              >
+                {removerDivisao ? ROTULOS.desfazer : TD.remover_divisao}
+              </Botao>
+            </div>
+          </div>
+        ) : null}
         {vazio ? (
           <p role="alert" className="texto-caption text-danger-fg">
             {mensagem("regra.vazia")}

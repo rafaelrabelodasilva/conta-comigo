@@ -29,6 +29,8 @@ describe("referências", () => {
       { cadastro: "responsavel", tabela: "regras", coluna: "contagem", contaUso: false },
       { cadastro: "responsavel", tabela: "lancamentos", coluna: "revisao_dados", contaUso: false },
       { cadastro: "tipo", tabela: "lancamentos", coluna: "revisao_dados", contaUso: false },
+      { cadastro: "responsavel", tabela: "lancamentos", coluna: "divisao", contaUso: false },
+      { cadastro: "responsavel", tabela: "regras", coluna: "divisao", contaUso: false },
     ]);
   });
 

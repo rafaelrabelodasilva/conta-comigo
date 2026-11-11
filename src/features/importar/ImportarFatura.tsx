@@ -28,6 +28,7 @@ import {
   rotuloPassoImportar,
   rotuloReimportado,
   rotuloResumoClassificacao,
+  rotuloDivididosPelaRegra,
   rotuloParcelasHerdadas,
   rotuloPrevistosCasados,
   rotuloPrevistosCriados,
@@ -118,7 +119,7 @@ type Estado =
   | { tipo: "processando"; passo: Passo; etapa: EtapaImportacao }
   | { tipo: "falha_leitura"; codigo: string }
   /** Gravou e há linhas para revisar: o resumo e os dois caminhos. */
-  | { tipo: "concluido"; classificados: number; paraRevisar: number; casados: number; naoVieram: number; herdadas: number }
+  | { tipo: "concluido"; classificados: number; paraRevisar: number; casados: number; naoVieram: number; herdadas: number; divididas: number }
   | {
       tipo: "conferir";
       importacao: Importacao;
@@ -495,7 +496,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
       const resumo = resumoDaClassificacao(atual.importacao.lancamentos, atual.importacao.previstos_sem_par?.length ?? 0);
       if (substituir) toast.mostrar({ texto: rotuloReimportado(mes, r.quantidade) });
       aoImportar?.(mes);
-      if (resumo.paraRevisar > 0 || resumo.naoVieram > 0 || resumo.casados > 0 || resumo.herdadas > 0) {
+      if (resumo.paraRevisar > 0 || resumo.naoVieram > 0 || resumo.casados > 0 || resumo.herdadas > 0 || resumo.divididas > 0) {
         // Há o que revisar ou previstos casados: o passo 3 mostra o resumo e os caminhos.
         setEstado({ tipo: "concluido", ...resumo });
         return;
@@ -672,6 +673,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
         <p className="texto-body-strong">{rotuloResumoClassificacao(estado.classificados, estado.paraRevisar)}</p>
         {estado.casados > 0 ? <p className="texto-body">{rotuloPrevistosCasados(estado.casados)}</p> : null}
         {estado.herdadas > 0 ? <p className="texto-body">{rotuloParcelasHerdadas(estado.herdadas)}</p> : null}
+        {estado.divididas > 0 ? <p className="texto-body">{rotuloDivididosPelaRegra(estado.divididas)}</p> : null}
         {estado.naoVieram > 0 ? <p className="texto-body">{rotuloPrevistosNaoVieram(estado.naoVieram)}</p> : null}
       </div>
     );
@@ -705,6 +707,8 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     const f = importacao.fatura;
     const casados = importacao.lancamentos.filter((l) => (l.previsto_id ?? null) !== null).length;
     const herdadas = importacao.lancamentos.filter((l) => (l.herdado_de_id ?? null) !== null && l.ajuste_de_ordem === null).length;
+    // Linhas novas que entram divididas (pela Regra ou pela parcela anterior, História 3.8).
+    const divididas = importacao.lancamentos.filter((l) => (l.divisao ?? null) !== null && (l.previsto_id ?? null) === null).length;
     const naoVieram = importacao.previstos_sem_par?.length ?? 0;
     // Fatura com linhas casadas não reimporta (a RPC recusa): só "Cancelar".
     const bloqueadaPorCasados = aviso?.tipo === "pronto" && (aviso.resumo.casados ?? 0) > 0;
@@ -729,6 +733,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
         <p className="texto-body">{rotuloSeraoGravados(importacao.lancamentos.length)}</p>
         {casados > 0 ? <p className="texto-body">{rotuloPrevistosCasados(casados)}</p> : null}
         {herdadas > 0 ? <p className="texto-body">{rotuloParcelasHerdadas(herdadas)}</p> : null}
+        {divididas > 0 ? <p className="texto-body">{rotuloDivididosPelaRegra(divididas)}</p> : null}
         {naoVieram > 0 ? <p className="texto-body text-text-muted">{rotuloPrevistosNaoVieram(naoVieram)}</p> : null}
         {importacao.previstos.length > 0 ? (
           <p className="texto-body text-text-muted">{rotuloPrevistosCriados(importacao.previstos.length)}</p>

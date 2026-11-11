@@ -106,7 +106,7 @@ describe("mesclarHerdada", () => {
 
   it("a candidata completa tira a linha da fila e dá Apelido e Observação", () => {
     const r = mesclarHerdada(l, { responsavel_id: "r1", tipo_id: "t1", apelido: "Sofá", observacao: "10x" });
-    expect(r).toEqual({ responsavel_id: "r1", tipo_id: "t1", apelido: "Sofá", observacao: "10x", revisao_motivo: null, revisao_dados: null });
+    expect(r).toEqual({ responsavel_id: "r1", tipo_id: "t1", apelido: "Sofá", observacao: "10x", divisao: null, revisao_motivo: null, revisao_dados: null });
   });
 
   it("a herança vale sobre as Regras onde a candidata tem valor; a Regra completa o resto", () => {

@@ -86,6 +86,7 @@ describe("propagarAosPrevistos (História 3.5)", () => {
     expect(m.consultas[0].filtros).toEqual([
       { tipo: "in", coluna: "serie_id", valor: ["s1"] },
       { tipo: "eq", coluna: "lancado_por", valor: "sistema" },
+      { tipo: "is", coluna: "dividido_de_id", valor: null },
       { tipo: "is", coluna: "excluido_em", valor: null },
     ]);
     expect(m.aplicarLote).toHaveBeenCalledOnce();

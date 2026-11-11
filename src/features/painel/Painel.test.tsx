@@ -1295,3 +1295,91 @@ describe("Ajustes de centavos (História 2.8)", () => {
     expect(screen.getAllByRole("checkbox", { name: "Selecionar MSC CRUZEIROS" })).toHaveLength(2);
   });
 });
+
+describe("Divisão no Painel (História 3.8)", () => {
+  const divisao = {
+    modo: "proporcao",
+    partes: [
+      { responsavel_id: "r-casal", numerador: 2, denominador: 3, filha_id: "fa" },
+      { responsavel_id: "r-rafael", numerador: 1, denominador: 3, filha_id: "fb" },
+    ],
+  };
+
+  /** Novembro: o JIM COM (R$ 466,00) dividido em duas filhas e uma padaria; a Fatura bate com as mães. */
+  function comDivisao() {
+    const jim = lanc("2026-11", { id: "jim", nome: "JIM COM", valor_centavos: 46600, tipo_id: "t-casa", divisao: divisao as never, ordem_fatura: 1 });
+    const fa = lanc("2026-11", { id: "fa", nome: "JIM COM", valor_centavos: 31067, tipo_id: "t-casa", responsavel_id: "r-casal", dividido_de_id: "jim", ordem_fatura: 1, status_id: "s-pago" });
+    const fb = lanc("2026-11", { id: "fb", nome: "JIM COM", valor_centavos: 15533, tipo_id: "t-casa", responsavel_id: "r-rafael", dividido_de_id: "jim", ordem_fatura: 1 });
+    const padaria = lanc("2026-11", { id: "pad", nome: "PADARIA", valor_centavos: 1000, ordem_fatura: 2 });
+    const fatura = { ...novembro, total_despesas_centavos: 47600, total_creditos_centavos: 0, total_a_pagar_centavos: 47600, saldo_anterior_centavos: 0, pagamentos_centavos: 0 } as LinhaFatura;
+    definir({ faturas: [fatura], fatura_cartoes: [cartao(fatura, "5061", 47600)], lancamentos: [padaria, fb, jim, fa] });
+    return { jim, fa, fb, padaria };
+  }
+
+  it("a mãe vira cabeçalho sobre as partes; a Conferência e o hero usam a mãe, o rodapé e a barra usam as partes", () => {
+    comDivisao();
+    renderizar();
+    const linhas = linhasDaGrade();
+    expect(linhas.map((r) => r.dataset.papel ?? "linha")).toEqual(["cabecalho", "parte", "parte", "linha"]);
+    // Conferência: a mãe conta uma vez ("2 lançamentos"), sem diferença nem bolinhas.
+    const hero = screen.getByRole("region", { name: /^Fatura de novembro/ });
+    expect(sem(hero.querySelector(".texto-hero-value")?.textContent)).toBe("Total a pagar R$ 476,00");
+    expect(sem(within(hero).getByText(TEXTOS_CONFERENCIA.conferido).parentElement?.textContent)).toBe("✓ Conferido·2 lançamentos");
+    expect(document.querySelector(".bg-verify")).toBeNull();
+    // Rodapé: as partes (R$ 310,67 + R$ 155,33) e a padaria; a mãe fora.
+    expect(rodape()).toContain("R$ 476,00");
+    // Barra por Responsável: cada um com a sua parte (e a padaria sem Responsável).
+    expect(sem(document.body.textContent)).toContain("R$ 310,67");
+    expect(sem(document.body.textContent)).toContain("R$ 155,33");
+  });
+
+  it("filtrar por Responsável mostra só a parte dele, sob o cabeçalho da mãe, e o rodapé soma só ela", async () => {
+    comDivisao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getAllByRole("button", { name: "Filtrar por Rafael" })[0]);
+    expect(linhasDaGrade().map((r) => r.dataset.papel ?? "linha")).toEqual(["cabecalho", "parte"]);
+    expect(rodape()).toContain("R$ 155,33");
+  });
+
+  it("selecionar todos marca as partes e a padaria, não a mãe", async () => {
+    comDivisao();
+    renderizar();
+    await userEvent.setup().click(screen.getByRole("checkbox", { name: TEXTOS_LANCAMENTO.selecionar_todos }));
+    expect(screen.getAllByRole("checkbox", { checked: true })).toHaveLength(4);
+  });
+
+  it("excluir a mãe leva as filhas na mesma gravação", async () => {
+    comDivisao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhasDaGrade()[0]).getByRole("button", { name: /Ações de/ }));
+    await u.click(screen.getByRole("menuitem", { name: "Excluir" }));
+    await u.click(screen.getByRole("button", { name: "Excluir lançamento" }));
+    expect(repoL.excluir).toHaveBeenCalledOnce();
+    const [id, opcoes] = repoL.excluir.mock.calls[0];
+    expect(id).toBe("jim");
+    expect([...(opcoes?.junto ?? [])].sort()).toEqual(["fa", "fb"]);
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["PADARIA"]);
+  });
+
+  it("abrir uma parte mostra o painel reduzido da parte, com 'Abrir divisão'", async () => {
+    comDivisao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhasDaGrade()[1]).getAllByRole("cell")[3]);
+    const painel = screen.getByRole("complementary");
+    expect(within(painel).getByText("Parte de JIM COM")).toBeTruthy();
+    await u.click(within(painel).getByRole("button", { name: "Abrir divisão" }));
+    expect(await screen.findByRole("dialog", { name: "Dividir lançamento" })).toBeTruthy();
+  });
+
+  it("a mãe aberta no painel não vira linha repetida na grade", async () => {
+    comDivisao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhasDaGrade()[0]).getAllByRole("cell")[3]);
+    expect(linhasDaGrade().map((r) => r.dataset.papel ?? "linha")).toEqual(["cabecalho", "parte", "parte", "linha"]);
+    expect(within(screen.getByRole("complementary")).getByRole("button", { name: "Editar divisão" })).toBeTruthy();
+  });
+});

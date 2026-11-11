@@ -73,11 +73,21 @@ export function criarRepoRegras(deps: {
     try {
       const lida = await cliente.from("regras").select("*").eq("chave", chave).maybeSingle();
       if (lida.error) return { ok: false };
+      // Só limpar a Divisão de um Nome sem Regra não cria Regra.
+      const soLimpa = eventos.every((e) => e.divisao === null && e.responsavelDepois === null && e.tipoDepois === null);
+      if (lida.data === null && soLimpa) return { ok: false };
       const nova = aprenderEmLote(lida.data as RegraGravada | null, eventos, agora().toISOString());
       if (!nova) return { ok: false };
       const { data, error } = await cliente
         .from("regras")
-        .upsert({ ...nova, contagem: nova.contagem as unknown as NonNullable<Json> }, { onConflict: "owner_id,chave" })
+        .upsert(
+          {
+            ...nova,
+            contagem: nova.contagem as unknown as NonNullable<Json>,
+            divisao: nova.divisao as unknown as Json,
+          },
+          { onConflict: "owner_id,chave" },
+        )
         .select()
         .single();
       return error || !data ? { ok: false } : { ok: true, regra: data };

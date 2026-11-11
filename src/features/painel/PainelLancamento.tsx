@@ -6,6 +6,8 @@ import { lerDadosRevisao } from "@/domain/classificacao";
 import type { ConfigCiclo } from "@/domain/ciclo";
 import type { Conferencia } from "@/domain/conferencia";
 import { formatarHora, instanteEmMicros } from "@/domain/datas";
+import { formatarDinheiro } from "@/domain/dinheiro";
+import { ehFilha, ehMaeDividida, lerDivisao, valoresDasPartes } from "@/domain/divisao";
 import { formatarParcela } from "@/domain/importacao-fatura";
 import {
   FORM_NOVO_VAZIO,
@@ -41,6 +43,7 @@ import {
   textoSugestao,
 } from "@/domain/mensagens";
 import { nomeExibido } from "@/domain/painel";
+import { TEXTOS_DIVISAO, rotuloParteDe, rotuloResumoDaDivisao } from "@/domain/mensagens";
 import { ehPrevisto, type MudancaDoPrevisto } from "@/domain/previstos";
 import { ordenarParaConfiguracoes as ordenarResponsaveis } from "@/domain/responsaveis";
 import { ordenarParaConfiguracoes as ordenarStatus } from "@/domain/status";
@@ -129,6 +132,12 @@ export type PropsPainelLancamento = Comum &
         conferencia: Conferencia | null;
         /** "Excluir" do rodapé (a tela confirma). */
         aoExcluir: (id: string) => void;
+        /** As filhas da linha (ela é mãe dividida): acompanham Tipo, Apelido, Observação e data. */
+        filhas?: readonly LinhaLancamento[];
+        /** A mãe da linha (ela é uma parte de uma Divisão, História 3.8). */
+        maeDaParte?: LinhaLancamento | null;
+        /** "Dividir" / "Editar divisão" / "Abrir divisão": abre a janela da mãe. */
+        aoDividir?: (id: string) => void;
       }
     | {
         modo: "novo";
@@ -295,10 +304,18 @@ const SEM_AJUSTES: readonly LinhaLancamento[] = [];
 /** Os campos que o Ajuste segue da mãe. */
 const SEGUEM_A_MAE: readonly CampoLancamento[] = ["tipo", "responsavel"];
 
+/** Os campos que as filhas de uma Divisão seguem da mãe (o Valor, o Responsável e o Status são delas). */
+const SEGUEM_AS_FILHAS: readonly CampoLancamento[] = ["tipo", "apelido", "observacao", "data"];
+
+const SEM_FILHAS: readonly LinhaLancamento[] = [];
+
 function EditarLancamento({
   linha,
   mae = null,
   ajustes = SEM_AJUSTES,
+  filhas = SEM_FILHAS,
+  maeDaParte = null,
+  aoDividir,
   lerLinha,
   conferencia,
   cadastros,
@@ -321,6 +338,7 @@ function EditarLancamento({
   const rascunhosRef = useRef(rascunhos);
   const linhaRef = useRef(linha);
   const ajustesRef = useRef(ajustes);
+  const filhasRef = useRef(filhas);
   const maeRef = useRef(mae);
   const focado = useRef<CampoLancamento | null>(null);
   const emVoo = useRef(0);
@@ -330,6 +348,7 @@ function EditarLancamento({
   useEffect(() => {
     linhaRef.current = linha;
     ajustesRef.current = ajustes;
+    filhasRef.current = filhas;
     if (mae) maeRef.current = mae;
   });
   // Fechado (Esc, outra linha, outro Mês): sem novas tentativas; a falha vira toast.
@@ -399,8 +418,12 @@ function EditarLancamento({
     emVoo.current++;
     definirEstado(campo, "salvando");
     setFalhou(false);
-    // Tipo e Responsável da mãe vão também para os Ajustes dela, na mesma requisição.
-    const junto = SEGUEM_A_MAE.includes(campo) ? ajustesRef.current.map((a) => a.id) : [];
+    // Tipo e Responsável da mãe vão também para os Ajustes dela, e Tipo, Apelido, Observação e data
+    // para as filhas de uma Divisão, na mesma requisição.
+    const junto = [
+      ...(SEGUEM_A_MAE.includes(campo) ? ajustesRef.current.map((a) => a.id) : []),
+      ...(SEGUEM_AS_FILHAS.includes(campo) ? filhasRef.current.map((f) => f.id) : []),
+    ];
     const antes = { responsavel_id: linhaRef.current.responsavel_id, tipo_id: linhaRef.current.tipo_id };
     const r =
       junto.length > 0
@@ -546,6 +569,19 @@ function EditarLancamento({
   const idSugestao = useId();
   const nomeDoCadastro = (lista: readonly { id: string; nome: string }[], id: string | null, sem: string) =>
     id === null ? sem : (lista.find((c) => c.id === id)?.nome ?? sem);
+  const maeDividida = ehMaeDividida(linha);
+  const divisao = maeDividida ? lerDivisao(linha.divisao) : null;
+  // "Mãe 2/3 · Rafael 1/3" (por valor: "Mãe R$ 310,67 · Rafael R$ 155,33").
+  const resumoDaDivisao = (() => {
+    if (!divisao) return "";
+    const valores = divisao.modo === "valor" ? valoresDasPartes(linha.valor_centavos, divisao) : null;
+    return rotuloResumoDaDivisao(
+      divisao.partes.map((p, i) => ({
+        nome: nomeDoCadastro(cadastros.responsaveis, p.responsavel_id, TEXTOS_PAINEL.sem_responsavel),
+        fracao: valores?.ok ? formatarDinheiro(valores.valor[i]) : `${p.numerador}/${p.denominador}`,
+      })),
+    );
+  })();
 
   const situacao = Object.values(estados);
   let indicador: ReactNode = null;
@@ -553,6 +589,54 @@ function EditarLancamento({
   else if (situacao.includes("tentando")) indicador = T.tentando;
   else if (falhou) indicador = <span className="text-danger-fg">{mensagem("salvar.falhou")}</span>;
   else if (salvoAs) indicador = rotuloSalvoAs(salvoAs);
+
+  // Uma parte da Divisão: só o Status é dela; o resto é lido da mãe (Dividir > Editar divisão).
+  if (ehFilha(linha)) {
+    const maeNome = maeDaParte ? nomeExibido(maeDaParte) : linha.nome;
+    return (
+      <Moldura
+        titulo={rotuloParteDe(maeNome)}
+        aoFechar={aoFechar}
+        topo={
+          <p role="status" className="shrink-0 texto-caption text-text-muted">
+            {indicador}
+          </p>
+        }
+        rodape={
+          <div className="ml-auto flex gap-2">
+            {aoDividir && maeDaParte ? (
+              <Botao onClick={() => aoDividir(maeDaParte.id)}>{TEXTOS_DIVISAO.abrir_divisao}</Botao>
+            ) : null}
+          </div>
+        }
+      >
+        <p className="texto-body text-text-muted">
+          {T.nome_na_fatura} <span className="texto-body-strong text-text">{linha.nome}</span> {T.nao_editavel}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-col gap-1">
+            <span className="texto-label text-text">{T.valor}</span>
+            <span className="flex min-h-toque items-center texto-body texto-number text-text">{formatarDinheiro(linha.valor_centavos)}</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="texto-label text-text">{T.responsavel}</span>
+            <span className="flex min-h-toque items-center texto-body text-text">
+              {nomeDoCadastro(cadastros.responsaveis, linha.responsavel_id, TEXTOS_PAINEL.sem_responsavel)}
+            </span>
+          </div>
+        </div>
+        <p className="texto-caption text-text-muted">
+          {maeDaParte ? `${rotuloParteDe(maeNome)} · ${formatarDinheiro(maeDaParte.valor_centavos)}` : ""} {TEXTOS_DIVISAO.filhas_seguem}
+        </p>
+        <Seletor
+          rotulo={T.status}
+          opcoes={opcoes.status}
+          value={texto("status")}
+          onChange={(e) => escolher("status", e.target.value)}
+        />
+      </Moldura>
+    );
+  }
 
   return (
     <Moldura
@@ -566,6 +650,9 @@ function EditarLancamento({
       rodape={
         <div className="ml-auto flex gap-2">
           {mae ? <Botao onClick={() => void desvincular()}>{TEXTOS_AJUSTE.desvincular}</Botao> : null}
+          {aoDividir && !mae ? (
+            <Botao onClick={() => aoDividir(linha.id)}>{maeDividida ? TEXTOS_DIVISAO.botao_editar : TEXTOS_DIVISAO.botao}</Botao>
+          ) : null}
           <Botao variante="destrutivo" onClick={() => aoExcluir(linha.id)}>
             {T.excluir}
           </Botao>
@@ -592,6 +679,9 @@ function EditarLancamento({
           className="texto-number"
           value={texto("valor")}
           erro={erros.valor ?? null}
+          // A mãe dividida tem o Valor travado: as filhas somam esse Valor (desfaça a divisão para corrigi-lo).
+          readOnly={maeDividida}
+          aria-describedby={maeDividida ? `${idSugestao}-valor` : undefined}
           onFocus={() => focar("valor")}
           onChange={(e) => definirRascunho("valor", e.target.value)}
           onBlur={() => sair("valor")}
@@ -615,6 +705,11 @@ function EditarLancamento({
           }}
         />
       </div>
+      {maeDividida ? (
+        <p id={`${idSugestao}-valor`} className="texto-caption text-text-muted">
+          {TEXTOS_DIVISAO.dividido_somente_leitura}
+        </p>
+      ) : null}
       {ajustes.length > 0 ? (
         <p className="texto-label font-normal text-text-muted">
           {rotuloAjusteDaMae(somaDosAjustes(ajustes), liquidoCentavos(linha, ajustes))}
@@ -657,13 +752,24 @@ function EditarLancamento({
       ) : (
         <div className="flex flex-col gap-1">
           <div className="grid grid-cols-2 gap-2">
-            <Seletor
-              rotulo={T.responsavel}
-              opcoes={opcoes.responsavel}
-              value={texto("responsavel")}
-              onChange={(e) => escolher("responsavel", e.target.value)}
-              aria-describedby={sugestao ? idSugestao : undefined}
-            />
+            {maeDividida ? (
+              // O Responsável é de cada parte: aqui só leitura.
+              <div className="flex flex-col gap-1">
+                <span className="texto-label text-text">{T.responsavel}</span>
+                <span className="flex min-h-toque flex-col justify-center texto-body text-text">
+                  <span>{TEXTOS_DIVISAO.responsavel_dividido}</span>
+                  <span className="texto-caption text-text-muted">{resumoDaDivisao}</span>
+                </span>
+              </div>
+            ) : (
+              <Seletor
+                rotulo={T.responsavel}
+                opcoes={opcoes.responsavel}
+                value={texto("responsavel")}
+                onChange={(e) => escolher("responsavel", e.target.value)}
+                aria-describedby={sugestao ? idSugestao : undefined}
+              />
+            )}
             <Seletor
               rotulo={T.tipo}
               opcoes={opcoes.tipo}

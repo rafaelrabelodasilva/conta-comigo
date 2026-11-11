@@ -17,9 +17,11 @@ export function Seletor({ rotulo, opcoes, id, className, ...props }: PropsSeleto
 
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={idCampo} className="texto-label text-text">
-        {rotulo}
-      </label>
+      {rotulo ? (
+        <label htmlFor={idCampo} className="texto-label text-text">
+          {rotulo}
+        </label>
+      ) : null}
       <div className="relative">
         <select
           id={idCampo}

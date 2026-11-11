@@ -43,11 +43,19 @@ export type LinhaDaFila = {
   fatura_id?: string | null;
 };
 
-type SoParaPertencer = Pick<LinhaDaFila, "excluido_em" | "ajuste_de_id" | "revisao_motivo">;
+type SoParaPertencer = Pick<LinhaDaFila, "excluido_em" | "ajuste_de_id" | "revisao_motivo"> & {
+  /** Filha de uma Divisão (História 3.8): nunca entra na fila. */
+  dividido_de_id?: string | null;
+};
 
 /** A linha está na fila do Revisar? Não excluída, não Ajuste e com motivo. */
 export function ehDaFila(l: SoParaPertencer): boolean {
-  return (l.excluido_em ?? null) === null && (l.ajuste_de_id ?? null) === null && (l.revisao_motivo ?? null) !== null;
+  return (
+    (l.excluido_em ?? null) === null &&
+    (l.ajuste_de_id ?? null) === null &&
+    (l.dividido_de_id ?? null) === null &&
+    (l.revisao_motivo ?? null) !== null
+  );
 }
 
 /**
@@ -314,12 +322,16 @@ export type ResumoDaImportacao = {
  * = itens da fila daquele Mês; `classificados` = o resto.
  */
 export function resumoDaImportacao(
-  lancamentos: readonly { fatura_id: string | null; ajuste_de_id: string | null; excluido_em: string | null }[],
+  lancamentos: readonly { fatura_id: string | null; ajuste_de_id: string | null; excluido_em: string | null; dividido_de_id?: string | null }[],
   faturaId: string,
   paraRevisar: number,
 ): ResumoDaImportacao {
   const total = lancamentos.filter(
-    (l) => l.fatura_id === faturaId && (l.ajuste_de_id ?? null) === null && (l.excluido_em ?? null) === null,
+    (l) =>
+      l.fatura_id === faturaId &&
+      (l.ajuste_de_id ?? null) === null &&
+      (l.dividido_de_id ?? null) === null &&
+      (l.excluido_em ?? null) === null,
   ).length;
   return { lancamentos: total, classificados: Math.max(0, total - paraRevisar), paraRevisar };
 }
@@ -329,17 +341,25 @@ export function resumoDaImportacao(
  * mãe) entram classificadas e quantas vão para a fila, quantos previstos
  * casaram (`previsto_id`) e quantos previstos a Fatura não trouxe
  * (`previstosSemPar`, que também vão para a fila, História 3.6) e quantas
- * herdaram a classificação da parcela anterior (`herdado_de_id`, História 3.7).
+ * herdaram a classificação da parcela anterior (`herdado_de_id`, História 3.7)
+ * e quantas entram divididas (`divisao`, História 3.8).
  */
 export function resumoDaClassificacao(
-  lancamentos: readonly { ajuste_de_ordem: number | null; revisao_motivo: MotivoRevisao | null; previsto_id?: string | null; herdado_de_id?: string | null }[],
+  lancamentos: readonly {
+    ajuste_de_ordem: number | null;
+    revisao_motivo: MotivoRevisao | null;
+    previsto_id?: string | null;
+    herdado_de_id?: string | null;
+    divisao?: unknown;
+  }[],
   previstosSemPar = 0,
-): { classificados: number; paraRevisar: number; casados: number; naoVieram: number; herdadas: number } {
+): { classificados: number; paraRevisar: number; casados: number; naoVieram: number; herdadas: number; divididas: number } {
   const maes = lancamentos.filter((l) => l.ajuste_de_ordem === null);
   const paraRevisar = maes.filter((l) => l.revisao_motivo !== null).length;
   const casados = maes.filter((l) => (l.previsto_id ?? null) !== null).length;
   const herdadas = maes.filter((l) => (l.herdado_de_id ?? null) !== null).length;
-  return { classificados: maes.length - paraRevisar, paraRevisar, casados, naoVieram: previstosSemPar, herdadas };
+  const divididas = maes.filter((l) => (l.divisao ?? null) !== null).length;
+  return { classificados: maes.length - paraRevisar, paraRevisar, casados, naoVieram: previstosSemPar, herdadas, divididas };
 }
 
 /**

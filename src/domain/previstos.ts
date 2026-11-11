@@ -24,12 +24,17 @@
 //   procura a n−1/N do Mês anterior (`heranca.ts`) e, se achar, entra na Série
 //   dela e herda a classificação; `aplicarCasamento` faz isso depois do
 //   casamento e antes de subir a `ocorrencia`.
+// - Divisão (História 3.8): o previsto herda a `divisao` da parcela e nasce com
+//   as filhas (mesmo Valor, então os mesmos centavos); o casado mantém as
+//   filhas do previsto e o núcleo recalcula os valores delas com o Valor da
+//   Fatura (`partes`). A mãe dividida não tem Responsável.
 // - Propagação (decisão 4-A): quando a parcela real é reclassificada, os
 //   previstos vazios recebem sozinhos; os que já têm outro valor só mudam se
 //   Rafael responder "Aplicar a todos", e só se a parcela já tinha valor.
 
 import type { DadosRevisao, DadosValorMudou, MotivoRevisao } from "./classificacao";
 import { somarMeses } from "./ciclo";
+import { copiarDivisao, estaClassificada, partesDaImportacao, type Divisao, type ParteParaGravar } from "./divisao";
 import { emprestaAlgo, escolherCandidatas, mesclarHerdada, type CandidataParaHerdar } from "./heranca";
 
 /** A linha é um previsto? (`lancado_por = 'sistema'`: o app a criou, a fatura ainda não chegou.) */
@@ -118,6 +123,8 @@ export type LinhaParaPrever = {
   /** Herdados da parcela anterior (3.7); os previstos seguintes os copiam. */
   apelido?: string | null;
   observacao?: string | null;
+  /** Divisão da parcela (3.8); o previsto a herda e nasce com as filhas. */
+  divisao?: Divisao | null;
   serie: ChaveDaSerie | null;
 };
 
@@ -135,6 +142,9 @@ export type PrevistoParaGravar = {
   responsavel_id: string | null;
   tipo_id: string | null;
   observacao: string | null;
+  /** A Divisão herdada, sem `filha_id`, e as partes (filhas) com os valores. */
+  divisao?: Divisao;
+  partes?: ParteParaGravar[];
 };
 
 /**
@@ -152,6 +162,8 @@ export function gerarPrevistos(
   const naOrdem = [...linhas].sort((a, b) => a.ordem_fatura - b.ordem_fatura);
   for (const l of naOrdem) {
     if (l.serie === null || l.parcela_n === null || l.parcela_total === null) continue;
+    const divisao = l.divisao ? copiarDivisao(l.divisao) : null;
+    const partes = divisao ? partesDaImportacao(l.valor_centavos, divisao) : null;
     for (let k = 1; l.parcela_n + k <= l.parcela_total; k++) {
       const mes = somarMeses(mesDaFatura, k);
       if (comFatura.has(mes)) continue;
@@ -167,6 +179,7 @@ export function gerarPrevistos(
         responsavel_id: l.responsavel_id,
         tipo_id: l.tipo_id,
         observacao: l.observacao ?? null,
+        ...(divisao && partes ? { divisao, partes } : {}),
       });
     }
   }
@@ -248,6 +261,8 @@ export type PrevistoParaCasar = {
   ocorrencia: number;
   responsavel_id: string | null;
   tipo_id: string | null;
+  /** A Divisão do previsto (3.8), com os `filha_id` das filhas dele. */
+  divisao?: Divisao | null;
   /** A chave da Série do previsto; com ela, a parcela real sem par não cai numa Série já ocupada. */
   serie?: ChaveDaSerie;
 };
@@ -316,10 +331,15 @@ export type ClassificacaoCalculada = {
   tipo_id: string | null;
   revisao_motivo: MotivoRevisao | null;
   revisao_dados: DadosRevisao | DadosValorMudou | null;
+  /** A Divisão que a Regra aplicou (3.8). */
+  divisao?: Divisao | null;
 };
 
 /** O que a herança (3.7) acrescenta a cada linha devolvida por `aplicarCasamento`. */
 export type MarcaDeHeranca = { herdado_de_id: string | null };
+
+/** A Divisão final da linha (3.8) e as partes que a RPC grava nas filhas. */
+export type MarcaDeDivisao = { divisao?: Divisao | null; partes?: ParteParaGravar[] };
 
 /**
  * Aplica o casamento às linhas já classificadas pelas Regras. A linha casada
@@ -341,15 +361,22 @@ export function aplicarCasamento<
   casamento: ResultadoDoCasamento,
   previstos: readonly PrevistoParaCasar[],
   candidatas: readonly CandidataParaHerdar[] = [],
-): (L & { previsto_id: string | null } & MarcaDeHeranca)[] {
+): (L & { previsto_id: string | null } & MarcaDeHeranca & MarcaDeDivisao)[] {
   const previstoDe = new Map(previstos.map((p) => [p.id, p]));
   const idDoPar = new Map(casamento.casados.map((c) => [c.ordem_fatura, c.previsto_id]));
-  const aplicadas = lancamentos.map((l): L & { previsto_id: string | null } & MarcaDeHeranca => {
+  const aplicadas = lancamentos.map((l): L & { previsto_id: string | null } & MarcaDeHeranca & MarcaDeDivisao => {
     const previsto = previstoDe.get(idDoPar.get(l.ordem_fatura) ?? "");
     if (!previsto) return { ...l, previsto_id: null, herdado_de_id: null };
-    const responsavel_id = previsto.responsavel_id ?? l.responsavel_id;
+    // Divisão do casado: a do previsto (a das Regras não vale aqui); as filhas são as dele, com o Valor da Fatura.
+    let divisao = previsto.divisao ?? null;
+    let partes: ParteParaGravar[] | null = null;
+    if (divisao !== null) {
+      partes = partesDaImportacao(l.valor_centavos, divisao, divisao.partes.map((p) => p.filha_id), true);
+      if (partes === null) divisao = null;
+    }
+    const responsavel_id = divisao !== null ? null : (previsto.responsavel_id ?? (l.divisao ? null : l.responsavel_id));
     const tipo_id = previsto.tipo_id ?? l.tipo_id;
-    const completa = responsavel_id !== null && tipo_id !== null;
+    const completa = estaClassificada({ responsavel_id, tipo_id, divisao });
     const mudou = previsto.valor_centavos !== l.valor_centavos;
     let revisao_motivo: MotivoRevisao | null;
     let revisao_dados: DadosRevisao | DadosValorMudou | null = null;
@@ -362,7 +389,18 @@ export function aplicarCasamento<
     } else {
       revisao_motivo = null;
     }
-    return { ...l, serie: null, responsavel_id, tipo_id, revisao_motivo, revisao_dados, previsto_id: previsto.id, herdado_de_id: null };
+    return {
+      ...l,
+      serie: null,
+      responsavel_id,
+      tipo_id,
+      revisao_motivo,
+      revisao_dados,
+      previsto_id: previsto.id,
+      herdado_de_id: null,
+      divisao,
+      ...(partes ? { partes } : {}),
+    };
   });
 
   const chaveDaParcela = (k: ChaveDaSerie, n: number | null) =>
@@ -410,6 +448,13 @@ export function aplicarCasamento<
   const porOrdem = new Map(livres.map((l) => [l.ordem_fatura, l]));
   return livres.map((l) => {
     const mae = l.ajuste_de_ordem === null ? undefined : porOrdem.get(l.ajuste_de_ordem);
-    return mae ? { ...l, responsavel_id: mae.responsavel_id, tipo_id: mae.tipo_id } : l;
+    if (mae) return { ...l, responsavel_id: mae.responsavel_id, tipo_id: mae.tipo_id };
+    // Divisão de linha nova (Regra ou herança): as partes que a RPC grava. Se alguma zera, a linha não divide.
+    if (l.previsto_id === null && (l.divisao ?? null) !== null) {
+      const partes = partesDaImportacao(l.valor_centavos, l.divisao as Divisao);
+      if (partes) return { ...l, partes };
+      return { ...l, divisao: null, revisao_motivo: l.revisao_motivo ?? "sem_classificacao" };
+    }
+    return l;
   });
 }

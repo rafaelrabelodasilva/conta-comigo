@@ -135,6 +135,7 @@ describe("aprenderRegra", () => {
       tipo_id: "gatos",
       contagem: [{ responsavel_id: "rafael", n: 1 }],
       ultimo_uso: AGORA,
+      divisao: null,
     });
   });
 
@@ -326,6 +327,7 @@ describe("aprenderEmLote (a mesma aprenderRegra, evento a evento)", () => {
       tipo_id: "casa",
       contagem: [{ responsavel_id: "casal", n: 3 }],
       ultimo_uso: AGORA,
+      divisao: null,
     });
   });
 
