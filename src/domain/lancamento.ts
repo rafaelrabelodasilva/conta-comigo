@@ -35,6 +35,8 @@ export const MAIOR_INTEGER = 2_147_483_647;
 export type LancamentoEditavel = {
   /** Linha da Fatura sempre tem data (restrição `lancamentos_fatura_check`). */
   lancado_por?: string;
+  /** O Nome (só leitura): um Apelido igual a ele vira nulo (História 3.9). */
+  nome?: string;
   valor_centavos: number;
   data: string | null;
   apelido: string | null;
@@ -157,8 +159,13 @@ export function mudancaDoCampo(
   campo: CampoLancamento,
   texto: string,
 ): Resultado<MudancaCampo | null> {
-  const r = lerCampo(campo, texto);
-  if (!r.ok) return r;
+  const lido = lerCampo(campo, texto);
+  if (!lido.ok) return lido;
+  let r = lido;
+  // Apelido igual ao Nome (sem maiúsculas nem acento) é o mesmo que nenhum Apelido (História 3.9).
+  if (r.valor.coluna === "apelido" && r.valor.valor !== null && atual.nome !== undefined) {
+    if (normalizarNome(r.valor.valor) === normalizarNome(atual.nome)) r = { ok: true, valor: { coluna: "apelido", valor: null } };
+  }
   if (r.valor.coluna === "data" && r.valor.valor === null && atual.lancado_por === "fatura") {
     return erro("lancamento.data_da_fatura");
   }

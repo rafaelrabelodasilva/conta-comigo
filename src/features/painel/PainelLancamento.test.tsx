@@ -812,3 +812,103 @@ describe("previstos (História 3.5)", () => {
     expect(propagar).not.toHaveBeenCalled();
   });
 });
+
+describe("painel do Lançamento: Apelido em massa (História 3.9)", () => {
+  const plano = (mudam: number, comOutro = 0) => ({
+    itens: [{ id: "x", corpo: { apelido: "Pedras" } }],
+    antes: [{ id: "x", corpo: { apelido: null, editado_em: null } }],
+    mudam,
+    comOutro,
+  });
+  function comPlano(m: ReturnType<typeof montarRepo>, p: ReturnType<typeof plano>) {
+    const planejar = vi.fn(async () => ({ ok: true as const, plano: p }));
+    const aplicar = vi.fn(async () => ({ ok: true as const, gravadas: 1 }));
+    Object.assign(m.repo, { planejarApelido: planejar, aplicarApelido: aplicar });
+    return { planejar, aplicar };
+  }
+  async function digitar(u: ReturnType<typeof userEvent.setup>, texto: string) {
+    await u.click(campo("Apelido"));
+    await u.type(campo("Apelido"), texto);
+    await u.tab();
+  }
+
+  it("dar Apelido: lê as outras linhas do Nome e pergunta com a contagem", async () => {
+    const m = montarRepo();
+    const { planejar } = comPlano(m, plano(12, 2));
+    renderizar(<Editar m={m} />);
+    await digitar(userEvent.setup(), "Pedras");
+    await screen.findByRole("group", {
+      name: "Aplicar a 12 lançamentos de BELLA PIETRA? 2 já têm outro Apelido e serão trocados.",
+    });
+    expect(planejar).toHaveBeenCalledWith({ id: "a", nome_normalizado: "BELLA PIETRA" }, "Pedras");
+  });
+
+  it("'Aplicar a todos' grava os itens do plano e o toast 'Desfazer' devolve o retrato de antes", async () => {
+    const m = montarRepo();
+    const p = plano(3);
+    const { aplicar } = comPlano(m, p);
+    renderizar(<Editar m={m} />);
+    const u = userEvent.setup();
+    await digitar(u, "Pedras");
+    const faixa = await screen.findByRole("group", { name: "Aplicar a 3 lançamentos de BELLA PIETRA?" });
+    await u.click(within(faixa).getByRole("button", { name: "Aplicar a todos" }));
+    expect(aplicar).toHaveBeenCalledWith(p.itens);
+    expect(await screen.findByText("Apelido aplicado a 3 lançamentos")).toBeTruthy();
+    expect(screen.queryByRole("group", { name: /lançamentos de/ })).toBeNull();
+    await u.click(screen.getByRole("button", { name: "Desfazer" }));
+    expect(aplicar).toHaveBeenLastCalledWith(p.antes);
+  });
+
+  it("'Só este' fecha a pergunta sem gravar nas outras", async () => {
+    const m = montarRepo();
+    const { aplicar } = comPlano(m, plano(1));
+    renderizar(<Editar m={m} />);
+    const u = userEvent.setup();
+    await digitar(u, "Pedras");
+    const faixa = await screen.findByRole("group", { name: "Aplicar a 1 lançamento de BELLA PIETRA?" });
+    await u.click(within(faixa).getByRole("button", { name: "Só este" }));
+    expect(aplicar).not.toHaveBeenCalled();
+    expect(screen.queryByRole("group", { name: /lançamento de/ })).toBeNull();
+  });
+
+  it("remover o Apelido: a pergunta fala em remover", async () => {
+    const m = montarRepo();
+    m.memoria.atual = linha({ apelido: "Pedras" });
+    comPlano(m, plano(4));
+    renderizar(<Editar m={m} />);
+    const u = userEvent.setup();
+    await u.clear(campo("Apelido"));
+    await u.tab();
+    await screen.findByRole("group", { name: "Remover o Apelido de 4 lançamentos de BELLA PIETRA?" });
+  });
+
+  it("sem outras linhas que mudem: não pergunta; o Apelido da linha já foi gravado", async () => {
+    const m = montarRepo();
+    comPlano(m, plano(0));
+    renderizar(<Editar m={m} />);
+    await digitar(userEvent.setup(), "Pedras");
+    await vi.waitFor(() => expect(m.atualizar).toHaveBeenCalled());
+    expect(screen.queryByRole("group", { name: /lançamento/ })).toBeNull();
+  });
+
+  it("falha ao ler as outras linhas: sem pergunta e sem erro", async () => {
+    const m = montarRepo();
+    Object.assign(m.repo, { planejarApelido: vi.fn(async () => ({ ok: false as const, codigo: "salvar.falhou" })) });
+    renderizar(<Editar m={m} />);
+    await digitar(userEvent.setup(), "Pedras");
+    await vi.waitFor(() => expect(m.atualizar).toHaveBeenCalled());
+    expect(screen.queryByRole("group", { name: /lançamento/ })).toBeNull();
+  });
+
+  it("mudar outro campo (Observação) não pergunta nada de Apelido", async () => {
+    const m = montarRepo();
+    const { planejar } = comPlano(m, plano(5));
+    renderizar(<Editar m={m} />);
+    const u = userEvent.setup();
+    await u.click(campo("Observação"));
+    await u.type(campo("Observação"), "x");
+    await u.tab();
+    await vi.waitFor(() => expect(m.atualizar).toHaveBeenCalled());
+    expect(planejar).not.toHaveBeenCalled();
+  });
+});

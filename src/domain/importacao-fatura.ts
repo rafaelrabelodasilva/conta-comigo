@@ -384,6 +384,8 @@ export type LinhaParaReimportar = {
   responsavel_id: string | null;
   tipo_id: string | null;
   observacao: string | null;
+  /** Apelido dado à mão (História 3.9): conta como "marcada à mão". */
+  apelido?: string | null;
   status_id: string | null;
   /** Quando o previsto foi casado com a Fatura (História 3.6); nulo se a linha nunca foi previsto. */
   casado_em?: string | null;
@@ -430,6 +432,7 @@ export function resumirReimportacao(
       l.responsavel_id !== null ||
       l.tipo_id !== null ||
       (l.observacao !== null && l.observacao.trim() !== "") ||
+      (l.apelido ?? null) !== null ||
       l.status_id !== statusPadraoId;
     if (mexido) mexidos++;
   }

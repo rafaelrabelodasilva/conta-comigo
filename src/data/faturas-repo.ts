@@ -151,7 +151,7 @@ function ehGravados(dados: unknown): dados is Gravados {
 }
 
 const COLUNAS_REIMPORTACAO =
-  "id, fatura_id, excluido_em, responsavel_id, tipo_id, observacao, status_id, casado_em, dividido_de_id, divisao, updated_at";
+  "id, fatura_id, excluido_em, responsavel_id, tipo_id, observacao, apelido, status_id, casado_em, dividido_de_id, divisao, updated_at";
 
 const COLUNAS_CANDIDATAS =
   "id, nome_normalizado, parcela_n, parcela_total, valor_centavos, ordem_fatura, responsavel_id, tipo_id, apelido, observacao, divisao, serie_id, excluido_em, dividido_de_id, ajuste_de_id";
