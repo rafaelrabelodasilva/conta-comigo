@@ -99,8 +99,8 @@ describe.skipIf(!ligado)("Casamento dos previstos no Supabase local", () => {
   async function lerMes(mes: string) {
     const { data } = await local.admin.from("lancamentos").select("*").eq("owner_id", a.id).eq("mes", mes);
     const linhas = data ?? [];
-    const { data: series } = await local.admin.from("series").select("id, ocorrencia").eq("owner_id", a.id);
-    const ocorrencias = new Map((series ?? []).map((s) => [s.id, s.ocorrencia]));
+    const { data: series } = await local.admin.from("series").select("*").eq("owner_id", a.id);
+    const dasSeries = new Map((series ?? []).map((s) => [s.id, s]));
     const previstos: PrevistoParaCasar[] = linhas
       .filter((l) => l.lancado_por === "sistema" && l.excluido_em === null && l.fatura_id === null && l.serie_id)
       .map((l) => ({
@@ -109,9 +109,17 @@ describe.skipIf(!ligado)("Casamento dos previstos no Supabase local", () => {
         parcela_n: l.parcela_n!,
         parcela_total: l.parcela_total!,
         valor_centavos: l.valor_centavos,
-        ocorrencia: ocorrencias.get(l.serie_id!)!,
+        ocorrencia: dasSeries.get(l.serie_id!)!.ocorrencia,
         responsavel_id: l.responsavel_id,
         tipo_id: l.tipo_id,
+        // Como `lerPrevistosDoMes`: a chave da Série evita a Série já ocupada.
+        serie: {
+          nome_normalizado: dasSeries.get(l.serie_id!)!.nome_normalizado,
+          parcela_total: dasSeries.get(l.serie_id!)!.parcela_total,
+          valor_parcela_centavos: dasSeries.get(l.serie_id!)!.valor_parcela_centavos,
+          mes_primeira_parcela: dasSeries.get(l.serie_id!)!.mes_primeira_parcela,
+          ocorrencia: dasSeries.get(l.serie_id!)!.ocorrencia,
+        },
       }));
     const atualizadoEm = linhas.map((l) => l.updated_at).sort().at(-1) ?? null;
     return { previstos, atualizadoEm };
