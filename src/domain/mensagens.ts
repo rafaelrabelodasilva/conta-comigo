@@ -94,6 +94,9 @@ export const MENSAGENS = {
   "fatura.mes_ja_importado": "A fatura deste Mês já foi importada. Nada foi gravado.",
   "fatura.mes_mudou":
     "Os lançamentos deste Mês mudaram em outro aparelho. Nada foi gravado. Tente de novo.",
+  // História 3.5: o casamento do previsto com a parcela real é da 3.6.
+  "fatura.previstos_sem_casamento":
+    "Este Mês já tem parcelas previstas de compras parceladas, e o app ainda não sabe juntá-las às da fatura. Nada foi gravado.",
   "lancamento.nome_vazio": "Preencha o nome.",
   "lancamento.nome_longo": "Use até 200 caracteres.",
   "lancamento.valor_vazio": "Preencha o valor.",
@@ -219,7 +222,20 @@ export function avisoReimportar(mes: string, r: ResumoReimportacao): string {
   const mexidos = r.mexidos === 1 ? "1 já classificado ou marcado à mão" : `${r.mexidos} já classificados ou marcados à mão`;
   const excluidos =
     r.excluidos === 0 ? "" : r.excluidos === 1 ? " O 1 excluído volta." : ` Os ${r.excluidos} excluídos voltam.`;
-  return `Esta fatura já foi importada. Importar de novo apaga ${linhas} (${mexidos}) e importa tudo de novo.${excluidos}`;
+  const previstos =
+    !r.previstos
+      ? ""
+      : r.previstos === 1
+        ? " Apaga também o 1 previsto que ela criou e você não mexeu."
+        : ` Apaga também os ${r.previstos} previstos que ela criou e você não mexeu.`;
+  return `Esta fatura já foi importada. Importar de novo apaga ${linhas} (${mexidos}) e importa tudo de novo.${excluidos}${previstos}`;
+}
+
+/** Passo 3: "17 parcelas previstas serão criadas nos próximos meses" (uma: "1 parcela prevista será criada…"). */
+export function rotuloPrevistosCriados(n: number): string {
+  return n === 1
+    ? "1 parcela prevista será criada nos próximos meses"
+    : `${n} parcelas previstas serão criadas nos próximos meses`;
 }
 
 /** Toast depois de reimportar: "Fatura de novembro importada de novo · 52 lançamentos". */
@@ -314,6 +330,35 @@ export const COLUNAS_GRADE = {
   /** A coluna do ⋯ (História 2.7). */
   acoes: "Ações",
 } as const;
+
+/** O selo do previsto, junto do Nome (História 3.5). */
+export const ROTULO_PREVISTO = "Previsto";
+
+/**
+ * A origem do previsto no painel (História 3.5): "criado a partir da parcela
+ * 05/10 de MAGALU na Fatura de 06/10/26". Sem a linha de origem (a Fatura foi
+ * importada de novo), a frase genérica.
+ */
+export function rotuloOrigemPrevisto(
+  origem: { nome: string; parcela: string; vencimento: string | null } | null,
+): string {
+  if (origem === null) return "criado a partir de uma parcela anterior desta compra";
+  const de = origem.parcela ? `da parcela ${origem.parcela} de ${origem.nome}` : `de ${origem.nome}`;
+  const fatura = origem.vencimento === null ? "" : ` na Fatura de ${formatarData(origem.vencimento)}`;
+  return `criado a partir ${de}${fatura}`;
+}
+
+/** A pergunta ao reclassificar a parcela: "Aplicar também aos 3 previstos desta compra?". */
+export function perguntaAplicarAosPrevistos(n: number): string {
+  return n === 1
+    ? "Aplicar também ao 1 previsto desta compra?"
+    : `Aplicar também aos ${n} previstos desta compra?`;
+}
+
+/** Toast depois de "Aplicar a todos" ou do preenchimento dos previstos. */
+export function rotuloPrevistosAtualizados(n: number): string {
+  return n === 1 ? "1 previsto atualizado" : `${n} previstos atualizados`;
+}
 
 /** Rótulos de `lancado_por` (AD-6). */
 export const ROTULOS_LANCADO_POR = {

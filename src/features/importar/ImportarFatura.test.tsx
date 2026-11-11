@@ -367,6 +367,44 @@ describe("ImportarFatura", () => {
     expect(screen.queryByRole("button", { name: T.importar })).toBeNull();
   });
 
+  it("História 3.5: os previstos das parcelas vão na gravação, só para Meses sem Fatura, e o passo 3 diz quantos", async () => {
+    falso.faturas = [{ id: "f11", mes: "2026-11" }];
+    const u = await escolherPdf();
+    await digitarSenha(u, "s");
+    await screen.findByText(PASSO_3);
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    await verNoPainel();
+    const gravado: Importacao = falso.importar.mock.calls[0][0];
+    expect(gravado.previstos.length).toBeGreaterThan(0);
+    // nov/26 já tem Fatura (decisão 1-A); todos são de Meses depois de out/26.
+    expect(gravado.previstos.every((p) => p.mes > "2026-10" && p.mes !== "2026-11")).toBe(true);
+    // Cada linha com parcela a vir tem a Série; o previsto aponta para a ordem dela.
+    const ordens = new Set(gravado.lancamentos.filter((l) => l.serie !== null).map((l) => l.ordem_fatura));
+    expect(gravado.previstos.every((p) => ordens.has(p.ordem_origem))).toBe(true);
+  });
+
+  it("História 3.5: sem Fatura nos Meses seguintes, o passo 3 mostra 'N parcelas previstas serão criadas'", async () => {
+    const u = await escolherPdf();
+    await digitarSenha(u, "s");
+    await screen.findByText(PASSO_3);
+    const texto = screen.getByText(/prevista.* criada/).textContent ?? "";
+    await u.click(screen.getByRole("button", { name: T.importar }));
+    await verNoPainel();
+    const gravado: Importacao = falso.importar.mock.calls[0][0];
+    expect(texto).toBe(`${gravado.previstos.length} parcelas previstas serão criadas nos próximos meses`);
+  });
+
+  it("História 3.5: 'fatura.previstos_sem_casamento' mostra a mensagem e só deixa Cancelar", async () => {
+    falso.importar.mockResolvedValue({ ok: false, codigo: "fatura.previstos_sem_casamento" });
+    const u = await escolherPdf();
+    await digitarSenha(u, "s");
+    await u.click(await screen.findByRole("button", { name: T.importar }));
+    expect((await screen.findByRole("alert")).textContent).toBe(mensagem("fatura.previstos_sem_casamento"));
+    expect(screen.queryByRole("button", { name: ROTULOS.tentar_de_novo })).toBeNull();
+    expect(screen.queryByRole("button", { name: T.importar })).toBeNull();
+    expect(screen.getByRole("button", { name: ROTULOS.cancelar })).toBeTruthy();
+  });
+
   it("dois toques rápidos em Importar chamam a RPC uma vez só", async () => {
     let terminar: (r: unknown) => void = () => {};
     falso.importar.mockImplementation(() => new Promise((r) => (terminar = r)));
@@ -409,6 +447,18 @@ describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
     await screen.findByText(PASSO_3);
     return u;
   }
+
+  it("História 3.5: o aviso cita os previstos que a reimportação apaga", async () => {
+    falso.lerReimportacao.mockResolvedValue({
+      ok: true,
+      valor: { faturaId: "f0", atualizadoEm: T_AVISO, linhas, statusPadraoId: PADRAO, previstosAApagar: 5 },
+    });
+    await ateOAviso();
+    expect(screen.getByRole("alert").textContent).toBe(
+      avisoReimportar("2026-10", { quantidade: 52, mexidos: 30, excluidos: 2, previstos: 5 }),
+    );
+    expect(screen.getByRole("alert").textContent).toContain("Apaga também os 5 previstos que ela criou e você não mexeu.");
+  });
 
   it("Mês com Fatura: o passo 3 mostra o aviso com 52, 30 e os 2 excluídos, \"Importar de novo\" e \"Cancelar\"", async () => {
     falso.lerReimportacao.mockResolvedValue(leitura());

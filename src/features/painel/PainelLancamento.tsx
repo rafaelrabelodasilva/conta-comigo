@@ -23,20 +23,25 @@ import {
 import {
   ROTULOS,
   ROTULOS_LANCADO_POR,
+  ROTULO_PREVISTO,
   TEXTOS_AJUSTE,
   TEXTOS_LANCAMENTO as T,
   TEXTOS_PAINEL,
   mensagem,
+  perguntaAplicarAosPrevistos,
   rotuloAjusteDaMae,
   rotuloAlteradoEmOutroAparelho,
   rotuloCartaoFinal,
   rotuloDetalhesLancamento,
   rotuloIncluidoEm,
+  rotuloOrigemPrevisto,
+  rotuloPrevistosAtualizados,
   rotuloSalvoAs,
   rotuloSegueAParcela,
   textoSugestao,
 } from "@/domain/mensagens";
 import { nomeExibido } from "@/domain/painel";
+import { ehPrevisto, type MudancaDoPrevisto } from "@/domain/previstos";
 import { ordenarParaConfiguracoes as ordenarResponsaveis } from "@/domain/responsaveis";
 import { ordenarParaConfiguracoes as ordenarStatus } from "@/domain/status";
 import { ordenarParaConfiguracoes as ordenarTipos } from "@/domain/tipos";
@@ -50,6 +55,7 @@ import type { LinhaDe } from "@/data/realtime";
 import { Botao } from "@/ui/Botao";
 import { Campo } from "@/ui/Campo";
 import { cn } from "@/ui/cn";
+import { FaixaPergunta } from "@/ui/FaixaPergunta";
 import { Seletor, type OpcaoSeletor } from "@/ui/Seletor";
 import { useToast } from "@/ui/Toast";
 
@@ -80,6 +86,12 @@ import { useToast } from "@/ui/Toast";
 // classificação atual da mãe). No painel da mãe, a linha "Ajuste - R$ 0,08 ·
 // líquido R$ 1.140,66", e mudar Tipo ou Responsável grava a mãe e os
 // Ajustes dela na mesma requisição.
+//
+// Previstos (História 3.5): o previsto leva o selo "Previsto" e a origem
+// ("criado a partir da parcela 05/10 de MAGALU na Fatura de 06/10/26", lida do
+// banco). Mudar Tipo ou Responsável de uma parcela real com previstos preenche
+// sozinho os previstos vazios; se há previstos com outro valor, a faixa
+// "Só este" / "Aplicar a todos" pergunta (decisão 4-A).
 //
 // Sugestão da fila (História 3.1): na linha que a importação mandou para o
 // Revisar com sugestão, o texto "Sugestão: Casal · Saúde (às vezes Rafael)"
@@ -227,6 +239,41 @@ function sugestaoDaLinha(linha: LinhaLancamento, cadastros: CadastrosPainel): st
   return textoSugestao(nome(cadastros.responsaveis, dados.responsavel_id), nome(cadastros.tipos, dados.tipo_id), outros);
 }
 
+/** O selo "Previsto" e a origem da linha, lida do banco (a linha de origem pode estar em outro Mês). */
+function OrigemDoPrevisto({ origemId, repo }: { origemId: string | null; repo: RepoLancamentos }) {
+  const [texto, setTexto] = useState<string | null>(null);
+  useEffect(() => {
+    if (origemId === null) return;
+    let vivo = true;
+    void repo.lerOrigem(origemId).then((r) => {
+      if (!vivo || !r.ok) return;
+      setTexto(
+        rotuloOrigemPrevisto(
+          r.origem === null
+            ? null
+            : {
+                nome: r.origem.nome,
+                parcela: formatarParcela(r.origem.parcela_n, r.origem.parcela_total),
+                vencimento: r.origem.vencimento,
+              },
+        ),
+      );
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [origemId, repo]);
+  const origem = origemId === null ? rotuloOrigemPrevisto(null) : texto;
+  return (
+    <p className="flex flex-wrap items-center gap-2 texto-body text-text-muted">
+      <span data-previsto className="rounded-sm border border-border px-1.5 texto-caption">
+        {ROTULO_PREVISTO}
+      </span>
+      {origem ? <span data-origem>{origem}</span> : null}
+    </p>
+  );
+}
+
 function opcoesDosCadastros(cadastros: CadastrosPainel, atual: { responsavel: string | null; tipo: string | null; status: string | null }) {
   return {
     responsavel: opcoesDoCadastro(ordenarResponsaveis(cadastros.responsaveis), atual.responsavel, TEXTOS_PAINEL.sem_responsavel),
@@ -267,6 +314,8 @@ function EditarLancamento({
   const [salvoAs, setSalvoAs] = useState<string | null>(null);
   const [falhou, setFalhou] = useState(false);
   const [alteradoAs, setAlteradoAs] = useState<string | null>(null);
+  // Previstos com outro valor, à espera do "Só este" / "Aplicar a todos" (História 3.5).
+  const [aPerguntar, setAPerguntar] = useState<MudancaDoPrevisto[]>([]);
 
   // Refs para as gravações assíncronas lerem o estado atual.
   const rascunhosRef = useRef(rascunhos);
@@ -352,6 +401,7 @@ function EditarLancamento({
     setFalhou(false);
     // Tipo e Responsável da mãe vão também para os Ajustes dela, na mesma requisição.
     const junto = SEGUEM_A_MAE.includes(campo) ? ajustesRef.current.map((a) => a.id) : [];
+    const antes = { responsavel_id: linhaRef.current.responsavel_id, tipo_id: linhaRef.current.tipo_id };
     const r =
       junto.length > 0
         ? await repo.atualizar(linhaRef.current.id, mudancaDaColuna(mudanca), { junto })
@@ -361,6 +411,7 @@ function EditarLancamento({
       gravadosAqui.current.push(r.linha.updated_at);
       setSalvoAs(formatarHora(r.linha.updated_at));
       definirEstado(campo, undefined);
+      if (SEGUEM_A_MAE.includes(campo)) void propagar(antes, r.linha);
       // O campo passa a mostrar a memória (já com o valor gravado, formatado).
       if (focado.current !== campo && rascunhosRef.current[campo] === texto) definirRascunho(campo, undefined);
     } else if (r.codigo === "conexao.gravar_sem_conexao") {
@@ -387,6 +438,31 @@ function EditarLancamento({
       setFalhou(true);
     }
     avaliar();
+  }
+
+  /** Previstos da Série: preenche os vazios e guarda os com outro valor para a pergunta (decisão 4-A). */
+  async function propagar(antes: { responsavel_id: string | null; tipo_id: string | null }, gravada: LinhaLancamento) {
+    if (!gravada.serie_id || ehPrevisto(gravada)) return;
+    const r = await repo.propagarAosPrevistos([
+      {
+        serie_id: gravada.serie_id,
+        parcela_n: gravada.parcela_n,
+        lancado_por: gravada.lancado_por,
+        antes,
+        depois: { responsavel_id: gravada.responsavel_id, tipo_id: gravada.tipo_id },
+      },
+    ]);
+    // A gravação do campo já valeu: a falha só deixa os previstos como estão.
+    if (!r.ok) return;
+    if (montado.current) setAPerguntar(r.aPerguntar);
+  }
+
+  async function responderPrevistos(resposta: "so_este" | "aplicar_a_todos") {
+    const pendentes = aPerguntar;
+    setAPerguntar([]);
+    if (resposta === "so_este" || pendentes.length === 0) return;
+    const r = await repo.aplicarAosPrevistos(pendentes);
+    toast.mostrar({ texto: r.ok ? rotuloPrevistosAtualizados(r.gravados) : mensagem(r.codigo) });
   }
 
   function salvar(campo: CampoLancamento, texto: string) {
@@ -504,6 +580,7 @@ function EditarLancamento({
           {rotuloAlteradoEmOutroAparelho(formatarHora(alteradoAs))}
         </p>
       ) : null}
+      {ehPrevisto(linha) ? <OrigemDoPrevisto origemId={linha.origem_lancamento_id} repo={repo} /> : null}
       <p className="texto-body text-text-muted">
         {T.nome_na_fatura} <span className="texto-body-strong text-text">{linha.nome}</span> {T.nao_editavel}
       </p>
@@ -602,6 +679,12 @@ function EditarLancamento({
           ) : null}
         </div>
       )}
+      {aPerguntar.length > 0 ? (
+        <FaixaPergunta
+          pergunta={perguntaAplicarAosPrevistos(aPerguntar.length)}
+          aoResponder={(resposta) => void responderPrevistos(resposta)}
+        />
+      ) : null}
       <Seletor
         rotulo={T.status}
         opcoes={opcoes.status}

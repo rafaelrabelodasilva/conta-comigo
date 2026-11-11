@@ -55,6 +55,7 @@ export function supabaseLocal(prefixo: string) {
     for (const u of usuarios) {
       await admin.from("regras").delete().eq("owner_id", u.id);
       await admin.from("lancamentos").delete().eq("owner_id", u.id);
+      await admin.from("series").delete().eq("owner_id", u.id);
       await admin.from("fatura_cartoes").delete().eq("owner_id", u.id);
       await admin.from("faturas").delete().eq("owner_id", u.id);
       await admin.from("config_ciclo").delete().eq("owner_id", u.id);

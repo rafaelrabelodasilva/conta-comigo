@@ -140,7 +140,7 @@ describe.skipIf(!ligado)("regras no Supabase local", () => {
     if (!lidas.ok) return;
 
     const base = { data: "2026-08-04", final_cartao: "5061", duvida_extracao: false, tipo_sugerido: null };
-    const sem = { responsavel_id: null, tipo_id: null, revisao_motivo: null, revisao_dados: null };
+    const sem = { responsavel_id: null, tipo_id: null, revisao_motivo: null, revisao_dados: null, serie: null };
     const linhas: Importacao["lancamentos"] = [
       { ...base, ...sem, nome: "MSC CRUZEIROS", nome_normalizado: "MSC CRUZEIROS", valor_centavos: 114074, parcela_n: 3, parcela_total: 12, ordem_fatura: 1, ajuste_de_ordem: null },
       { ...base, ...sem, nome: "MSC CRUZEIROS", nome_normalizado: "MSC CRUZEIROS", valor_centavos: -8, parcela_n: null, parcela_total: null, ordem_fatura: 2, ajuste_de_ordem: 1 },

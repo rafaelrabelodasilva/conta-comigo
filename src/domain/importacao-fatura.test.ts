@@ -150,6 +150,13 @@ describe("prepararImportacao", () => {
         duvida_extracao: false,
         ajuste_de_ordem: null,
         ...SEM_CLASSIFICACAO,
+        serie: {
+          nome_normalizado: "OTICA EXATA",
+          parcela_total: 10,
+          valor_parcela_centavos: 27000,
+          mes_primeira_parcela: "2026-01",
+          ocorrencia: 1,
+        },
       },
       {
         nome: "MSC CRUZEIROS",
@@ -163,6 +170,7 @@ describe("prepararImportacao", () => {
         duvida_extracao: true,
         ajuste_de_ordem: null,
         ...SEM_CLASSIFICACAO,
+        serie: null,
       },
       {
         nome: "SHOPEE",
@@ -176,9 +184,36 @@ describe("prepararImportacao", () => {
         duvida_extracao: false,
         ajuste_de_ordem: null,
         ...SEM_CLASSIFICACAO,
+        serie: {
+          nome_normalizado: "SHOPEE",
+          parcela_total: 12,
+          valor_parcela_centavos: 52366,
+          mes_primeira_parcela: "2025-11",
+          ocorrencia: 1,
+        },
       },
     ]);
+    expect(r.valor.previstos).toEqual([]);
     expect(r.valor.cartoes).toEqual([{ final: "1234", total_centavos: 79366 }]);
+  });
+
+  it("Séries (História 3.5): chave sem a data e duas compras idênticas com ocorrencia 1 e 2", () => {
+    const r = prepararImportacao(
+      extracao([
+        lanc({ nome: "MAGALU", data: "03/10", parcelaN: 5, parcelaTotal: 10, valorCentavos: 44589 }),
+        lanc({ nome: "PADARIA", valorCentavos: 1000 }),
+        lanc({ nome: "MAGALU", data: "03/10", parcelaN: 5, parcelaTotal: 10, valorCentavos: 44589 }),
+      ]),
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.valor.lancamentos.map((l) => l.serie?.ocorrencia ?? null)).toEqual([1, null, 2]);
+    expect(r.valor.lancamentos[0].serie).toMatchObject({
+      nome_normalizado: "MAGALU",
+      parcela_total: 10,
+      valor_parcela_centavos: 44589,
+      mes_primeira_parcela: "2026-06",
+    });
   });
 
   it("repassa o tipo_sugerido da extração (História 3.1)", () => {
@@ -386,5 +421,10 @@ describe("resumirReimportacao (História 3.11)", () => {
 
   it("sem linhas: tudo zero", () => {
     expect(resumirReimportacao([], PADRAO)).toEqual({ quantidade: 0, mexidos: 0, excluidos: 0 });
+  });
+
+  it("previstos que a reimportação apaga (História 3.5): só entram quando há", () => {
+    expect(resumirReimportacao([limpa], PADRAO, 5)).toEqual({ quantidade: 1, mexidos: 0, excluidos: 0, previstos: 5 });
+    expect(resumirReimportacao([limpa], PADRAO, 0)).toEqual({ quantidade: 1, mexidos: 0, excluidos: 0 });
   });
 });

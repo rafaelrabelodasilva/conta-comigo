@@ -83,3 +83,21 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-4-gerenciar-regras-aprendidas.md`
   summary: Rodar no CI os testes novos de `test/integracao/regras.test.ts` (editar, excluir com DELETE no Realtime e `marcarUso`).
   evidence: Medium não verificado. Esta máquina não tem Docker: os repositórios foram provados só com cliente falso (Vitest) e a tela com jsdom; RLS e Realtime só o teste de integração prova.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-series-e-parcelas-previstas.md`
+  summary: Antes da 3.6 (casamento) ou do Épico 6 (Pagamentos) irem para produção, trocar a reimportação simplificada pela Story 3.12 ou fazer a RPC recusar com código próprio quando uma linha da Fatura for previsto casado ou tiver Pagamento.
+  evidence: Medium. Com a 3.5 só, a reimportação simplificada é segura (decisão 3-A: apaga as linhas da Fatura e os previstos `sistema` não editados que ela criou, religa os demais, a Série sobrevive e `origem_lancamento_id` é `set null`), porque ainda não existe previsto casado (a linha vira real e ganha `fatura_id`) nem Pagamento. A partir da 3.6 a apagação destruiria o `id` e a classificação dos casados. Substitui, para a 3.5, a pendência de mesmo teor da 3.11.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-series-e-parcelas-previstas.md`
+  summary: Rodar no CI a migração `20261114120000_series_previstos.sql`, `test/integracao/series.test.ts` e a comparação de `database.types.ts` com `supabase gen types`.
+  evidence: Medium não verificado. Esta máquina não tem Docker: a migração e a RPC `importar_fatura` foram provadas num Postgres em memória (pglite) com todas as migrações em ordem e os cenários do teste de integração (Série, previstos, duas compras idênticas, recusa sem casamento, Mês com Fatura, reimportação). RLS, Realtime e o formato exato dos tipos gerados só o CI prova; as entradas de `series` e das colunas novas em `database.types.ts` foram escritas à mão no formato do gerado.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-series-e-parcelas-previstas.md`
+  summary: Decidir se o "Desfazer" do Confirmar/lote do Revisar também devolve os previstos que a classificação preencheu, e se o lote deve perguntar quando um previsto tem outro valor.
+  evidence: Low. Hoje o "Desfazer" devolve só as linhas da fila (como a Regra, que também não é desfeita) e o lote só preenche previstos vazios, sem perguntar; previstos preenchidos continuam como estão e Rafael corrige abrindo o previsto.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-series-e-parcelas-previstas.md`
+  summary: Dar um caminho curto para os Meses futuros além de "Mês atual + 1" (o seletor só lista até o mês seguinte; os previstos de jan/27 em diante só aparecem pelas setas).
+  evidence: Low. `mesesDaLista` termina em atual + 1 e "as setas andam sem limite" (2.4); os previstos vão até o último mês da Série.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-series-e-parcelas-previstas.md`
+  summary: Rever se a barra por Responsável do Painel deve incluir os previstos (hoje inclui, como o resto do Mês) quando os Blocos e a Previsão chegarem (Épico 4/7).
+  evidence: Low. O "Total a pagar", a Conferência e o "verificar" filtram por `fatura_id` e ignoram os previstos; a barra por Responsável e a contagem da grade usam todas as linhas do Mês aberto (`linhasDoMes`).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-series-e-parcelas-previstas.md`
+  summary: Conferir no iPad se o VoiceOver lê "Nome, previsto, Valor, Parcela, Responsável, Status" na linha de um previsto.
+  evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4; o jsdom só confere o `aria-label`.

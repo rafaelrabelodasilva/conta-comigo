@@ -18,7 +18,8 @@ Depois de importar a fatura (Épico 2), o app passa a classificar sozinho: apren
 - Story 3.8: Dividir um Lançamento
 - Story 3.9: Dar Apelido
 - Story 3.10: Importar o histórico da planilha
-- Story 3.11: Reimportar um Mês
+- Story 3.11: Reimportar um Mês (entregue simplificada)
+- Story 3.12: Reimportar mantendo a classificação (obrigatória antes de Séries e Pagamentos irem para produção)
 
 ## Requirements & Constraints
 
@@ -32,7 +33,7 @@ Depois de importar a fatura (Épico 2), o app passa a classificar sozinho: apren
 - **Divisão:** 2+ partes por valor ou proporção, cada uma com Responsável e Status (padrão: o do original). A soma é sempre o Valor original, centavos na última parte, inclusive com Valor negativo. Partes mantêm Nome e Parcela e ficam ligadas à mãe.
 - **Apelido:** dar, trocar ou remover, perguntando se aplica aos outros com o mesmo `nome_normalizado` (inclusive previstos). Substitui o Nome nas telas e na mensagem; o Nome fica no detalhe e nunca muda.
 - **Histórico da planilha:** lê o `.xlsx` no navegador (sem integração Google), abas 01/2026 a 10/2026 marcadas por padrão. Mapeia Despesa → Nome, Valor, Parcela, Observação, Tipo, Resposabilidade → Responsável, Status dívida → Status, `lancado_por = historico`. Cria cadastros que faltam, Regras iniciais, Séries, parcelas em andamento e previstos. Linhas divididas (Monjaro) viram mãe com Divisão e filhas. Uma transação por aba; aba com erro não para as outras.
-- **Reimportar:** avisa o que será substituído e quantos já estão pagos ou classificados à mão, só faz após confirmação, reaplica Regras e herança, não toca Contas manuais do Mês, tudo numa transação.
+- **Reimportar:** avisa o que será substituído e quantos já estão classificados à mão, só faz após confirmação, não toca Contas manuais do Mês, tudo numa transação. A 3.11 entregou a versão simplificada (apaga a Fatura do Mês e todas as linhas dela e importa tudo de novo, classificando pelas Regras atuais, sem casar linhas novas com antigas); casar mantendo `id` e classificação ficou para a 3.12.
 - **Precisão:** nenhum valor perdido ou duplicado em Divisão, casamento ou reimportação. Testes de aceite obrigatórios: Monjaro R$ 466,00 = R$ 310,67 + R$ 155,33; duas compras idênticas na mesma fatura (duas Séries, `ocorrencia` 1 e 2, casamento sem estourar a restrição única); reimportação de Mês (o caso com Pagamento é testado no Épico 6).
 - **Desempenho:** importar e classificar ~50 Lançamentos em menos de 1 minuto.
 
@@ -46,7 +47,7 @@ Depois de importar a fatura (Épico 2), o app passa a classificar sozinho: apren
 - **Mês dos previstos (AD-9):** `mes = somarMeses(mes_origem, k)`, fixado na criação e nunca recalculado.
 - **Casamento (AD-8):** `casarPrevistos(extraidos, previstos)` 1-para-1 e determinístico por `(nome_normalizado, parcela_n, parcela_total)`: reais na ordem da fatura, previstos por valor igual primeiro e depois `ocorrencia`.
 - **Divisão (AD-2, AD-8):** `divisao jsonb` na mãe (partes com Responsável, Tipo, fração, `vencimento_combinado` opcional) e `dividido_de_id` nas filhas, recriadas pela RPC `dividir_lancamento` com `dividirEmPartes` (cada parte `arredondar(valor × fração)`, a última recebe a diferença). Conferência, casamento e previstos usam a mãe; Blocos, Seleção, Pagamento e Mensagem usam as filhas; a mãe dividida não entra em soma. O previsto seguinte herda a `divisao`.
-- **Reimportação (AD-7.6):** `importar_fatura` em modo reimportação casa novas com antigas pela chave de casamento; casadas mantêm `id`, classificação, Divisão e referências. Antigas sem par e sem referências são apagadas (exclusão física só aqui); previsto que tinha casado volta a `sistema`. Antigas sem par com referências ficam com `revisao_motivo = 'sumiu_na_reimportacao'`. Série com parcela em outro Mês nunca é apagada; previstos da fatura anterior só são apagados se ainda `sistema` e sem Pagamento.
+- **Reimportação (AD-7.6, Story 3.12):** a 3.11 simplificada apaga e regrava; a 3.12 fará `importar_fatura` em modo reimportação casa novas com antigas pela chave de casamento; casadas mantêm `id`, classificação, Divisão e referências. Antigas sem par e sem referências são apagadas (exclusão física só aqui); previsto que tinha casado volta a `sistema`. Antigas sem par com referências ficam com `revisao_motivo = 'sumiu_na_reimportacao'`. Série com parcela em outro Mês nunca é apagada; previstos da fatura anterior só são apagados se ainda `sistema` e sem Pagamento.
 - **Gravação e tempo real (AD-3, AD-4):** tudo pelos repositórios de `src/data`; operações multi-linha (importar, dividir, lote, planilha por aba) são RPCs em transação que devolvem as linhas afetadas ao gerenciador `src/data/realtime.ts`. Só colunas alteradas; `updated_at` do banco decide.
 - **Schema (AD-14):** cada mudança acima é uma migração em `supabase/migrations`, com `owner_id default auth.uid()`, RLS e `replica identity full`; tipos regenerados em `src/data/database.types.ts`.
 
@@ -69,5 +70,5 @@ Depois de importar a fatura (Épico 2), o app passa a classificar sozinho: apren
 - 3.1 cria `regras`, `chaveDeRegra` e `regrasRepo.aprender()`, usados por 3.2, 3.3, 3.4, 3.8 (Divisão na Regra), 3.10 e 3.11.
 - 3.2 cria as colunas de revisão e a tela; 3.3 adiciona o lote nela; 3.6 e 3.11 acrescentam as variantes "valor mudou", "não veio na fatura" e "sumiu na reimportação".
 - 3.5 cria `series` e previstos; 3.6 (casamento) e 3.7 (herança) dependem dela; 3.8 faz o previsto herdar a `divisao`; 3.9 aplica Apelido também aos previstos.
-- 3.10 usa Regras, Séries, previstos e Divisão (3.1, 3.5, 3.8). 3.11 usa casamento, Regras e herança e substitui a recusa de Mês já importado da 2.3.
+- 3.10 usa Regras, Séries, previstos e Divisão (3.1, 3.5, 3.8). 3.11 (simplificada) substituiu a recusa de Mês já importado da 2.3; a 3.12 usa casamento, Regras e herança e é obrigatória antes de Séries (3.5) e Pagamentos (Épico 6) irem para produção, porque a apagação simples da 3.11 destruiria previstos, Séries e Pagamentos.
 - Ficam para depois: Seleção na grade e mensagem (Épico 4, que reusa `classificarEmLote`), Contas manuais com Série e `divisao` (Épico 5), Pagamentos e o teste de reimportação com Pagamento (Épico 6).

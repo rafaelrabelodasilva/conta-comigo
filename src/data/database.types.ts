@@ -205,6 +205,7 @@ export type Database = {
           apelido: string | null
           created_at: string
           data: string | null
+          dividido_de_id: string | null
           duvida_extracao: boolean
           editado_em: string | null
           excluido_em: string | null
@@ -217,6 +218,7 @@ export type Database = {
           nome_normalizado: string
           observacao: string | null
           ordem_fatura: number | null
+          origem_lancamento_id: string | null
           owner_id: string
           parcela_n: number | null
           parcela_total: number | null
@@ -224,6 +226,7 @@ export type Database = {
           revisado_em: string | null
           revisao_dados: Json | null
           revisao_motivo: Database["public"]["Enums"]["revisao_motivo"] | null
+          serie_id: string | null
           status_id: string | null
           tipo_id: string | null
           updated_at: string
@@ -234,6 +237,7 @@ export type Database = {
           apelido?: string | null
           created_at?: string
           data?: string | null
+          dividido_de_id?: string | null
           duvida_extracao?: boolean
           editado_em?: string | null
           excluido_em?: string | null
@@ -246,6 +250,7 @@ export type Database = {
           nome_normalizado: string
           observacao?: string | null
           ordem_fatura?: number | null
+          origem_lancamento_id?: string | null
           owner_id?: string
           parcela_n?: number | null
           parcela_total?: number | null
@@ -253,6 +258,7 @@ export type Database = {
           revisado_em?: string | null
           revisao_dados?: Json | null
           revisao_motivo?: Database["public"]["Enums"]["revisao_motivo"] | null
+          serie_id?: string | null
           status_id?: string | null
           tipo_id?: string | null
           updated_at?: string
@@ -263,6 +269,7 @@ export type Database = {
           apelido?: string | null
           created_at?: string
           data?: string | null
+          dividido_de_id?: string | null
           duvida_extracao?: boolean
           editado_em?: string | null
           excluido_em?: string | null
@@ -275,6 +282,7 @@ export type Database = {
           nome_normalizado?: string
           observacao?: string | null
           ordem_fatura?: number | null
+          origem_lancamento_id?: string | null
           owner_id?: string
           parcela_n?: number | null
           parcela_total?: number | null
@@ -282,6 +290,7 @@ export type Database = {
           revisado_em?: string | null
           revisao_dados?: Json | null
           revisao_motivo?: Database["public"]["Enums"]["revisao_motivo"] | null
+          serie_id?: string | null
           status_id?: string | null
           tipo_id?: string | null
           updated_at?: string
@@ -296,6 +305,13 @@ export type Database = {
             referencedColumns: ["owner_id", "id"]
           },
           {
+            foreignKeyName: "lancamentos_dividido_de_fkey"
+            columns: ["owner_id", "dividido_de_id"]
+            isOneToOne: false
+            referencedRelation: "lancamentos"
+            referencedColumns: ["owner_id", "id"]
+          },
+          {
             foreignKeyName: "lancamentos_fatura_fkey"
             columns: ["owner_id", "fatura_id"]
             isOneToOne: false
@@ -303,10 +319,24 @@ export type Database = {
             referencedColumns: ["owner_id", "id"]
           },
           {
+            foreignKeyName: "lancamentos_origem_fkey"
+            columns: ["owner_id", "origem_lancamento_id"]
+            isOneToOne: false
+            referencedRelation: "lancamentos"
+            referencedColumns: ["owner_id", "id"]
+          },
+          {
             foreignKeyName: "lancamentos_responsavel_fkey"
             columns: ["owner_id", "responsavel_id"]
             isOneToOne: false
             referencedRelation: "responsaveis"
+            referencedColumns: ["owner_id", "id"]
+          },
+          {
+            foreignKeyName: "lancamentos_serie_fkey"
+            columns: ["owner_id", "serie_id"]
+            isOneToOne: false
+            referencedRelation: "series"
             referencedColumns: ["owner_id", "id"]
           },
           {
@@ -412,6 +442,42 @@ export type Database = {
         }
         Relationships: []
       }
+      series: {
+        Row: {
+          created_at: string
+          id: string
+          mes_primeira_parcela: string
+          nome_normalizado: string
+          ocorrencia: number
+          owner_id: string
+          parcela_total: number
+          updated_at: string
+          valor_parcela_centavos: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mes_primeira_parcela: string
+          nome_normalizado: string
+          ocorrencia: number
+          owner_id?: string
+          parcela_total: number
+          updated_at?: string
+          valor_parcela_centavos: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mes_primeira_parcela?: string
+          nome_normalizado?: string
+          ocorrencia?: number
+          owner_id?: string
+          parcela_total?: number
+          updated_at?: string
+          valor_parcela_centavos?: number
+        }
+        Relationships: []
+      }
       status: {
         Row: {
           arquivado: boolean
@@ -488,6 +554,7 @@ export type Database = {
           dados_cartoes: Json
           dados_fatura: Json
           dados_lancamentos: Json
+          dados_previstos?: Json
           lancamentos_atualizados_em?: string
           substituir_fatura_id?: string
         }
