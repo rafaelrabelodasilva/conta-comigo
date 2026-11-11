@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { idsQueAcompanham, separarAjustes } from "@/domain/ajustes";
 import { conferir } from "@/domain/conferencia";
 import { hojeEmSaoPaulo } from "@/domain/datas";
+import { ehMaeDividida, filhasPorMae, linhasDaFatura, unidadesDoMes } from "@/domain/divisao";
 import { alternarSelecao, alternarTodos, selecaoValida } from "@/domain/lancamento";
 import {
   COLUNAS_DA_BARRA,
@@ -55,6 +56,7 @@ import { BarraFiltros } from "./BarraFiltros";
 import { FaixaConferencia } from "./FaixaConferencia";
 import { FaturaDoMes } from "./FaturaDoMes";
 import { GradeLancamentos, type CadastrosGrade } from "./GradeLancamentos";
+import { DividirLancamento } from "./DividirLancamento";
 import { PainelLancamento } from "./PainelLancamento";
 import { SeletorMes } from "./SeletorMes";
 
@@ -156,6 +158,8 @@ export function Painel({ titulo }: { titulo: string }) {
   const [painel, setPainel] = useState<EstadoPainel>(null);
   const [selecao, setSelecao] = useState<ReadonlySet<string>>(() => new Set());
   const [excluindo, setExcluindo] = useState<string | null>(null);
+  // A mãe cuja janela "Dividir" está aberta (História 3.8).
+  const [dividindo, setDividindo] = useState<string | null>(null);
   const toast = useToast();
   const router = useRouter();
 
@@ -220,6 +224,7 @@ export function Painel({ titulo }: { titulo: string }) {
     // A seleção e o painel são do Mês.
     setSelecao(new Set());
     setPainel(null);
+    setDividindo(null);
   };
 
   // Esc fecha o painel (a janela de confirmação, os menus e os popovers fecham antes).
@@ -263,9 +268,12 @@ export function Painel({ titulo }: { titulo: string }) {
 
   /** Os Ajustes não excluídos da linha `id` no Mês aberto (saem e voltam com ela). */
   const ajustesDe = (id: string) => idsQueAcompanham(id, lancamentos.linhas.filter((l) => l.mes === mesAberto));
+  /** As filhas não excluídas de uma mãe dividida (saem e voltam com ela, como os Ajustes). */
+  const filhasDe = (id: string) =>
+    lancamentos.linhas.filter((l) => l.mes === mesAberto && l.dividido_de_id === id && l.excluido_em === null).map((l) => l.id);
 
   async function excluir(id: string) {
-    const junto = ajustesDe(id);
+    const junto = [...ajustesDe(id), ...filhasDe(id)];
     // Fecha antes de gravar: a linha (e os Ajustes dela) sai do painel e da seleção.
     setPainel((p) => (p?.modo === "editar" && (p.id === id || junto.includes(p.id)) ? null : p));
     setSelecao((s) => {
@@ -321,10 +329,14 @@ export function Painel({ titulo }: { titulo: string }) {
     conteudo = <EsqueletoPainel />;
   } else {
     const doMes = linhasDoMes(lancamentos.linhas, mesAberto);
-    const daFatura = fatura ? doMes.filter((l) => l.fatura_id === fatura.id) : [];
+    // Conferência, "Total a pagar" e "verificar" usam a mãe; as filhas de uma Divisão não entram (História 3.8).
+    const daFatura = fatura ? linhasDaFatura(doMes).filter((l) => l.fatura_id === fatura.id) : [];
     const conferencia = fatura ? conferir(fatura, cartoes.linhas, doMes) : null;
-    // Filtros, contagens, anúncio e seleção olham só as mães (o Ajuste segue a dele).
-    const { maes, ajustesPorMae } = separarAjustes(doMes);
+    // Soma, filtros, contagens, anúncio e seleção olham as unidades: a mãe dividida fica de fora e valem
+    // as filhas (a mãe aparece só como cabeçalho). O Ajuste segue a mãe dele.
+    const unidades = unidadesDoMes(doMes);
+    const maesDivididas = new Map(doMes.filter(ehMaeDividida).map((l) => [l.id, l]));
+    const { maes, ajustesPorMae } = separarAjustes(unidades);
     // Sem Fatura não há o que verificar (nem a pílula): o filtro fica guardado.
     const verificando = filtros.verificar && conferencia !== null;
     const efetivos = { ...filtros, verificar: verificando };
@@ -341,7 +353,7 @@ export function Painel({ titulo }: { titulo: string }) {
         : null;
     // A linha aberta que uma edição tirou do filtro continua na grade (opção A);
     // num Ajuste, fica a mãe (com ele embaixo).
-    const linhaFixa = maeDaAberta ?? abertaNoMes;
+    const linhaFixa = ehMaeDividida(abertaNoMes ?? {}) ? null : (maeDaAberta ?? abertaNoMes);
     const idsDoMes = maes.map((l) => l.id);
     const selecionados = selecaoValida(selecao, idsDoMes);
     const idsNaGrade = naGrade.map((l) => l.id);
@@ -374,6 +386,9 @@ export function Painel({ titulo }: { titulo: string }) {
           linha={abertaNoMes}
           mae={maeDaAberta}
           ajustes={maeDaAberta ? [] : (ajustesPorMae.get(abertaNoMes.id) ?? [])}
+          filhas={filhasPorMae(doMes).get(abertaNoMes.id) ?? []}
+          maeDaParte={abertaNoMes.dividido_de_id ? (doMes.find((l) => l.id === abertaNoMes.dividido_de_id) ?? null) : null}
+          aoDividir={setDividindo}
           lerLinha={lerLinha}
           conferencia={conferencia}
           cadastros={cadastrosPainel}
@@ -392,7 +407,7 @@ export function Painel({ titulo }: { titulo: string }) {
             mes={mesAberto}
             fatura={fatura}
             valoresDaFaturaCentavos={daFatura.map((l) => l.valor_centavos)}
-            distribuicao={distribuicaoPorResponsavel(doMes, ordemResponsaveis)}
+            distribuicao={distribuicaoPorResponsavel(unidades, ordemResponsaveis)}
             responsaveis={cadastros.responsaveis}
             escolhidos={filtros.colunas.responsavel}
             aoFiltrar={filtrar}
@@ -423,6 +438,8 @@ export function Painel({ titulo }: { titulo: string }) {
         <GradeLancamentos
           linhas={naGrade}
           ajustesPorMae={ajustesPorMae}
+          maesDivididas={maesDivididas}
+          aoDividir={setDividindo}
           cadastros={cadastros}
           ordem={ordem}
           aoOrdenar={(coluna) => setOrdem((o) => alternarOrdem(o, coluna))}
@@ -494,6 +511,13 @@ export function Painel({ titulo }: { titulo: string }) {
             if (excluindo !== null) void excluir(excluindo);
             setExcluindo(null);
           }}
+        />
+        <DividirLancamento
+          alvoId={dividindo}
+          aoFechar={() => setDividindo(null)}
+          linhas={lancamentos.linhas}
+          cadastros={{ responsaveis: responsaveis.linhas, status: status.linhas }}
+          statusPadraoId={configuracoes.linhas[0]?.status_padrao_id ?? null}
         />
         <ImportarFatura
           aberta={importando}

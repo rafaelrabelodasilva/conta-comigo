@@ -30,6 +30,7 @@ import type { DadosRevisao, DadosValorMudou, MotivoRevisao } from "./classificac
 import { ehData } from "./ciclo";
 import { LIMITE_AJUSTE_PADRAO_CENTAVOS } from "./configuracoes";
 import { dois } from "./datas";
+import type { Divisao, ParteParaGravar } from "./divisao";
 import {
   parecePagamentoDeFatura,
   resumirExtracao,
@@ -152,6 +153,10 @@ export type LancamentoParaGravar = {
   observacao?: string | null;
   /** A parcela anterior de que a linha herdou a classificação (só quando emprestou algum campo). */
   herdado_de_id?: string | null;
+  /** Divisão da linha (História 3.8): da Regra, da herança ou do previsto casado; a mãe fica sem Responsável. */
+  divisao?: Divisao | null;
+  /** As filhas da Divisão (com o `filha_id` do previsto casado) e os valores que o núcleo calculou. */
+  partes?: ParteParaGravar[];
 };
 
 export type Importacao = {
@@ -371,6 +376,10 @@ export function comporTotalAPagar(
 
 /** O que o aviso de reimportação precisa de cada linha da Fatura do Mês. */
 export type LinhaParaReimportar = {
+  /** Filha de uma Divisão (História 3.8): sai junto com a mãe e não conta. */
+  dividido_de_id?: string | null;
+  /** Mãe dividida: conta como "marcada à mão". */
+  divisao?: unknown;
   excluido_em: string | null;
   responsavel_id: string | null;
   tipo_id: string | null;
@@ -409,6 +418,7 @@ export function resumirReimportacao(
   let excluidos = 0;
   let casados = 0;
   for (const l of linhas) {
+    if ((l.dividido_de_id ?? null) !== null) continue;
     if (l.excluido_em !== null) {
       excluidos++;
       continue;
@@ -416,6 +426,7 @@ export function resumirReimportacao(
     quantidade++;
     if ((l.casado_em ?? null) !== null) casados++;
     const mexido =
+      (l.divisao ?? null) !== null ||
       l.responsavel_id !== null ||
       l.tipo_id !== null ||
       (l.observacao !== null && l.observacao.trim() !== "") ||

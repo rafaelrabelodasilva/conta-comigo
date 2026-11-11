@@ -13,12 +13,16 @@
 // - Sem Regra (ou Regra só com cadastros arquivados/inexistentes): com
 //   `tipo_sugerido` (um Tipo ativo pelo nome) → só sugere (`sugestao`); sem
 //   nada → `sem_classificacao`.
+// - Divisão (História 3.8): a Regra com Divisão, Tipo ativo e Responsáveis
+//   ativos divide a linha sozinha (Responsável nulo, sem motivo), menos a
+//   mãe de um Ajuste e a linha cujo Valor zeraria uma parte.
 // - Créditos também passam pelas Regras; parcelas também (até a herança da
 //   3.7). O Ajuste de centavos (`ajuste_de_ordem`) nunca tem Regra própria:
 //   recebe a classificação calculada da mãe, sem motivo.
 
+import { partesDaImportacao, type Divisao } from "./divisao";
 import { normalizarNome } from "./importacao-fatura";
-import { avaliarRegra, chaveDeRegra, regrasUsadas, type CadastrosAtivos, type RegraGravada } from "./regras";
+import { avaliarRegra, chaveDeRegra, divisaoDaRegra, regrasUsadas, type CadastrosAtivos, type RegraGravada } from "./regras";
 
 /** Por que a linha está na fila do Revisar (enum `revisao_motivo` do banco). */
 export type MotivoRevisao =
@@ -59,6 +63,8 @@ export type Classificacao = {
   tipo_id: string | null;
   revisao_motivo: MotivoRevisao | null;
   revisao_dados: DadosRevisao | null;
+  /** A Divisão que a Regra aplicou (História 3.8); ausente nas outras linhas. */
+  divisao?: Divisao;
 };
 
 /** O que a classificação usa de uma linha da importação. */
@@ -68,6 +74,8 @@ export type LinhaParaClassificar = {
   tipo_sugerido: string | null;
   ordem_fatura: number;
   ajuste_de_ordem: number | null;
+  /** O Valor, para a Divisão da Regra não zerar uma parte (sem ele, não confere). */
+  valor_centavos?: number;
 };
 
 /** Os cadastros do dono, com o arquivado (arquivado conta como ausente). */
@@ -103,9 +111,14 @@ function classificarLinha(
   regras: ReadonlyMap<string, RegraGravada>,
   cadastros: CadastrosParaClassificar,
   emUso: CadastrosAtivos,
+  temAjuste: boolean,
 ): Classificacao {
   const sugerido = tipoPeloNome(l.tipo_sugerido, cadastros);
   const regra = regras.get(chaveDeRegra(l.nome));
+  const divisao = regra && !temAjuste ? divisaoDaRegra(regra, emUso) : null;
+  if (regra && divisao && (l.valor_centavos === undefined || partesDaImportacao(l.valor_centavos, divisao) !== null)) {
+    return { responsavel_id: null, tipo_id: regra.tipo_id, revisao_motivo: null, revisao_dados: null, divisao };
+  }
   const avaliacao = regra ? avaliarRegra(regra, emUso) : ({ tipo: "nada" } as const);
   if (avaliacao.tipo === "aplicar") {
     const completa = avaliacao.responsavel_id !== null && avaliacao.tipo_id !== null;
@@ -163,8 +176,11 @@ export function classificarImportacao<L extends LinhaParaClassificar>(
   const emUso = ativos(cadastros);
 
   const porOrdem = new Map<number, Classificacao>();
+  const maesDeAjuste = new Set(lancamentos.flatMap((l) => (l.ajuste_de_ordem === null ? [] : [l.ajuste_de_ordem])));
   for (const l of lancamentos) {
-    if (l.ajuste_de_ordem === null) porOrdem.set(l.ordem_fatura, classificarLinha(l, porChave, cadastros, emUso));
+    if (l.ajuste_de_ordem === null) {
+      porOrdem.set(l.ordem_fatura, classificarLinha(l, porChave, cadastros, emUso, maesDeAjuste.has(l.ordem_fatura)));
+    }
   }
   return lancamentos.map((l) => {
     if (l.ajuste_de_ordem === null) return { ...l, ...porOrdem.get(l.ordem_fatura)! };

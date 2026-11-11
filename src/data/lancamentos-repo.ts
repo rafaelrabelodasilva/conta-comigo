@@ -52,6 +52,14 @@
 // aberto. `aplicarAosPrevistos` grava a resposta "Aplicar a todos".
 // `lerOrigem` lê a linha que gerou um previsto e o vencimento da Fatura dela.
 //
+// Divisão (História 3.8): `dividir` e `desfazerDivisao` gravam pela RPC
+// `dividir_lancamento` o que o núcleo (`divisao.ts`) planejou, aplicam mãe e
+// filhas devolvidas no gerenciador (sem otimismo: as filhas só existem depois
+// da RPC) e ensinam a Regra do Nome (sem esperar). Depois propagam aos
+// previstos da Série como a 3.5: os vazios recebem na hora e os com outra
+// Divisão voltam em `aPerguntar` ("Aplicar a todos" → `aplicarDivisaoAosPrevistos`).
+// `desfazer` leva os itens que devolvem tudo ao que era (`restaurarDivisao`).
+//
 // Casamento (História 3.6): `manterPrevisto` é o "Manter" da variante "Não
 // veio na fatura": o previsto sai da fila (`revisao_motivo` e `revisao_dados`
 // nulos, `revisado_em`) e continua previsto, sem ensinar Regra. O "Desfazer" é
@@ -59,6 +67,17 @@
 // dele, o `restaurar`.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  itemParaRestaurar,
+  juntarItensDividir,
+  lerDivisao,
+  planejarDesfazerDivisao,
+  planejarDivisao,
+  planejarDivisaoNosPrevistos,
+  type Divisao,
+  type DivisaoDaParcela,
+  type ItemDividir,
+} from "@/domain/divisao";
 import type { MudancaCampo, NovoLancamento } from "@/domain/lancamento";
 import {
   planejarGravacao,
@@ -167,6 +186,25 @@ export type OrigemDoPrevisto = {
 
 export type ResultadoOrigem = { ok: true; origem: OrigemDoPrevisto | null } | { ok: false; codigo: CodigoFalhaGravacao };
 
+/** Os códigos que `dividir_lancamento` levanta e a tela mostra como estão. */
+const CODIGOS_DA_DIVISAO = new Set([
+  "divisao.com_ajuste",
+  "divisao.soma_diferente",
+  "divisao.mae_invalida",
+  "divisao.filha_invalida",
+]);
+
+export type FalhaDaDivisao = CodigoFalhaGravacao | "divisao.com_ajuste" | "divisao.soma_diferente" | "divisao.mae_invalida" | "divisao.filha_invalida" | string;
+
+/**
+ * Resultado de dividir (ou desfazer): as linhas gravadas (mãe e filhas), quantos
+ * previstos foram preenchidos sozinhos, os itens que dependem de "Aplicar a
+ * todos" e os que devolvem tudo ao que era (o "Desfazer" do toast).
+ */
+export type ResultadoDivisao =
+  | { ok: true; linhas: LinhaLancamento[]; preenchidos: number; aPerguntar: ItemDividir[]; desfazer: ItemDividir[] }
+  | { ok: false; codigo: FalhaDaDivisao };
+
 export function criarRepoLancamentos(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
   memoria: Gerenciador<LinhaLancamento>;
@@ -200,6 +238,37 @@ export function criarRepoLancamentos(deps: {
     } catch {
       // O lote já valeu.
     }
+  }
+
+  /** Chama `dividir_lancamento`; as linhas (mães e filhas) ou o código da recusa. */
+  async function chamarDividir(
+    cliente: SupabaseClient<Database>,
+    itens: readonly ItemDividir[],
+  ): Promise<{ ok: true; linhas: LinhaLancamento[] } | { ok: false; codigo: FalhaDaDivisao }> {
+    const { data, error } = await cliente.rpc("dividir_lancamento", { p_itens: itens as unknown as Json });
+    if (error) {
+      const codigo = [...CODIGOS_DA_DIVISAO].find((c) => error.message?.includes(c));
+      return { ok: false, codigo: codigo ?? "salvar.falhou" };
+    }
+    if (!Array.isArray(data)) return { ok: false, codigo: "salvar.falhou" };
+    return { ok: true, linhas: data as unknown as LinhaLancamento[] };
+  }
+
+  /** Ensina (ou limpa) a Divisão da Regra do Nome, sem esperar; a falha não chega à gravação. */
+  function ensinarDivisao(nome: string, tipoId: string | null, divisao: Divisao | null) {
+    if (!aprender) return;
+    try {
+      void aprender({ nome, responsavelAntes: null, responsavelDepois: null, tipoDepois: tipoId, divisao }).catch(() => {});
+    } catch {
+      // A divisão já valeu.
+    }
+  }
+
+  /** As filhas não excluídas de cada mãe, lidas do banco (para restaurar previstos). */
+  async function lerFilhasDoBanco(cliente: SupabaseClient<Database>, ids: readonly string[]): Promise<LinhaLancamento[] | null> {
+    if (ids.length === 0) return [];
+    const { data, error } = await cliente.from("lancamentos").select("*").in("dividido_de_id", ids).is("excluido_em", null);
+    return error || !data ? null : data;
   }
 
   /** Chama a RPC do lote; as linhas gravadas, ou `null` se o banco recusou ou respondeu pela metade. */
@@ -279,6 +348,93 @@ export function criarRepoLancamentos(deps: {
       // De outro Mês, o gerenciador (só o Mês aberto) não guarda.
       memoria.aplicarLote(linhas);
       return { ok: true };
+    } catch {
+      return FALHOU;
+    }
+  }
+
+  /** Os previstos da Série depois de `mae`, a Divisão deles planejada e o que já foi gravado sozinho. */
+  async function propagarDivisao(
+    cliente: SupabaseClient<Database>,
+    mae: LinhaLancamento,
+    antes: DivisaoDaParcela,
+    depois: DivisaoDaParcela,
+  ): Promise<{ preenchidos: number; aPerguntar: ItemDividir[]; desfazer: ItemDividir[] } | null> {
+    if (mae.serie_id === null || mae.parcela_n === null || mae.lancado_por === "sistema") {
+      return { preenchidos: 0, aPerguntar: [], desfazer: [] };
+    }
+    const lidos = await cliente
+      .from("lancamentos")
+      .select("*")
+      .eq("serie_id", mae.serie_id)
+      .eq("lancado_por", "sistema")
+      .is("excluido_em", null)
+      .is("dividido_de_id", null)
+      .gt("parcela_n", mae.parcela_n);
+    if (lidos.error || !lidos.data) return null;
+    const plano = planejarDivisaoNosPrevistos(antes, depois, lidos.data);
+    if (plano.silenciosos.length === 0) return { preenchidos: 0, aPerguntar: plano.aPerguntar, desfazer: [] };
+    const ids = plano.silenciosos.map((i) => i.id);
+    const filhas = await lerFilhasDoBanco(cliente, ids);
+    if (!filhas) return null;
+    const desfazer = ids.flatMap((id) => {
+      const p = lidos.data.find((x) => x.id === id);
+      return p ? [itemParaRestaurar(p, filhas.filter((f) => f.dividido_de_id === id))] : [];
+    });
+    const gravou = await chamarDividir(cliente, plano.silenciosos);
+    if (!gravou.ok) return null;
+    // De outro Mês, o gerenciador (só o Mês aberto) não guarda.
+    memoria.aplicarLote(gravou.linhas);
+    return { preenchidos: plano.silenciosos.length, aPerguntar: plano.aPerguntar, desfazer };
+  }
+
+  /** Grava os itens pela RPC (sem otimismo) e aplica as linhas devolvidas na memória. */
+  async function gravarItensDaDivisao(itens: readonly ItemDividir[]): Promise<{ ok: true } | { ok: false; codigo: FalhaDaDivisao }> {
+    const bloqueio = semConexao(online);
+    if (bloqueio) return bloqueio;
+    const cliente = obterCliente();
+    if (!cliente) return FALHOU;
+    try {
+      const r = await chamarDividir(cliente, itens);
+      if (!r.ok) return r;
+      memoria.aplicarLote(r.linhas);
+      return { ok: true };
+    } catch {
+      return FALHOU;
+    }
+  }
+
+  /** Grava o item da mãe, ensina a Regra e propaga aos previstos. */
+  async function executarDivisao(
+    mae: LinhaLancamento,
+    item: ItemDividir,
+    depois: DivisaoDaParcela,
+    regra: { tipoId: string | null; divisao: Divisao | null },
+  ): Promise<ResultadoDivisao> {
+    const cliente = obterCliente();
+    if (!cliente) return FALHOU;
+    try {
+      const filhasAntes = memoria.linhas().filter((f) => f.dividido_de_id === mae.id && f.excluido_em === null);
+      const gravou = await chamarDividir(cliente, [item]);
+      if (!gravou.ok) return gravou;
+      memoria.aplicarLote(gravou.linhas);
+      ensinarDivisao(mae.nome, regra.tipoId, regra.divisao);
+      const restaurarMae = itemParaRestaurar(mae, filhasAntes);
+      let propagou: Awaited<ReturnType<typeof propagarDivisao>> = null;
+      try {
+        propagou = await propagarDivisao(cliente, mae, { responsavel_id: mae.responsavel_id, divisao: lerDivisao(mae.divisao) }, depois);
+      } catch {
+        propagou = null;
+      }
+      // A mãe já foi gravada; se os previstos falharem, a tela só avisa.
+      if (!propagou) return { ok: true, linhas: gravou.linhas, preenchidos: 0, aPerguntar: [], desfazer: [restaurarMae] };
+      return {
+        ok: true,
+        linhas: gravou.linhas,
+        preenchidos: propagou.preenchidos,
+        aPerguntar: propagou.aPerguntar,
+        desfazer: juntarItensDividir([restaurarMae], propagou.desfazer),
+      };
     } catch {
       return FALHOU;
     }
@@ -403,6 +559,7 @@ export function criarRepoLancamentos(deps: {
           .select("id, serie_id, parcela_n, responsavel_id, tipo_id")
           .in("serie_id", [...new Set(alvos.map((p) => p.serie_id as string))])
           .eq("lancado_por", "sistema")
+          .is("dividido_de_id", null)
           .is("excluido_em", null);
         if (error || !data) return FALHOU;
         const silenciosos: MudancaDoPrevisto[][] = [];
@@ -431,6 +588,59 @@ export function criarRepoLancamentos(deps: {
       if (bloqueio) return bloqueio;
       const r = await gravarPrevistos(mudancas);
       return r.ok ? { ok: true, gravados: mudancas.length } : r;
+    },
+
+    /**
+     * "Dividir" (e editar a Divisão): grava a mãe e as filhas, ensina a Regra e
+     * preenche os previstos vazios da Série. `status` é o Status de cada parte
+     * (`undefined` mantém o da filha, ou usa o da mãe numa filha nova).
+     */
+    async dividir(
+      maeId: string,
+      divisao: Divisao,
+      status: readonly (string | null | undefined)[] = [],
+      agora: Date = new Date(),
+    ): Promise<ResultadoDivisao> {
+      const bloqueio = semConexao(online);
+      if (bloqueio) return bloqueio;
+      const mae = memoria.linha(maeId);
+      if (!mae) return FALHOU;
+      const item = planejarDivisao(mae, divisao, { agora: agora.toISOString(), status });
+      if (!item.ok) return { ok: false, codigo: item.erro.codigo };
+      const gravada = item.valor.corpo.divisao as Divisao;
+      return executarDivisao(mae, item.valor, { responsavel_id: null, divisao: gravada }, { tipoId: mae.tipo_id, divisao: gravada });
+    },
+
+    /**
+     * "Desfazer divisão": a mãe volta a ser linha comum (o Responsável de antes
+     * volta, ou a linha vai para a fila) e as filhas saem. A Regra passa a não
+     * ter Divisão; os previstos com a mesma Divisão voltam sozinhos.
+     */
+    async desfazerDivisao(maeId: string, agora: Date = new Date()): Promise<ResultadoDivisao> {
+      const bloqueio = semConexao(online);
+      if (bloqueio) return bloqueio;
+      const mae = memoria.linha(maeId);
+      if (!mae) return FALHOU;
+      const item = planejarDesfazerDivisao(mae, agora.toISOString());
+      if (!item.ok) return { ok: false, codigo: item.erro.codigo };
+      return executarDivisao(
+        mae,
+        item.valor,
+        { responsavel_id: item.valor.corpo.responsavel_id ?? null, divisao: null },
+        { tipoId: null, divisao: null },
+      );
+    },
+
+    /** O "Desfazer" do toast: devolve a mãe (e os previstos que a ação preencheu) ao que eram. A Regra não é desfeita. */
+    restaurarDivisao(itens: readonly ItemDividir[]): Promise<{ ok: true } | { ok: false; codigo: FalhaDaDivisao }> {
+      return gravarItensDaDivisao(itens);
+    },
+
+    /** "Aplicar a todos": grava a Divisão nos previstos que `dividir` deixou para perguntar. */
+    async aplicarDivisaoAosPrevistos(itens: readonly ItemDividir[]): Promise<{ ok: true; gravados: number } | { ok: false; codigo: FalhaDaDivisao }> {
+      if (itens.length === 0) return { ok: true, gravados: 0 };
+      const r = await gravarItensDaDivisao(itens);
+      return r.ok ? { ok: true, gravados: itens.length } : r;
     },
 
     /** A linha que gerou o previsto e o vencimento da Fatura dela, lidos do banco. */

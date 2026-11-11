@@ -2,6 +2,7 @@
 
 import { agruparComAjustes, liquidoCentavos, textoLiquido } from "@/domain/ajustes";
 import { precisaVerificar, type Conferencia } from "@/domain/conferencia";
+import { agruparPartes, type PapelNaGrade } from "@/domain/divisao";
 import type { ValorFiltro } from "@/domain/filtros-grade";
 import { formatarDinheiro } from "@/domain/dinheiro";
 import { formatarParcela } from "@/domain/importacao-fatura";
@@ -11,6 +12,7 @@ import {
   COLUNAS_GRADE as C,
   ROTULOS_LANCADO_POR,
   TEXTOS_AJUSTE,
+  TEXTOS_DIVISAO,
   TEXTOS_FILTROS,
   TEXTOS_LANCAMENTO,
   TEXTOS_PAINEL as T,
@@ -63,6 +65,11 @@ import { MenuAcoes, useToqueLongo } from "@/ui/MenuAcoes";
 // os Ajustes da mãe). Não tem caixa: fica com o fundo `selection` quando a
 // mãe está selecionada. O rodapé soma as linhas visíveis, Ajustes incluídos
 // (fecha no líquido).
+//
+// Divisão (História 3.8): as filhas de uma mãe dividida são as linhas que
+// contam (caixa, filtro, rodapé); a mãe aparece só como cabeçalho antes da
+// primeira filha visível, sem caixa, com o Valor apagado e "Dividido" no
+// lugar do Responsável. As filhas vêm logo abaixo, recuadas 16 px, com "↳".
 
 export type CadastroResponsavel = { nome: string; cor: number };
 export type CadastroStatus = { nome: string; conta_como_pago: boolean };
@@ -78,6 +85,10 @@ export type PropsGradeLancamentos = {
   linhas: readonly LancamentoGrade[];
   /** Os Ajustes de cada mãe (pelo id dela): vão logo abaixo dela. */
   ajustesPorMae?: ReadonlyMap<string, readonly LancamentoGrade[]>;
+  /** As mães divididas do Mês (pelo id): viram o cabeçalho das filhas que passaram pelos filtros. */
+  maesDivididas?: ReadonlyMap<string, LancamentoGrade>;
+  /** "Dividir" / "Editar divisão" do menu ⋯ (a janela mostra por que não dá, se for o caso). */
+  aoDividir?: (id: string) => void;
   cadastros: CadastrosGrade;
   ordem: Ordem;
   aoOrdenar: (coluna: ColunaOrdem) => void;
@@ -238,6 +249,9 @@ type PropsLinha = {
   aoSelecionar: (id: string) => void;
   aoAbrir: (id: string) => void;
   aoExcluir: (id: string) => void;
+  /** Cabeçalho da mãe dividida ou parte dela (História 3.8). */
+  papel?: PapelNaGrade;
+  aoDividir?: (id: string) => void;
 };
 
 /** Toque no corpo: abre o painel, menos na caixa, na `person-tag` e no ⋯ (e no menu, que fica num portal). */
@@ -260,6 +274,8 @@ function LinhaGrade({
   aoSelecionar,
   aoAbrir,
   aoExcluir,
+  papel,
+  aoDividir,
 }: PropsLinha) {
   const [menuAberto, setMenuAberto] = useState(false);
   const abrirMenu = useCallback(() => setMenuAberto(true), []);
@@ -276,16 +292,20 @@ function LinhaGrade({
     valorCentavos: l.valor_centavos,
     parcelaN: l.parcela_n,
     parcelaTotal: l.parcela_total,
-    responsavel: responsavel?.nome ?? T.sem_responsavel,
-    status: status?.nome ?? null,
+    // O cabeçalho da Divisão não tem Responsável nem Status: são das partes.
+    responsavel: papel === "cabecalho" ? "" : (responsavel?.nome ?? T.sem_responsavel),
+    status: papel === "cabecalho" ? null : (status?.nome ?? null),
     verificar,
     previsto,
     ajuste: mae ? { nomeMae: nomeExibido(mae), liquidoCentavos: liquidoCentavos(mae, ajustesDaMae) } : undefined,
+    parteDe: papel === "parte" ? nome : undefined,
+    dividido: papel === "cabecalho",
   });
   const textoNome = (
     <>
       {verificar ? <Bolinha /> : null}
       {mae ? <span className="mr-1 text-text-muted">{TEXTOS_AJUSTE.marca}</span> : null}
+      {papel === "parte" ? <span className="mr-1 text-text-muted">{TEXTOS_DIVISAO.marca}</span> : null}
       {temApelido ? (
         <>
           <span className="texto-body-strong">{nome}</span>{" "}
@@ -310,6 +330,7 @@ function LinhaGrade({
       data-verificar={verificar || undefined}
       data-aberta={aberta || undefined}
       data-ajuste={mae ? true : undefined}
+      data-papel={papel}
       className={cn("cursor-pointer select-none [-webkit-touch-callout:none]", selecionada && "bg-selection")}
       {...toqueLongo}
       onClick={(e) => {
@@ -317,8 +338,8 @@ function LinhaGrade({
       }}
     >
       <td className={cn(CELULA, FIXA_CAIXA, fundo, aberta && "shadow-[inset_3px_0_0_var(--color-accent-line)]")}>
-        {/* O Ajuste não tem caixa: segue a seleção da mãe. */}
-        {mae ? null : (
+        {/* O Ajuste não tem caixa: segue a seleção da mãe; o cabeçalho da Divisão também não (valem as partes). */}
+        {mae || papel === "cabecalho" ? null : (
           <Caixa rotulo={rotuloSelecionar(nome)} estado={selecionada ? "todos" : "nenhum"} aoMudar={() => aoSelecionar(l.id)} />
         )}
       </td>
@@ -333,17 +354,21 @@ function LinhaGrade({
               </span>
             </span>
           ) : (
-            <span aria-hidden data-nome>
+            <span aria-hidden data-nome className={cn(papel === "parte" && "pl-4")}>
               {textoNome}
             </span>
           )}
         </button>
       </td>
       <td className={cn(CELULA, "texto-number")}>{formatarParcela(l.parcela_n, l.parcela_total)}</td>
-      <td className={cn(CELULA, "text-right texto-number")}>{formatarDinheiro(l.valor_centavos)}</td>
+      <td className={cn(CELULA, "text-right texto-number", papel === "cabecalho" && "text-text-muted")}>
+        {formatarDinheiro(l.valor_centavos)}
+      </td>
       <td className={CELULA}>{tipo ?? <Vazio />}</td>
       <td className={CELULA}>
-        {responsavel ? (
+        {papel === "cabecalho" ? (
+          <span className="rounded-sm border border-border px-1.5 texto-caption text-text-muted">{TEXTOS_DIVISAO.dividido}</span>
+        ) : responsavel ? (
           <button
             type="button"
             aria-label={rotuloFiltrarPor(responsavel.nome)}
@@ -366,7 +391,7 @@ function LinhaGrade({
         </span>
       </td>
       <td className={CELULA}>
-        {status ? (
+        {papel === "cabecalho" ? null : status ? (
           <span
             className={cn(
               "rounded-full px-2 texto-caption",
@@ -388,7 +413,18 @@ function LinhaGrade({
           aoMudarAberto={setMenuAberto}
           itens={[
             { rotulo: TEXTOS_LANCAMENTO.abrir, aoEscolher: () => aoAbrir(l.id) },
-            { rotulo: TEXTOS_LANCAMENTO.excluir, aoEscolher: () => aoExcluir(l.id), destrutivo: true },
+            ...(aoDividir && !mae && papel !== "parte"
+              ? [
+                  {
+                    rotulo: papel === "cabecalho" ? TEXTOS_DIVISAO.botao_editar : TEXTOS_DIVISAO.botao,
+                    aoEscolher: () => aoDividir(l.id),
+                  },
+                ]
+              : []),
+            // A parte não se exclui: desfaz-se a divisão.
+            ...(papel === "parte"
+              ? []
+              : [{ rotulo: TEXTOS_LANCAMENTO.excluir, aoEscolher: () => aoExcluir(l.id), destrutivo: true as const }]),
           ]}
         />
       </td>
@@ -398,9 +434,13 @@ function LinhaGrade({
 
 const SEM_AJUSTES: ReadonlyMap<string, readonly LancamentoGrade[]> = new Map();
 
+const SEM_MAES: ReadonlyMap<string, LancamentoGrade> = new Map();
+
 export function GradeLancamentos({
   linhas,
   ajustesPorMae = SEM_AJUSTES,
+  maesDivididas = SEM_MAES,
+  aoDividir,
   cadastros,
   ordem,
   aoOrdenar,
@@ -420,7 +460,10 @@ export function GradeLancamentos({
 }: PropsGradeLancamentos) {
   // A linha aberta que saiu do filtro continua na grade (opção A), fora do total.
   const comFixa = linhaFixa && !linhas.some((l) => l.id === linhaFixa.id) ? [...linhas, linhaFixa] : linhas;
-  const ordenadas = agruparComAjustes(ordenarGrade(comFixa, ordem, nomesDosCadastros(cadastros), verificando), ajustesPorMae);
+  const ordenadas = agruparPartes(
+    agruparComAjustes(ordenarGrade(comFixa, ordem, nomesDosCadastros(cadastros), verificando), ajustesPorMae),
+    maesDivididas,
+  );
   // O rodapé: as linhas visíveis (as mães filtradas e os Ajustes delas), fora a fixa.
   const visiveis = linhas.flatMap((l) => [l, ...(ajustesPorMae.get(l.id) ?? [])]);
   const estadoCaixa = estadoCaixaCabecalho(
@@ -445,11 +488,13 @@ export function GradeLancamentos({
               </td>
             </tr>
           ) : null}
-          {ordenadas.map(({ linha: l, mae }) => (
+          {ordenadas.map(({ linha: l, mae, papel }) => (
             <LinhaGrade
               key={l.id}
               l={l}
               mae={mae}
+              papel={papel}
+              aoDividir={aoDividir}
               ajustesDaMae={mae ? (ajustesPorMae.get(mae.id) ?? []) : []}
               cadastros={cadastros}
               escolhidos={escolhidos}

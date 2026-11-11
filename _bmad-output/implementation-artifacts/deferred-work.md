@@ -143,3 +143,27 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-7-herdar-parcelas-sem-previsto.md`
   summary: Conferir no iPad se o VoiceOver lê com sentido a linha nova do passo 3 ("N parcelas herdaram a classificação da parcela anterior").
   evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4; o jsdom só confere o texto.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-dividir-um-lancamento.md`
+  summary: Rodar no CI a migração `20261117120000_dividir_lancamento.sql`, `test/integracao/divisao.test.ts` e a comparação de `database.types.ts` com `supabase gen types`.
+  evidence: Medium não verificado. Esta máquina não tem Docker: a migração e as RPCs (`recriar_filhas`, `dividir_lancamento`, `importar_fatura`) foram provadas só no Postgres em memória (pglite) com todas as migrações em ordem; RLS, Realtime e o formato exato dos tipos só o CI prova (as entradas de `divisao`, `dividir_lancamento` e `recriar_filhas` foram escritas à mão no formato do gerado).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-dividir-um-lancamento.md`
+  summary: Conferir a Divisão de verdade no iPad (dividir uma linha com Tipo, ver grade, hero, Conferência e barra por Responsável antes e depois, previstos de dez/26 divididos e o Desfazer) e, em dez/26, o casamento de um previsto dividido e a recusa de reimportar essa Fatura.
+  evidence: Medium não verificado em produção. Hoje não há Divisão nem filha; o casamento de previsto dividido (filhas mantidas e recalculadas) só rodou no pglite e no Vitest.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-dividir-um-lancamento.md`
+  summary: Na 3.12 (reimportar mantendo a classificação), manter a `divisao`, o `filha_id` e os `id` das filhas das linhas casadas, e olhar o `editado_em`/Status das filhas de um previsto antes de apagá-lo.
+  evidence: Low. A reimportação simplificada apaga mãe e filhas (o aviso conta a mãe dividida como "à mão") e apaga o previsto dividido cujas filhas tiveram o Status editado, porque a regra da 3.5 olha só a mãe. As filhas apagadas em cascata com um previsto também não entram em `removidos.previstos` (o Realtime limpa a memória).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-dividir-um-lancamento.md`
+  summary: Dar ao Pagamento (Épico 6) uma trava na RPC `dividir_lancamento`/`recriar_filhas` quando uma filha que seria excluída em lógico (redividir, Desfazer divisão) já tem Pagamento.
+  evidence: Maybe-false/medium. A filha mantém o `id` pela posição, mas a que sobra é excluída; sem Pagamentos hoje não há o que proteger.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-dividir-um-lancamento.md`
+  summary: Permitir dividir uma parcela com Ajuste de centavos (hoje "Dividir" fica desativado com o aviso para desvincular o Ajuste) e corrigir o Valor de uma mãe dividida sem desfazer a divisão.
+  evidence: Low. Decisões Q1/Q3-A: o Ajuste fica sem dono se a mãe se divide, e o Valor da mãe dividida é somente leitura (as filhas somam esse Valor).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-dividir-um-lancamento.md`
+  summary: Tratar no "Mudar" e no ✓ do Revisar a mãe dividida que voltou à fila (Tipo limpo): hoje o "Mudar" mostra o seletor de Responsável, que `planejarGravacao` ignora.
+  evidence: Low. A mãe dividida sai da fila ao dividir (exige Tipo) e só volta se Rafael limpar o Tipo.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-dividir-um-lancamento.md`
+  summary: A Regra guarda a Divisão em frações mas não o Status de cada parte (as filhas e os previstos nascem com o Status da mãe), e `recriar_filhas` é executável pelo usuário e contorna as checagens de `dividir_lancamento`.
+  evidence: Low. O Status por parte vive na filha (e na janela); a função interna só mexe em linhas do próprio dono.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-dividir-um-lancamento.md`
+  summary: Conferir no iPad se o VoiceOver lê com sentido o cabeçalho da Divisão ("NOME, dividido, Valor") e as partes ("Parte de NOME, Valor, Responsável, Status").
+  evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4; o jsdom só confere o `aria-label`.

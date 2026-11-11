@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { hojeEmSaoPaulo } from "@/domain/datas";
+import { lerDivisao } from "@/domain/divisao";
 import {
   DESCRICAO_EXCLUIR_REGRA,
   ROTULOS,
@@ -9,6 +10,7 @@ import {
   mensagem,
   perguntaReaplicar,
   rotuloClassificados,
+  textoDaDivisao,
   tituloExcluirRegra,
 } from "@/domain/mensagens";
 import { mesAtual } from "@/domain/painel";
@@ -72,6 +74,11 @@ export function SecaoRegras() {
     }),
     [responsaveis.linhas, tipos.linhas],
   );
+  /** A Divisão da Regra em texto ("Mãe 2/3 · Rafael 1/3"); sem Divisão válida, null. */
+  const divisaoEmTexto = (dados: unknown): string | null => {
+    const d = lerDivisao(dados);
+    return d === null ? null : textoDaDivisao(d, (id) => nomes.responsaveis.get(id) ?? T.sem_valor);
+  };
   const lista = useMemo(
     () => filtrarRegras(ordenarRegras(regras.linhas), busca, nomes),
     [regras.linhas, busca, nomes],
@@ -192,6 +199,7 @@ export function SecaoRegras() {
                 return nome === undefined ? [] : [nome];
               })}
               tipo={r.tipo_id === null ? null : (nomes.tipos.get(r.tipo_id) ?? null)}
+              divisao={divisaoEmTexto(r.divisao)}
               ultimoUso={r.ultimo_uso}
               aoEditar={() => setEditandoId(r.id)}
               aoExcluir={() => setExcluindoId(r.id)}
@@ -249,6 +257,7 @@ export function SecaoRegras() {
           })}
           responsaveis={responsaveis.linhas}
           tipos={tipos.linhas}
+          divisao={divisaoEmTexto(editando.divisao)}
           aberta
           aoMudar={(aberta) => {
             if (!aberta) setEditandoId(null);

@@ -18,6 +18,7 @@
 
 import { idsQueAcompanham } from "./ajustes";
 import type { MotivoRevisao } from "./classificacao";
+import { estaClassificada } from "./divisao";
 import type { EventoAprender } from "./regras";
 import type { ItemDaFila } from "./revisar";
 
@@ -70,6 +71,8 @@ export type LinhaParaGravar = {
   editado_em: string | null;
   fatura_id: string | null;
   ajuste_de_id: string | null;
+  /** Mãe dividida (História 3.8): o Responsável é das partes, nunca da mãe. */
+  divisao?: unknown;
 };
 
 /** O que o lote usa de uma linha de `lancamentos`. */
@@ -81,6 +84,8 @@ export type LinhaDoLote = LinhaParaGravar & {
   observacao: string | null;
   revisado_em: string | null;
   excluido_em: string | null;
+  /** Filha de uma Divisão (História 3.8): segue o Tipo e a Observação da mãe. */
+  dividido_de_id?: string | null;
 };
 
 export type PlanoDeGravacao<L> =
@@ -125,7 +130,13 @@ const escolheuClassificacao = (corpo: Partial<LinhaParaGravar>) =>
  *   volta como `sem_classificacao`, só na linha principal (`soDaPrincipal`);
  * - sem nada a mudar, `vazio`.
  */
-export function planejarGravacao<L extends LinhaParaGravar>(atual: L, mudanca: Partial<L>, agora: string): PlanoDeGravacao<L> {
+export function planejarGravacao<L extends LinhaParaGravar>(atual: L, pedida: Partial<L>, agora: string): PlanoDeGravacao<L> {
+  // A mãe dividida não tem Responsável: o pedido de Responsável é ignorado (História 3.8).
+  let mudanca = pedida;
+  if ((atual.divisao ?? null) !== null && pedida.responsavel_id !== undefined) {
+    mudanca = { ...pedida };
+    delete mudanca.responsavel_id;
+  }
   const corpo: Partial<L> = colunasQueMudam<L>(atual, mudanca);
   const naFila = atual.revisao_motivo != null || atual.revisao_dados != null;
   const pedeClassificacao = mudanca.responsavel_id !== undefined || mudanca.tipo_id !== undefined;
@@ -138,7 +149,7 @@ export function planejarGravacao<L extends LinhaParaGravar>(atual: L, mudanca: P
   let soDaPrincipal: Partial<L> | null = null;
   if (mudouClassificacao(corpo) || fechaFila) {
     const depois = { ...atual, ...corpo };
-    if (depois.responsavel_id !== null && depois.tipo_id !== null) {
+    if (estaClassificada(depois)) {
       if (naFila) {
         saida.revisao_motivo = null;
         saida.revisao_dados = null;
@@ -247,6 +258,19 @@ export function planejarLote(entradas: readonly EntradaDoLote[], linhas: readonl
         responsavelDepois: corpo.responsavel_id !== undefined ? corpo.responsavel_id : atual.responsavel_id,
         tipoDepois: corpo.tipo_id !== undefined ? corpo.tipo_id : atual.tipo_id,
       });
+    }
+    // As filhas de uma mãe dividida seguem o Tipo e a Observação dela (o Responsável, o Status e o Valor são delas).
+    if (campos.tipo_id !== undefined || campos.observacao !== undefined) {
+      for (const filha of linhas) {
+        if (filha.dividido_de_id !== id || filha.excluido_em != null || entrou.has(filha.id) || vistos.has(filha.id)) continue;
+        const corpoFilha: CorpoDoLote = {};
+        if (campos.tipo_id !== undefined && !Object.is(filha.tipo_id, campos.tipo_id)) corpoFilha.tipo_id = campos.tipo_id;
+        if (campos.observacao !== undefined && !Object.is(filha.observacao, campos.observacao)) corpoFilha.observacao = campos.observacao;
+        if (Object.keys(corpoFilha).length === 0) continue;
+        corpoFilha.editado_em = agora;
+        vistos.add(filha.id);
+        incluir(filha, corpoFilha);
+      }
     }
     if (campos.responsavel_id === undefined && campos.tipo_id === undefined) continue;
     for (const idAjuste of idsQueAcompanham(id, linhas)) {

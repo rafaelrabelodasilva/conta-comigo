@@ -75,10 +75,41 @@ describe("repositório de Regras", () => {
           tipo_id: "musica",
           contagem: [{ responsavel_id: "rafael", n: 1 }],
           ultimo_uso: "2026-11-09T12:00:00.000Z",
+          divisao: null,
         },
         onConflict: "owner_id,chave",
       },
     ]);
+  });
+
+  it("História 3.8: aprender grava a Divisão em frações (sem filha_id); só limpar a Divisão de um Nome sem Regra não cria Regra", async () => {
+    const m = montar();
+    const divisao = {
+      modo: "proporcao" as const,
+      partes: [
+        { responsavel_id: "mae", numerador: 2, denominador: 3, filha_id: "f1" },
+        { responsavel_id: "rafael", numerador: 1, denominador: 3 },
+      ],
+    };
+    const r = await m.repo.aprender({ nome: "JIM COM 5765", responsavelAntes: null, responsavelDepois: null, tipoDepois: "saude", divisao });
+    expect(r.ok).toBe(true);
+    expect(m.upserts[0].corpo).toMatchObject({
+      chave: "JIM COM",
+      tipo_id: "saude",
+      contagem: [],
+      divisao: {
+        modo: "proporcao",
+        partes: [
+          { responsavel_id: "mae", numerador: 2, denominador: 3 },
+          { responsavel_id: "rafael", numerador: 1, denominador: 3 },
+        ],
+      },
+    });
+    expect(JSON.stringify(m.upserts[0].corpo)).not.toContain("filha_id");
+    const antes = m.upserts.length;
+    const limpar = await m.repo.aprender({ nome: "OUTRO NOME", responsavelAntes: null, responsavelDepois: null, tipoDepois: null, divisao: null });
+    expect(limpar).toEqual({ ok: false });
+    expect(m.upserts.length).toBe(antes);
   });
 
   it("fila por chave: duas classificações seguidas não perdem incremento", async () => {
@@ -262,6 +293,27 @@ describe("repositório de Regras: editar, excluir e marcar uso", () => {
     ]);
     expect(m.memoria.get("r1")?.responsavel_id).toBe("rafael");
     expect(m.tabela.get("r1")?.ultimo_uso).toBe("2026-10-01T00:00:00.000Z");
+  });
+
+  it("História 3.8: 'Remover divisão' grava só divisao = null, junto do Responsável, Tipo e contagem que a edição devolve", async () => {
+    const m = montarEdicao();
+    m.tabela.set("r1", { ...m.tabela.get("r1")!, divisao: { modo: "proporcao", partes: [{ responsavel_id: "casal", numerador: 1, denominador: 2 }, { responsavel_id: "rafael", numerador: 1, denominador: 2 }] } } as never);
+    const r = await m.repo.editar("r1", { divisao: null });
+    expect(r.ok).toBe(true);
+    expect(m.updates).toEqual([
+      {
+        corpo: {
+          responsavel_id: "casal",
+          tipo_id: "casa",
+          contagem: [
+            { responsavel_id: "casal", n: 3 },
+            { responsavel_id: "rafael", n: 1 },
+          ],
+          divisao: null,
+        },
+        filtro: "r1",
+      },
+    ]);
   });
 
   it("editar sem mudança não grava; limpar os dois recusa com regra.vazia", async () => {

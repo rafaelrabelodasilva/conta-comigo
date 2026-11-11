@@ -414,7 +414,7 @@ describe("reimportar um Mês (História 3.11)", () => {
       [
         "lancamentos",
         "id",
-        ["origem_lancamento_id in a,b,c", "lancado_por=sistema", "editado_em is null", "excluido_em is null"],
+        ["origem_lancamento_id in a,b,c", "lancado_por=sistema", "dividido_de_id is null", "editado_em is null", "excluido_em is null"],
       ],
     ]);
   });
@@ -687,8 +687,8 @@ describe("casamento dos previstos (História 3.6)", () => {
       ok: true,
       atualizadoEm: T2,
       previstos: [
-        { id: "p1", nome_normalizado: "MAGALU", parcela_n: 7, parcela_total: 10, valor_centavos: 44589, ocorrencia: 1, responsavel_id: null, tipo_id: null, serie: chave(1) },
-        { id: "p2", nome_normalizado: "MAGALU", parcela_n: 7, parcela_total: 10, valor_centavos: 44589, ocorrencia: 2, responsavel_id: null, tipo_id: null, serie: chave(2) },
+        { id: "p1", nome_normalizado: "MAGALU", parcela_n: 7, parcela_total: 10, valor_centavos: 44589, ocorrencia: 1, responsavel_id: null, tipo_id: null, divisao: null, serie: chave(1) },
+        { id: "p2", nome_normalizado: "MAGALU", parcela_n: 7, parcela_total: 10, valor_centavos: 44589, ocorrencia: 2, responsavel_id: null, tipo_id: null, divisao: null, serie: chave(2) },
       ],
     });
   });

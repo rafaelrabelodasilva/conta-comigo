@@ -8,7 +8,8 @@
 import type { PassoPrimeiroUso } from "./primeiro-uso";
 import { partesDaDiferenca, valorDaDiferenca, type Conferencia, type SentidoDiferenca } from "./conferencia";
 import { formatarData, formatarMes, formatarMesExtenso, formatarNomeDoMes } from "./datas";
-import { formatarDinheiro } from "./dinheiro";
+import { arredondar, formatarDinheiro } from "./dinheiro";
+import type { Divisao } from "./divisao";
 import {
   primeiraDiferenca,
   type ComposicaoTotalAPagar,
@@ -76,6 +77,18 @@ export const MENSAGENS = {
   "ciclo.vigente_no_passado": "A mudança do Ciclo não pode valer para um mês que já passou.",
   "dinheiro.invalido": "Valor inválido. Use, por exemplo, 1,50.",
   "divisao.fracoes_invalidas": "As frações da divisão precisam somar 100%.",
+  "divisao.fracao_invalida": "Use uma fração como 2/3 ou uma porcentagem como 33,33%.",
+  "divisao.valor_zero": "Um lançamento de R$ 0,00 não pode ser dividido.",
+  "divisao.valor_grande": "O valor é grande demais para dividir (até R$ 900.000,00).",
+  "divisao.poucas_partes": "Divida em pelo menos 2 partes.",
+  "divisao.partes_demais": "Divida em até 10 partes.",
+  "divisao.sem_responsavel": "Escolha o Responsável de cada parte.",
+  "divisao.parte_zerada": "Uma parte ficou com R$ 0,00. Mude os valores ou as frações.",
+  "divisao.soma_diferente": "A soma das partes precisa ser igual ao valor do lançamento.",
+  "divisao.sem_tipo": "Escolha o Tipo antes de dividir.",
+  "divisao.com_ajuste": "Este lançamento tem um Ajuste de centavos. Desvincule o Ajuste antes de dividir.",
+  "divisao.mae_invalida": "Este lançamento não pode ser dividido.",
+  "divisao.filha_invalida": "A divisão mudou em outro aparelho. Abra de novo e tente outra vez.",
   "ajuste.limite_invalido": "Valor inválido. Use, por exemplo, 1,50.",
   "ajuste.limite_fora": "Use um valor de R$ 0,01 a R$ 10,00.",
   "atraso.tolerancia_invalida": "Use de 0 a 60 dias.",
@@ -773,6 +786,111 @@ export function descricaoExcluirLancamento(nome: string, daFatura: boolean, ajus
 }
 
 /** Ajustes de centavos (História 2.8, FR-47). */
+/** A janela "Dividir" e os avisos da Divisão (História 3.8, UX-DR15). */
+export const TEXTOS_DIVISAO = {
+  /** Antes do Nome da filha na grade. */
+  marca: "↳",
+  titulo: "Dividir lançamento",
+  titulo_edicao: "Dividir lançamento",
+  botao: "Dividir",
+  botao_editar: "Editar divisão",
+  desfazer: "Desfazer divisão",
+  por_valor: "Por valor",
+  por_proporcao: "Por proporção",
+  modo: "Como dividir",
+  parte: "＋ Parte",
+  remover_parte: "Remover parte",
+  responsavel: "Responsável",
+  fracao: "Fração",
+  valor: "Valor",
+  status: "Status",
+  sem_responsavel: "Escolha…",
+  cancelar: "Cancelar",
+  dividido: "Dividido",
+  /** O que o painel da mãe mostra no lugar do Responsável. */
+  responsavel_dividido: "Dividido entre as partes",
+  dividido_somente_leitura: "Para corrigir o valor, desfaça a divisão.",
+  /** Painel da filha. */
+  parte_de: "Parte de",
+  abrir_divisao: "Abrir divisão",
+  filhas_seguem: "Tipo, Apelido e Observação seguem a divisão.",
+  indisponivel_ajuste: "Desvincule o Ajuste de centavos para dividir.",
+  indisponivel_tipo: "Escolha o Tipo para dividir.",
+  indisponivel_zero: "Valor zero não pode ser dividido.",
+  indisponivel_grande: "Valor grande demais para dividir (até R$ 900.000,00).",
+  indisponivel_ajuste_proprio: "Um Ajuste de centavos não pode ser dividido.",
+  fracoes_nao_fecham: "As frações precisam somar 1 (100%).",
+  /** Regras aprendidas: sem Divisão. */
+  sem_divisao: "—",
+  remover_divisao: "Remover divisão",
+  divisao_da_regra: "Divisão",
+  desfeita: "Divisão desfeita",
+  nenhuma_parte_fora: "Nenhuma",
+} as const;
+
+/** "Dividido em 2 partes" (toast depois de dividir). */
+export function rotuloDividido(partes: number): string {
+  return `Dividido em ${partes} partes`;
+}
+
+/** "Soma das partes: R$ 466,00 de R$ 466,00 ✓" (ou sem o ✓ quando não bate). */
+export function rotuloSomaDasPartes(somaCentavos: number, totalCentavos: number, bate: boolean): string {
+  return `Soma das partes: ${formatarDinheiro(somaCentavos)} de ${formatarDinheiro(totalCentavos)}${bate ? " ✓" : ""}`;
+}
+
+/** "(+1 centavo)" na última parte quando o arredondamento deixou a diferença (ou "−2 centavos"). */
+export function rotuloDiferencaDeCentavos(centavos: number): string {
+  const n = Math.abs(centavos);
+  return `(${centavos > 0 ? "+" : "−"}${n} ${n === 1 ? "centavo" : "centavos"})`;
+}
+
+/** "Divisão aplicada pela Regra de JIM COM 5765" (modo edição, quando a Divisão veio de uma Regra). */
+export function avisoDivisaoDaRegra(chave: string): string {
+  return `Divisão aplicada pela Regra de ${chave}`;
+}
+
+/** Passo 3 e resumo final: "1 lançamento entra dividido" / "3 lançamentos entram divididos" (pela Regra ou pela parcela anterior). */
+export function rotuloDivididosPelaRegra(n: number): string {
+  return n === 1 ? "1 lançamento entra dividido" : `${n} lançamentos entram divididos`;
+}
+
+/**
+ * A Divisão em frações para a lista de Regras: "Mãe 2/3 · Rafael 1/3". Uma
+ * Divisão por valor (frações como 31067/46600) mostra a porcentagem com duas
+ * casas ("66,67%"); só exibição.
+ */
+export function textoDaDivisao(d: Divisao, nomeDe: (responsavelId: string) => string): string {
+  return rotuloResumoDaDivisao(
+    d.partes.map((p) => {
+      const centesimos = arredondar(p.numerador * 10_000, p.denominador);
+      const percentual = `${Math.floor(centesimos / 100)},${String(centesimos % 100).padStart(2, "0")}%`;
+      return { nome: nomeDe(p.responsavel_id), fracao: d.modo === "proporcao" ? `${p.numerador}/${p.denominador}` : percentual };
+    }),
+  );
+}
+
+/** Linha do painel da mãe: "Mãe 2/3 · Rafael 1/3". */
+export function rotuloResumoDaDivisao(partes: readonly { nome: string; fracao: string }[]): string {
+  return partes.map((p) => `${p.nome} ${p.fracao}`).join(" · ");
+}
+
+/** Nome acessível da linha da filha: "Parte de NOME". */
+export function rotuloParteDe(nome: string): string {
+  return `Parte de ${nome}`;
+}
+
+/** Toast: "Dividido em 2 partes · 3 previstos também" (os previstos preenchidos sozinhos). */
+export function rotuloDivididoComPrevistos(partes: number, previstos: number): string {
+  return `${rotuloDividido(partes)} · ${previstos === 1 ? "1 previsto também" : `${previstos} previstos também`}`;
+}
+
+/** Pergunta quando há previstos com outra Divisão: "Dividir também os 2 previstos que já têm outro Responsável?" */
+export function perguntaDividirPrevistos(n: number): string {
+  return n === 1
+    ? "Dividir também o previsto que já tem outro Responsável ou outra divisão?"
+    : `Dividir também os ${n} previstos que já têm outro Responsável ou outra divisão?`;
+}
+
 export const TEXTOS_AJUSTE = {
   /** Antes do Nome do Ajuste na grade. */
   marca: "↳",

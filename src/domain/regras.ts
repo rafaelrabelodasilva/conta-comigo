@@ -18,10 +18,16 @@
 //   (depois de uma exclusão sem substituto).
 // - Só escolher ensina (decisão 7-A): um campo que a gravação deixa nulo não
 //   muda o campo da Regra (`responsavel_id`/`tipo_id` = último não nulo).
+// - Divisão (História 3.8): a Regra guarda a Divisão da última vez que Rafael
+//   dividiu aquele Nome, em frações (`divisao`, sem `filha_id`). Escolher um
+//   Responsável sem dividir, ou "Desfazer divisão", a limpa. Só vale na
+//   importação com Tipo ativo e Responsáveis ativos em todas as partes
+//   (`divisaoDaRegra`).
 // - Com dúvida: mais de um Responsável (ativo) com `n > 0`. O sugerido é o de
 //   maior `n`; no empate, o `responsavel_id` da Regra (senão, o primeiro da
 //   contagem).
 
+import { copiarDivisao, divisaoComResponsaveisAtivos, lerDivisao, type Divisao } from "./divisao";
 import { normalizarNome } from "./importacao-fatura";
 import type { Resultado } from "./resultado";
 
@@ -95,6 +101,8 @@ export type RegraGravada = {
   /** `jsonb` do banco: lido com cuidado (`lerContagem`). */
   contagem: unknown;
   ultimo_uso: string;
+  /** `jsonb` do banco: a Divisão da Regra, lida com cuidado (`lerDivisao`). */
+  divisao?: unknown;
 };
 
 /** A linha a gravar em `regras` (upsert por `owner_id, chave`). */
@@ -105,6 +113,7 @@ export type RegraParaGravar = {
   tipo_id: string | null;
   contagem: ContagemLida;
   ultimo_uso: string;
+  divisao: Divisao | null;
 };
 
 /**
@@ -130,6 +139,12 @@ export type EventoAprender = {
   responsavelAntes: string | null;
   responsavelDepois: string | null;
   tipoDepois: string | null;
+  /**
+   * A Divisão que a gravação deixou na linha (História 3.8): uma Divisão a
+   * ensina, `null` a limpa e `undefined` não mexe. Escolher um Responsável
+   * (`responsavelDepois` não nulo) sem dividir também a limpa.
+   */
+  divisao?: Divisao | null;
 };
 
 function somarUm(contagem: ContagemLida, id: string): ContagemLida {
@@ -152,6 +167,8 @@ export function aprenderRegra(atual: RegraGravada | null, evento: EventoAprender
   if (depois !== null && (evento.responsavelAntes !== depois || atual === null || semHistorico)) {
     contagem = somarUm(contagem, depois);
   }
+  const divisao =
+    evento.divisao !== undefined ? (evento.divisao === null ? null : copiarDivisao(evento.divisao)) : depois !== null ? null : lerDivisao(atual?.divisao);
   return {
     chave: chaveDeRegra(evento.nome),
     versao_normalizacao: VERSAO_NORMALIZACAO,
@@ -159,6 +176,7 @@ export function aprenderRegra(atual: RegraGravada | null, evento: EventoAprender
     tipo_id: evento.tipoDepois ?? atual?.tipo_id ?? null,
     contagem,
     ultimo_uso: agora,
+    divisao,
   };
 }
 
@@ -213,6 +231,18 @@ export type AvaliacaoRegra =
  * sugere o de maior `n` (empate: o da Regra) e os outros. Sem dúvida: aplica
  * o Responsável e o Tipo da Regra que estiverem ativos; nenhum → `nada`.
  */
+/**
+ * A Divisão que a importação aplica (História 3.8): a da Regra, com a chave
+ * (`regra_chave`), quando o Tipo e os Responsáveis de todas as partes estão
+ * ativos. Sem Tipo ativo ou com um Responsável arquivado, a Regra não divide.
+ */
+export function divisaoDaRegra(regra: RegraGravada, ativos: CadastrosAtivos): Divisao | null {
+  const d = lerDivisao(regra.divisao);
+  if (d === null || regra.tipo_id === null || !ativos.tipos.has(regra.tipo_id)) return null;
+  if (!divisaoComResponsaveisAtivos(d, ativos.responsaveis)) return null;
+  return { ...copiarDivisao(d), regra_chave: regra.chave };
+}
+
 export function avaliarRegra(regra: RegraGravada, ativos: CadastrosAtivos): AvaliacaoRegra {
   const tipo = regra.tipo_id !== null && ativos.tipos.has(regra.tipo_id) ? regra.tipo_id : null;
   const usados = lerContagem(regra.contagem).filter((e) => e.n > 0 && ativos.responsaveis.has(e.responsavel_id));
@@ -241,13 +271,17 @@ export function avaliarRegra(regra: RegraGravada, ativos: CadastrosAtivos): Aval
 export type RegraDaTela = RegraGravada & { id: string };
 
 /** A edição de uma Regra: só o que mudou (`undefined` = não mexe; `null` = limpa). */
-export type EdicaoRegra = { responsavel_id?: string | null; tipo_id?: string | null };
+export type EdicaoRegra = { responsavel_id?: string | null; tipo_id?: string | null; divisao?: null };
 
-/** O que a edição grava em `regras` (nunca a chave, a Divisão nem o `ultimo_uso`). */
+/**
+ * O que a edição grava em `regras` (nunca a chave nem o `ultimo_uso`). A
+ * `divisao` só aparece para ser limpa (História 3.8): a tela remove, não edita.
+ */
 export type CorpoEdicaoRegra = {
   responsavel_id: string | null;
   tipo_id: string | null;
   contagem: ContagemLida;
+  divisao?: null;
 };
 
 /**
@@ -265,13 +299,15 @@ export function editarRegra(atual: RegraGravada, edicao: EdicaoRegra): Resultado
   if (responsavel === null && tipo === null) return { ok: false, erro: { codigo: "regra.vazia" } };
   const mudouResponsavel = responsavel !== atual.responsavel_id;
   const mudouTipo = tipo !== atual.tipo_id;
-  if (!mudouResponsavel && !mudouTipo) return { ok: true, valor: null };
+  // Escolher um Responsável, ou pedir "Remover divisão", limpa a Divisão da Regra.
+  const limpaDivisao = lerDivisao(atual.divisao) !== null && (edicao.divisao === null || (mudouResponsavel && responsavel !== null));
+  if (!mudouResponsavel && !mudouTipo && !limpaDivisao) return { ok: true, valor: null };
   let contagem = lerContagem(atual.contagem);
   if (mudouResponsavel) {
     const soma = contagem.reduce((total, e) => total + e.n, 0);
     contagem = responsavel === null ? [] : [{ responsavel_id: responsavel, n: Math.max(1, soma) }];
   }
-  return { ok: true, valor: { responsavel_id: responsavel, tipo_id: tipo, contagem } };
+  return { ok: true, valor: { responsavel_id: responsavel, tipo_id: tipo, contagem, ...(limpaDivisao ? { divisao: null } : {}) } };
 }
 
 function semAcento(texto: string): string {
@@ -332,6 +368,8 @@ export type LinhaParaReaplicar = {
   tipo_id: string | null;
   ajuste_de_id: string | null;
   excluido_em: string | null;
+  /** Filha de uma Divisão (História 3.8): nunca recebe a reaplicação. */
+  dividido_de_id?: string | null;
 };
 
 /**
@@ -349,7 +387,7 @@ export function entradasDaReaplicacao(
   if (campos.responsavel_id === undefined && campos.tipo_id === undefined) return [];
   const entradas: { id: string; campos: { responsavel_id?: string; tipo_id?: string } }[] = [];
   for (const l of linhas) {
-    if (l.mes !== mes || l.excluido_em !== null || l.ajuste_de_id !== null) continue;
+    if (l.mes !== mes || l.excluido_em !== null || l.ajuste_de_id !== null || (l.dividido_de_id ?? null) !== null) continue;
     if (chaveDeRegra(l.nome) !== chave) continue;
     const muda =
       (campos.responsavel_id !== undefined && l.responsavel_id !== campos.responsavel_id) ||

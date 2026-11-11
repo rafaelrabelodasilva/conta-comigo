@@ -3,12 +3,14 @@
 // `extracao-fatura.ts`, `montarConferencia` em `importacao-fatura.ts`):
 // aqui ela só recebe as linhas gravadas em vez da extração.
 //
-// - Entram só os Lançamentos não excluídos com o `fatura_id` da Fatura.
+// - Entram só os Lançamentos não excluídos com o `fatura_id` da Fatura, sem as
+//   filhas de uma Divisão (a mãe é que conta, História 3.8).
 // - "Verificar" é derivado, nunca gravado: o Lançamento está num cartão com
 //   diferença; sem cartão com diferença e com os créditos diferentes, os
 //   créditos. Some sozinho quando a Conferência bate. `duvida_extracao`
 //   sozinho não marca: só põe a linha primeiro na ordem padrão.
 
+import { linhasDaFatura } from "./divisao";
 import { somarConferencia } from "./extracao-fatura";
 import { montarConferencia, type ConferenciaImportacao } from "./importacao-fatura";
 
@@ -28,6 +30,8 @@ export type LancamentoParaConferir = {
   valor_centavos: number;
   final_cartao: string | null;
   excluido_em: string | null;
+  /** Filha de uma Divisão (História 3.8): a Conferência usa a mãe, nunca a filha. */
+  dividido_de_id?: string | null;
 };
 
 export type Conferencia = ConferenciaImportacao & {
@@ -48,7 +52,7 @@ export function conferir(
   cartoes: readonly CartaoParaConferir[],
   lancamentos: readonly LancamentoParaConferir[],
 ): Conferencia {
-  const daFatura = lancamentos.filter((l) => l.fatura_id === fatura.id && l.excluido_em === null);
+  const daFatura = linhasDaFatura(lancamentos).filter((l) => l.fatura_id === fatura.id && l.excluido_em === null);
   const lidos = cartoes
     .filter((c) => c.fatura_id === fatura.id)
     .map((c) => ({ final: c.final, valorTotalCentavos: c.total_centavos }))

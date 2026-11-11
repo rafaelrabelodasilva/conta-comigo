@@ -6,7 +6,15 @@
 import { mesDaData, somarMeses } from "./ciclo";
 import { ordenarDuvidasPrimeiro } from "./conferencia";
 import { formatarDinheiro } from "./dinheiro";
-import { ROTULO_PREVISTO, TEXTOS_CONFERENCIA, rotuloAjusteDe, rotuloLiquido, rotuloParcelaFalada } from "./mensagens";
+import {
+  ROTULO_PREVISTO,
+  TEXTOS_CONFERENCIA,
+  TEXTOS_DIVISAO,
+  rotuloAjusteDe,
+  rotuloLiquido,
+  rotuloParcelaFalada,
+  rotuloParteDe,
+} from "./mensagens";
 
 /** O que a grade usa de um Lançamento (as colunas da tabela `lancamentos`). */
 export type LancamentoGrade = {
@@ -28,6 +36,10 @@ export type LancamentoGrade = {
   duvida_extracao: boolean;
   /** Ajuste de centavos (História 2.8): a mãe (parcela) dele. */
   ajuste_de_id?: string | null;
+  /** Divisão (História 3.8): a mãe da parte; nulo na linha comum e na mãe. */
+  dividido_de_id?: string | null;
+  /** A Divisão da mãe (`jsonb`); nulo na linha comum e na parte. */
+  divisao?: unknown;
 };
 
 export type LancadoPor = "fatura" | "sistema" | "manual" | "historico";
@@ -227,10 +239,15 @@ export function rotuloLinhaAcessivel(partes: {
   /** Previsto (História 3.5): "Nome, previsto, Valor, …". */
   previsto?: boolean;
   ajuste?: { nomeMae: string; liquidoCentavos: number };
+  /** Parte de uma Divisão (História 3.8): "Parte de NOME, …". */
+  parteDe?: string;
+  /** Mãe dividida (cabeçalho): "NOME, dividido, …". */
+  dividido?: boolean;
 }): string {
   const ajuste = partes.ajuste;
   return [
-    ajuste ? rotuloAjusteDe(ajuste.nomeMae) : partes.nome,
+    ajuste ? rotuloAjusteDe(ajuste.nomeMae) : partes.parteDe !== undefined ? rotuloParteDe(partes.parteDe) : partes.nome,
+    partes.dividido ? TEXTOS_DIVISAO.dividido.toLowerCase() : "",
     partes.previsto ? ROTULO_PREVISTO.toLowerCase() : "",
     formatarDinheiro(partes.valorCentavos),
     ajuste ? rotuloLiquido(ajuste.liquidoCentavos) : rotuloParcelaFalada(partes.parcelaN, partes.parcelaTotal),

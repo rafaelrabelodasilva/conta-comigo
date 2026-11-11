@@ -419,8 +419,9 @@ describe("resumoDaClassificacao (passo final da importação)", () => {
       casados: 0,
       naoVieram: 0,
       herdadas: 0,
+      divididas: 0,
     });
-    expect(resumoDaClassificacao([])).toEqual({ classificados: 0, paraRevisar: 0, casados: 0, naoVieram: 0, herdadas: 0 });
+    expect(resumoDaClassificacao([])).toEqual({ classificados: 0, paraRevisar: 0, casados: 0, naoVieram: 0, herdadas: 0, divididas: 0 });
   });
 
   it("conta as parcelas que herdaram a classificação da anterior (História 3.7), sem os Ajustes", () => {
@@ -444,6 +445,7 @@ describe("resumoDaClassificacao (passo final da importação)", () => {
       casados: 2,
       naoVieram: 2,
       herdadas: 0,
+      divididas: 0,
     });
   });
 });

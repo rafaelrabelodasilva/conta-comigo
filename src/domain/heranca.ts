@@ -14,13 +14,16 @@
 //   `ordem_fatura` e `id`). Candidata cuja Série já tem a parcela n não serve.
 // - Campo a campo: onde a candidata tem valor, vale a herança; as Regras só
 //   completam o que falta (decisão Q2-A). Completo → sem motivo.
-// - Divisão (3.8) entra em `CAMPOS_HERDADOS` quando a coluna existir.
+// - Divisão (3.8): a Divisão da candidata é herdada junto com o Responsável,
+//   como um campo só: quem tem Divisão não tem Responsável (a mãe dividida
+//   fica sem ele), e a herança nunca mistura os dois.
 
 import type { DadosRevisao, DadosValorMudou, MotivoRevisao } from "./classificacao";
+import { copiarDivisao, estaClassificada, type Divisao } from "./divisao";
 import type { ChaveDaSerie } from "./previstos";
 
-/** Os campos de classificação que a parcela anterior empresta. A 3.8 acrescenta `divisao`. */
-export const CAMPOS_HERDADOS = ["responsavel_id", "tipo_id", "apelido", "observacao"] as const;
+/** Os campos de classificação que a parcela anterior empresta. */
+export const CAMPOS_HERDADOS = ["responsavel_id", "tipo_id", "apelido", "observacao", "divisao"] as const;
 
 export type CampoHerdado = (typeof CAMPOS_HERDADOS)[number];
 
@@ -37,6 +40,8 @@ export type CandidataParaHerdar = {
   tipo_id: string | null;
   apelido: string | null;
   observacao: string | null;
+  /** A Divisão da candidata (3.8), lida do `jsonb` do banco por `lerDivisao`. */
+  divisao?: Divisao | null;
   /** A Série da candidata; null se ela foi gravada antes da 3.5. */
   serie: ChaveDaSerie | null;
   /** A Série já tem a parcela seguinte (n) fora da Fatura do Mês: a candidata não serve. */
@@ -93,19 +98,23 @@ export type ClassificacaoParaMesclar = {
   tipo_id: string | null;
   apelido?: string | null;
   observacao?: string | null;
+  divisao?: Divisao | null;
   revisao_motivo: MotivoRevisao | null;
   revisao_dados: DadosRevisao | DadosValorMudou | null;
 };
 
 /** A candidata empresta algum campo? (Candidata sem classificação não conta como herança.) */
 export function emprestaAlgo(c: Pick<CandidataParaHerdar, CampoHerdado>): boolean {
-  return CAMPOS_HERDADOS.some((campo) => c[campo] !== null);
+  return CAMPOS_HERDADOS.some((campo) => (c[campo] ?? null) !== null);
 }
 
 /**
  * Junta a classificação da candidata à da linha: campo a campo, a candidata
- * vale onde tem valor e a linha (Regras) completa o resto. Completo (Responsável
- * e Tipo) → sem motivo; incompleto → o motivo da classificação normal.
+ * vale onde tem valor e a linha (Regras) completa o resto. Responsável e
+ * Divisão são um campo só: a candidata dividida deixa a linha dividida e sem
+ * Responsável; a candidata com Responsável tira a Divisão que a Regra pôs.
+ * Completo (Tipo e Responsável ou Divisão) → sem motivo; incompleto → o motivo
+ * da classificação normal.
  */
 export function mesclarHerdada(
   l: ClassificacaoParaMesclar,
@@ -113,13 +122,27 @@ export function mesclarHerdada(
 ): Required<Pick<ClassificacaoParaMesclar, "responsavel_id" | "tipo_id" | "revisao_motivo" | "revisao_dados">> & {
   apelido: string | null;
   observacao: string | null;
+  divisao: Divisao | null;
 } {
-  const responsavel_id = c.responsavel_id ?? l.responsavel_id;
+  const daCandidata = c.divisao ?? null;
+  let responsavel_id: string | null;
+  let divisao: Divisao | null;
+  if (daCandidata !== null) {
+    responsavel_id = null;
+    divisao = copiarDivisao(daCandidata);
+  } else if (c.responsavel_id !== null) {
+    responsavel_id = c.responsavel_id;
+    divisao = null;
+  } else {
+    responsavel_id = l.responsavel_id;
+    divisao = l.divisao ?? null;
+  }
   const tipo_id = c.tipo_id ?? l.tipo_id;
-  const completa = responsavel_id !== null && tipo_id !== null;
+  const completa = estaClassificada({ responsavel_id, tipo_id, divisao });
   return {
     responsavel_id,
     tipo_id,
+    divisao,
     apelido: c.apelido ?? l.apelido ?? null,
     observacao: c.observacao ?? l.observacao ?? null,
     revisao_motivo: completa ? null : (l.revisao_motivo ?? "sem_classificacao"),

@@ -207,6 +207,7 @@ export type Database = {
           created_at: string
           data: string | null
           dividido_de_id: string | null
+          divisao: Json | null
           duvida_extracao: boolean
           editado_em: string | null
           excluido_em: string | null
@@ -240,6 +241,7 @@ export type Database = {
           created_at?: string
           data?: string | null
           dividido_de_id?: string | null
+          divisao?: Json | null
           duvida_extracao?: boolean
           editado_em?: string | null
           excluido_em?: string | null
@@ -273,6 +275,7 @@ export type Database = {
           created_at?: string
           data?: string | null
           dividido_de_id?: string | null
+          divisao?: Json | null
           duvida_extracao?: boolean
           editado_em?: string | null
           excluido_em?: string | null
@@ -363,6 +366,7 @@ export type Database = {
           chave: string
           contagem: NonNullable<Json>
           created_at: string
+          divisao: Json | null
           id: string
           owner_id: string
           responsavel_id: string | null
@@ -375,6 +379,7 @@ export type Database = {
           chave: string
           contagem?: NonNullable<Json>
           created_at?: string
+          divisao?: Json | null
           id?: string
           owner_id?: string
           responsavel_id?: string | null
@@ -387,6 +392,7 @@ export type Database = {
           chave?: string
           contagem?: NonNullable<Json>
           created_at?: string
+          divisao?: Json | null
           id?: string
           owner_id?: string
           responsavel_id?: string | null
@@ -552,6 +558,7 @@ export type Database = {
           usos: number
         }[]
       }
+      dividir_lancamento: { Args: { p_itens: Json }; Returns: Json }
       importar_fatura: {
         Args: {
           dados_cartoes: Json
@@ -564,6 +571,7 @@ export type Database = {
         }
         Returns: Json
       }
+      recriar_filhas: { Args: { p_mae_id: string; p_partes: Json }; Returns: string[] }
       referencias_cadastro: {
         Args: never
         Returns: {
