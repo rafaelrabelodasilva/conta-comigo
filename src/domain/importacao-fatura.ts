@@ -26,7 +26,7 @@
 //   resultado em `Importacao.previstos`.
 
 import { reconhecerAjustes } from "./ajustes";
-import type { DadosRevisao, MotivoRevisao } from "./classificacao";
+import type { DadosRevisao, DadosValorMudou, MotivoRevisao } from "./classificacao";
 import { ehData } from "./ciclo";
 import { LIMITE_AJUSTE_PADRAO_CENTAVOS } from "./configuracoes";
 import { dois } from "./datas";
@@ -142,9 +142,11 @@ export type LancamentoParaGravar = {
   responsavel_id: string | null;
   tipo_id: string | null;
   revisao_motivo: MotivoRevisao | null;
-  revisao_dados: DadosRevisao | null;
-  /** Série da parcela (História 3.5); null à vista, em crédito e no Ajuste. */
+  revisao_dados: DadosRevisao | DadosValorMudou | null;
+  /** Série da parcela (História 3.5); null à vista, em crédito, no Ajuste e no casado (a Série é a do previsto). */
   serie: ChaveDaSerie | null;
+  /** Previsto que esta linha casou (História 3.6): a RPC o transforma nesta linha, mantendo o `id`. */
+  previsto_id?: string | null;
 };
 
 export type Importacao = {
@@ -153,6 +155,8 @@ export type Importacao = {
   lancamentos: LancamentoParaGravar[];
   /** Parcelas previstas dos Meses seguintes (vazio até a tela chamar `gerarPrevistos`). */
   previstos: PrevistoParaGravar[];
+  /** Ids dos previstos do Mês que a Fatura não trouxe (História 3.6): ganham "Não veio na fatura". */
+  previstos_sem_par?: string[];
 };
 
 const LEITURA_FALHOU = (detalhe: string): Resultado<never> => ({
@@ -367,6 +371,8 @@ export type LinhaParaReimportar = {
   tipo_id: string | null;
   observacao: string | null;
   status_id: string | null;
+  /** Quando o previsto foi casado com a Fatura (História 3.6); nulo se a linha nunca foi previsto. */
+  casado_em?: string | null;
 };
 
 export type ResumoReimportacao = {
@@ -378,6 +384,8 @@ export type ResumoReimportacao = {
   excluidos: number;
   /** Previstos que a Fatura criou, ainda `sistema`, sem edição e não excluídos: a reimportação os apaga (História 3.5). */
   previstos?: number;
+  /** Linhas da Fatura que nasceram de um previsto (não excluídas): a reimportação simples as apagaria e a RPC recusa (História 3.6). */
+  casados?: number;
 };
 
 /**
@@ -394,12 +402,14 @@ export function resumirReimportacao(
   let quantidade = 0;
   let mexidos = 0;
   let excluidos = 0;
+  let casados = 0;
   for (const l of linhas) {
     if (l.excluido_em !== null) {
       excluidos++;
       continue;
     }
     quantidade++;
+    if ((l.casado_em ?? null) !== null) casados++;
     const mexido =
       l.responsavel_id !== null ||
       l.tipo_id !== null ||
@@ -407,5 +417,11 @@ export function resumirReimportacao(
       l.status_id !== statusPadraoId;
     if (mexido) mexidos++;
   }
-  return previstosAApagar > 0 ? { quantidade, mexidos, excluidos, previstos: previstosAApagar } : { quantidade, mexidos, excluidos };
+  return {
+    quantidade,
+    mexidos,
+    excluidos,
+    ...(previstosAApagar > 0 ? { previstos: previstosAApagar } : {}),
+    ...(casados > 0 ? { casados } : {}),
+  };
 }

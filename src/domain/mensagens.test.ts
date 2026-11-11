@@ -38,6 +38,13 @@ import {
   ETAPAS_IMPORTACAO,
   TEXTOS_IMPORTAR,
   avisoReimportar,
+  avisoReimportarBloqueado,
+  rotuloManterClassificacao,
+  rotuloManterPrevisto,
+  rotuloPrevistosCasados,
+  rotuloPrevistosNaoVieram,
+  rotuloRemoverPrevisto,
+  textoValorMudou,
   ROTULO_PREVISTO,
   perguntaAplicarAosPrevistos,
   rotuloOrigemPrevisto,
@@ -696,5 +703,38 @@ describe("previstos (História 3.5)", () => {
 
   it("a recusa sem casamento diz que nada foi gravado", () => {
     expect(mensagem("fatura.previstos_sem_casamento")).toContain("Nada foi gravado");
+  });
+});
+
+describe("textos da História 3.6 (casamento)", () => {
+  it("o erro de previstos mudou e o da reimportação com casados têm mensagem própria", () => {
+    expect(mensagem("fatura.previstos_sem_casamento")).toContain("mudaram durante a importação");
+    expect(mensagem("fatura.reimportacao_com_casados")).toContain("Nada foi gravado");
+    expect(mensagem("fatura.reimportacao_com_casados")).not.toBe(mensagem("fatura.previstos_sem_casamento"));
+  });
+
+  it("o aviso bloqueado diz quantos vieram de previstos e que nada será apagado", () => {
+    expect(avisoReimportarBloqueado("2026-12", 21)).toBe(
+      "Esta fatura já foi importada e 21 lançamentos de dezembro vieram de parcelas previstas. Importar de novo apagaria a classificação deles, e a reimportação que mantém a classificação ainda não existe. Nada será apagado.",
+    );
+    expect(avisoReimportarBloqueado("2026-12", 1)).toContain("1 lançamento de dezembro veio de uma parcela prevista");
+  });
+
+  it("o resumo conta os previstos que casaram e os que não vieram", () => {
+    expect(rotuloPrevistosCasados(1)).toBe("1 previsto casou com a fatura");
+    expect(rotuloPrevistosCasados(21)).toBe("21 previstos casaram com a fatura");
+    expect(rotuloPrevistosNaoVieram(1)).toBe("1 previsto não veio na fatura");
+    expect(rotuloPrevistosNaoVieram(3)).toBe("3 previstos não vieram na fatura");
+  });
+
+  it("'Valor mudou' mostra o antes e o agora", () => {
+    expect(textoValorMudou(44589, 44910)).toBe("Antes R$\u00a0445,89 → agora R$\u00a0449,10");
+    expect(textoValorMudou(null, 44910)).toBe("Valor mudou → agora R$\u00a0449,10");
+  });
+
+  it("nomes acessíveis dos botões novos", () => {
+    expect(rotuloManterClassificacao("MAGALU")).toBe("Manter classificação de MAGALU");
+    expect(rotuloRemoverPrevisto("MAGALU")).toBe("Remover previsto de MAGALU");
+    expect(rotuloManterPrevisto("MAGALU")).toBe("Manter previsto de MAGALU");
   });
 });

@@ -21,9 +21,30 @@ import { normalizarNome } from "./importacao-fatura";
 import { avaliarRegra, chaveDeRegra, regrasUsadas, type CadastrosAtivos, type RegraGravada } from "./regras";
 
 /** Por que a linha está na fila do Revisar (enum `revisao_motivo` do banco). */
-export type MotivoRevisao = "sem_classificacao" | "sugestao" | "sugestao_duvida";
+export type MotivoRevisao =
+  | "sem_classificacao"
+  | "sugestao"
+  | "sugestao_duvida"
+  | "valor_mudou"
+  | "nao_veio_na_fatura";
 
-export const MOTIVOS_REVISAO: readonly MotivoRevisao[] = ["sem_classificacao", "sugestao", "sugestao_duvida"];
+export const MOTIVOS_REVISAO: readonly MotivoRevisao[] = [
+  "sem_classificacao",
+  "sugestao",
+  "sugestao_duvida",
+  "valor_mudou",
+  "nao_veio_na_fatura",
+];
+
+/** `revisao_dados` de "Valor mudou" (História 3.6): o Valor do previsto antes da Fatura. */
+export type DadosValorMudou = { antes_centavos: number };
+
+/** Lê o "antes" de `revisao_dados` de "Valor mudou"; ausente ou inválido → null. */
+export function lerValorAntes(dados: unknown): number | null {
+  if (typeof dados !== "object" || dados === null || Array.isArray(dados)) return null;
+  const v = (dados as Record<string, unknown>).antes_centavos;
+  return typeof v === "number" && Number.isInteger(v) ? v : null;
+}
 
 /** A sugestão guardada em `revisao_dados` (ids só como valores). */
 export type DadosRevisao = {

@@ -83,9 +83,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-4-gerenciar-regras-aprendidas.md`
   summary: Rodar no CI os testes novos de `test/integracao/regras.test.ts` (editar, excluir com DELETE no Realtime e `marcarUso`).
   evidence: Medium não verificado. Esta máquina não tem Docker: os repositórios foram provados só com cliente falso (Vitest) e a tela com jsdom; RLS e Realtime só o teste de integração prova.
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-series-e-parcelas-previstas.md`
-  summary: Antes da 3.6 (casamento) ou do Épico 6 (Pagamentos) irem para produção, trocar a reimportação simplificada pela Story 3.12 ou fazer a RPC recusar com código próprio quando uma linha da Fatura for previsto casado ou tiver Pagamento.
-  evidence: Medium. Com a 3.5 só, a reimportação simplificada é segura (decisão 3-A: apaga as linhas da Fatura e os previstos `sistema` não editados que ela criou, religa os demais, a Série sobrevive e `origem_lancamento_id` é `set null`), porque ainda não existe previsto casado (a linha vira real e ganha `fatura_id`) nem Pagamento. A partir da 3.6 a apagação destruiria o `id` e a classificação dos casados. Substitui, para a 3.5, a pendência de mesmo teor da 3.11.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-6-casar-os-previstos-com-a-fatura-real.md`
+  summary: Fazer a Story 3.12 (reimportar mantendo a classificação) antes do Épico 6, e dar ao Pagamento uma trava própria na RPC `importar_fatura` se a 3.12 ainda não existir.
+  evidence: Medium. A 3.6 fechou a parte do casamento da pendência da 3.11/3.5: a RPC recusa a reimportação com `fatura.reimportacao_com_casados` quando a Fatura tem linha com `casado_em` (e o aviso do passo 3 só deixa "Cancelar"). Sem casado a reimportação simplificada segue como na 3.11. Quem reimportar uma Fatura já casada espera a 3.12; o Pagamento (Épico 6) ainda não tem trava.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-5-series-e-parcelas-previstas.md`
   summary: Rodar no CI a migração `20261114120000_series_previstos.sql`, `test/integracao/series.test.ts` e a comparação de `database.types.ts` com `supabase gen types`.
   evidence: Medium não verificado. Esta máquina não tem Docker: a migração e a RPC `importar_fatura` foram provadas num Postgres em memória (pglite) com todas as migrações em ordem e os cenários do teste de integração (Série, previstos, duas compras idênticas, recusa sem casamento, Mês com Fatura, reimportação). RLS, Realtime e o formato exato dos tipos gerados só o CI prova; as entradas de `series` e das colunas novas em `database.types.ts` foram escritas à mão no formato do gerado.
@@ -101,3 +101,21 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-5-series-e-parcelas-previstas.md`
   summary: Conferir no iPad se o VoiceOver lê "Nome, previsto, Valor, Parcela, Responsável, Status" na linha de um previsto.
   evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4; o jsdom só confere o `aria-label`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-6-casar-os-previstos-com-a-fatura-real.md`
+  summary: Conferir o casamento de verdade na primeira Fatura que tenha previstos no Mês (dez/26, com 21 previstos): os previstos viram a linha real com o mesmo `id`, "Valor mudou" e "Não veio na fatura" aparecem na fila, o resumo do passo 3 conta os casados e reimportar essa Fatura é recusada.
+  evidence: Medium não verificado em produção. Hoje out/26 e nov/26 não têm previstos para casar (decisão Q4-A da 3.6): a migração e a RPC foram provadas só no Postgres em memória (pglite) e no Vitest. O que o Rafael pode ver no iPad antes de dez/26 é a regressão (Painel, Revisar, reimportar nov/26).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-6-casar-os-previstos-com-a-fatura-real.md`
+  summary: Rodar no CI a migração `20261115120000_casar_previstos.sql`, `test/integracao/casamento.test.ts` e a comparação de `database.types.ts` com `supabase gen types`.
+  evidence: Medium não verificado. Esta máquina não tem Docker: a migração (valores novos do enum, `casado_em`, RPC de 7 argumentos) e os cenários da matriz rodaram no pglite com todas as migrações em ordem; RLS, Realtime e o formato exato dos tipos só o CI prova (as entradas de `casado_em`, do enum e de `previstos_sem_par` foram escritas à mão no formato do gerado).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-6-casar-os-previstos-com-a-fatura-real.md`
+  summary: Decidir se o Valor novo de um casado com "Valor mudou" deve atualizar os previstos seguintes da Série (hoje cada Mês avisa "Valor mudou" de novo, decisão Q3-A).
+  evidence: Low. O casamento só toca o Mês importado; a parcela 05/10 com Valor diferente deixa 06/10…10/10 com o Valor antigo, e cada um avisa quando a Fatura chegar.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-6-casar-os-previstos-com-a-fatura-real.md`
+  summary: Tratar a parcela que chega num Mês diferente do previsto (a Fatura atrasa ou adianta uma parcela).
+  evidence: Low. O previsto casa só com a Fatura do próprio Mês (`mes` fixo, AD-9); a parcela fora do Mês vira linha nova com Série nova (a chave usa o Mês da Fatura) e o previsto original fica "Não veio na fatura" até Rafael remover.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-6-casar-os-previstos-com-a-fatura-real.md`
+  summary: Conferir no iPad se o VoiceOver lê com sentido as variantes "Valor mudou" ("Antes → agora") e "Não veio na fatura" ("Remover previsto" / "Manter") do Revisar.
+  evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4; o jsdom só confere o DOM e os nomes acessíveis.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-6-casar-os-previstos-com-a-fatura-real.md`
+  summary: Reimportar a Fatura de um Mês apaga em silêncio os previstos "Não veio na fatura" dos Meses seguintes que ela criou (origem na Fatura apagada, ainda `sistema` e sem edição), sem a pergunta que "Manter" evitaria.
+  evidence: Low. É a regra da reimportação simplificada (3.5, decisão 3-A): os previstos intocados são apagados e recriados só nos Meses sem Fatura. Com a 3.12 isso muda (previstos que tinham casado voltam a `sistema`).

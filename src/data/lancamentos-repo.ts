@@ -51,6 +51,12 @@
 // são de outros Meses: a memória (só o Mês aberto) guarda apenas os do Mês
 // aberto. `aplicarAosPrevistos` grava a resposta "Aplicar a todos".
 // `lerOrigem` lê a linha que gerou um previsto e o vencimento da Fatura dela.
+//
+// Casamento (História 3.6): `manterPrevisto` é o "Manter" da variante "Não
+// veio na fatura": o previsto sai da fila (`revisao_motivo` e `revisao_dados`
+// nulos, `revisado_em`) e continua previsto, sem ensinar Regra. O "Desfazer" é
+// `devolverAFila`. "Remover previsto" é o `excluir` de sempre e o "Desfazer"
+// dele, o `restaurar`.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MudancaCampo, NovoLancamento } from "@/domain/lancamento";
@@ -496,6 +502,17 @@ export function criarRepoLancamentos(deps: {
       const ids = todos(id, opcoes.junto);
       if (ids.every((i) => memoria.linha(i))) return gravar(ids, { excluido_em: null });
       return gravarSemMemoria(ids, { excluido_em: null });
+    },
+
+    /**
+     * "Manter" de um previsto que a Fatura não trouxe: só limpa o motivo da
+     * fila e marca `revisado_em`. A classificação e o resto da linha não mudam.
+     */
+    manterPrevisto(id: string, agora: Date = new Date()): Promise<ResultadoLancamento> {
+      const bloqueio = semConexao(online);
+      if (bloqueio) return Promise.resolve(bloqueio);
+      if (!memoria.linha(id)) return Promise.resolve(FALHOU);
+      return gravar([id], { revisao_motivo: null, revisao_dados: null, revisado_em: agora.toISOString() });
     },
 
     /**

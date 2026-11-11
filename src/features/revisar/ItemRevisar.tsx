@@ -8,8 +8,11 @@ import {
   TEXTOS_REVISAR as T,
   rotuloAjusteDoItem,
   rotuloConfirmarItem,
+  rotuloManterClassificacao,
+  rotuloManterPrevisto,
   rotuloMesDoItem,
   rotuloMudarItem,
+  rotuloRemoverPrevisto,
   rotuloRepeticao,
   rotuloSelecionar,
 } from "@/domain/mensagens";
@@ -40,9 +43,23 @@ export type PropsItemRevisar = {
   aoMarcar: (item: ItemDaFila) => void;
   aoConfirmar: (item: ItemDaFila) => void;
   aoMudar: (item: ItemDaFila) => void;
+  /** "Não veio na fatura": "Remover previsto" (exclui o previsto). */
+  aoRemoverPrevisto?: (item: ItemDaFila) => void;
+  /** "Não veio na fatura": "Manter" (tira da fila e continua previsto). */
+  aoManterPrevisto?: (item: ItemDaFila) => void;
 };
 
-export function ItemRevisar({ item, comMes, ocupado = false, marcado, aoMarcar, aoConfirmar, aoMudar }: PropsItemRevisar) {
+export function ItemRevisar({
+  item,
+  comMes,
+  ocupado = false,
+  marcado,
+  aoMarcar,
+  aoConfirmar,
+  aoMudar,
+  aoRemoverPrevisto,
+  aoManterPrevisto,
+}: PropsItemRevisar) {
   const parcela = formatarParcela(item.parcelaN, item.parcelaTotal);
   // "Mês · DD/MM · Parcela · Valor · 2 de 3": a data e a posição separam compras iguais da Fatura.
   const detalhe = [
@@ -55,6 +72,8 @@ export function ItemRevisar({ item, comMes, ocupado = false, marcado, aoMarcar, 
     .filter((p): p is string => p !== null)
     .join(" · ");
   const semSugestao = item.variante === "sem_sugestao";
+  const valorMudou = item.variante === "valor_mudou";
+  const naoVeio = item.variante === "nao_veio";
   return (
     <li
       data-variante={item.variante}
@@ -64,7 +83,12 @@ export function ItemRevisar({ item, comMes, ocupado = false, marcado, aoMarcar, 
         marcado && "bg-selection",
       )}
     >
-      <CaixaLote rotulo={rotuloSelecionar(item.nome)} estado={marcado ? "todos" : "nenhum"} aoMudar={() => aoMarcar(item)} />
+      {/* "Não veio na fatura" não entra no lote: a coluna fica vazia para as outras se alinharem. */}
+      {item.selecionavel ? (
+        <CaixaLote rotulo={rotuloSelecionar(item.nome)} estado={marcado ? "todos" : "nenhum"} aoMudar={() => aoMarcar(item)} />
+      ) : (
+        <span aria-hidden />
+      )}
       <div className="min-w-0">
         <p className="truncate texto-body-strong">{item.nome}</p>
         <p className="texto-number text-text-muted">{detalhe}</p>
@@ -75,33 +99,68 @@ export function ItemRevisar({ item, comMes, ocupado = false, marcado, aoMarcar, 
           </p>
         ))}
       </div>
-      <p className="text-right">
-        <span className="block min-h-4 texto-caption text-text-muted">{semSugestao ? "" : T.sugestao}</span>
-        <span className="block texto-body-strong">{semSugestao ? T.sem_sugestao : item.sugestao}</span>
-        {item.duvida ? <span className="block texto-caption text-text-muted">{item.duvida}</span> : null}
-      </p>
-      <div className="flex justify-end">
-        {item.confirmavel ? (
+      {naoVeio ? (
+        <>
+          <p className="text-right">
+            <span className="block min-h-4 texto-caption text-text-muted">{T.previsto}</span>
+            <span className="block texto-body-strong">{T.nao_veio}</span>
+          </p>
+          <div className="col-span-2 flex justify-end gap-2">
+            <Botao
+              aria-label={rotuloRemoverPrevisto(item.nome)}
+              disabled={ocupado}
+              onClick={() => aoRemoverPrevisto?.(item)}
+              className="flex-1 px-1.5"
+            >
+              {T.remover_previsto}
+            </Botao>
+            <Botao
+              variante="primario"
+              aria-label={rotuloManterPrevisto(item.nome)}
+              disabled={ocupado}
+              onClick={() => aoManterPrevisto?.(item)}
+              className="w-20 px-1.5"
+            >
+              {T.manter}
+            </Botao>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-right">
+            <span className="block min-h-4 texto-caption text-text-muted">
+              {valorMudou ? T.valor_mudou : semSugestao ? "" : T.sugestao}
+            </span>
+            <span className="block texto-body-strong">
+              {valorMudou ? item.texto : semSugestao ? T.sem_sugestao : item.sugestao}
+            </span>
+            {valorMudou && item.sugestao ? <span className="block texto-caption text-text-muted">{item.sugestao}</span> : null}
+            {item.duvida ? <span className="block texto-caption text-text-muted">{item.duvida}</span> : null}
+          </p>
+          <div className="flex justify-end">
+            {item.confirmavel ? (
+              <Botao
+                variante="primario"
+                aria-label={valorMudou ? rotuloManterClassificacao(item.nome) : rotuloConfirmarItem(item.nome)}
+                title={valorMudou ? T.manter_classificacao : T.confirmar}
+                disabled={ocupado}
+                onClick={() => aoConfirmar(item)}
+                className="size-11 px-0 text-base"
+              >
+                <span aria-hidden>✓</span>
+              </Botao>
+            ) : null}
+          </div>
           <Botao
-            variante="primario"
-            aria-label={rotuloConfirmarItem(item.nome)}
-            title={T.confirmar}
+            aria-label={rotuloMudarItem(item.nome)}
             disabled={ocupado}
-            onClick={() => aoConfirmar(item)}
-            className="size-11 px-0 text-base"
+            onClick={() => aoMudar(item)}
+            className="w-full px-1.5"
           >
-            <span aria-hidden>✓</span>
+            {T.mudar}
           </Botao>
-        ) : null}
-      </div>
-      <Botao
-        aria-label={rotuloMudarItem(item.nome)}
-        disabled={ocupado}
-        onClick={() => aoMudar(item)}
-        className="w-full px-1.5"
-      >
-        {T.mudar}
-      </Botao>
+        </>
+      )}
     </li>
   );
 }

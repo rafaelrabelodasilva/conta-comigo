@@ -203,6 +203,7 @@ export type Database = {
         Row: {
           ajuste_de_id: string | null
           apelido: string | null
+          casado_em: string | null
           created_at: string
           data: string | null
           dividido_de_id: string | null
@@ -235,6 +236,7 @@ export type Database = {
         Insert: {
           ajuste_de_id?: string | null
           apelido?: string | null
+          casado_em?: string | null
           created_at?: string
           data?: string | null
           dividido_de_id?: string | null
@@ -267,6 +269,7 @@ export type Database = {
         Update: {
           ajuste_de_id?: string | null
           apelido?: string | null
+          casado_em?: string | null
           created_at?: string
           data?: string | null
           dividido_de_id?: string | null
@@ -556,6 +559,7 @@ export type Database = {
           dados_lancamentos: Json
           dados_previstos?: Json
           lancamentos_atualizados_em?: string
+          previstos_sem_par?: Json
           substituir_fatura_id?: string
         }
         Returns: Json
@@ -608,7 +612,12 @@ export type Database = {
     }
     Enums: {
       lancado_por: "fatura" | "sistema" | "manual" | "historico"
-      revisao_motivo: "sem_classificacao" | "sugestao" | "sugestao_duvida"
+      revisao_motivo:
+        | "sem_classificacao"
+        | "sugestao"
+        | "sugestao_duvida"
+        | "valor_mudou"
+        | "nao_veio_na_fatura"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -740,7 +749,13 @@ export const Constants = {
   public: {
     Enums: {
       lancado_por: ["fatura", "sistema", "manual", "historico"],
-      revisao_motivo: ["sem_classificacao", "sugestao", "sugestao_duvida"],
+      revisao_motivo: [
+        "sem_classificacao",
+        "sugestao",
+        "sugestao_duvida",
+        "valor_mudou",
+        "nao_veio_na_fatura",
+      ],
     },
   },
 } as const

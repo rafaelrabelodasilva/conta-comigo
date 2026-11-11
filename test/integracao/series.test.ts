@@ -1,7 +1,7 @@
 // Prova, contra o Supabase local (CI), as Séries e os previstos (História 3.5):
 // a RPC `importar_fatura` acha ou cria a Série de cada parcela, cria os
 // previstos n+1/N a N/N nos Meses seguintes (mes = somarMeses), não duplica ao
-// reinserir, recusa a parcela que já tem previsto (o casamento é da 3.6), não
+// reinserir, recusa a parcela que já tem previsto quando o núcleo não calculou o casamento (rede de segurança; o casamento é da 3.6), não
 // cria previsto em Mês que já tem Fatura e, na reimportação simplificada,
 // apaga só os previstos que ninguém tocou. O teste de aceite: duas compras
 // idênticas na mesma Fatura são duas Séries (ocorrencia 1 e 2), sem erro.
@@ -192,8 +192,8 @@ describe.skipIf(!ligado)("Séries e previstos no Supabase local", () => {
     expect(livre.error).toBeNull();
   });
 
-  it("linha real em parcela que já tem previsto: fatura.previstos_sem_casamento e nada é gravado", async () => {
-    // O 07/10 de MAGALU existe em dez/26 (previsto). Importar dez/26 com a mesma parcela é o caso da 3.6.
+  it("linha real em parcela que já tem previsto, sem o casamento calculado: fatura.previstos_sem_casamento e nada é gravado (rede de segurança; o casamento da 3.6 está em casamento.test.ts)", async () => {
+    // O 07/10 de MAGALU existe em dez/26 (previsto). Sem o plano do núcleo, a RPC não decide sozinha.
     const antes = await local.admin.from("faturas").select("id", { count: "exact", head: true }).eq("owner_id", a.id);
     const { data: ult } = await local.admin
       .from("lancamentos")

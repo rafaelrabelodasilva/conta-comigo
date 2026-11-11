@@ -710,6 +710,31 @@ describe("fila do Revisar (História 3.2)", () => {
     expect(m.memoria.linhas()).toEqual([]);
   });
 
+  it("Manter um previsto que a Fatura não trouxe: limpa o motivo e os dados, marca revisado_em, sem Regra; o Desfazer o devolve à fila (História 3.6)", async () => {
+    const aprender = vi.fn(async () => ({ ok: true }));
+    const dados = { responsavel_id: "r-casal", tipo_id: "t-casa" };
+    const p = linha("p", { mes: "2026-11", lancado_por: "sistema", fatura_id: null, revisao_motivo: "nao_veio_na_fatura", revisao_dados: null, ...dados });
+    const m = montar([p], (c) => ({ data: linha("p", { ...p, ...c.corpo, updated_at: T2 }), error: null }), { aprender, fila: true });
+    await aguardar(m);
+    const r = await m.repo.manterPrevisto("p", AGORA);
+    expect(m.chamadas).toEqual([
+      { tipo: "update", corpo: { revisao_motivo: null, revisao_dados: null, revisado_em: AGORA_ISO }, id: "p" },
+    ]);
+    expect(r.ok).toBe(true);
+    expect(m.memoria.linhas()).toEqual([]);
+    expect(aprender).not.toHaveBeenCalled();
+
+    await m.repo.devolverAFila("p", { ...dados, revisao_motivo: "nao_veio_na_fatura", revisao_dados: null, revisado_em: null });
+    expect(m.chamadas[1].corpo).toMatchObject({ revisao_motivo: "nao_veio_na_fatura", revisado_em: null });
+  });
+
+  it("Manter fora da memória da fila: falha sem gravar", async () => {
+    const m = montar([], () => ({ data: null, error: null }), { fila: true });
+    await aguardar(m);
+    expect(await m.repo.manterPrevisto("nao-existe", AGORA)).toMatchObject({ ok: false });
+    expect(m.chamadas).toEqual([]);
+  });
+
   it("linha da fila que já tem os dois: confirmar ainda a tira da fila", async () => {
     const a = sugerida("a", { responsavel_id: "r-casal", tipo_id: "t-casa" });
     const m = montar([a], (c) => ({ data: linha("a", { ...a, ...c.corpo, updated_at: T2 }), error: null }), { fila: true });
