@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { chavesDeRegrasUsadas, classificarImportacao } from "@/domain/classificacao";
 import { LIMITE_AJUSTE_PADRAO_CENTAVOS } from "@/domain/configuracoes";
 import { removerDadosPessoais } from "@/domain/dados-pessoais";
+import type { CandidataParaHerdar } from "@/domain/heranca";
 import {
   conferirImportacao,
   pareceFaturaSantander,
@@ -27,6 +28,7 @@ import {
   rotuloPassoImportar,
   rotuloReimportado,
   rotuloResumoClassificacao,
+  rotuloParcelasHerdadas,
   rotuloPrevistosCasados,
   rotuloPrevistosCriados,
   rotuloPrevistosNaoVieram,
@@ -82,6 +84,12 @@ import { TotalAPagar } from "./TotalAPagar";
 // recusa se isso criaria duas linhas para a mesma parcela). Fatura com linhas
 // casadas não reimporta: o aviso só tem "Cancelar" (a RPC recusa também).
 //
+// Herança (História 3.7): junto dos previstos, lê do banco as parcelas n−1 do
+// Mês anterior (`lerParcelasDoMesAnterior`; a memória guarda só o Mês aberto).
+// As parcelas n > 1 que ficaram sem previsto herdam a classificação da n−1 de
+// mesmo Nome e Valor (`aplicarCasamento`, `heranca.ts`) e o passo 3 diz quantas.
+// Falhou ao ler ou passou do limite: importa sem herdar, como as Regras.
+//
 // Depois de gravar (História 3.2): com linhas para revisar, o passo 3 mostra
 // "N classificados · N para revisar" com "Ir para revisão" (principal) e "Ver
 // no Painel"; sem nenhuma, a janela fecha como antes. O Mês importado já foi
@@ -110,7 +118,7 @@ type Estado =
   | { tipo: "processando"; passo: Passo; etapa: EtapaImportacao }
   | { tipo: "falha_leitura"; codigo: string }
   /** Gravou e há linhas para revisar: o resumo e os dois caminhos. */
-  | { tipo: "concluido"; classificados: number; paraRevisar: number; casados: number; naoVieram: number }
+  | { tipo: "concluido"; classificados: number; paraRevisar: number; casados: number; naoVieram: number; herdadas: number }
   | {
       tipo: "conferir";
       importacao: Importacao;
@@ -196,7 +204,12 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
   // O `updated_at` do Mês lido junto dos previstos do casamento: a trava da RPC.
   const previstosLidosEm = useRef<{ mes: string; atualizadoEm: string | null } | null>(null);
   // O que o casamento precisa para ser refeito se os previstos do Mês mudarem antes de gravar.
-  const planoDoCasamento = useRef<{ mes: string; base: Importacao; classificadas: LancamentoParaGravar[] } | null>(null);
+  const planoDoCasamento = useRef<{
+    mes: string;
+    base: Importacao;
+    classificadas: LancamentoParaGravar[];
+    candidatas: CandidataParaHerdar[];
+  } | null>(null);
 
   const gravando = estado.tipo === "conferir" && estado.gravando;
 
@@ -251,18 +264,19 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     if (minha !== geracao.current) return;
     const mes = importacao.valor.fatura.mes;
     const temFatura = atuais.current.faturas.some((f) => f.mes === mes);
-    const [lidas, prontos, reimportar, previstosLidos] = await Promise.all([
+    const [lidas, prontos, reimportar, previstosLidos, candidatas] = await Promise.all([
       comLimite(lerRegras(), []),
       esperarCadastros(),
       temFatura ? comLimite(lerAviso(mes), AVISO_NO_LIMITE) : Promise.resolve(null),
       comLimite(lerPrevistos(mes), null),
+      comLimite(lerCandidatas(mes), []),
     ]);
     if (minha !== geracao.current) return;
     const { responsaveis: r, tipos: t } = cadastros.current;
     const paraClassificar = prontos ? { responsaveis: r, tipos: t } : { responsaveis: [], tipos: [] };
     const classificadas = classificarImportacao(importacao.valor.lancamentos, lidas, paraClassificar);
-    planoDoCasamento.current = { mes, base: importacao.valor, classificadas };
-    const classificada = montarComCasamento(importacao.valor, classificadas, previstosLidos);
+    planoDoCasamento.current = { mes, base: importacao.valor, classificadas, candidatas };
+    const classificada = montarComCasamento(importacao.valor, classificadas, previstosLidos, candidatas);
     // As Regras que esta importação usou: ganham `ultimo_uso` quando a Fatura for gravada.
     regrasUsadasNaImportacao.current = chavesDeRegrasUsadas(importacao.valor.lancamentos, lidas, paraClassificar);
     setEstado({ tipo: "conferir", importacao: classificada, conferencia, gravando: false, erro: null, reimportar });
@@ -277,11 +291,12 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     base: Importacao,
     classificadas: LancamentoParaGravar[],
     previstosLidos: LeituraDePrevistos | null,
+    candidatas: readonly CandidataParaHerdar[],
   ): Importacao {
     const mes = base.fatura.mes;
     const previstosDoMes = previstosLidos?.previstos ?? [];
     const casamento = casarPrevistos(classificadas, previstosDoMes);
-    const lancamentos = aplicarCasamento(classificadas, casamento, previstosDoMes);
+    const lancamentos = aplicarCasamento(classificadas, casamento, previstosDoMes, candidatas);
     previstosLidosEm.current = previstosLidos ? { mes, atualizadoEm: previstosLidos.atualizadoEm } : null;
     // Previstos (História 3.5): copiam a classificação já calculada; Mês que já tem Fatura fica de fora.
     return {
@@ -306,7 +321,17 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     if (!plano || plano.mes !== mes) return null;
     const lidos = await lerPrevistos(mes);
     if (!lidos) return null;
-    return montarComCasamento(plano.base, plano.classificadas, lidos);
+    return montarComCasamento(plano.base, plano.classificadas, lidos, plano.candidatas);
+  }
+
+  /** As parcelas n−1 do Mês anterior, do banco; falhou → nenhuma (importa sem herdar). */
+  async function lerCandidatas(mes: string): Promise<CandidataParaHerdar[]> {
+    try {
+      const r = await repoFaturas().lerParcelasDoMesAnterior(mes);
+      return r.ok ? r.candidatas : [];
+    } catch {
+      return [];
+    }
   }
 
   /** Os previstos do Mês e o `updated_at` do Mês, do banco; falhou → null (importa sem casar). */
@@ -470,7 +495,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
       const resumo = resumoDaClassificacao(atual.importacao.lancamentos, atual.importacao.previstos_sem_par?.length ?? 0);
       if (substituir) toast.mostrar({ texto: rotuloReimportado(mes, r.quantidade) });
       aoImportar?.(mes);
-      if (resumo.paraRevisar > 0 || resumo.naoVieram > 0 || resumo.casados > 0) {
+      if (resumo.paraRevisar > 0 || resumo.naoVieram > 0 || resumo.casados > 0 || resumo.herdadas > 0) {
         // Há o que revisar ou previstos casados: o passo 3 mostra o resumo e os caminhos.
         setEstado({ tipo: "concluido", ...resumo });
         return;
@@ -646,6 +671,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
       <div role="status" className="flex flex-col gap-1">
         <p className="texto-body-strong">{rotuloResumoClassificacao(estado.classificados, estado.paraRevisar)}</p>
         {estado.casados > 0 ? <p className="texto-body">{rotuloPrevistosCasados(estado.casados)}</p> : null}
+        {estado.herdadas > 0 ? <p className="texto-body">{rotuloParcelasHerdadas(estado.herdadas)}</p> : null}
         {estado.naoVieram > 0 ? <p className="texto-body">{rotuloPrevistosNaoVieram(estado.naoVieram)}</p> : null}
       </div>
     );
@@ -678,6 +704,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
           : null;
     const f = importacao.fatura;
     const casados = importacao.lancamentos.filter((l) => (l.previsto_id ?? null) !== null).length;
+    const herdadas = importacao.lancamentos.filter((l) => (l.herdado_de_id ?? null) !== null && l.ajuste_de_ordem === null).length;
     const naoVieram = importacao.previstos_sem_par?.length ?? 0;
     // Fatura com linhas casadas não reimporta (a RPC recusa): só "Cancelar".
     const bloqueadaPorCasados = aviso?.tipo === "pronto" && (aviso.resumo.casados ?? 0) > 0;
@@ -701,6 +728,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
         )}
         <p className="texto-body">{rotuloSeraoGravados(importacao.lancamentos.length)}</p>
         {casados > 0 ? <p className="texto-body">{rotuloPrevistosCasados(casados)}</p> : null}
+        {herdadas > 0 ? <p className="texto-body">{rotuloParcelasHerdadas(herdadas)}</p> : null}
         {naoVieram > 0 ? <p className="texto-body text-text-muted">{rotuloPrevistosNaoVieram(naoVieram)}</p> : null}
         {importacao.previstos.length > 0 ? (
           <p className="texto-body text-text-muted">{rotuloPrevistosCriados(importacao.previstos.length)}</p>

@@ -706,6 +706,99 @@ describe("casamento dos previstos (História 3.6)", () => {
     expect(await erro.repo.lerPrevistosDoMes("2026-11")).toEqual({ ok: false, codigo: "carregar.falhou" });
   });
 
+  describe("lerParcelasDoMesAnterior (História 3.7)", () => {
+    const parcela = (id: string, extra: Record<string, unknown> = {}) => ({
+      id,
+      mes: "2026-10",
+      nome_normalizado: "MAGALU",
+      parcela_n: 4,
+      parcela_total: 10,
+      valor_centavos: 44589,
+      ordem_fatura: 3,
+      responsavel_id: "r1",
+      tipo_id: "t1",
+      apelido: null,
+      observacao: null,
+      serie_id: "s1",
+      excluido_em: null,
+      dividido_de_id: null,
+      ajuste_de_id: null,
+      fatura_id: "f0",
+      ...extra,
+    });
+    const serieDeOut = [{ ...serieDe("s1", 1), mes_primeira_parcela: "2026-07" }, { ...serieDe("s2", 2), mes_primeira_parcela: "2026-07" }];
+
+    it("lê as mães do Mês anterior, com a Série e sem excluídas, Ajustes, filhas, outros Meses nem Valor negativo", async () => {
+      const m = montar(
+        {
+          lancamentos: [
+            parcela("c1"),
+            parcela("c2", { serie_id: "s2", ordem_fatura: 4 }),
+            parcela("excluida", { excluido_em: "2026-11-01T00:00:00Z" }),
+            parcela("ajuste", { ajuste_de_id: "c1" }),
+            parcela("filha", { dividido_de_id: "c1" }),
+            parcela("credito", { valor_centavos: -100 }),
+            parcela("a-vista", { parcela_n: null, parcela_total: null }),
+            parcela("outro-mes", { mes: "2026-09" }),
+          ],
+          series: serieDeOut,
+        },
+        () => ({ data: null, error: null }),
+      );
+      const r = await m.repo.lerParcelasDoMesAnterior("2026-11");
+      expect(r.ok && r.candidatas.map((c) => [c.id, c.serie?.ocorrencia, c.serie?.mes_primeira_parcela, c.proxima_ocupada])).toEqual([
+        ["c1", 1, "2026-07", false],
+        ["c2", 2, "2026-07", false],
+      ]);
+      expect(m.leituras[0].filtros).toContain("mes=2026-10");
+    });
+
+    it("sem Série (gravada antes da 3.5) vem com serie nula e não lê as Séries", async () => {
+      const m = montar({ lancamentos: [parcela("c1", { serie_id: null })], series: serieDeOut }, () => ({ data: null, error: null }));
+      const r = await m.repo.lerParcelasDoMesAnterior("2026-11");
+      expect(r.ok && r.candidatas[0]).toMatchObject({ id: "c1", serie: null, proxima_ocupada: false });
+      expect(m.leituras.some((l) => l.tabela === "series")).toBe(false);
+    });
+
+    it("marca a candidata cuja Série já tem a parcela seguinte, menos a da Fatura do próprio Mês e as excluídas", async () => {
+      const seguinte = (id: string, serie_id: string, extra: Record<string, unknown> = {}) =>
+        parcela(id, { mes: "2026-11", parcela_n: 5, serie_id, fatura_id: null, ...extra });
+      const m = montar(
+        {
+          lancamentos: [
+            parcela("c1"),
+            parcela("c2", { serie_id: "s2" }),
+            seguinte("prev1", "s1", { lancado_por: "sistema" }),
+            // a de s2 é da Fatura que está sendo substituída (mes 2026-11 com fatura): não conta
+            seguinte("fatura-velha", "s2", { fatura_id: "f1" }),
+          ],
+          series: serieDeOut,
+        },
+        () => ({ data: null, error: null }),
+      );
+      const r = await m.repo.lerParcelasDoMesAnterior("2026-11");
+      expect(r.ok && r.candidatas.map((c) => [c.id, c.proxima_ocupada])).toEqual([
+        ["c1", true],
+        ["c2", false],
+      ]);
+      const m2 = montar(
+        { lancamentos: [parcela("c1"), seguinte("excl", "s1", { excluido_em: "2026-11-01T00:00:00Z" })], series: serieDeOut },
+        () => ({ data: null, error: null }),
+      );
+      const r2 = await m2.repo.lerParcelasDoMesAnterior("2026-11");
+      expect(r2.ok && r2.candidatas[0].proxima_ocupada).toBe(false);
+    });
+
+    it("Mês anterior sem parcelas devolve lista vazia; sem conexão e erro de leitura viram falha", async () => {
+      const vazio = montar({ lancamentos: [] }, () => ({ data: null, error: null }));
+      expect(await vazio.repo.lerParcelasDoMesAnterior("2026-11")).toEqual({ ok: true, candidatas: [] });
+      const semRede = montar({}, () => ({ data: null, error: null }), () => false);
+      expect((await semRede.repo.lerParcelasDoMesAnterior("2026-11")).ok).toBe(false);
+      const erro = montar({}, () => ({ data: null, error: null }), () => true, { errosDeTabela: { lancamentos: { code: "XX" } } });
+      expect(await erro.repo.lerParcelasDoMesAnterior("2026-11")).toEqual({ ok: false, codigo: "carregar.falhou" });
+    });
+  });
+
   it("importar manda os previstos sem par e usa o updated_at lido junto dos previstos, sem reler", async () => {
     const m = montar({}, () => ({ data: gravados, error: null }));
     await pronto(m);

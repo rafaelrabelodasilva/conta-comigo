@@ -418,8 +418,18 @@ describe("resumoDaClassificacao (passo final da importação)", () => {
       paraRevisar: 1,
       casados: 0,
       naoVieram: 0,
+      herdadas: 0,
     });
-    expect(resumoDaClassificacao([])).toEqual({ classificados: 0, paraRevisar: 0, casados: 0, naoVieram: 0 });
+    expect(resumoDaClassificacao([])).toEqual({ classificados: 0, paraRevisar: 0, casados: 0, naoVieram: 0, herdadas: 0 });
+  });
+
+  it("conta as parcelas que herdaram a classificação da anterior (História 3.7), sem os Ajustes", () => {
+    const l = (herdado_de_id: string | null, ajuste_de_ordem: number | null = null) => ({
+      ajuste_de_ordem,
+      revisao_motivo: null,
+      herdado_de_id,
+    });
+    expect(resumoDaClassificacao([l("c1"), l("c2"), l(null), l("c1", 1)])).toMatchObject({ herdadas: 2, paraRevisar: 0, classificados: 3 });
   });
 
   it("conta os previstos que casaram e os que não vieram (História 3.6)", () => {
@@ -433,6 +443,7 @@ describe("resumoDaClassificacao (passo final da importação)", () => {
       paraRevisar: 1,
       casados: 2,
       naoVieram: 2,
+      herdadas: 0,
     });
   });
 });

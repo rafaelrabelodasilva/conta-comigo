@@ -147,6 +147,11 @@ export type LancamentoParaGravar = {
   serie: ChaveDaSerie | null;
   /** Previsto que esta linha casou (História 3.6): a RPC o transforma nesta linha, mantendo o `id`. */
   previsto_id?: string | null;
+  /** Herdados da parcela n−1 do Mês anterior (História 3.7); a RPC os grava na linha nova. */
+  apelido?: string | null;
+  observacao?: string | null;
+  /** A parcela anterior de que a linha herdou a classificação (só quando emprestou algum campo). */
+  herdado_de_id?: string | null;
 };
 
 export type Importacao = {

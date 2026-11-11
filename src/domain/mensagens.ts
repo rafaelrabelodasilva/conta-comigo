@@ -246,6 +246,11 @@ export function avisoReimportarBloqueado(mes: string, casados: number): string {
   return `Esta fatura já foi importada e ${quais}. Importar de novo apagaria a classificação deles, e a reimportação que mantém a classificação ainda não existe. Nada será apagado.`;
 }
 
+/** Passo 3 e resumo final: "2 herdaram a classificação da parcela anterior" (uma: "1 herdou…"). */
+export function rotuloParcelasHerdadas(n: number): string {
+  return n === 1 ? "1 parcela herdou a classificação da parcela anterior" : `${n} parcelas herdaram a classificação da parcela anterior`;
+}
+
 /** Passo 3 e resumo final: "3 previstos casaram com a fatura" (um: "1 previsto casou com a fatura"). */
 export function rotuloPrevistosCasados(n: number): string {
   return n === 1 ? "1 previsto casou com a fatura" : `${n} previstos casaram com a fatura`;

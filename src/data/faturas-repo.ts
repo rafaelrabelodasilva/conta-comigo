@@ -32,10 +32,16 @@
 //   `lancamentos` e os previstos sem par em `previstos`; só os do Mês aberto
 //   entram na memória. `lerReimportacao` conta as linhas casadas: com elas a
 //   RPC recusa a reimportação (`fatura.reimportacao_com_casados`).
+// - Herança (História 3.7): `lerParcelasDoMesAnterior` lê do banco as parcelas
+//   do Mês anterior ao importado (a memória guarda só o Mês aberto) e, para as
+//   que têm Série, se a Série já tem a parcela seguinte fora da Fatura do Mês.
+//   Não entra na trava da RPC: a herança copia o que havia na leitura.
 // - "Dispensar" o alerta da Conferência (e o "Desfazer"): grava só
 //   `faturas.alerta_dispensado_em`, com otimismo.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { somarMeses } from "@/domain/ciclo";
+import type { CandidataParaHerdar } from "@/domain/heranca";
 import type { Importacao, LinhaParaReimportar } from "@/domain/importacao-fatura";
 import type { PrevistoParaCasar } from "@/domain/previstos";
 import { estaOnline } from "./conexao";
@@ -96,6 +102,13 @@ export type ResultadoLeituraDePrevistos =
   | ({ ok: true } & LeituraDePrevistos)
   | { ok: false; codigo: string };
 
+/** As parcelas n−1 do Mês anterior que podem emprestar a classificação à parcela sem previsto. */
+export type LeituraDeCandidatas = { candidatas: CandidataParaHerdar[] };
+
+export type ResultadoLeituraDeCandidatas =
+  | ({ ok: true } & LeituraDeCandidatas)
+  | { ok: false; codigo: string };
+
 type Removidos = { fatura_id: string; cartoes: string[]; lancamentos: string[]; previstos?: string[] };
 
 type Gravados = {
@@ -138,6 +151,9 @@ function ehGravados(dados: unknown): dados is Gravados {
 
 const COLUNAS_REIMPORTACAO =
   "id, fatura_id, excluido_em, responsavel_id, tipo_id, observacao, status_id, casado_em, updated_at";
+
+const COLUNAS_CANDIDATAS =
+  "id, nome_normalizado, parcela_n, parcela_total, valor_centavos, ordem_fatura, responsavel_id, tipo_id, apelido, observacao, serie_id, excluido_em, dividido_de_id, ajuste_de_id";
 
 const COLUNAS_DO_MES =
   "id, fatura_id, excluido_em, lancado_por, nome_normalizado, parcela_n, parcela_total, valor_centavos, responsavel_id, tipo_id, serie_id, updated_at";
@@ -336,6 +352,83 @@ export function criarRepoFaturas(deps: {
           ];
         });
         return { ok: true, previstos, atualizadoEm };
+      } catch {
+        return { ok: false, codigo: "carregar.falhou" };
+      }
+    },
+
+    /**
+     * Para a herança (História 3.7): as linhas-mãe do Mês anterior a `mes`
+     * (não excluídas, sem Ajuste, com parcela e Valor positivo), com a chave da
+     * Série e se a Série já tem a parcela seguinte numa linha que não é da
+     * Fatura do próprio `mes` (a da Fatura substituída cai na reimportação).
+     * Do banco, numa leitura só do Mês anterior mais a das Séries.
+     */
+    async lerParcelasDoMesAnterior(mes: string): Promise<ResultadoLeituraDeCandidatas> {
+      if (!online()) return SEM_CONEXAO;
+      const cliente = obterCliente();
+      if (!cliente) return { ok: false, codigo: "carregar.falhou" };
+      try {
+        const lidas = await cliente.from("lancamentos").select(COLUNAS_CANDIDATAS).eq("mes", somarMeses(mes, -1));
+        if (lidas.error || !lidas.data) return { ok: false, codigo: "carregar.falhou" };
+        const maes = lidas.data.filter(
+          (l) =>
+            l.excluido_em === null &&
+            l.dividido_de_id === null &&
+            l.ajuste_de_id === null &&
+            l.parcela_n !== null &&
+            l.parcela_total !== null &&
+            l.valor_centavos > 0,
+        );
+        if (maes.length === 0) return { ok: true, candidatas: [] };
+        const idsDasSeries = [...new Set(maes.flatMap((l) => (l.serie_id === null ? [] : [l.serie_id])))];
+        const dasSeries = new Map<string, NonNullable<CandidataParaHerdar["serie"]>>();
+        const ocupadas = new Set<string>();
+        if (idsDasSeries.length > 0) {
+          const [series, daSerie] = await Promise.all([
+            cliente
+              .from("series")
+              .select("id, ocorrencia, nome_normalizado, parcela_total, valor_parcela_centavos, mes_primeira_parcela")
+              .in("id", idsDasSeries),
+            cliente
+              .from("lancamentos")
+              .select("serie_id, parcela_n, mes, fatura_id, excluido_em, dividido_de_id")
+              .in("serie_id", idsDasSeries),
+          ]);
+          if (series.error || !series.data || daSerie.error || !daSerie.data) return { ok: false, codigo: "carregar.falhou" };
+          for (const sr of series.data) {
+            dasSeries.set(sr.id, {
+              nome_normalizado: sr.nome_normalizado,
+              parcela_total: sr.parcela_total,
+              valor_parcela_centavos: sr.valor_parcela_centavos,
+              mes_primeira_parcela: sr.mes_primeira_parcela,
+              ocorrencia: sr.ocorrencia,
+            });
+          }
+          for (const x of daSerie.data) {
+            if (x.excluido_em !== null || x.dividido_de_id !== null || x.parcela_n === null) continue;
+            if (x.mes === mes && x.fatura_id !== null) continue;
+            ocupadas.add(JSON.stringify([x.serie_id, x.parcela_n]));
+          }
+        }
+        const candidatas: CandidataParaHerdar[] = maes.map((l) => {
+          const serie = l.serie_id === null ? null : (dasSeries.get(l.serie_id) ?? null);
+          return {
+            id: l.id,
+            nome_normalizado: l.nome_normalizado,
+            parcela_n: l.parcela_n as number,
+            parcela_total: l.parcela_total as number,
+            valor_centavos: l.valor_centavos,
+            ordem_fatura: l.ordem_fatura,
+            responsavel_id: l.responsavel_id,
+            tipo_id: l.tipo_id,
+            apelido: l.apelido,
+            observacao: l.observacao,
+            serie,
+            proxima_ocupada: l.serie_id !== null && ocupadas.has(JSON.stringify([l.serie_id, (l.parcela_n as number) + 1])),
+          };
+        });
+        return { ok: true, candidatas };
       } catch {
         return { ok: false, codigo: "carregar.falhou" };
       }
