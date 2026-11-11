@@ -77,3 +77,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-3-classificar-em-lote.md`
   summary: Se o Realtime trouxer, durante o lote, uma versão mais nova de uma linha do lote, o `Desfazer` (valores de antes das colunas mudadas) a sobrescreve por coluna.
   evidence: Low. Segue o AD-3 (vale a última gravação por coluna): o retrato guarda só as colunas que o lote mudou, então o Desfazer não toca nas outras, mas desfaz também a mudança de outro aparelho nessas colunas feita dentro dos 6 s.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-gerenciar-regras-aprendidas.md`
+  summary: Conferir no iPad se o VoiceOver lê a linha da lista de Regras aprendidas com sentido (chave, Responsável, Tipo, Divisão, última vez usada), já que o cabeçalho das colunas é `aria-hidden`; se ler solto, dar rótulos ocultos por célula.
+  evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4 e da 3.3; o jsdom só confere o DOM.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-gerenciar-regras-aprendidas.md`
+  summary: Rodar no CI os testes novos de `test/integracao/regras.test.ts` (editar, excluir com DELETE no Realtime e `marcarUso`).
+  evidence: Medium não verificado. Esta máquina não tem Docker: os repositórios foram provados só com cliente falso (Vitest) e a tela com jsdom; RLS e Realtime só o teste de integração prova.

@@ -8,7 +8,7 @@ import { classificarImportacao } from "../../src/domain/classificacao";
 import type { Importacao } from "../../src/domain/importacao-fatura";
 import type { RegraGravada } from "../../src/domain/regras";
 import type { Json } from "../../src/data/database.types";
-import { criarRepoRegras } from "../../src/data/regras-repo";
+import { criarRepoRegras, type LinhaRegra } from "../../src/data/regras-repo";
 import { esperarEvento, ligado, supabaseLocal, type Usuario } from "./apoio";
 
 describe.skipIf(!ligado)("regras no Supabase local", () => {
@@ -225,5 +225,94 @@ describe.skipIf(!ligado)("regras no Supabase local", () => {
     expect(error).not.toBeNull();
     const { data: faturas } = await local.admin.from("faturas").select("id").eq("owner_id", a.id).eq("mes", "2026-07");
     expect(faturas).toEqual([]);
+  });
+  // Editar, excluir e marcar uso (História 3.4): contra o banco real, com RLS e Realtime.
+
+  /** Uma memória mínima no lugar do gerenciador do navegador (só o que o repositório usa). */
+  function memoriaCom(linhas: LinhaRegra[]) {
+    const mapa = new Map(linhas.map((l) => [l.id, l]));
+    return {
+      linha: (id: string) => mapa.get(id),
+      aplicarOtimista: (mudancas: (Partial<LinhaRegra> & { id: string })[]) => {
+        const antes = mudancas.map((m) => mapa.get(m.id)!);
+        for (const m of mudancas) mapa.set(m.id, { ...mapa.get(m.id)!, ...m });
+        return () => antes.forEach((x) => mapa.set(x.id, x));
+      },
+      aplicarLote: (ls: LinhaRegra[]) => ls.forEach((l) => mapa.set(l.id, l)),
+      remover: (ids: string[]) => ids.forEach((id) => mapa.delete(id)),
+    } as unknown as NonNullable<Parameters<typeof criarRepoRegras>[0]["memoria"]>;
+  }
+
+  async function criarRegra(chave: string) {
+    const { data, error } = await a.cliente
+      .from("regras")
+      .insert({
+        chave,
+        versao_normalizacao: 1,
+        responsavel_id: casal,
+        tipo_id: casa,
+        contagem: [
+          { responsavel_id: casal, n: 3 },
+          { responsavel_id: rafael, n: 1 },
+        ] as unknown as NonNullable<Json>,
+        ultimo_uso: "2026-10-01T00:00:00Z",
+      })
+      .select()
+      .single();
+    expect(error).toBeNull();
+    return data!;
+  }
+
+  it("editar o Responsável: contagem só com ele (soma antiga), ultimo_uso intacto; só o Tipo não mexe na contagem", async () => {
+    const regra = await criarRegra("EDITAR TESTE");
+    const repo = criarRepoRegras({ obterCliente: () => a.cliente, memoria: memoriaCom([regra]) });
+    expect((await repo.editar(regra.id, { responsavel_id: rafael })).ok).toBe(true);
+    expect(await regraDe(a, "EDITAR TESTE")).toMatchObject({
+      responsavel_id: rafael,
+      tipo_id: casa,
+      contagem: [{ responsavel_id: rafael, n: 4 }],
+    });
+    expect(new Date((await regraDe(a, "EDITAR TESTE"))!.ultimo_uso).toISOString()).toBe("2026-10-01T00:00:00.000Z");
+    expect((await repo.editar(regra.id, { tipo_id: gatos })).ok).toBe(true);
+    expect(await regraDe(a, "EDITAR TESTE")).toMatchObject({ tipo_id: gatos, contagem: [{ responsavel_id: rafael, n: 4 }] });
+    expect(await repo.editar(regra.id, { responsavel_id: null, tipo_id: null })).toEqual({ ok: false, codigo: "regra.vazia" });
+  });
+
+  it("excluir: a Regra some, outro aparelho recebe o DELETE e B não apaga a de A", async () => {
+    const regra = await criarRegra("EXCLUIR TESTE");
+    const { data: apagadas } = await b.cliente.from("regras").delete().eq("id", regra.id).select();
+    expect(apagadas).toEqual([]);
+    expect(await regraDe(a, "EXCLUIR TESTE")).not.toBeNull();
+    const repo = criarRepoRegras({ obterCliente: () => a.cliente, memoria: memoriaCom([regra]) });
+    expect(await repo.excluir(regra.id)).toEqual({ ok: true });
+    expect(await regraDe(a, "EXCLUIR TESTE")).toBeNull();
+    // O DELETE chega a outro aparelho (replica identity full); cada tentativa usa uma Regra nova.
+    const outro = await local.entrar(a.email, a.senha);
+    const ids: string[] = [];
+    const chegou = await esperarEvento<{ id: string }>(
+      outro,
+      "regras",
+      "DELETE",
+      (l) => ids.includes(l.id),
+      async (t) => {
+        const nova = await criarRegra(`EXCLUIR REALTIME ${t}`);
+        ids.push(nova.id);
+        await criarRepoRegras({ obterCliente: () => a.cliente, memoria: memoriaCom([nova]) }).excluir(nova.id);
+      },
+    );
+    expect(ids).toContain(chegou.id);
+  }, 40_000);
+
+  it("marcarUso muda só o ultimo_uso das chaves, sem tocar na contagem nem nas Regras de B", async () => {
+    const regra = await criarRegra("USO TESTE");
+    const repo = criarRepoRegras({ obterCliente: () => a.cliente, agora: () => new Date("2026-11-10T12:00:00Z") });
+    expect(await repo.marcarUso(["USO TESTE", "NAO EXISTE"])).toEqual({ ok: true });
+    const depois = await regraDe(a, "USO TESTE");
+    expect(new Date(depois!.ultimo_uso).toISOString()).toBe("2026-11-10T12:00:00.000Z");
+    expect(depois!.contagem).toEqual(regra.contagem);
+    expect(depois!.responsavel_id).toBe(casal);
+    const repoB = criarRepoRegras({ obterCliente: () => b.cliente, agora: () => new Date("2027-01-01T00:00:00Z") });
+    await repoB.marcarUso(["USO TESTE"]);
+    expect(new Date((await regraDe(a, "USO TESTE"))!.ultimo_uso).toISOString()).toBe("2026-11-10T12:00:00.000Z");
   });
 });

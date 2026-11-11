@@ -34,6 +34,7 @@ import {
   alternarOrdem,
   distribuicaoPorResponsavel,
   ehOrdemPadrao,
+  linhasDoMes,
   mesAtual,
   mesesDaLista,
   nomeExibido,
@@ -319,7 +320,7 @@ export function Painel({ titulo }: { titulo: string }) {
   } else if (carregando) {
     conteudo = <EsqueletoPainel />;
   } else {
-    const doMes = lancamentos.linhas.filter((l) => l.mes === mesAberto && l.excluido_em === null);
+    const doMes = linhasDoMes(lancamentos.linhas, mesAberto);
     const daFatura = fatura ? doMes.filter((l) => l.fatura_id === fatura.id) : [];
     const conferencia = fatura ? conferir(fatura, cartoes.linhas, doMes) : null;
     // Filtros, contagens, anúncio e seleção olham só as mães (o Ajuste segue a dele).

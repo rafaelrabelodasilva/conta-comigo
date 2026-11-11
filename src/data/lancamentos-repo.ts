@@ -90,8 +90,12 @@ export type OpcoesGravacao = {
   junto?: readonly string[];
 };
 
-/** Opções do lote: `agora` (padrão, o relógio do aparelho). */
-export type OpcoesLote = { agora?: Date };
+/**
+ * Opções do lote: `agora` (padrão, o relógio do aparelho) e `ensinar`
+ * (padrão `true`; `false` não ensina as Regras: a reaplicação de uma Regra
+ * editada, História 3.4, não soma contagem nem muda `ultimo_uso`).
+ */
+export type OpcoesLote = { agora?: Date; ensinar?: boolean };
 
 /** A mãe a que um Ajuste volta no "Desfazer" do "Desvincular": o id e a classificação atual. */
 export type MaeDoAjuste = Pick<LinhaLancamento, "id" | "tipo_id" | "responsavel_id">;
@@ -250,7 +254,7 @@ export function criarRepoLancamentos(deps: {
       online,
     );
     if (!r.ok) return r;
-    ensinarLote(plano.eventos);
+    if (opcoes?.ensinar !== false) ensinarLote(plano.eventos);
     return { ok: true, linhas: gravadas.linhas, gravadas: plano.gravadas, antes: plano.antes };
   }
 

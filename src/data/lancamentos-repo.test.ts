@@ -917,6 +917,17 @@ describe("classificar em lote (História 3.3)", () => {
     );
   });
 
+  it("ensinar: false (reaplicar uma Regra editada) grava o lote sem chamar aprender", async () => {
+    const aprender = vi.fn(async () => ({ ok: true }));
+    const base = [shopee("a"), shopee("b")];
+    const m = montar(base, semUpdate, { fila: true, aprender, rpc: banco(base) });
+    await aguardar(m);
+    const r = await m.repo.classificarEmLote(["a", "b"], { responsavel_id: "r-casal" }, { agora: AGORA, ensinar: false });
+    expect(r).toMatchObject({ ok: true, gravadas: 2 });
+    expect(m.rpcs).toHaveLength(1);
+    expect(aprender).not.toHaveBeenCalled();
+  });
+
   it("a assinatura (entradas) dá campos diferentes a cada item; o resultado traz o retrato de antes", async () => {
     const a = shopee("a", { revisao_motivo: "sugestao", revisao_dados: DADOS });
     const b = shopee("b", { nome: "AMAZON Y", tipo_id: null });

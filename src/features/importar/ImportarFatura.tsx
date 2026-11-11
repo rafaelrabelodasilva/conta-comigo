@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { classificarImportacao } from "@/domain/classificacao";
+import { chavesDeRegrasUsadas, classificarImportacao } from "@/domain/classificacao";
 import { LIMITE_AJUSTE_PADRAO_CENTAVOS } from "@/domain/configuracoes";
 import { removerDadosPessoais } from "@/domain/dados-pessoais";
 import {
@@ -177,6 +177,8 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
   const geracao = useRef(0);
   // Trava contra dois toques rápidos em Importar (o estado ainda é o antigo).
   const gravandoAgora = useRef(false);
+  // As chaves das Regras que a classificação usou (para o `ultimo_uso`, depois de gravar).
+  const regrasUsadasNaImportacao = useRef<string[]>([]);
 
   const gravando = estado.tipo === "conferir" && estado.gravando;
 
@@ -236,14 +238,13 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     ]);
     if (minha !== geracao.current) return;
     const { responsaveis: r, tipos: t } = cadastros.current;
+    const paraClassificar = prontos ? { responsaveis: r, tipos: t } : { responsaveis: [], tipos: [] };
     const classificada: Importacao = {
       ...importacao.valor,
-      lancamentos: classificarImportacao(
-        importacao.valor.lancamentos,
-        lidas,
-        prontos ? { responsaveis: r, tipos: t } : { responsaveis: [], tipos: [] },
-      ),
+      lancamentos: classificarImportacao(importacao.valor.lancamentos, lidas, paraClassificar),
     };
+    // As Regras que esta importação usou: ganham `ultimo_uso` quando a Fatura for gravada.
+    regrasUsadasNaImportacao.current = chavesDeRegrasUsadas(importacao.valor.lancamentos, lidas, paraClassificar);
     setEstado({ tipo: "conferir", importacao: classificada, conferencia, gravando: false, erro: null, reimportar });
   }
 
@@ -314,6 +315,16 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     });
   }
 
+  /** Marca o `ultimo_uso` das Regras usadas, sem esperar; a falha não chega à importação. */
+  function marcarUsoDasRegras(chaves: readonly string[]) {
+    if (chaves.length === 0) return;
+    try {
+      void Promise.resolve(repoRegras().marcarUso(chaves)).catch(() => {});
+    } catch {
+      // A Fatura já foi gravada.
+    }
+  }
+
   /** As Regras do dono; falhou → nenhuma (a importação não bloqueia). */
   async function lerRegras(): Promise<RegraGravada[]> {
     try {
@@ -378,6 +389,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     const r = await repoFaturas().importar(atual.importacao, substituir);
     gravandoAgora.current = false;
     if (r.ok) {
+      marcarUsoDasRegras(regrasUsadasNaImportacao.current);
       const resumo = resumoDaClassificacao(atual.importacao.lancamentos);
       if (substituir) toast.mostrar({ texto: rotuloReimportado(mes, r.quantidade) });
       aoImportar?.(mes);

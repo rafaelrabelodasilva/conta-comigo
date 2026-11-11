@@ -35,6 +35,7 @@ const falso = vi.hoisted(() => ({
   responsaveis: [] as { id: string; nome: string; arquivado: boolean }[],
   tipos: [] as { id: string; nome: string; arquivado: boolean }[],
   listarRegras: vi.fn(),
+  marcarUso: vi.fn(),
   // Status de Responsáveis e Tipos no gerenciador falso (os outros: "pronto").
   statusCadastros: "pronto" as "carregando" | "pronto" | "erro",
   ouvintes: new Set<() => void>(),
@@ -67,7 +68,9 @@ vi.mock("@/data/realtime", async () => {
 vi.mock("@/data/faturas-repo", () => ({
   repoFaturas: () => ({ importar: falso.importar, lerReimportacao: falso.lerReimportacao }),
 }));
-vi.mock("@/data/regras-repo", () => ({ repoRegras: () => ({ listar: falso.listarRegras }) }));
+vi.mock("@/data/regras-repo", () => ({
+  repoRegras: () => ({ listar: falso.listarRegras, marcarUso: falso.marcarUso }),
+}));
 
 const TEXTO_PDF = [
   "Olá, Fulana! Esta é a fatura do seu cartão SANTANDER",
@@ -144,6 +147,7 @@ beforeEach(() => {
   falso.responsaveis = [];
   falso.tipos = [];
   falso.listarRegras.mockResolvedValue({ ok: true, regras: [] });
+  falso.marcarUso.mockResolvedValue({ ok: true });
   falso.statusCadastros = "pronto";
   vi.stubGlobal("fetch", falso.fetch);
   // Primeiro sem senha (pede a senha), depois com a senha certa.
@@ -637,6 +641,19 @@ describe("ImportarFatura: classificação pelas Regras (História 3.1)", () => {
       [null, null, "sugestao", { responsavel_id: null, tipo_id: "gatos", outros_responsaveis: [] }],
     ]);
     expect(falso.listarRegras).toHaveBeenCalledTimes(1);
+  });
+
+  it("depois de gravar, marca o ultimo_uso só das Regras que a importação usou", async () => {
+    falso.listarRegras.mockResolvedValue({ ok: true, regras: [regraMsc] });
+    await gravado();
+    await waitFor(() => expect(falso.marcarUso).toHaveBeenCalledTimes(1));
+    expect(falso.marcarUso).toHaveBeenCalledWith([regraMsc.chave]);
+  });
+
+  it("sem Regras usadas, marcarUso não é chamado", async () => {
+    falso.listarRegras.mockResolvedValue({ ok: true, regras: [] });
+    await gravado();
+    expect(falso.marcarUso).not.toHaveBeenCalled();
   });
 
   it("falha ao ler as Regras: importa sem elas, sem bloquear", async () => {

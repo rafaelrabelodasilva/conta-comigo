@@ -23,6 +23,7 @@
 //   contagem).
 
 import { normalizarNome } from "./importacao-fatura";
+import type { Resultado } from "./resultado";
 
 /** Versão da regra de `chaveDeRegra`, gravada em cada Regra. */
 export const VERSAO_NORMALIZACAO = 1;
@@ -230,4 +231,149 @@ export function avaliarRegra(regra: RegraGravada, ativos: CadastrosAtivos): Aval
     regra.responsavel_id !== null && ativos.responsaveis.has(regra.responsavel_id) ? regra.responsavel_id : null;
   if (responsavel === null && tipo === null) return { tipo: "nada" };
   return { tipo: "aplicar", responsavel_id: responsavel, tipo_id: tipo };
+}
+
+// ------------------------------------------------- Regras aprendidas (3.4)
+// Tela Configurações → Regras aprendidas: editar, buscar, ordenar e reaplicar.
+
+
+/** O que a tela usa de uma linha de `regras`. */
+export type RegraDaTela = RegraGravada & { id: string };
+
+/** A edição de uma Regra: só o que mudou (`undefined` = não mexe; `null` = limpa). */
+export type EdicaoRegra = { responsavel_id?: string | null; tipo_id?: string | null };
+
+/** O que a edição grava em `regras` (nunca a chave, a Divisão nem o `ultimo_uso`). */
+export type CorpoEdicaoRegra = {
+  responsavel_id: string | null;
+  tipo_id: string | null;
+  contagem: ContagemLida;
+};
+
+/**
+ * A Regra depois de editar o Responsável e/ou o Tipo (decisão 3-A):
+ * - o Responsável que muda deixa a contagem só com ele (soma das entradas
+ *   antigas, mínimo 1) ou vazia, se foi limpo; assim a Regra não segue "com
+ *   dúvida" e a edição vale na importação;
+ * - só o Tipo mudar não mexe na contagem;
+ * - ao menos um dos dois fica preenchido (senão `regra.vazia`).
+ * Devolve `null` quando nada muda.
+ */
+export function editarRegra(atual: RegraGravada, edicao: EdicaoRegra): Resultado<CorpoEdicaoRegra | null> {
+  const responsavel = edicao.responsavel_id === undefined ? atual.responsavel_id : edicao.responsavel_id;
+  const tipo = edicao.tipo_id === undefined ? atual.tipo_id : edicao.tipo_id;
+  if (responsavel === null && tipo === null) return { ok: false, erro: { codigo: "regra.vazia" } };
+  const mudouResponsavel = responsavel !== atual.responsavel_id;
+  const mudouTipo = tipo !== atual.tipo_id;
+  if (!mudouResponsavel && !mudouTipo) return { ok: true, valor: null };
+  let contagem = lerContagem(atual.contagem);
+  if (mudouResponsavel) {
+    const soma = contagem.reduce((total, e) => total + e.n, 0);
+    contagem = responsavel === null ? [] : [{ responsavel_id: responsavel, n: Math.max(1, soma) }];
+  }
+  return { ok: true, valor: { responsavel_id: responsavel, tipo_id: tipo, contagem } };
+}
+
+function semAcento(texto: string): string {
+  return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+/** Nomes dos cadastros para a busca e a lista (id → nome). */
+export type NomesDosCadastros = {
+  responsaveis: ReadonlyMap<string, string>;
+  tipos: ReadonlyMap<string, string>;
+};
+
+/**
+ * As Regras cuja chave, Responsável ou Tipo contém o termo (sem acento nem
+ * maiúsculas). Termo vazio: todas, na mesma ordem.
+ */
+export function filtrarRegras<R extends { chave: string; responsavel_id: string | null; tipo_id: string | null }>(
+  regras: readonly R[],
+  termo: string,
+  nomes: NomesDosCadastros,
+): R[] {
+  const t = semAcento(termo.trim());
+  if (t === "") return [...regras];
+  return regras.filter((r) => {
+    const campos = [
+      r.chave,
+      r.responsavel_id === null ? "" : (nomes.responsaveis.get(r.responsavel_id) ?? ""),
+      r.tipo_id === null ? "" : (nomes.tipos.get(r.tipo_id) ?? ""),
+    ];
+    return campos.some((c) => semAcento(c).includes(t));
+  });
+}
+
+/** Mais recentemente usadas primeiro; empate pela chave. */
+export function ordenarRegras<R extends { chave: string; ultimo_uso: string }>(regras: readonly R[]): R[] {
+  return [...regras].sort((a, b) => {
+    const ta = Date.parse(a.ultimo_uso);
+    const tb = Date.parse(b.ultimo_uso);
+    if (ta !== tb) return (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta);
+    return a.chave < b.chave ? -1 : a.chave > b.chave ? 1 : 0;
+  });
+}
+
+/** Os outros Responsáveis da contagem (com `n > 0`), do mais frequente: "às vezes X". */
+export function outrosResponsaveisDaRegra(regra: RegraGravada): string[] {
+  return lerContagem(regra.contagem)
+    .filter((e) => e.n > 0 && e.responsavel_id !== regra.responsavel_id)
+    .sort((a, b) => b.n - a.n)
+    .map((e) => e.responsavel_id);
+}
+
+/** Uma linha de `lancamentos` para a reaplicação. */
+export type LinhaParaReaplicar = {
+  id: string;
+  nome: string;
+  mes: string;
+  responsavel_id: string | null;
+  tipo_id: string | null;
+  ajuste_de_id: string | null;
+  excluido_em: string | null;
+};
+
+/**
+ * "Aplicar a todos": as entradas do lote para as linhas do `mes` que vêm da
+ * Regra (`chaveDeRegra(nome) === chave`, não excluídas, não Ajuste, inclusive
+ * as classificadas à mão) e ainda diferem do que a edição mudou. Os campos
+ * são só os que a edição mudou (decisão 1-A/2-A); a ordem é a recebida.
+ */
+export function entradasDaReaplicacao(
+  chave: string,
+  campos: { responsavel_id?: string; tipo_id?: string },
+  linhas: readonly LinhaParaReaplicar[],
+  mes: string,
+): { id: string; campos: { responsavel_id?: string; tipo_id?: string } }[] {
+  if (campos.responsavel_id === undefined && campos.tipo_id === undefined) return [];
+  const entradas: { id: string; campos: { responsavel_id?: string; tipo_id?: string } }[] = [];
+  for (const l of linhas) {
+    if (l.mes !== mes || l.excluido_em !== null || l.ajuste_de_id !== null) continue;
+    if (chaveDeRegra(l.nome) !== chave) continue;
+    const muda =
+      (campos.responsavel_id !== undefined && l.responsavel_id !== campos.responsavel_id) ||
+      (campos.tipo_id !== undefined && l.tipo_id !== campos.tipo_id);
+    if (muda) entradas.push({ id: l.id, campos: { ...campos } });
+  }
+  return entradas;
+}
+
+/**
+ * As chaves das Regras que a importação usou (aplicou ou sugeriu): para
+ * `regrasRepo.marcarUso`. Sem repetir, na ordem em que aparecem.
+ */
+export function regrasUsadas(
+  nomes: readonly string[],
+  regras: readonly RegraGravada[],
+  ativos: CadastrosAtivos,
+): string[] {
+  const porChave = new Map(regras.map((r) => [r.chave, r]));
+  const usadas = new Set<string>();
+  for (const nome of nomes) {
+    const chave = chaveDeRegra(nome);
+    const regra = porChave.get(chave);
+    if (regra && avaliarRegra(regra, ativos).tipo !== "nada") usadas.add(chave);
+  }
+  return [...usadas];
 }

@@ -71,6 +71,12 @@ export function formatarData(data: string): string {
   return `${data.slice(8, 10)}/${data.slice(5, 7)}/${data.slice(2, 4)}`;
 }
 
+/** `AAAA-MM-DD` → "06/11". Lança se não estiver nesse formato. */
+export function formatarDiaMes(data: string): string {
+  if (!DATA.test(data)) throw new Error(`Data inválida: ${data}`);
+  return `${data.slice(8, 10)}/${data.slice(5, 7)}`;
+}
+
 function partesEmSaoPaulo(instante: Date): (tipo: string) => string {
   if (Number.isNaN(instante.getTime())) throw new Error("Instante inválido");
   const partes = new Intl.DateTimeFormat("en-CA", {

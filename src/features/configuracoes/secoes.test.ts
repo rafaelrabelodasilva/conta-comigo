@@ -5,7 +5,7 @@ describe("secaoEscolhida", () => {
   it("ausente ou desconhecida cai em Responsáveis", () => {
     expect(secaoEscolhida(undefined)).toBe("responsaveis");
     expect(secaoEscolhida("")).toBe("responsaveis");
-    expect(secaoEscolhida("regras")).toBe("responsaveis");
+    expect(secaoEscolhida("desconhecida")).toBe("responsaveis");
     expect(secaoEscolhida("toString")).toBe("responsaveis");
     expect(secaoEscolhida([])).toBe("responsaveis");
   });
@@ -22,8 +22,12 @@ describe("secaoEscolhida", () => {
     expect(secaoEscolhida("aparencia")).toBe("aparencia");
   });
 
+  it("escolhe Regras aprendidas (História 3.4)", () => {
+    expect(secaoEscolhida("regras")).toBe("regras");
+  });
+
   it("a ordem é a do EXPERIENCE.md", () => {
-    expect(CHAVES_SECAO).toEqual(["responsaveis", "tipos", "status", "ciclo", "conferencia", "aparencia"]);
+    expect(CHAVES_SECAO).toEqual(["responsaveis", "tipos", "status", "ciclo", "conferencia", "regras", "aparencia"]);
   });
 
   it("com o parâmetro repetido, vale o primeiro", () => {
