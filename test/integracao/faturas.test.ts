@@ -275,6 +275,8 @@ describe.skipIf(!ligado)("importar_fatura no Supabase local", () => {
         fatura_id: primeira.fatura.id,
         cartoes: primeira.cartoes.map((x) => x.id).sort(),
         lancamentos: primeira.lancamentos.map((l) => l.id).sort(),
+        // História 3.5: sem previstos criados por ela, a lista vem vazia.
+        previstos: [],
       });
       expect(g.fatura.id).not.toBe(primeira.fatura.id);
       expect(g.lancamentos).toHaveLength(2);
