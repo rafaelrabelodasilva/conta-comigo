@@ -110,6 +110,17 @@ export const MENSAGENS = {
   // História 3.6: o casamento junta os previstos à fatura; este erro só sobra se os previstos do Mês mudaram durante a importação.
   "fatura.previstos_sem_casamento":
     "As parcelas previstas deste Mês mudaram durante a importação. Nada foi gravado. Importe a fatura de novo.",
+  // História 3.10: importar o histórico da planilha.
+  "planilha.mes_com_fatura": "Este Mês já tem fatura importada. As linhas da planilha não foram gravadas.",
+  "planilha.serie_ocupada": "Uma parcela deste Mês já existe na mesma compra parcelada. Nada foi gravado.",
+  "planilha.cabecalho": "A primeira linha não tem as colunas esperadas (Despesa, Valor, Parcela, Tipo e Responsabilidade).",
+  "planilha.despesa_vazia": "Há uma linha com valor e sem Despesa.",
+  "planilha.valor_ausente": "Há uma linha com Despesa e sem Valor.",
+  "planilha.valor_invalido": "Há um Valor que não consegui ler.",
+  "planilha.parcela_invalida": "Há uma Parcela que não consegui ler (esperado 03/10).",
+  "planilha.linha_invalida": "Há uma linha com dados inválidos.",
+  "planilha.arquivo_invalido": "Não consegui abrir este arquivo. Escolha o .xlsx baixado do Google Sheets.",
+  "planilha.sem_abas": "Não encontrei abas de Mês (como 03/2026) neste arquivo.",
   "fatura.reimportacao_com_casados":
     "Esta fatura tem parcelas que vieram de previstos, e importar de novo ainda não mantém a classificação delas. Nada foi gravado.",
   "lancamento.nome_vazio": "Preencha o nome.",
@@ -290,6 +301,9 @@ export function rotuloReimportado(mes: string, n: number): string {
 export const TEXTOS_PAINEL = {
   fechado: "Fechado",
   sem_fatura: "Fatura ainda não importada",
+  /** Mês só com histórico da planilha (História 3.10): sem Fatura, o hero mostra o total das linhas. */
+  total_historico: "Total do histórico",
+  do_historico: "Importado da planilha",
   sem_responsavel: "Sem responsável",
   /** O que a grade mostra no lugar de um cadastro vazio (Tipo, Responsável, Status). */
   vazio: "—",
@@ -433,6 +447,11 @@ export const ROTULOS_LANCADO_POR = {
 /** Sobrelinha do `invoice-hero`: "Fatura de outubro · vence 06/10/26" (sem Fatura: "Fatura de outubro"). */
 export function sobrelinhaFatura(mes: string, vencimento: string | null): string {
   return vencimento === null ? `Fatura de ${formatarNomeDoMes(mes)}` : tituloFaturaLida(mes, vencimento);
+}
+
+/** Sobrelinha do hero de um Mês só com histórico da planilha: "Histórico de março". */
+export function sobrelinhaHistorico(mes: string): string {
+  return `Histórico de ${formatarNomeDoMes(mes)}`;
 }
 
 /** Nome acessível do nome do Mês no seletor: "outubro/26, escolher o Mês". */
@@ -631,7 +650,13 @@ export const TEXTOS_REGRAS = {
   confirmar_excluir: "Excluir Regra",
   /** Toast depois de "Aplicar a todos"; o "Desfazer" vem do próprio toast. */
   reaplicada: "Regra reaplicada",
+  mostrar_todas: "Mostrar todas",
 } as const;
+
+/** Faixa do filtro "criadas agora" (História 3.10): "Mostrando as 12 Regras criadas agora pela planilha". */
+export function rotuloCriadasAgora(quantas: number): string {
+  return quantas === 1 ? "Mostrando a Regra criada agora pela planilha" : `Mostrando as ${quantas} Regras criadas agora pela planilha`;
+}
 
 /** "às vezes Rafael" / "às vezes Rafael ou Casal". */
 export function rotuloAsVezes(nomes: readonly string[]): string {
@@ -1011,6 +1036,7 @@ export const ROTULOS = {
   voltar_para_salvar: "Voltar para salvar",
   descartar: "Descartar",
   regras_aprendidas: "Regras aprendidas",
+  importar_planilha: "Importar planilha",
 } as const;
 
 /**
@@ -1034,6 +1060,12 @@ export const TEXTOS_PASSO = {
     secao: ROTULOS.status,
     pergunta: "Como você acompanha o pagamento das contas?",
     ajuda: "Crie os Status das suas contas, como Não pago e Pago, e marque quais contam como pago.",
+  },
+  planilha: {
+    secao: ROTULOS.importar_planilha,
+    pergunta: "Quer trazer o histórico da sua planilha?",
+    ajuda:
+      "Escolha o arquivo .xlsx da planilha “Cartão” e as abas de 2026. O app aprende as Regras e já monta as parcelas em andamento. Dá para pular e fazer depois em Configurações.",
   },
   ciclo: {
     secao: ROTULOS.ciclo,
@@ -1111,4 +1143,81 @@ export function mensagem(codigo: string | null | undefined): string {
   return ehCodigoConhecido(codigo)
     ? MENSAGENS[codigo]
     : MENSAGENS["erro.desconhecido"];
+}
+
+
+/** Textos de Configurações → Importar planilha (História 3.10, FR-2). */
+export const TEXTOS_PLANILHA = {
+  descricao:
+    "Traga os meses de 2026 da sua planilha “Cartão”. No Google Sheets, use Arquivo → Fazer download → Microsoft Excel (.xlsx) e escolha o arquivo aqui. Ele é lido neste aparelho; nada é enviado ao Google.",
+  escolher: "Escolher arquivo",
+  trocar: "Escolher outro arquivo",
+  lendo: "Lendo o arquivo…",
+  abas: "Abas",
+  marcar_abas: "Abas para importar",
+  previa: "Ver prévia",
+  voltar: "Voltar às abas",
+  importar: "Importar",
+  importando: "Importando…",
+  cancelar: "Cancelar",
+  aba_com_fatura: "Já tem fatura: só aprende as Regras",
+  aba_ja_importada: "Já importada: será substituída",
+  aba_digitada: "digitados à mão",
+  previa_titulo: "O que vai acontecer",
+  novos_cadastros: "Cadastros que faltam",
+  nenhum_cadastro: "Nenhum cadastro novo",
+  regras_previstas: "Regras novas",
+  esperando: "Esperando",
+  gravando: "Gravando",
+  gravada: "Gravada",
+  so_regras: "Só Regras",
+  resumo_titulo: "Importação concluída",
+  ver_regras: "Ver Regras criadas agora",
+  ver_painel: "Ir para o Painel",
+  nada_marcado: "Marque ao menos uma aba.",
+  historico_titulo: "Apagar histórico importado",
+  historico_ajuda:
+    "Apaga só as linhas vindas da planilha de um Mês (e as parcelas previstas que elas geraram sem você mexer). Faturas, lançamentos manuais e Regras não são tocados.",
+  historico_vazio: "Nenhum Mês tem histórico importado.",
+  apagar: "Apagar",
+  apagado: "Histórico apagado",
+  confirmar_apagar: "Apagar histórico",
+} as const;
+
+/** "Não foi possível ler a aba 03/2026". */
+export function erroDaAba(nome: string): string {
+  return `Não foi possível ler a aba ${nome}`;
+}
+
+/** "Prévia da aba": "48 lançamentos · 2 Séries · 14 previstos". */
+export function rotuloPreviaDaAba(r: { lancamentos: number; divisoes: number; series: number; previstos: number; digitadosAMao: number }): string {
+  const partes = [
+    r.lancamentos === 1 ? "1 lançamento" : `${r.lancamentos} lançamentos`,
+    r.divisoes > 0 ? (r.divisoes === 1 ? "1 Divisão" : `${r.divisoes} Divisões`) : null,
+    r.series > 0 ? (r.series === 1 ? "1 Série" : `${r.series} Séries`) : null,
+    r.previstos > 0 ? (r.previstos === 1 ? "1 previsto" : `${r.previstos} previstos`) : null,
+    r.digitadosAMao > 0 ? `${r.digitadosAMao} ${TEXTOS_PLANILHA.aba_digitada}` : null,
+  ];
+  return partes.filter((p) => p !== null).join(" · ");
+}
+
+/** "N lançamentos, N Responsáveis, N Tipos, N Regras criadas". */
+export function resumoDaImportacao(r: { lancamentos: number; responsaveis: number; tipos: number; regras: number }): string {
+  const n = (q: number, um: string, varios: string) => `${q} ${q === 1 ? um : varios}`;
+  return [
+    n(r.lancamentos, "lançamento", "lançamentos"),
+    n(r.responsaveis, "Responsável", "Responsáveis"),
+    n(r.tipos, "Tipo", "Tipos"),
+    n(r.regras, "Regra criada", "Regras criadas"),
+  ].join(", ");
+}
+
+/** Texto do aviso de aba que troca o histórico. */
+export function rotuloApagarHistorico(mes: string, quantidade: number): string {
+  return `${formatarMes(mes)} · ${quantidade === 1 ? "1 lançamento" : `${quantidade} lançamentos`}`;
+}
+
+/** Título da confirmação de apagar o histórico de um Mês. */
+export function tituloApagarHistorico(mes: string): string {
+  return `Apagar o histórico de ${formatarMes(mes)}?`;
 }

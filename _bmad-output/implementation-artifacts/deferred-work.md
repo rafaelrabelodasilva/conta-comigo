@@ -176,4 +176,21 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-9-dar-apelido.md`
   summary: Conferir no iPad o Apelido em massa de verdade (pergunta com a contagem, "Aplicar a todos", "Desfazer", dez/26 e outros Meses) e se o VoiceOver lê com sentido a grade com Apelido em negrito e Nome em cinza.
   evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4; o jsdom só confere o DOM e os nomes acessíveis.
-
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-importar-o-historico-da-planilha.md`
+  summary: Rodar no CI a migração `20261119120000_importar_planilha.sql`, `test/integracao/planilha.test.ts` e a comparação de `database.types.ts` com `supabase gen types`.
+  evidence: Medium não verificado. Esta máquina não tem Docker: as RPCs `importar_aba_planilha` e `apagar_historico_do_mes` foram provadas só no Postgres em memória (pglite) com todas as migrações em ordem; RLS, Realtime e o formato exato dos tipos só o CI prova (as duas entradas em `database.types.ts` foram escritas à mão no formato do gerado).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-importar-o-historico-da-planilha.md`
+  summary: Importar uma Fatura para um Mês que já tem histórico da planilha duplica o Mês (a RPC `importar_fatura` e a 3.11 só olham as linhas da Fatura).
+  evidence: Low. Os Meses 01/2026 a 09/2026 não têm Fatura e Rafael não os importa pelo PDF; out/26 e nov/26 têm Fatura e a planilha só ensina Regras neles. Se um dia entrar Fatura num Mês de histórico, apagar o histórico do Mês antes ("Apagar histórico importado").
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-importar-o-historico-da-planilha.md`
+  summary: Decidir se a 3.12 (reimportar mantendo a classificação) e a próxima Fatura devem usar o histórico: a herança da 3.7 lê a n−1 do Mês anterior, e a Série do histórico tem `nome_normalizado` diferente da Fatura (o `*` se perdeu na planilha), então a parcela da Fatura de dez/26 não herda do histórico de set/26.
+  evidence: Medium não verificado em produção. Só as Regras da planilha casam com o Nome da Fatura (chave sem `*`); Série, previsto e herança usam `nome_normalizado`, que difere. Quando Rafael reimportar out/26 ou nov/26, as Regras classificam, mas a herança de parcela não vem do histórico.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-importar-o-historico-da-planilha.md`
+  summary: Apelido para a próxima Fatura continua fora: a planilha não traz Apelido, e a reimportação simplificada (3.11) apaga o Apelido dado à mão.
+  evidence: Decisão 7 do Rafael (13/11/2026): manter fora; a tabela `apelidos` vale quando a 3.12 mexer na reimportação.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-importar-o-historico-da-planilha.md`
+  summary: Conferir no iPad o Importar planilha de verdade (arquivo `.xlsx` do Google Sheets, prévia, progresso, resumo, Regras "criadas agora", hero e grade de um Mês de histórico, "Apagar histórico importado") e se o VoiceOver lê com sentido a lista de abas e as barras de progresso.
+  evidence: Medium não verificado em produção. O jsdom só confere o DOM; a biblioteca de `.xlsx` só foi provada com um arquivo montado no teste, não com o que o Google Sheets exporta. Junta-se à pendência do VoiceOver da 2.4.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-importar-o-historico-da-planilha.md`
+  summary: Os Ajustes de centavos da planilha ("MSC CRUZEIROS (CREDITO) (0,08)") entram como créditos soltos, sem `ajuste_de_id`, e o Tipo "Rafael"/"Casal" de algumas linhas de crédito vira Tipo novo.
+  evidence: Low. A planilha não liga o crédito à parcela e usa o nome de pessoa no Tipo de alguns créditos; Rafael corrige em Tipos e na grade.

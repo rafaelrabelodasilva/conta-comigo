@@ -5,7 +5,7 @@
 // (Responsáveis → Tipos → Status → Importar planilha → Blocos → Mensagem → Ciclo).
 
 /** Os passos, na ordem em que aparecem. Fonte única da lista e da ordem. */
-export const PASSOS_PRIMEIRO_USO = ["responsaveis", "tipos", "status", "ciclo"] as const;
+export const PASSOS_PRIMEIRO_USO = ["responsaveis", "tipos", "status", "planilha", "ciclo"] as const;
 
 export type PassoPrimeiroUso = (typeof PASSOS_PRIMEIRO_USO)[number];
 

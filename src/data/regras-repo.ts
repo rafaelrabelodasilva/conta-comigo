@@ -30,6 +30,7 @@ import {
   type EdicaoRegra,
   type EventoAprender,
   type RegraGravada,
+  type RegraParaGravar,
 } from "@/domain/regras";
 import { estaOnline } from "./conexao";
 import type { Database, Json } from "./database.types";
@@ -49,6 +50,8 @@ export type ResultadoEditar =
   | { ok: false; codigo: CodigoFalhaGravacao | "regra.vazia" };
 export type ResultadoExcluir = { ok: true } | { ok: false; codigo: CodigoFalhaGravacao };
 export type ResultadoMarcarUso = { ok: true } | { ok: false };
+/** `criadas`: as Regras que não existiam (a chave que já tinha Regra é ignorada). */
+export type ResultadoCriarIniciais = { ok: true; criadas: LinhaRegra[] } | { ok: false };
 
 /** Linhas por página na leitura (o PostgREST devolve até 1000). */
 const PAGINA = 1000;
@@ -221,6 +224,37 @@ export function criarRepoRegras(deps: {
           if (error) return { ok: false };
         }
         return { ok: true };
+      } catch {
+        return { ok: false };
+      }
+    },
+
+    /**
+     * As Regras iniciais da planilha (História 3.10, calculadas pelo núcleo):
+     * grava só as chaves que ainda não têm Regra (nunca sobrescreve o que
+     * Rafael ensinou) e devolve as criadas, em páginas de 100.
+     */
+    async criarIniciais(regras: readonly RegraParaGravar[]): Promise<ResultadoCriarIniciais> {
+      if (regras.length === 0) return { ok: true, criadas: [] };
+      const cliente = obterCliente();
+      if (!cliente) return { ok: false };
+      try {
+        const criadas: LinhaRegra[] = [];
+        for (let i = 0; i < regras.length; i += 100) {
+          const pagina = regras.slice(i, i + 100).map((r) => ({
+            ...r,
+            contagem: r.contagem as unknown as NonNullable<Json>,
+            divisao: r.divisao as unknown as Json,
+          }));
+          const { data, error } = await cliente
+            .from("regras")
+            .upsert(pagina, { onConflict: "owner_id,chave", ignoreDuplicates: true })
+            .select();
+          if (error || !data) return { ok: false };
+          criadas.push(...data);
+        }
+        memoria?.aplicarLote(criadas);
+        return { ok: true, criadas };
       } catch {
         return { ok: false };
       }

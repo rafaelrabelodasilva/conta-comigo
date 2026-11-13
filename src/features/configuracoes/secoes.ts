@@ -9,6 +9,7 @@ export const CHAVES_SECAO = [
   "conferencia",
   "regras",
   "aparencia",
+  "planilha",
 ] as const;
 
 export type ChaveSecao = (typeof CHAVES_SECAO)[number];

@@ -30,6 +30,7 @@ function montar(opcoes: {
   linhas?: { responsavel_id: string | null; valor_centavos: number }[];
   escolhidos?: ValorFiltro[];
   conferencia?: Conferencia | null;
+  historico?: { totalCentavos: number; quantidade: number } | null;
 }) {
   const aoFiltrar = vi.fn();
   const aoImportar = vi.fn();
@@ -46,6 +47,7 @@ function montar(opcoes: {
       aoImportar={aoImportar}
       conferencia={opcoes.conferencia}
       aoVerificar={aoVerificar}
+      historico={opcoes.historico}
     />,
   );
   return { aoFiltrar, aoImportar, aoVerificar, u: userEvent.setup() };
@@ -176,5 +178,27 @@ describe("FaturaDoMes (invoice-hero)", () => {
       montar({});
       expect(screen.queryByText(/Conferido/)).toBeNull();
     });
+  });
+});
+
+describe("FaturaDoMes: Mês só com histórico da planilha (História 3.10)", () => {
+  it("sem Fatura e com histórico: sobrelinha 'Histórico de …', total em hero-value, contagem, barra e sem selo nem 'Importar fatura'", () => {
+    montar({
+      fatura: null,
+      historico: { totalCentavos: 928023, quantidade: 52 },
+      linhas: [{ responsavel_id: "r-rafael", valor_centavos: 229074 }, { responsavel_id: "r-casal", valor_centavos: 563935 }],
+    });
+    expect(screen.getByText("Histórico de outubro").className).toContain("texto-eyebrow");
+    expect(sem(document.querySelector(".texto-hero-value")?.textContent)).toBe("Total do histórico R$ 9.280,23");
+    expect(screen.getByText(/52 lançamentos · Importado da planilha/)).toBeTruthy();
+    expect(screen.getByRole("group", { name: TEXTOS_PAINEL.distribuicao })).toBeTruthy();
+    expect(screen.queryByText(TEXTOS_PAINEL.sem_fatura)).toBeNull();
+    expect(screen.queryByRole("button", { name: new RegExp(TEXTOS_IMPORTAR.botao) })).toBeNull();
+    expect(screen.queryByText(/Conferido|Diferença/)).toBeNull();
+  });
+
+  it("sem Fatura e sem histórico continua 'Fatura ainda não importada'", () => {
+    montar({ fatura: null, historico: null });
+    expect(screen.getByText(TEXTOS_PAINEL.sem_fatura)).toBeTruthy();
   });
 });

@@ -14,6 +14,7 @@ import {
   somarValores,
   type LancamentoGrade,
   type NomesCadastros,
+  resumoDoHistorico,
 } from "./painel";
 
 const lanc = (id: string, extra: Partial<LancamentoGrade> = {}): LancamentoGrade => ({
@@ -269,5 +270,43 @@ describe("rotuloLinhaAcessivel", () => {
     expect(nomeExibido({ nome: "MAGALU", apelido: "Lava e seca" })).toBe("Lava e seca");
     expect(nomeExibido({ nome: "MAGALU", apelido: null })).toBe("MAGALU");
     expect(nomeExibido({ nome: "MAGALU", apelido: "  " })).toBe("MAGALU");
+  });
+});
+
+describe("resumoDoHistorico (História 3.10)", () => {
+  const linha = (extra: Record<string, unknown>) => ({ lancado_por: "historico" as const, valor_centavos: 1000, dividido_de_id: null, divisao: null, ...extra });
+
+  it("soma só as linhas `historico`, conta a mãe dividida uma vez e usa as filhas no valor", () => {
+    const r = resumoDoHistorico([
+      linha({ valor_centavos: 10000 }),
+      linha({ valor_centavos: -2500 }),
+      linha({ valor_centavos: 46600, divisao: { modo: "valor" } }),
+      linha({ valor_centavos: 31067, dividido_de_id: "m" }),
+      linha({ valor_centavos: 15533, dividido_de_id: "m" }),
+      linha({ lancado_por: "sistema", valor_centavos: 99999 }),
+    ]);
+    expect(r).toEqual({ totalCentavos: 10000 - 2500 + 31067 + 15533, quantidade: 3 });
+  });
+
+  it("sem linhas de histórico, null", () => {
+    expect(resumoDoHistorico([])).toBeNull();
+    expect(resumoDoHistorico([linha({ lancado_por: "sistema" })])).toBeNull();
+  });
+});
+
+describe("ordem do histórico da planilha (História 3.10)", () => {
+  it("sem `ordem_fatura`, a ordem padrão segue a ordem em que a aba foi gravada (created_at), seja qual for a ordem do array", () => {
+    const h = (id: string, created_at: string) => lanc(id, { lancado_por: "historico", fatura_id: null, final_cartao: null, created_at });
+    const linhas = [
+      h("c", "2026-11-13T12:00:00.300000+00:00"),
+      h("a", "2026-11-13T12:00:00.100000+00:00"),
+      h("b", "2026-11-13T12:00:00.200000+00:00"),
+    ];
+    expect(ordenarLancamentos(linhas, ORDEM_PADRAO, nomes).map((l) => l.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("linha com `ordem_fatura` vem antes de empates sem ela, e sem `created_at` o empate continua estável", () => {
+    const linhas = [lanc("x"), lanc("y", { ordem_fatura: 1 }), lanc("z")];
+    expect(ordenarLancamentos(linhas, ORDEM_PADRAO, nomes).map((l) => l.id)).toEqual(["y", "x", "z"]);
   });
 });
