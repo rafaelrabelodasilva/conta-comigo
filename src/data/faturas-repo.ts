@@ -10,13 +10,16 @@
 //   da memória quando o Mês importado é o Mês aberto e já carregou; senão,
 //   de uma leitura do banco só daquele Mês (a memória guarda só o Mês
 //   aberto).
-// - Reimportação (História 3.11 simplificada): `lerReimportacao` lê do
-//   banco a Fatura do Mês, as linhas dela (inclusive excluídas) e o
-//   `updated_at` mais novo do Mês, para o aviso "Importar de novo".
-//   `importar(…, substituir)` manda o id da Fatura confirmada e esse
-//   `updated_at` (o lido com o aviso, não o da hora do toque); a RPC apaga a
-//   anterior e devolve os ids apagados, que saem da memória antes de as
-//   linhas novas entrarem.
+// - Reimportação (História 3.12): `lerReimportacao` lê do banco a Fatura do
+//   Mês, as linhas dela (mães e Ajustes, inclusive excluídas) com a Série, as
+//   outras linhas do Mês que ocupam uma parcela de Série, a contagem do
+//   histórico da planilha e o `updated_at` mais novo do Mês; o núcleo
+//   (`reimportacao.ts`) casa as linhas novas com essas antigas e decide o
+//   destino das sem par. `importar(…, substituir)` manda o id da Fatura
+//   confirmada, esse `updated_at` (o lido com o aviso, não o da hora do toque)
+//   e o plano (`dados_reimportacao`); a RPC mantém a Fatura no mesmo lugar e
+//   devolve os ids apagados, que saem da memória antes de as linhas novas
+//   entrarem. As linhas que saíram da Fatura voltam em `previstos`.
 // - Séries e previstos (História 3.5): `importar` manda também os previstos
 //   que o núcleo calculou (`dados_previstos`). A RPC devolve os previstos
 //   criados ou religados e os ids dos previstos apagados na reimportação; só
@@ -30,8 +33,7 @@
 //   mesmo `updated_at` como trava (se um previsto mudou em outro aparelho, a
 //   RPC recusa com `fatura.mes_mudou`). A RPC devolve os casados em
 //   `lancamentos` e os previstos sem par em `previstos`; só os do Mês aberto
-//   entram na memória. `lerReimportacao` conta as linhas casadas: com elas a
-//   RPC recusa a reimportação (`fatura.reimportacao_com_casados`).
+//   entram na memória.
 // - Herança (História 3.7): `lerParcelasDoMesAnterior` lê do banco as parcelas
 //   do Mês anterior ao importado (a memória guarda só o Mês aberto) e, para as
 //   que têm Série, se a Série já tem a parcela seguinte fora da Fatura do Mês.
@@ -43,8 +45,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { somarMeses } from "@/domain/ciclo";
 import { lerDivisao } from "@/domain/divisao";
 import type { CandidataParaHerdar } from "@/domain/heranca";
-import type { Importacao, LinhaParaReimportar } from "@/domain/importacao-fatura";
-import type { PrevistoParaCasar } from "@/domain/previstos";
+import type { Importacao } from "@/domain/importacao-fatura";
+import type { ChaveDaSerie, PrevistoParaCasar } from "@/domain/previstos";
+import type { AntigaParaReimportar } from "@/domain/reimportacao";
 import { estaOnline } from "./conexao";
 import type { Database, Json } from "./database.types";
 import { FALHOU, SEM_CONEXAO, gravarComOtimismo, type Online, type ResultadoGravacao } from "./gravacao";
@@ -61,7 +64,6 @@ const CODIGOS_DA_RPC = new Set([
   "fatura.mes_ja_importado",
   "fatura.mes_mudou",
   "fatura.previstos_sem_casamento",
-  "fatura.reimportacao_com_casados",
   "auth.sessao_expirou",
 ]);
 
@@ -78,14 +80,18 @@ export type ResultadoImportacao =
 /** A Fatura que Rafael confirmou substituir e o `updated_at` lido com o aviso. */
 export type Substituir = { faturaId: string; atualizadoEm: string | null };
 
-/** O que o aviso "Importar de novo" precisa, lido do banco. */
+/** O que o plano e o aviso "Importar de novo" precisam, lido do banco. */
 export type LeituraReimportacao = Substituir & {
-  /** As linhas da Fatura do Mês (inclusive excluídas e Ajustes); manuais ficam de fora. */
-  linhas: LinhaParaReimportar[];
+  /** As linhas da Fatura do Mês (mães e Ajustes, inclusive excluídas); manuais e filhas ficam de fora. */
+  antigas: AntigaParaReimportar[];
   /** O Status padrão de `configuracoes`, lido junto (null: sem padrão). */
   statusPadraoId: string | null;
-  /** Previstos que a reimportação apagaria: criados pela Fatura, `sistema`, sem edição e não excluídos. */
-  previstosAApagar: number;
+  /** Linhas com referência que impede apagar (Pagamento, Épico 6); vazio até lá. */
+  referenciadas: string[];
+  /** Linhas do Mês que ocupam uma parcela de Série fora da Fatura e não são previstos (ex.: as que saíram numa reimportação antes). */
+  outrasDaSerie: PrevistoParaCasar[];
+  /** Linhas `historico` (planilha) do Mês, que a reimportação não toca. */
+  historico: number;
 };
 
 /**
@@ -110,7 +116,8 @@ export type ResultadoLeituraDeCandidatas =
   | ({ ok: true } & LeituraDeCandidatas)
   | { ok: false; codigo: string };
 
-type Removidos = { fatura_id: string; cartoes: string[]; lancamentos: string[]; previstos?: string[] };
+/** `fatura_id` nulo: reimportação (a Fatura fica no mesmo lugar, só as linhas e os cartões saem). */
+type Removidos = { fatura_id: string | null; cartoes: string[]; lancamentos: string[]; previstos?: string[] };
 
 type Gravados = {
   fatura: LinhaFatura;
@@ -128,7 +135,7 @@ function ehRemovidos(dados: unknown): boolean {
   const r = dados as Partial<Record<keyof Removidos, unknown>>;
   return (
     typeof r === "object" &&
-    typeof r.fatura_id === "string" &&
+    (r.fatura_id === null || typeof r.fatura_id === "string") &&
     ehListaDeIds(r.cartoes) &&
     ehListaDeIds(r.lancamentos) &&
     (r.previstos === undefined || ehListaDeIds(r.previstos))
@@ -151,7 +158,7 @@ function ehGravados(dados: unknown): dados is Gravados {
 }
 
 const COLUNAS_REIMPORTACAO =
-  "id, fatura_id, excluido_em, responsavel_id, tipo_id, observacao, apelido, status_id, casado_em, dividido_de_id, divisao, updated_at";
+  "id, fatura_id, lancado_por, nome_normalizado, valor_centavos, parcela_n, parcela_total, ordem_fatura, ajuste_de_id, excluido_em, responsavel_id, tipo_id, observacao, apelido, status_id, casado_em, editado_em, revisao_motivo, revisao_dados, serie_id, dividido_de_id, divisao, updated_at";
 
 const COLUNAS_CANDIDATAS =
   "id, nome_normalizado, parcela_n, parcela_total, valor_centavos, ordem_fatura, responsavel_id, tipo_id, apelido, observacao, divisao, serie_id, excluido_em, dividido_de_id, ajuste_de_id";
@@ -262,35 +269,79 @@ export function criarRepoFaturas(deps: {
         for (const l of lidasLinhas.data) {
           if (atualizadoEm === null || ehMaisNovo(l.updated_at, atualizadoEm)) atualizadoEm = l.updated_at;
         }
-        const idsDaFatura = lidasLinhas.data.filter((l) => l.fatura_id === faturaId).map((l) => l.id);
-        // Previstos que a Fatura criou e ninguém tocou: a reimportação os apaga (decisão 3-A).
-        const lidosPrevistos =
-          idsDaFatura.length === 0
-            ? { data: [], error: null }
-            : await cliente
-                .from("lancamentos")
-                .select("id")
-                .in("origem_lancamento_id", idsDaFatura)
-                .eq("lancado_por", "sistema")
-                .is("dividido_de_id", null)
-                .is("editado_em", null)
-                .is("excluido_em", null);
-        if (lidosPrevistos.error || !lidosPrevistos.data) return falhou(lidosPrevistos.error);
-        const linhas = lidasLinhas.data
-          .filter((l) => l.fatura_id === faturaId)
-          .map(({ excluido_em, responsavel_id, tipo_id, observacao, status_id, casado_em, dividido_de_id, divisao }) => ({
-            excluido_em,
-            responsavel_id,
-            tipo_id,
-            observacao,
-            status_id,
-            casado_em,
-            dividido_de_id,
-            divisao,
-          }));
+        const daFatura = lidasLinhas.data.filter((l) => l.fatura_id === faturaId && (l.dividido_de_id ?? null) === null);
+        const outras = lidasLinhas.data.filter(
+          (l) =>
+            l.fatura_id !== faturaId &&
+            l.excluido_em === null &&
+            (l.dividido_de_id ?? null) === null &&
+            l.lancado_por !== "sistema" &&
+            l.serie_id !== null &&
+            l.parcela_n !== null &&
+            l.parcela_total !== null,
+        );
+        // As Séries das linhas da Fatura e das outras que ocupam parcela (uma leitura só).
+        const idsDasSeries = [...new Set([...daFatura, ...outras].flatMap((l) => (l.serie_id === null ? [] : [l.serie_id])))];
+        const dasSeries = new Map<string, ChaveDaSerie>();
+        if (idsDasSeries.length > 0) {
+          const series = await cliente
+            .from("series")
+            .select("id, ocorrencia, nome_normalizado, parcela_total, valor_parcela_centavos, mes_primeira_parcela")
+            .in("id", idsDasSeries);
+          if (series.error || !series.data) return falhou(series.error);
+          for (const sr of series.data) {
+            dasSeries.set(sr.id, {
+              nome_normalizado: sr.nome_normalizado,
+              parcela_total: sr.parcela_total,
+              valor_parcela_centavos: sr.valor_parcela_centavos,
+              mes_primeira_parcela: sr.mes_primeira_parcela,
+              ocorrencia: sr.ocorrencia,
+            });
+          }
+        }
+        const antigas: AntigaParaReimportar[] = daFatura.map((l) => ({
+          id: l.id,
+          nome_normalizado: l.nome_normalizado,
+          valor_centavos: l.valor_centavos,
+          parcela_n: l.parcela_n,
+          parcela_total: l.parcela_total,
+          ordem_fatura: l.ordem_fatura ?? 0,
+          ajuste_de_id: l.ajuste_de_id,
+          casado_em: l.casado_em,
+          excluido_em: l.excluido_em,
+          responsavel_id: l.responsavel_id,
+          tipo_id: l.tipo_id,
+          status_id: l.status_id,
+          observacao: l.observacao,
+          apelido: l.apelido,
+          editado_em: l.editado_em,
+          divisao: lerDivisao(l.divisao),
+          revisao_motivo: l.revisao_motivo,
+          revisao_dados: l.revisao_dados,
+          serie: l.serie_id === null ? null : (dasSeries.get(l.serie_id) ?? null),
+        }));
+        const outrasDaSerie: PrevistoParaCasar[] = outras.flatMap((l) => {
+          const serie = dasSeries.get(l.serie_id as string);
+          return serie === undefined
+            ? []
+            : [
+                {
+                  id: l.id,
+                  nome_normalizado: l.nome_normalizado,
+                  parcela_n: l.parcela_n,
+                  parcela_total: l.parcela_total,
+                  valor_centavos: l.valor_centavos,
+                  ocorrencia: serie.ocorrencia,
+                  responsavel_id: l.responsavel_id,
+                  tipo_id: l.tipo_id,
+                  serie,
+                },
+              ];
+        });
+        const historico = lidasLinhas.data.filter((l) => l.lancado_por === "historico" && l.excluido_em === null).length;
         return {
           ok: true,
-          valor: { faturaId, atualizadoEm, linhas, statusPadraoId, previstosAApagar: lidosPrevistos.data.length },
+          valor: { faturaId, atualizadoEm, antigas, statusPadraoId, referenciadas: [], outrasDaSerie, historico },
         };
       } catch {
         return { ok: false, codigo: "carregar.falhou" };
@@ -482,6 +533,15 @@ export function criarRepoFaturas(deps: {
           dados_lancamentos: importacao.lancamentos as unknown as Json,
           dados_previstos: importacao.previstos as unknown as Json,
           previstos_sem_par: (importacao.previstos_sem_par ?? []) as unknown as Json,
+          ...(substituir && importacao.reimportacao
+            ? {
+                dados_reimportacao: {
+                  apagar: importacao.reimportacao.apagar,
+                  sumiram: importacao.reimportacao.sumiram,
+                  voltar_a_previsto: importacao.reimportacao.voltar_a_previsto,
+                } as unknown as Json,
+              }
+            : {}),
           ...(lidoEm === null ? {} : { lancamentos_atualizados_em: lidoEm }),
           ...(substituir ? { substituir_fatura_id: substituir.faturaId } : {}),
         });
@@ -498,7 +558,7 @@ export function criarRepoFaturas(deps: {
         if (data.removidos) {
           lancamentos.remover([...data.removidos.lancamentos, ...(data.removidos.previstos ?? [])]);
           cartoes.remover(data.removidos.cartoes);
-          faturas.remover([data.removidos.fatura_id]);
+          if (data.removidos.fatura_id !== null) faturas.remover([data.removidos.fatura_id]);
         }
         faturas.aplicarLote([data.fatura]);
         cartoes.aplicarLote(data.cartoes);

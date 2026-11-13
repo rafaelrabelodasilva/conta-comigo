@@ -359,19 +359,33 @@ describe("repositório da importação da Fatura", () => {
   });
 });
 
-describe("reimportar um Mês (História 3.11)", () => {
+describe("reimportar um Mês (História 3.12)", () => {
   const PADRAO = "nao-pago";
   const linhaDb = (id: string, extra: Record<string, unknown>) => ({
     id,
     mes: "2026-10",
     fatura_id: "f0",
+    lancado_por: "fatura",
+    nome_normalizado: id.toUpperCase(),
+    valor_centavos: 1000,
+    parcela_n: null,
+    parcela_total: null,
+    ordem_fatura: 1,
+    ajuste_de_id: null,
     excluido_em: null,
     responsavel_id: null,
     tipo_id: null,
     observacao: null,
+    apelido: null,
     status_id: PADRAO,
+    casado_em: null,
+    editado_em: null,
+    revisao_motivo: null,
+    revisao_dados: null,
+    serie_id: null,
+    dividido_de_id: null,
+    divisao: null,
     updated_at: T1,
-    ordem_fatura: 1,
     ...extra,
   });
   const banco = {
@@ -381,79 +395,96 @@ describe("reimportar um Mês (História 3.11)", () => {
       { id: "f9", mes: "2026-09", updated_at: T1 },
     ],
     lancamentos: [
-      linhaDb("a", { responsavel_id: "casal" }),
-      linhaDb("b", { excluido_em: T1 }),
-      linhaDb("c", {}),
+      linhaDb("a", { responsavel_id: "casal", ordem_fatura: 1 }),
+      linhaDb("b", { excluido_em: T1, ordem_fatura: 2 }),
+      linhaDb("c", { ordem_fatura: 3 }),
+      // Filha de Divisão: sai junto com a mãe e não é uma linha da Fatura para parear.
+      linhaDb("filha", { dividido_de_id: "a", ordem_fatura: 1 }),
       // Manual do Mês: fica de fora das linhas, mas o updated_at dele conta.
-      linhaDb("m", { fatura_id: null, updated_at: T2, tipo_id: "casa" }),
+      linhaDb("m", { fatura_id: null, lancado_por: "manual", updated_at: T2, tipo_id: "casa" }),
       linhaDb("s", { mes: "2026-09", fatura_id: "f9", updated_at: "2026-12-01T00:00:00+00:00" }),
     ],
   };
 
-  it("lerReimportacao: a Fatura do Mês, só as linhas dela (com excluídas), o updated_at mais novo do Mês e o Status padrão do banco", async () => {
+  it("lerReimportacao: a Fatura do Mês, só as mães e os Ajustes dela (com excluídas), o updated_at mais novo do Mês e o Status padrão", async () => {
     const m = montar(banco, () => ({ data: null, error: null }));
-    expect(await m.repo.lerReimportacao("2026-10")).toEqual({
+    const r = await m.repo.lerReimportacao("2026-10");
+    expect(r).toMatchObject({
       ok: true,
-      valor: {
-        faturaId: "f0",
-        atualizadoEm: T2,
-        linhas: [
-          { excluido_em: null, responsavel_id: "casal", tipo_id: null, observacao: null, status_id: PADRAO },
-          { excluido_em: T1, responsavel_id: null, tipo_id: null, observacao: null, status_id: PADRAO },
-          { excluido_em: null, responsavel_id: null, tipo_id: null, observacao: null, status_id: PADRAO },
-        ],
-        statusPadraoId: PADRAO,
-        previstosAApagar: 0,
-      },
+      valor: { faturaId: "f0", atualizadoEm: T2, statusPadraoId: PADRAO, referenciadas: [], outrasDaSerie: [], historico: 0 },
     });
+    const antigas = r.ok && r.valor ? r.valor.antigas : [];
+    expect(antigas.map((l) => l.id)).toEqual(["a", "b", "c"]);
+    expect(antigas[0]).toMatchObject({ nome_normalizado: "A", valor_centavos: 1000, responsavel_id: "casal", ordem_fatura: 1, serie: null });
+    expect(antigas[1].excluido_em).toBe(T1);
     expect(m.leituras.map((l) => [l.tabela, l.colunas, l.filtros])).toEqual([
       ["faturas", "id", ["mes=2026-10"]],
       ["lancamentos", expect.any(String), ["mes=2026-10"]],
       ["configuracoes", "status_padrao_id", []],
-      // Os previstos que a Fatura criou (História 3.5): só as linhas dela.
-      [
-        "lancamentos",
-        "id",
-        ["origem_lancamento_id in a,b,c", "lancado_por=sistema", "dividido_de_id is null", "editado_em is null", "excluido_em is null"],
-      ],
     ]);
   });
 
-  it("lerReimportacao conta só os previstos da Fatura que ninguém tocou (sistema, sem edição, não excluídos)", async () => {
-    const previsto = (id: string, extra: Record<string, unknown>) =>
-      linhaDb(id, { mes: "2026-11", fatura_id: null, lancado_por: "sistema", origem_lancamento_id: "a", editado_em: null, ...extra });
+  it("lerReimportacao devolve o casado_em, o Ajuste, o Apelido, a edição e a Divisão de cada linha", async () => {
+    const divisao = {
+      modo: "proporcao",
+      partes: [
+        { responsavel_id: "r1", numerador: 1, denominador: 2, filha_id: "f1" },
+        { responsavel_id: "r2", numerador: 1, denominador: 2, filha_id: "f2" },
+      ],
+    };
     const m = montar(
       {
         ...banco,
         lancamentos: [
-          ...banco.lancamentos,
-          previsto("p1", {}),
-          previsto("p2", { origem_lancamento_id: "c" }),
-          previsto("p3", { editado_em: T1 }),
-          previsto("p4", { excluido_em: T1 }),
-          previsto("p5", { origem_lancamento_id: "m" }),
-          previsto("p6", { lancado_por: "manual" }),
+          linhaDb("a", { casado_em: "2026-12-05T10:00:00Z", apelido: "Celular", editado_em: T1, divisao, revisao_motivo: "valor_mudou" }),
+          linhaDb("b", { ajuste_de_id: "a", ordem_fatura: 2 }),
         ],
       },
       () => ({ data: null, error: null }),
     );
     const r = await m.repo.lerReimportacao("2026-10");
-    expect(r.ok && r.valor?.previstosAApagar).toBe(2);
+    const [a, b] = r.ok && r.valor ? r.valor.antigas : [];
+    expect(a).toMatchObject({ casado_em: "2026-12-05T10:00:00Z", apelido: "Celular", editado_em: T1, revisao_motivo: "valor_mudou" });
+    expect(a.divisao?.partes.map((p) => p.filha_id)).toEqual(["f1", "f2"]);
+    expect(b.ajuste_de_id).toBe("a");
   });
 
-  it("lerReimportacao devolve o casado_em de cada linha da Fatura (a tela bloqueia a reimportação, História 3.6)", async () => {
+  it("lerReimportacao lê a Série das linhas e das outras do Mês que ocupam parcela (não previstos), e conta o histórico", async () => {
+    const serie = {
+      id: "s1",
+      ocorrencia: 2,
+      nome_normalizado: "A",
+      parcela_total: 5,
+      valor_parcela_centavos: 1000,
+      mes_primeira_parcela: "2026-09",
+    };
     const m = montar(
       {
         ...banco,
+        series: [serie, { ...serie, id: "s2" }],
         lancamentos: [
-          linhaDb("a", { casado_em: "2026-12-05T10:00:00Z" }),
-          linhaDb("b", { casado_em: null }),
+          linhaDb("a", { serie_id: "s1", parcela_n: 2, parcela_total: 5 }),
+          // Saiu da Fatura numa reimportação anterior: ocupa a parcela e não é previsto.
+          linhaDb("x", { fatura_id: null, lancado_por: "manual", serie_id: "s2", parcela_n: 3, parcela_total: 5, ordem_fatura: null }),
+          // Previsto: o casamento já o conhece.
+          linhaDb("p", { fatura_id: null, lancado_por: "sistema", serie_id: "s2", parcela_n: 4, parcela_total: 5, ordem_fatura: null }),
+          linhaDb("h1", { fatura_id: null, lancado_por: "historico", ordem_fatura: null }),
+          linhaDb("h2", { fatura_id: null, lancado_por: "historico", ordem_fatura: null }),
+          linhaDb("h3", { fatura_id: null, lancado_por: "historico", ordem_fatura: null, excluido_em: T1 }),
         ],
       },
       () => ({ data: null, error: null }),
     );
     const r = await m.repo.lerReimportacao("2026-10");
-    expect(r.ok && r.valor?.linhas.map((l) => l.casado_em ?? null)).toEqual(["2026-12-05T10:00:00Z", null]);
+    expect(r.ok && r.valor?.antigas[0].serie).toEqual({
+      nome_normalizado: "A",
+      parcela_total: 5,
+      valor_parcela_centavos: 1000,
+      mes_primeira_parcela: "2026-09",
+      ocorrencia: 2,
+    });
+    expect(r.ok && r.valor?.outrasDaSerie.map((p) => [p.id, p.parcela_n, p.ocorrencia])).toEqual([["x", 3, 2]]);
+    expect(r.ok && r.valor?.historico).toBe(2);
   });
 
   it("lerReimportacao: sem configuracoes no banco, o Status padrão é null", async () => {
@@ -477,6 +508,50 @@ describe("reimportar um Mês (História 3.11)", () => {
     const offline = montar(banco, () => ({ data: null, error: null }), () => false);
     expect(await offline.repo.lerReimportacao("2026-10")).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
     expect(offline.leituras).toEqual([]);
+  });
+
+  it("importar com o plano: manda dados_reimportacao; a Fatura fica no lugar e as linhas que saíram voltam em previstos", async () => {
+    const plano = {
+      apagar: ["a"],
+      sumiram: ["b"],
+      voltar_a_previsto: ["c"],
+      resumo: { quantidade: 3, mantidas: 0, valorMudou: 0, novas: 2, apagadas: 1, sumiram: 1, voltaramAPrevisto: 1, excluidos: 0 },
+    };
+    const m = montar(
+      {
+        faturas: [{ id: "f1", mes: "2026-10", updated_at: T1 }],
+        fatura_cartoes: [{ id: "c0", fatura_id: "f1", final: "5061", updated_at: T1 }],
+        lancamentos: [lancamento("a", "2026-10", T1), lancamento("b", "2026-10", T1), lancamento("c", "2026-10", T1)],
+      },
+      () => ({
+        data: {
+          ...gravados,
+          // O `b` saiu da Fatura (manual) e o `c` voltou a previsto: voltam atualizados em `previstos`.
+          previstos: [
+            { id: "b", mes: "2026-10", fatura_id: null, ordem_fatura: null, updated_at: T2 },
+            { id: "c", mes: "2026-10", fatura_id: null, ordem_fatura: null, updated_at: T2 },
+          ],
+          removidos: { fatura_id: null, cartoes: ["c0"], lancamentos: ["a"], previstos: [] },
+        },
+        error: null,
+      }),
+    );
+    await pronto(m);
+    expect(await m.repo.importar({ ...importacao, reimportacao: plano }, { faturaId: "f1", atualizadoEm: T1 })).toEqual({
+      ok: true,
+      quantidade: 2,
+    });
+    expect(m.chamadas[0].args.dados_reimportacao).toEqual({ apagar: ["a"], sumiram: ["b"], voltar_a_previsto: ["c"] });
+    expect(m.chamadas[0].args.substituir_fatura_id).toBe("f1");
+    expect(m.cartoes.linhas().map((c) => c.id)).toEqual(["c1"]);
+    expect(m.lancamentos.linhas().map((l) => l.id).sort()).toEqual(["b", "c", "l1", "l2"]);
+  });
+
+  it("importar sem substituir não manda dados_reimportacao", async () => {
+    const m = montar({}, () => ({ data: gravados, error: null }));
+    await pronto(m);
+    await m.repo.importar(importacao);
+    expect("dados_reimportacao" in m.chamadas[0].args).toBe(false);
   });
 
   it("importar com substituir: manda o id e o updated_at do aviso, sem reler; tira os apagados da memória", async () => {
@@ -816,12 +891,12 @@ describe("casamento dos previstos (História 3.6)", () => {
     expect("lancamentos_atualizados_em" in m.chamadas[0].args).toBe(false);
   });
 
-  it("a recusa da reimportação com casados chega à tela com o código da RPC", async () => {
-    const m = montar({}, () => ({ data: null, error: { message: "fatura.reimportacao_com_casados", code: "P0001" } }));
+  it("a recusa de um plano velho chega à tela com o código da RPC", async () => {
+    const m = montar({}, () => ({ data: null, error: { message: "fatura.mes_mudou", code: "P0001" } }));
     await pronto(m);
     expect(await m.repo.importar(importacao, { faturaId: "f0", atualizadoEm: T1 })).toEqual({
       ok: false,
-      codigo: "fatura.reimportacao_com_casados",
+      codigo: "fatura.mes_mudou",
     });
   });
 

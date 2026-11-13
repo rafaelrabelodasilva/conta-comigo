@@ -9,7 +9,9 @@ import {
   rotuloAjusteDoItem,
   rotuloConfirmarItem,
   rotuloManterClassificacao,
+  rotuloExcluirSumiu,
   rotuloManterPrevisto,
+  rotuloManterSumiu,
   rotuloMesDoItem,
   rotuloMudarItem,
   rotuloRemoverPrevisto,
@@ -73,7 +75,8 @@ export function ItemRevisar({
     .join(" · ");
   const semSugestao = item.variante === "sem_sugestao";
   const valorMudou = item.variante === "valor_mudou";
-  const naoVeio = item.variante === "nao_veio";
+  const sumiu = item.variante === "sumiu";
+  const naoVeio = item.variante === "nao_veio" || sumiu;
   return (
     <li
       data-variante={item.variante}
@@ -102,21 +105,21 @@ export function ItemRevisar({
       {naoVeio ? (
         <>
           <p className="text-right">
-            <span className="block min-h-4 texto-caption text-text-muted">{T.previsto}</span>
-            <span className="block texto-body-strong">{T.nao_veio}</span>
+            <span className="block min-h-4 texto-caption text-text-muted">{sumiu ? T.sumiu_dica : T.previsto}</span>
+            <span className="block texto-body-strong">{sumiu ? T.sumiu : T.nao_veio}</span>
           </p>
           <div className="col-span-2 flex justify-end gap-2">
             <Botao
-              aria-label={rotuloRemoverPrevisto(item.nome)}
+              aria-label={sumiu ? rotuloExcluirSumiu(item.nome) : rotuloRemoverPrevisto(item.nome)}
               disabled={ocupado}
               onClick={() => aoRemoverPrevisto?.(item)}
               className="flex-1 px-1.5"
             >
-              {T.remover_previsto}
+              {sumiu ? T.excluir : T.remover_previsto}
             </Botao>
             <Botao
               variante="primario"
-              aria-label={rotuloManterPrevisto(item.nome)}
+              aria-label={sumiu ? rotuloManterSumiu(item.nome) : rotuloManterPrevisto(item.nome)}
               disabled={ocupado}
               onClick={() => aoManterPrevisto?.(item)}
               className="w-20 px-1.5"

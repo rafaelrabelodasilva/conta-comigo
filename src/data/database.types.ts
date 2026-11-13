@@ -570,6 +570,7 @@ export type Database = {
           dados_fatura: Json
           dados_lancamentos: Json
           dados_previstos?: Json
+          dados_reimportacao?: Json
           lancamentos_atualizados_em?: string
           previstos_sem_par?: Json
           substituir_fatura_id?: string
@@ -631,6 +632,7 @@ export type Database = {
         | "sugestao_duvida"
         | "valor_mudou"
         | "nao_veio_na_fatura"
+        | "sumiu_na_reimportacao"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -768,6 +770,7 @@ export const Constants = {
         "sugestao_duvida",
         "valor_mudou",
         "nao_veio_na_fatura",
+        "sumiu_na_reimportacao",
       ],
     },
   },

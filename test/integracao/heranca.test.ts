@@ -10,7 +10,7 @@ import type { Json } from "../../src/data/database.types";
 import type { CandidataParaHerdar } from "../../src/domain/heranca";
 import type { Importacao, LancamentoParaGravar } from "../../src/domain/importacao-fatura";
 import { aplicarCasamento, atribuirSeries, casarPrevistos, gerarPrevistos } from "../../src/domain/previstos";
-import { ligado, supabaseLocal, type Cliente, type Usuario } from "./apoio";
+import { ligado, planoApagarTudo, supabaseLocal, type Cliente, type Usuario } from "./apoio";
 
 type Parcela = { nome: string; n: number | null; total: number | null; valor: number };
 
@@ -199,6 +199,7 @@ describe.skipIf(!ligado)("Herança das parcelas sem previsto no Supabase local",
       previstos_sem_par: [] as unknown as Json,
       lancamentos_atualizados_em: lidoEm,
       substituir_fatura_id: f!.id,
+      dados_reimportacao: (await planoApagarTudo(a.cliente, f!.id)) as unknown as Json,
     });
     expect(r.error).toBeNull();
     const { data: novas } = await local.admin.from("lancamentos").select("*").eq("owner_id", a.id).eq("mes", "2026-11").not("fatura_id", "is", null);

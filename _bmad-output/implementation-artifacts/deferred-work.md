@@ -1,5 +1,4 @@
 # Trabalho adiado
-
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-1-criar-o-projeto-e-publica-lo-na-vercel.md`
   summary: Estender o lint do núcleo (AD-1) para proibir rede, relógio, DOM e APIs só de Node (`fetch`, `Date.now`, `new Date()` sem argumento, `window`, `document`, `node:*`, `fs`) em `src/domain`.
   evidence: AD-1 proíbe esses usos, mas a regra da 1.1 cobre só imports de camadas, Next, React e Supabase.
@@ -39,11 +38,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-7-configurar-o-ciclo-do-cartao-e-a-aparencia.md`
   summary: Testes de componente (jsdom) para `SecaoCiclo`, `SecaoConferencia` e `SecaoAparencia`: dias passados na ordem certa a `planejarMudancaCiclo`, nada gravado com plano `null`, mensagem no campo e rascunho mantido após recusa.
   evidence: Medium não verificado: nenhuma seção tem teste de componente (Vitest em `node`); um erro de fiação inseriria uma linha errada em `config_ciclo`, que só pode ser superada, nunca corrigida.
-
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-10-backup-semanal-fora-do-supabase.md`
   summary: Alertar quando o último backup bem-sucedido tiver mais de ~8 dias (agenda desativada pelo GitHub após 60 dias sem atividade ou falhas repetidas).
   evidence: O GitHub desativa workflows agendados em repositórios sem atividade por 60 dias; hoje só docs/backup.md avisa e o e-mail de falha vai para quem editou o cron.
-
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-1-prova-tecnica-ler-a-fatura-de-outubro-no-ipad.md`
   summary: Antes da 2.3, avaliar subir o `pdfjs-dist` para a 6.x (a arquitetura fixa 5.6.x) e conferir se o `getTextContent` volta a funcionar no Safari.
   evidence: `npm audit` acusa GHSA-hq66-cqwq-w95j (alta) na 5.6.x, corrigido na 6.2.108; só afeta `enableScripting` do visualizador, que não é usado. A 5.6 também exigiu ler o texto por `getReader()` no Safari 18 (PR #21).
@@ -65,9 +62,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-11-reimportar-um-mes.md`
   summary: Testar a tradução do ramo `unique_violation` de `importar_fatura` (o `sqlerrm like '%faturas_owner_id_mes_key%'` devolve `fatura.mes_ja_importado` em vez do erro cru).
   evidence: Low. A 3.11 fixou o nome da restrição (teste do insert direto repetido) e o resultado de duas importações em paralelo, mas a trava `pg_advisory_xact_lock` faz a segunda cair na checagem explícita, não no ramo; um erro de digitação no padrão `like` passaria no CI. Só se alcança o ramo contornando a trava.
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-11-reimportar-um-mes.md`
-  summary: Antes de a 3.5 (Séries) ou o Épico 6 (Pagamentos) irem para produção, trocar a reimportação simplificada pela Story 3.12 ou fazer a RPC recusar com código próprio quando as linhas da Fatura tiverem Série ou Pagamento.
-  evidence: Low hoje. A 3.11 simplificada apaga todas as linhas da Fatura; uma FK nova sem cascata faz a RPC falhar com erro genérico (nada é apagado, a transação desfaz), e uma com cascata apagaria Séries ou Pagamentos. Só a nota no `epics.md` (Story 3.12) lembra disso.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-3-classificar-em-lote.md`
   summary: Rodar no CI (ou no Supabase local) a migração `20261113120000_classificar_em_lote.sql` e `test/integracao/lote.test.ts`, e conferir `database.types.ts` com `supabase gen types`.
   evidence: Medium não verificado. Esta máquina não tem Docker nem a CLI do Supabase: a RPC foi exercitada só num Postgres em memória (pglite) com uma tabela simplificada (tudo ou nada, recusas, `null`, lista vazia, 1001 itens), e a entrada de `classificar_em_lote` em `database.types.ts` foi escrita à mão no formato do gerado. RLS e Realtime só o teste de integração prova.
@@ -83,9 +77,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-4-gerenciar-regras-aprendidas.md`
   summary: Rodar no CI os testes novos de `test/integracao/regras.test.ts` (editar, excluir com DELETE no Realtime e `marcarUso`).
   evidence: Medium não verificado. Esta máquina não tem Docker: os repositórios foram provados só com cliente falso (Vitest) e a tela com jsdom; RLS e Realtime só o teste de integração prova.
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-6-casar-os-previstos-com-a-fatura-real.md`
-  summary: Fazer a Story 3.12 (reimportar mantendo a classificação) antes do Épico 6, e dar ao Pagamento uma trava própria na RPC `importar_fatura` se a 3.12 ainda não existir.
-  evidence: Medium. A 3.6 fechou a parte do casamento da pendência da 3.11/3.5: a RPC recusa a reimportação com `fatura.reimportacao_com_casados` quando a Fatura tem linha com `casado_em` (e o aviso do passo 3 só deixa "Cancelar"). Sem casado a reimportação simplificada segue como na 3.11. Quem reimportar uma Fatura já casada espera a 3.12; o Pagamento (Épico 6) ainda não tem trava.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-5-series-e-parcelas-previstas.md`
   summary: Rodar no CI a migração `20261114120000_series_previstos.sql`, `test/integracao/series.test.ts` e a comparação de `database.types.ts` com `supabase gen types`.
   evidence: Medium não verificado. Esta máquina não tem Docker: a migração e a RPC `importar_fatura` foram provadas num Postgres em memória (pglite) com todas as migrações em ordem e os cenários do teste de integração (Série, previstos, duas compras idênticas, recusa sem casamento, Mês com Fatura, reimportação). RLS, Realtime e o formato exato dos tipos gerados só o CI prova; as entradas de `series` e das colunas novas em `database.types.ts` foram escritas à mão no formato do gerado.
@@ -116,9 +107,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-6-casar-os-previstos-com-a-fatura-real.md`
   summary: Conferir no iPad se o VoiceOver lê com sentido as variantes "Valor mudou" ("Antes → agora") e "Não veio na fatura" ("Remover previsto" / "Manter") do Revisar.
   evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4; o jsdom só confere o DOM e os nomes acessíveis.
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-6-casar-os-previstos-com-a-fatura-real.md`
-  summary: Reimportar a Fatura de um Mês apaga em silêncio os previstos "Não veio na fatura" dos Meses seguintes que ela criou (origem na Fatura apagada, ainda `sistema` e sem edição), sem a pergunta que "Manter" evitaria.
-  evidence: Low. É a regra da reimportação simplificada (3.5, decisão 3-A): os previstos intocados são apagados e recriados só nos Meses sem Fatura. Com a 3.12 isso muda (previstos que tinham casado voltam a `sistema`).
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-7-herdar-parcelas-sem-previsto.md`
   summary: Rodar no CI a migração `20261116120000_herdar_parcelas.sql` (a RPC `importar_fatura` passa a gravar `apelido` e `observacao`) e `test/integracao/heranca.test.ts`.
   evidence: Medium não verificado. Esta máquina não tem Docker: a migração e os cenários (herdeiras com e sem Série, compras idênticas, previsto excluído, reimportação, casado mantendo o Apelido) rodaram só no Postgres em memória (pglite) com todas as migrações em ordem; RLS e Realtime só o CI prova. A assinatura da RPC não mudou, então `database.types.ts` não muda.
@@ -135,9 +123,6 @@
   summary: Herdar "para trás" (importar um Mês mais antigo que a parcela já gravada, ex.: out/26 depois de nov/26) ou de mais de um Mês antes (n−2 quando falta o Mês anterior).
   evidence: Low. A 3.7 só olha a n−1 do Mês imediatamente anterior (decisão Q5-A). Importar fora de ordem entra na Série pela chave (sem previsto, pois o Mês seguinte já tem Fatura, decisão 1-A), mas só com as Regras.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-7-herdar-parcelas-sem-previsto.md`
-  summary: Na 3.12 (reimportar mantendo a classificação), dar prioridade à edição manual da linha antiga sobre a herança recalculada, e lembrar que a herança lê o Mês anterior como está na hora da reimportação.
-  evidence: Low. A reimportação simplificada recalcula a herança, mas apaga a edição manual de uma herdeira (a herdeira não tem `casado_em`, então a trava da 3.6 não a protege). O aviso "X já estão classificados à mão" cobre o caso.
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-herdar-parcelas-sem-previsto.md`
   summary: `regrasUsadas`/`chavesDeRegrasUsadas` marcam o `ultimo_uso` da Regra mesmo quando a herança sobrepôs a classificação dela na linha.
   evidence: Low. A importação calcula as Regras usadas antes da herança; a Regra aparece como usada embora a linha tenha ficado com a classificação da parcela anterior.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-7-herdar-parcelas-sem-previsto.md`
@@ -149,9 +134,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-8-dividir-um-lancamento.md`
   summary: Conferir a Divisão de verdade no iPad (dividir uma linha com Tipo, ver grade, hero, Conferência e barra por Responsável antes e depois, previstos de dez/26 divididos e o Desfazer) e, em dez/26, o casamento de um previsto dividido e a recusa de reimportar essa Fatura.
   evidence: Medium não verificado em produção. Hoje não há Divisão nem filha; o casamento de previsto dividido (filhas mantidas e recalculadas) só rodou no pglite e no Vitest.
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-dividir-um-lancamento.md`
-  summary: Na 3.12 (reimportar mantendo a classificação), manter a `divisao`, o `filha_id` e os `id` das filhas das linhas casadas, e olhar o `editado_em`/Status das filhas de um previsto antes de apagá-lo.
-  evidence: Low. A reimportação simplificada apaga mãe e filhas (o aviso conta a mãe dividida como "à mão") e apaga o previsto dividido cujas filhas tiveram o Status editado, porque a regra da 3.5 olha só a mãe. As filhas apagadas em cascata com um previsto também não entram em `removidos.previstos` (o Realtime limpa a memória).
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-8-dividir-um-lancamento.md`
   summary: Dar ao Pagamento (Épico 6) uma trava na RPC `dividir_lancamento`/`recriar_filhas` quando uma filha que seria excluída em lógico (redividir, Desfazer divisão) já tem Pagamento.
   evidence: Maybe-false/medium. A filha mantém o `id` pela posição, mas a que sobra é excluída; sem Pagamentos hoje não há o que proteger.
@@ -169,10 +151,7 @@
   evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4; o jsdom só confere o `aria-label`.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-9-dar-apelido.md`
   summary: Fazer a próxima Fatura que trouxer um Nome já apelidado nascer com o Apelido (hoje só parcela herdada e previstos copiam); candidata: tabela `apelidos` por `normalizarNome`, aplicada pela `importar_fatura`, nunca em `regras`.
-  evidence: Medium. Decisão Q3-A da 3.9: o critério de aceite não pede. Uma compra à vista recorrente (ex.: assinatura) volta sem Apelido todo mês, e a reimportação simplificada (3.11) apaga o Apelido dado à mão; a 3.12 e a 3.10 precisam decidir isso juntas.
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-dar-apelido.md`
-  summary: Na 3.12 (reimportar mantendo a classificação), manter o Apelido das linhas casadas e reimportadas e dos previstos que a 3.9 preencheu sem `editado_em`.
-  evidence: Low. O Apelido em massa grava previstos sem `editado_em` (como a 3.5), então a reimportação simplificada os recria sem Apelido; o aviso da reimportação já conta o Apelido como "à mão".
+  evidence: Medium. Decisão Q3-A da 3.9: o critério de aceite não pede. Uma compra à vista recorrente (ex.: assinatura) volta sem Apelido todo mês, e a 3.12 mantém o Apelido das linhas casadas e dos previstos, mas decidiu (13/11/2026) não criar a tabela `apelidos`: fica para uma história própria (3.13).
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-9-dar-apelido.md`
   summary: Conferir no iPad o Apelido em massa de verdade (pergunta com a contagem, "Aplicar a todos", "Desfazer", dez/26 e outros Meses) e se o VoiceOver lê com sentido a grade com Apelido em negrito e Nome em cinza.
   evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4; o jsdom só confere o DOM e os nomes acessíveis.
@@ -181,16 +160,31 @@
   evidence: Medium não verificado. Esta máquina não tem Docker: as RPCs `importar_aba_planilha` e `apagar_historico_do_mes` foram provadas só no Postgres em memória (pglite) com todas as migrações em ordem; RLS, Realtime e o formato exato dos tipos só o CI prova (as duas entradas em `database.types.ts` foram escritas à mão no formato do gerado).
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-10-importar-o-historico-da-planilha.md`
   summary: Importar uma Fatura para um Mês que já tem histórico da planilha duplica o Mês (a RPC `importar_fatura` e a 3.11 só olham as linhas da Fatura).
-  evidence: Low. Os Meses 01/2026 a 09/2026 não têm Fatura e Rafael não os importa pelo PDF; out/26 e nov/26 têm Fatura e a planilha só ensina Regras neles. Se um dia entrar Fatura num Mês de histórico, apagar o histórico do Mês antes ("Apagar histórico importado").
+  evidence: Low. Os Meses 01/2026 a 09/2026 não têm Fatura e Rafael não os importa pelo PDF; out/26 e nov/26 têm Fatura e a planilha só ensina Regras neles. Se um dia entrar Fatura num Mês de histórico, apagar o histórico do Mês antes ("Apagar histórico importado"). A 3.12 decidiu: a reimportação ignora as linhas `historico` e o aviso diz quantas há; a primeira importação de um Mês com histórico continua sem aviso.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-10-importar-o-historico-da-planilha.md`
   summary: Decidir se a 3.12 (reimportar mantendo a classificação) e a próxima Fatura devem usar o histórico: a herança da 3.7 lê a n−1 do Mês anterior, e a Série do histórico tem `nome_normalizado` diferente da Fatura (o `*` se perdeu na planilha), então a parcela da Fatura de dez/26 não herda do histórico de set/26.
   evidence: Medium não verificado em produção. Só as Regras da planilha casam com o Nome da Fatura (chave sem `*`); Série, previsto e herança usam `nome_normalizado`, que difere. Quando Rafael reimportar out/26 ou nov/26, as Regras classificam, mas a herança de parcela não vem do histórico.
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-importar-o-historico-da-planilha.md`
-  summary: Apelido para a próxima Fatura continua fora: a planilha não traz Apelido, e a reimportação simplificada (3.11) apaga o Apelido dado à mão.
-  evidence: Decisão 7 do Rafael (13/11/2026): manter fora; a tabela `apelidos` vale quando a 3.12 mexer na reimportação.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-10-importar-o-historico-da-planilha.md`
   summary: Conferir no iPad o Importar planilha de verdade (arquivo `.xlsx` do Google Sheets, prévia, progresso, resumo, Regras "criadas agora", hero e grade de um Mês de histórico, "Apagar histórico importado") e se o VoiceOver lê com sentido a lista de abas e as barras de progresso.
   evidence: Medium não verificado em produção. O jsdom só confere o DOM; a biblioteca de `.xlsx` só foi provada com um arquivo montado no teste, não com o que o Google Sheets exporta. Junta-se à pendência do VoiceOver da 2.4.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-10-importar-o-historico-da-planilha.md`
   summary: Os Ajustes de centavos da planilha ("MSC CRUZEIROS (CREDITO) (0,08)") entram como créditos soltos, sem `ajuste_de_id`, e o Tipo "Rafael"/"Casal" de algumas linhas de crédito vira Tipo novo.
   evidence: Low. A planilha não liga o crédito à parcela e usa o nome de pessoa no Tipo de alguns créditos; Rafael corrige em Tipos e na grade.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-12-reimportar-mantendo-a-classificacao.md`
+  summary: Rodar no CI a migração `20261120120000_reimportar_mantendo.sql`, `test/integracao/reimportacao.test.ts` e a comparação de `database.types.ts` com `supabase gen types`.
+  evidence: Medium não verificado. Esta máquina não tem Docker: a RPC `importar_fatura` de 8 argumentos foi provada só no Postgres em memória (pglite) com todas as migrações em ordem, direto e com o núcleo (`reimportacao.ts`) montando o plano; RLS, Realtime e o formato exato dos tipos só o CI prova (o valor do enum e o argumento `dados_reimportacao` foram escritos à mão no formato do gerado).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-12-reimportar-mantendo-a-classificacao.md`
+  summary: Conferir a reimportação de verdade no iPad (nov/26 e out/26 com a mesma Fatura: mesmos ids, Apelidos e Ajustes mantidos; aviso com os números do plano; linha mexida que sai da Fatura e aparece como "Sumiu na reimportação" no Revisar com "Excluir" e "Manter"; previsto casado que volta a "Não veio na fatura") e se o VoiceOver lê com sentido a variante nova.
+  evidence: Medium não verificado em produção. Hoje nenhuma linha de out/26 e nov/26 é casada, e só nov/26 tem Apelido; o jsdom só confere o DOM e os nomes acessíveis. Junta-se à pendência do VoiceOver da 2.4.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-12-reimportar-mantendo-a-classificacao.md`
+  summary: Dar ao Pagamento (Épico 6) o conjunto `referenciadas` da reimportação: `lerReimportacao` hoje manda `referenciadas: []`; com `pagamento_itens`, as linhas com Pagamento passam a sair da Fatura com `sumiu_na_reimportacao` em vez de ser apagadas, e a RPC ganha a trava de estrutura equivalente.
+  evidence: Medium. A 3.12 só deixou o ponto de extensão no núcleo (`planejarReimportacao`, opção `referenciadas`) e na leitura do repositório; sem Pagamentos não há o que proteger, e o teste de reimportação com Pagamento é do Épico 6.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-12-reimportar-mantendo-a-classificacao.md`
+  summary: A reimportação casa as linhas pelo Nome (AD-6): um Nome que o Gemini leu diferente da primeira vez vira linha nova e a antiga sem trabalho à mão é apagada (a com trabalho sai da Fatura).
+  evidence: Low. Decisão Q1-A da 3.12: não há 3ª passada por Valor, data e cartão. Se acontecer com frequência, a 3ª passada (mesmo Valor, data e cartão) entra no casamento antes de decidir o destino das sem par.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-12-reimportar-mantendo-a-classificacao.md`
+  summary: A reimportação marca de novo como "Não veio na fatura" o previsto do Mês que Rafael já tinha mantido ("Manter"), e o Valor novo de uma casada não propaga aos previstos das parcelas seguintes.
+  evidence: Low. O cálculo de `previstos_sem_par` olha só os previstos `sistema` sem Fatura do Mês, sem distinguir o já revisado; os previstos de casadas ficam intactos (decisão Q4-A), inclusive com o Valor antigo.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-12-reimportar-mantendo-a-classificacao.md`
+  summary: A casada que volta a previsto mantém o Valor da Fatura (o previsto original não guardava o "antes") e a que sai da Fatura vira linha `manual` com Mês fixo; o "Manter" só limpa o motivo.
+  evidence: Low. Decisões Q3-A da 3.12; Rafael corrige o Valor abrindo a linha se o previsto voltar errado.

@@ -117,3 +117,19 @@ export async function esperarEvento<T>(
     if (canal) await ouvinte.removeChannel(canal);
   }
 }
+
+/**
+ * O plano de reimportação "apagar tudo" (História 3.12): nenhuma linha nova
+ * pareia com as antigas, então todas as linhas vivas da Fatura são apagadas
+ * (as excluídas a RPC apaga sozinha). Reproduz a reimportação simplificada da
+ * 3.11 para os testes que só olham o que sai e o que entra.
+ */
+export async function planoApagarTudo(cliente: Cliente, faturaId: string) {
+  const { data } = await cliente
+    .from("lancamentos")
+    .select("id")
+    .eq("fatura_id", faturaId)
+    .is("excluido_em", null)
+    .is("dividido_de_id", null);
+  return { apagar: (data ?? []).map((l) => l.id), sumiram: [] as string[], voltar_a_previsto: [] as string[] };
+}

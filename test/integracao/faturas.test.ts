@@ -11,7 +11,7 @@ import { somarMeses } from "../../src/domain/ciclo";
 import type { Extracao } from "../../src/domain/extracao-fatura";
 import { ESPERADO_OUTUBRO_2026, prepararImportacao, type Importacao } from "../../src/domain/importacao-fatura";
 import extracaoOutubro from "../fixtures/extracao-2026-10.json";
-import { esperarEvento, ligado, supabaseLocal, type Cliente, type Usuario } from "./apoio";
+import { esperarEvento, ligado, planoApagarTudo, supabaseLocal, type Cliente, type Usuario } from "./apoio";
 
 type Gravados = {
   fatura: { id: string; mes: string; owner_id: string };
@@ -88,13 +88,15 @@ function pequena(mes: string, extra: Partial<Importacao["lancamentos"][number]> 
   };
 }
 
-function importar(cliente: Cliente, imp: Importacao, lidoEm?: string | null, substituirFaturaId?: string) {
+async function importar(cliente: Cliente, imp: Importacao, lidoEm?: string | null, substituirFaturaId?: string) {
+  const plano = substituirFaturaId ? await planoApagarTudo(cliente, substituirFaturaId) : null;
   return cliente.rpc("importar_fatura", {
     dados_fatura: imp.fatura as unknown as Json,
     dados_cartoes: imp.cartoes as unknown as Json,
     dados_lancamentos: imp.lancamentos as unknown as Json,
     ...(lidoEm ? { lancamentos_atualizados_em: lidoEm } : {}),
     ...(substituirFaturaId ? { substituir_fatura_id: substituirFaturaId } : {}),
+    ...(plano ? { dados_reimportacao: plano as unknown as Json } : {}),
   });
 }
 
@@ -267,18 +269,20 @@ describe.skipIf(!ligado)("importar_fatura no Supabase local", () => {
       expect(await contar("lancamentos", c.id, MES)).toBe(3);
     });
 
-    it("confirmado: apaga a Fatura, os cartões e as linhas dela (excluídas também), grava a nova e devolve os ids apagados", async () => {
-      const { data, error } = await importar(c.cliente, pequena(MES), await ultimaDoMes(), primeira.fatura.id);
+    it("confirmado (plano 'apagar tudo'): troca os cartões e as linhas dela (excluídas também), grava as novas no mesmo lugar e devolve os ids apagados", async () => {
+      const lidoAntes = await ultimaDoMes();
+      const { data, error } = await importar(c.cliente, pequena(MES), lidoAntes, primeira.fatura.id);
       expect(error).toBeNull();
       const g = data as unknown as Gravados;
       expect(g.removidos).toEqual({
-        fatura_id: primeira.fatura.id,
+        // 3.12: a Fatura fica no mesmo lugar; só os cartões e as linhas saem.
+        fatura_id: null,
         cartoes: primeira.cartoes.map((x) => x.id).sort(),
         lancamentos: primeira.lancamentos.map((l) => l.id).sort(),
         // História 3.5: sem previstos criados por ela, a lista vem vazia.
         previstos: [],
       });
-      expect(g.fatura.id).not.toBe(primeira.fatura.id);
+      expect(g.fatura.id).toBe(primeira.fatura.id);
       expect(g.lancamentos).toHaveLength(2);
       // O Ajuste volta ligado à mãe nova; nada da classificação antiga fica.
       const [mae, ajuste] = g.lancamentos;
@@ -290,12 +294,12 @@ describe.skipIf(!ligado)("importar_fatura no Supabase local", () => {
       const { count: antigas } = await local.admin
         .from("lancamentos")
         .select("id", { count: "exact", head: true })
-        .eq("fatura_id", primeira.fatura.id);
+        .in("id", primeira.lancamentos.map((l) => l.id));
       expect(antigas).toBe(0);
       const { count: cartoesAntigos } = await local.admin
         .from("fatura_cartoes")
         .select("id", { count: "exact", head: true })
-        .eq("fatura_id", primeira.fatura.id);
+        .in("id", primeira.cartoes.map((x) => x.id));
       expect(cartoesAntigos).toBe(0);
 
       // O manual do Mês fica igual, e as Regras também.
@@ -305,8 +309,8 @@ describe.skipIf(!ligado)("importar_fatura no Supabase local", () => {
       const { count } = await local.admin.from("regras").select("id", { count: "exact", head: true }).eq("owner_id", c.id);
       expect(count).toBe(regras);
 
-      // Outro aparelho que confirmou a Fatura antiga não apaga a nova.
-      const tarde = await importar(c.cliente, pequena(MES), await ultimaDoMes(), primeira.fatura.id);
+      // Outro aparelho que leu o Mês antes da reimportação não grava por cima (a trava é o updated_at).
+      const tarde = await importar(c.cliente, pequena(MES), lidoAntes, primeira.fatura.id);
       expect(tarde.error?.message).toBe("fatura.mes_mudou");
       const { data: atual } = await local.admin.from("faturas").select("id").eq("owner_id", c.id).eq("mes", MES).single();
       expect(atual!.id).toBe(g.fatura.id);

@@ -10,12 +10,8 @@ import { partesDaDiferenca, valorDaDiferenca, type Conferencia, type SentidoDife
 import { formatarData, formatarMes, formatarMesExtenso, formatarNomeDoMes } from "./datas";
 import { arredondar, formatarDinheiro } from "./dinheiro";
 import type { Divisao } from "./divisao";
-import {
-  primeiraDiferenca,
-  type ComposicaoTotalAPagar,
-  type ConferenciaImportacao,
-  type ResumoReimportacao,
-} from "./importacao-fatura";
+import { primeiraDiferenca, type ComposicaoTotalAPagar, type ConferenciaImportacao } from "./importacao-fatura";
+import type { ResumoDoPlano } from "./reimportacao";
 
 export const MENSAGENS = {
   "auth.campos_vazios": "Preencha o e-mail e a senha.",
@@ -121,8 +117,6 @@ export const MENSAGENS = {
   "planilha.linha_invalida": "Há uma linha com dados inválidos.",
   "planilha.arquivo_invalido": "Não consegui abrir este arquivo. Escolha o .xlsx baixado do Google Sheets.",
   "planilha.sem_abas": "Não encontrei abas de Mês (como 03/2026) neste arquivo.",
-  "fatura.reimportacao_com_casados":
-    "Esta fatura tem parcelas que vieram de previstos, e importar de novo ainda não mantém a classificação delas. Nada foi gravado.",
   "lancamento.nome_vazio": "Preencha o nome.",
   "lancamento.nome_longo": "Use até 200 caracteres.",
   "lancamento.valor_vazio": "Preencha o valor.",
@@ -235,39 +229,49 @@ export function textoExtracaoIncompleta(lidos: number): string {
 }
 
 /**
- * Aviso do passo 3 quando o Mês já tem Fatura (História 3.11 simplificada):
- * "Esta fatura já foi importada. Importar de novo apaga os 52 lançamentos
- * de novembro vindos da fatura (30 já classificados ou marcados à mão) e
- * importa tudo de novo. Os 2 excluídos voltam."
+ * Aviso do passo 3 quando o Mês já tem Fatura (História 3.12), com os números
+ * do plano que a RPC vai executar: "Esta fatura já foi importada. Importar de
+ * novo mantém a classificação dos 44 lançamentos de novembro que continuam na
+ * fatura (2 com valor diferente) e traz 3 novos. 1 que não vem mais é apagado;
+ * 2 que você mexeu saem da fatura e vão para o Revisar. Os 2 excluídos voltam."
  */
-export function avisoReimportar(mes: string, r: ResumoReimportacao): string {
-  const linhas =
-    r.quantidade === 1
-      ? `o 1 lançamento de ${formatarNomeDoMes(mes)} vindo da fatura`
-      : `os ${r.quantidade} lançamentos de ${formatarNomeDoMes(mes)} vindos da fatura`;
-  const mexidos = r.mexidos === 1 ? "1 já classificado ou marcado à mão" : `${r.mexidos} já classificados ou marcados à mão`;
+export function avisoReimportar(mes: string, r: ResumoDoPlano, historico = 0): string {
+  const nomeMes = formatarNomeDoMes(mes);
+  const um = (n: number, singular: string, plural: string) => (n === 1 ? `1 ${singular}` : `${n} ${plural}`);
+  const frases: string[] = [];
+  if (r.mantidas === 0) {
+    frases.push(`não mantém nenhuma classificação (nenhum lançamento da fatura nova bate com os de ${nomeMes})`);
+  } else {
+    const valor = r.valorMudou === 0 ? "" : ` (${r.valorMudou === 1 ? "1 com valor diferente" : `${r.valorMudou} com valor diferente`})`;
+    frases.push(
+      `mantém a classificação ${r.mantidas === 1 ? "do 1 lançamento" : `dos ${r.mantidas} lançamentos`} de ${nomeMes} que continua${r.mantidas === 1 ? "" : "m"} na fatura${valor}`,
+    );
+  }
+  const novas = r.novas === 0 ? "" : ` e traz ${um(r.novas, "novo", "novos")}`;
+  const principal = `Importar de novo ${frases[0]}${novas}.`;
+  const sobras: string[] = [];
+  if (r.apagadas > 0) {
+    sobras.push(`${um(r.apagadas, "que não vem mais na fatura é apagado", "que não vêm mais na fatura são apagados")}`);
+  }
+  if (r.sumiram > 0) {
+    sobras.push(`${um(r.sumiram, "que você mexeu sai da fatura e vai", "que você mexeu saem da fatura e vão")} para o Revisar`);
+  }
+  if (r.voltaramAPrevisto > 0) {
+    sobras.push(`${um(r.voltaramAPrevisto, "volta a ser previsto", "voltam a ser previstos")}`);
+  }
+  const resto = sobras.length === 0 ? "" : ` ${sobras.join("; ")}.`;
   const excluidos =
     r.excluidos === 0 ? "" : r.excluidos === 1 ? " O 1 excluído volta." : ` Os ${r.excluidos} excluídos voltam.`;
-  const previstos =
-    !r.previstos
+  const doHistorico =
+    historico === 0
       ? ""
-      : r.previstos === 1
-        ? " Apaga também o 1 previsto que ela criou e você não mexeu."
-        : ` Apaga também os ${r.previstos} previstos que ela criou e você não mexeu.`;
-  return `Esta fatura já foi importada. Importar de novo apaga ${linhas} (${mexidos}) e importa tudo de novo.${excluidos}${previstos}`;
+      : ` Este mês também tem ${um(historico, "lançamento do histórico da planilha", "lançamentos do histórico da planilha")}, que ${historico === 1 ? "não é tocado" : "não são tocados"}.`;
+  return `Esta fatura já foi importada. ${principal}${resto}${excluidos}${doHistorico}`;
 }
 
-/**
- * Aviso do passo 3 quando a Fatura do Mês já tem parcelas casadas com
- * previstos (História 3.6): reimportar apagaria o `id` e a classificação delas
- * (a reimportação que mantém a classificação é a História 3.12). Só "Cancelar".
- */
-export function avisoReimportarBloqueado(mes: string, casados: number): string {
-  const quais =
-    casados === 1
-      ? "1 lançamento de " + formatarNomeDoMes(mes) + " veio de uma parcela prevista"
-      : `${casados} lançamentos de ${formatarNomeDoMes(mes)} vieram de parcelas previstas`;
-  return `Esta fatura já foi importada e ${quais}. Importar de novo apagaria a classificação deles, e a reimportação que mantém a classificação ainda não existe. Nada será apagado.`;
+/** Passo 3 e resumo final: "2 lançamentos saíram da fatura e estão no Revisar". */
+export function rotuloSumiramNaReimportacao(n: number): string {
+  return n === 1 ? "1 lançamento saiu da fatura e está no Revisar" : `${n} lançamentos saíram da fatura e estão no Revisar`;
 }
 
 /** Passo 3 e resumo final: "2 herdaram a classificação da parcela anterior" (uma: "1 herdou…"). */
@@ -613,6 +617,12 @@ export const TEXTOS_REVISAR = {
   /** Variante "Valor mudou" (História 3.6): o ✓ mantém a classificação. */
   valor_mudou: "Valor mudou",
   manter_classificacao: "Manter classificação",
+  /** Variante "Sumiu na reimportação" (História 3.12): a linha que a Fatura nova não trouxe. */
+  sumiu: "Sumiu na reimportação",
+  sumiu_dica: "Saiu da fatura",
+  excluir: "Excluir",
+  linha_excluida: "Lançamento excluído",
+  linha_mantida: "Lançamento mantido",
   /** Variante "Não veio na fatura" (História 3.6): o previsto sem par. */
   nao_veio: "Não veio na fatura",
   previsto: "Previsto",
@@ -731,6 +741,16 @@ export function rotuloManterClassificacao(nome: string): string {
 /** Nome acessível de "Remover previsto": "Remover previsto de MAGALU". */
 export function rotuloRemoverPrevisto(nome: string): string {
   return `Remover previsto de ${nome}`;
+}
+
+/** Nome acessível do "Excluir" de "Sumiu na reimportação": "Excluir lançamento MAGALU". */
+export function rotuloExcluirSumiu(nome: string): string {
+  return `Excluir lançamento ${nome}`;
+}
+
+/** Nome acessível do "Manter" de "Sumiu na reimportação": "Manter lançamento MAGALU". */
+export function rotuloManterSumiu(nome: string): string {
+  return `Manter lançamento ${nome}`;
 }
 
 /** Nome acessível de "Manter": "Manter previsto de MAGALU". */

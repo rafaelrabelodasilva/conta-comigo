@@ -4,14 +4,14 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Extracao } from "@/domain/extracao-fatura";
-import type { Importacao, LinhaParaReimportar } from "@/domain/importacao-fatura";
+import { prepararImportacao, type Importacao } from "@/domain/importacao-fatura";
+import type { AntigaParaReimportar } from "@/domain/reimportacao";
 import {
   ETAPAS_IMPORTACAO,
   ROTULOS,
   TEXTOS_IMPORTAR as T,
   TEXTOS_REVISAR,
   avisoReimportar,
-  avisoReimportarBloqueado,
   mensagem,
   rotuloDespesasCreditos,
   rotuloParcelasHerdadas,
@@ -19,6 +19,7 @@ import {
   rotuloPrevistosNaoVieram,
   rotuloReimportado,
   rotuloResumoClassificacao,
+  rotuloSumiramNaReimportacao,
   rotuloTotalAPagar,
   textoExtracaoIncompleta,
 } from "@/domain/mensagens";
@@ -149,6 +150,44 @@ const PASSO_3 = "Fatura de outubro · vence 06/10/26";
 async function verNoPainel() {
   await userEvent.setup().click(await screen.findByRole("button", { name: TEXTOS_REVISAR.ver_no_painel }));
   expect(aoMudar).toHaveBeenCalledWith(false);
+}
+
+/** Uma linha antiga da Fatura (já classificada pelas Regras, sem trabalho à mão). */
+function antigaBase(id: string, ordem: number): AntigaParaReimportar {
+  return {
+    id,
+    nome_normalizado: id.toUpperCase(),
+    valor_centavos: 1000,
+    parcela_n: null,
+    parcela_total: null,
+    ordem_fatura: ordem,
+    ajuste_de_id: null,
+    casado_em: null,
+    excluido_em: null,
+    responsavel_id: null,
+    tipo_id: null,
+    status_id: "nao-pago",
+    observacao: null,
+    apelido: null,
+    editado_em: null,
+    divisao: null,
+    revisao_motivo: null,
+    revisao_dados: null,
+    serie: null,
+  };
+}
+
+/** As primeiras `n` linhas do PDF de outubro como se já estivessem gravadas (mesmo Nome, Valor e Parcela). */
+function antigasDoPdf(n: number): AntigaParaReimportar[] {
+  const prep = prepararImportacao(outubro);
+  if (!prep.ok) throw new Error("fixture inválida");
+  return prep.valor.lancamentos.slice(0, n).map((l) => ({
+    ...antigaBase(`a${l.ordem_fatura}`, l.ordem_fatura),
+    nome_normalizado: l.nome_normalizado,
+    valor_centavos: l.valor_centavos,
+    parcela_n: l.parcela_n,
+    parcela_total: l.parcela_total,
+  }));
 }
 
 beforeEach(() => {
@@ -543,52 +582,44 @@ describe("ImportarFatura: casamento dos previstos (História 3.6)", () => {
     expect(segunda[2]).toBe(T_NOVO);
   });
 
-  it("'fatura.reimportacao_com_casados' mostra a mensagem e só deixa Cancelar", async () => {
-    falso.importar.mockResolvedValue({ ok: false, codigo: "fatura.reimportacao_com_casados" });
-    const u = await ateOPasso3();
-    await u.click(screen.getByRole("button", { name: T.importar }));
-    expect((await screen.findByRole("alert")).textContent).toBe(mensagem("fatura.reimportacao_com_casados"));
-    expect(screen.queryByRole("button", { name: ROTULOS.tentar_de_novo })).toBeNull();
-    expect(screen.getByRole("button", { name: ROTULOS.cancelar })).toBeTruthy();
-  });
-
-  it("Fatura do Mês com linhas casadas: o aviso bloqueia a reimportação, só 'Cancelar' (sem 'Importar de novo')", async () => {
+  it("Fatura do Mês com linhas casadas: reimporta mantendo (sem bloqueio), com \"Importar de novo\"", async () => {
     falso.faturas = [{ id: "f0", mes: "2026-10" }];
-    falso.configuracoes = [];
-    const limpa: LinhaParaReimportar = { excluido_em: null, responsavel_id: null, tipo_id: null, observacao: null, status_id: "nao-pago" };
     falso.lerReimportacao.mockResolvedValue({
       ok: true,
       valor: {
         faturaId: "f0",
         atualizadoEm: T_MES,
         statusPadraoId: "nao-pago",
-        linhas: [limpa, { ...limpa, casado_em: "2026-12-05T10:00:00Z" }, { ...limpa, casado_em: "2026-12-05T10:00:00Z" }],
+        antigas: antigasDoPdf(3).map((a, i) => (i > 0 ? { ...a, casado_em: "2026-12-05T10:00:00Z" } : a)),
+        referenciadas: [],
+        outrasDaSerie: [],
+        historico: 0,
       },
     });
     await ateOPasso3();
-    expect((await screen.findByRole("alert")).textContent).toBe(avisoReimportarBloqueado("2026-10", 2));
-    expect(screen.queryByRole("button", { name: T.importar_de_novo })).toBeNull();
-    expect(screen.getByRole("button", { name: ROTULOS.cancelar })).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toContain("mantém a classificação dos 3 lançamentos");
+    expect(screen.getByRole("button", { name: T.importar_de_novo })).toBeTruthy();
   });
 });
 
-describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
+describe("ImportarFatura: reimportar mantendo a classificação (História 3.12)", () => {
   const PADRAO = "nao-pago";
   const T_AVISO = "2026-10-20T10:00:00.000001+00:00";
-  const limpa: LinhaParaReimportar = { excluido_em: null, responsavel_id: null, tipo_id: null, observacao: null, status_id: PADRAO };
-  // 52 linhas da Fatura, 30 classificadas ou marcadas, mais 2 excluídas.
-  const linhas: LinhaParaReimportar[] = [
-    ...Array.from({ length: 22 }, () => limpa),
-    ...Array.from({ length: 20 }, () => ({ ...limpa, responsavel_id: "casal" })),
-    ...Array.from({ length: 10 }, () => ({ ...limpa, status_id: "pago" })),
-    { ...limpa, excluido_em: "2026-10-10T00:00:00Z" },
-    { ...limpa, excluido_em: "2026-10-10T00:00:00Z" },
+  // As 49 linhas da Fatura de antes (mesmo Nome e Valor), mais uma que a Fatura nova não traz e
+  // não foi mexida (apagada), uma mexida à mão (sai da Fatura) e 2 excluídas (voltam).
+  const antigas = (): AntigaParaReimportar[] => [
+    ...antigasDoPdf(49),
+    { ...antigaBase("sumida", 50), nome_normalizado: "NAO VEM MAIS", status_id: PADRAO },
+    { ...antigaBase("mexida", 51), nome_normalizado: "MEXIDA", status_id: PADRAO, editado_em: "2026-10-10T00:00:00Z" },
+    { ...antigaBase("x1", 52), excluido_em: "2026-10-10T00:00:00Z" },
+    { ...antigaBase("x2", 53), excluido_em: "2026-10-10T00:00:00Z" },
   ];
-  const leitura = (faturaId = "f0", atualizadoEm: string | null = T_AVISO, l = linhas) => ({
+  const leitura = (faturaId = "f0", atualizadoEm: string | null = T_AVISO, a = antigas(), historico = 0) => ({
     ok: true,
-    valor: { faturaId, atualizadoEm, linhas: l, statusPadraoId: PADRAO },
+    valor: { faturaId, atualizadoEm, antigas: a, statusPadraoId: PADRAO, referenciadas: [], outrasDaSerie: [], historico },
   });
-  const TEXTO_AVISO = avisoReimportar("2026-10", { quantidade: 52, mexidos: 30, excluidos: 2 });
+  const RESUMO = { quantidade: 51, mantidas: 49, valorMudou: 0, novas: 0, apagadas: 1, sumiram: 1, voltaramAPrevisto: 0, excluidos: 2 };
+  const TEXTO_AVISO = avisoReimportar("2026-10", RESUMO);
 
   async function ateOAviso() {
     falso.faturas = [{ id: "f0", mes: "2026-10" }];
@@ -600,22 +631,11 @@ describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
     return u;
   }
 
-  it("História 3.5: o aviso cita os previstos que a reimportação apaga", async () => {
-    falso.lerReimportacao.mockResolvedValue({
-      ok: true,
-      valor: { faturaId: "f0", atualizadoEm: T_AVISO, linhas, statusPadraoId: PADRAO, previstosAApagar: 5 },
-    });
-    await ateOAviso();
-    expect(screen.getByRole("alert").textContent).toBe(
-      avisoReimportar("2026-10", { quantidade: 52, mexidos: 30, excluidos: 2, previstos: 5 }),
-    );
-    expect(screen.getByRole("alert").textContent).toContain("Apaga também os 5 previstos que ela criou e você não mexeu.");
-  });
-
-  it("Mês com Fatura: o passo 3 mostra o aviso com 52, 30 e os 2 excluídos, \"Importar de novo\" e \"Cancelar\"", async () => {
+  it("Mês com Fatura: o passo 3 mostra o plano (mantidas, apagada, a que sai da Fatura e os excluídos), \"Importar de novo\" e \"Cancelar\"", async () => {
     falso.lerReimportacao.mockResolvedValue(leitura());
     await ateOAviso();
-    expect(TEXTO_AVISO).toContain("apaga os 52 lançamentos de outubro vindos da fatura (30 já classificados ou marcados à mão)");
+    expect(TEXTO_AVISO).toContain("mantém a classificação dos 49 lançamentos de outubro que continuam na fatura");
+    expect(TEXTO_AVISO).toContain("1 que não vem mais na fatura é apagado; 1 que você mexeu sai da fatura e vai para o Revisar");
     expect(TEXTO_AVISO).toContain("Os 2 excluídos voltam.");
     expect(screen.getByRole("alert").textContent).toBe(TEXTO_AVISO);
     expect(screen.getByRole("button", { name: T.importar_de_novo })).toBeTruthy();
@@ -627,7 +647,14 @@ describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
     expect(falso.listarRegras).toHaveBeenCalledTimes(1);
   });
 
-  it("a Fatura do Mês chega pelo Realtime no passo 3: lê o resumo uma vez e mostra o aviso", async () => {
+  it("o histórico da planilha do Mês entra no aviso", async () => {
+    falso.lerReimportacao.mockResolvedValue(leitura("f0", T_AVISO, antigas(), 12));
+    await ateOAviso();
+    expect(screen.getByRole("alert").textContent).toBe(avisoReimportar("2026-10", RESUMO, 12));
+    expect(screen.getByRole("alert").textContent).toContain("12 lançamentos do histórico da planilha");
+  });
+
+  it("a Fatura do Mês chega pelo Realtime no passo 3: lê o plano uma vez e mostra o aviso", async () => {
     falso.lerReimportacao.mockResolvedValue(leitura());
     const u = await escolherPdf();
     await digitarSenha(u, "s");
@@ -649,7 +676,6 @@ describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
     falso.lerReimportacao.mockResolvedValue(leitura());
     falso.fetch.mockImplementation(async () => resposta({ ...outubro, lancamentos: outubro.lancamentos.slice(0, 41) }));
     await ateOAviso();
-    expect(screen.getByText(TEXTO_AVISO)).toBeTruthy();
     expect(screen.getByText(textoExtracaoIncompleta(41))).toBeTruthy();
     expect(screen.getByRole("button", { name: T.importar_de_novo })).toBeTruthy();
   });
@@ -663,19 +689,32 @@ describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
     expect(aoImportar).not.toHaveBeenCalled();
   });
 
-  it("\"Importar de novo\" grava num toque com o id e o updated_at do aviso, mostra o toast e abre o Mês", async () => {
+  it("\"Importar de novo\" grava num toque com o id, o updated_at e o plano; mostra o toast, o resumo e abre o Mês", async () => {
     falso.lerReimportacao.mockResolvedValue(leitura());
     const u = await ateOAviso();
     await u.click(screen.getByRole("button", { name: T.importar_de_novo }));
-    await verNoPainel();
+    // Uma mexida saiu da Fatura: o passo 3 mostra o resumo e leva ao Revisar.
+    expect(await screen.findByText(rotuloSumiramNaReimportacao(1))).toBeTruthy();
+    expect(screen.getByRole("button", { name: TEXTOS_REVISAR.ir_para_revisao })).toBeTruthy();
     expect(falso.importar).toHaveBeenCalledTimes(1);
     const [gravado, substituir] = falso.importar.mock.calls[0];
-    expect((gravado as Importacao).lancamentos).toHaveLength(49);
+    const g = gravado as Importacao;
+    expect(g.lancamentos).toHaveLength(49);
+    expect(g.lancamentos.every((l) => l.antiga_id !== null && l.antiga_id !== undefined)).toBe(true);
+    expect(g.reimportacao).toMatchObject({ apagar: ["sumida"], sumiram: ["mexida"], voltar_a_previsto: [], resumo: RESUMO });
     expect(substituir).toEqual({ faturaId: "f0", atualizadoEm: T_AVISO });
     expect(aoImportar).toHaveBeenCalledExactlyOnceWith("2026-10");
-    expect(await screen.findByText(rotuloReimportado("2026-10", 49))).toBeTruthy();
+    expect(screen.getByText(rotuloReimportado("2026-10", 49))).toBeTruthy();
     // Sem "Desfazer".
     expect(screen.queryByRole("button", { name: ROTULOS.desfazer })).toBeNull();
+  });
+
+  it("Fatura nova com Valor diferente: o aviso conta o que mudou e a linha vai para o Revisar como \"Valor mudou\"", async () => {
+    const a = antigasDoPdf(49);
+    a[0] = { ...a[0], valor_centavos: a[0].valor_centavos + 50, responsavel_id: "casal", tipo_id: "casa" };
+    falso.lerReimportacao.mockResolvedValue(leitura("f0", T_AVISO, a));
+    await ateOAviso();
+    expect(screen.getByRole("alert").textContent).toContain("(1 com valor diferente)");
   });
 
   it("importação normal não manda substituir nem mostra o toast de reimportação", async () => {
@@ -684,11 +723,12 @@ describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
     await u.click(await screen.findByRole("button", { name: T.importar }));
     await verNoPainel();
     expect(falso.importar.mock.calls[0][1]).toBeUndefined();
+    expect((falso.importar.mock.calls[0][0] as Importacao).reimportacao).toBeUndefined();
     expect(falso.lerReimportacao).not.toHaveBeenCalled();
     expect(screen.queryByText(rotuloReimportado("2026-10", 49))).toBeNull();
   });
 
-  it("falha ao ler o resumo: só o erro e \"Tentar de novo\", que relê só o resumo", async () => {
+  it("falha ao ler o plano: só o erro e \"Tentar de novo\", que relê só o plano", async () => {
     falso.lerReimportacao.mockResolvedValueOnce({ ok: false, codigo: "carregar.falhou" });
     falso.lerReimportacao.mockResolvedValueOnce(leitura());
     const u = await ateOAviso();
@@ -704,16 +744,16 @@ describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
     expect(falso.importar).not.toHaveBeenCalled();
   });
 
-  it("sessão expirada ao ler o resumo: só \"Cancelar\"", async () => {
+  it("sessão expirada ao ler o plano: só \"Cancelar\"", async () => {
     falso.lerReimportacao.mockResolvedValue({ ok: false, codigo: "auth.sessao_expirou" });
     await ateOAviso();
     expect(screen.getByRole("alert").textContent).toBe(mensagem("auth.sessao_expirou"));
     expect(screen.queryByRole("button", { name: ROTULOS.tentar_de_novo })).toBeNull();
   });
 
-  it("fatura.mes_mudou ao gravar: nada gravado, erro e \"Tentar de novo\" relê os números antes de gravar de novo", async () => {
+  it("fatura.mes_mudou ao gravar: nada gravado, erro e \"Tentar de novo\" refaz o plano antes de gravar de novo", async () => {
     falso.lerReimportacao.mockResolvedValueOnce(leitura());
-    falso.lerReimportacao.mockResolvedValueOnce(leitura("f1", "2026-10-21T00:00:00+00:00", linhas.slice(0, 10)));
+    falso.lerReimportacao.mockResolvedValueOnce(leitura("f1", "2026-10-21T00:00:00+00:00", antigasDoPdf(10)));
     falso.importar.mockResolvedValueOnce({ ok: false, codigo: "fatura.mes_mudou" });
     const u = await ateOAviso();
     await u.click(screen.getByRole("button", { name: T.importar_de_novo }));
@@ -721,14 +761,15 @@ describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
     expect(screen.queryByRole("button", { name: T.importar_de_novo })).toBeNull();
     expect(aoImportar).not.toHaveBeenCalled();
     await u.click(screen.getByRole("button", { name: ROTULOS.tentar_de_novo }));
-    const novo = avisoReimportar("2026-10", { quantidade: 10, mexidos: 0, excluidos: 0 });
+    const novo = avisoReimportar("2026-10", { quantidade: 10, mantidas: 10, valorMudou: 0, novas: 39, apagadas: 0, sumiram: 0, voltaramAPrevisto: 0, excluidos: 0 });
     expect(await screen.findByText(novo)).toBeTruthy();
     await u.click(screen.getByRole("button", { name: T.importar_de_novo }));
     await verNoPainel();
     expect(falso.importar.mock.calls[1][1]).toEqual({ faturaId: "f1", atualizadoEm: "2026-10-21T00:00:00+00:00" });
+    expect((falso.importar.mock.calls[1][0] as Importacao).reimportacao?.resumo.mantidas).toBe(10);
   });
 
-  it("a RPC diz que o Mês já foi importado (outro aparelho): lê o resumo e oferece \"Importar de novo\"", async () => {
+  it("a RPC diz que o Mês já foi importado (outro aparelho): lê o plano e oferece \"Importar de novo\"", async () => {
     falso.importar.mockResolvedValueOnce({ ok: false, codigo: "fatura.mes_ja_importado" });
     falso.lerReimportacao.mockResolvedValue(leitura());
     falso.configuracoes = [{ limite_ajuste_centavos: 100, status_padrao_id: PADRAO }];
@@ -755,7 +796,7 @@ describe("ImportarFatura: reimportar um Mês (História 3.11)", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: ROTULOS.cancelar }).hasAttribute("disabled")).toBe(true));
     expect(screen.getByRole("button", { name: T.gravando }).hasAttribute("disabled")).toBe(true);
     terminar({ ok: true, quantidade: 49 });
-    await verNoPainel();
+    await screen.findByText(rotuloSumiramNaReimportacao(1));
   });
 });
 
@@ -1021,7 +1062,7 @@ describe("ImportarFatura: depois de gravar (História 3.2)", () => {
     falso.faturas = [{ id: "f0", mes: "2026-10" }];
     falso.lerReimportacao.mockResolvedValue({
       ok: true,
-      valor: { faturaId: "f0", atualizadoEm: null, linhas: [], statusPadraoId: null },
+      valor: { faturaId: "f0", atualizadoEm: null, antigas: [], statusPadraoId: null, referenciadas: [], outrasDaSerie: [], historico: 0 },
     });
     const u = await escolherPdf();
     await digitarSenha(u, "s");
