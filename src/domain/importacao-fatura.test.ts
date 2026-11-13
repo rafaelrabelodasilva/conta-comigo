@@ -406,6 +406,14 @@ describe("resumirReimportacao (História 3.11)", () => {
     expect(resumirReimportacao(linhas, PADRAO)).toEqual({ quantidade: 52, mexidos: 30, excluidos: 2 });
   });
 
+  it("Apelido dado à mão conta como marcada à mão (História 3.9)", () => {
+    expect(resumirReimportacao([{ ...limpa, apelido: "Celular da mãe" }, { ...limpa, apelido: null }, limpa], PADRAO)).toEqual({
+      quantidade: 3,
+      mexidos: 1,
+      excluidos: 0,
+    });
+  });
+
   it("Status nulo é o padrão quando o padrão é nulo; fora do padrão conta", () => {
     expect(resumirReimportacao([{ ...limpa, status_id: null }], null)).toEqual({ quantidade: 1, mexidos: 0, excluidos: 0 });
     expect(resumirReimportacao([{ ...limpa, status_id: null }], PADRAO).mexidos).toBe(1);

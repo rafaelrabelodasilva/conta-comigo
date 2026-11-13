@@ -167,3 +167,13 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-8-dividir-um-lancamento.md`
   summary: Conferir no iPad se o VoiceOver lê com sentido o cabeçalho da Divisão ("NOME, dividido, Valor") e as partes ("Parte de NOME, Valor, Responsável, Status").
   evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4; o jsdom só confere o `aria-label`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-dar-apelido.md`
+  summary: Fazer a próxima Fatura que trouxer um Nome já apelidado nascer com o Apelido (hoje só parcela herdada e previstos copiam); candidata: tabela `apelidos` por `normalizarNome`, aplicada pela `importar_fatura`, nunca em `regras`.
+  evidence: Medium. Decisão Q3-A da 3.9: o critério de aceite não pede. Uma compra à vista recorrente (ex.: assinatura) volta sem Apelido todo mês, e a reimportação simplificada (3.11) apaga o Apelido dado à mão; a 3.12 e a 3.10 precisam decidir isso juntas.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-dar-apelido.md`
+  summary: Na 3.12 (reimportar mantendo a classificação), manter o Apelido das linhas casadas e reimportadas e dos previstos que a 3.9 preencheu sem `editado_em`.
+  evidence: Low. O Apelido em massa grava previstos sem `editado_em` (como a 3.5), então a reimportação simplificada os recria sem Apelido; o aviso da reimportação já conta o Apelido como "à mão".
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-dar-apelido.md`
+  summary: Conferir no iPad o Apelido em massa de verdade (pergunta com a contagem, "Aplicar a todos", "Desfazer", dez/26 e outros Meses) e se o VoiceOver lê com sentido a grade com Apelido em negrito e Nome em cinza.
+  evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4; o jsdom só confere o DOM e os nomes acessíveis.
+

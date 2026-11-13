@@ -312,3 +312,25 @@ describe("alterado em outro aparelho", () => {
     expect(alteradoEmOutroAparelho(visto, "ilegível", [])).toBe(false);
   });
 });
+
+describe("Apelido igual ao Nome (História 3.9)", () => {
+  const atual = {
+    nome: "PAG*José da Silva",
+    valor_centavos: 100,
+    data: "2026-09-12",
+    apelido: "Celular da mãe",
+    observacao: null,
+    responsavel_id: null,
+    tipo_id: null,
+    status_id: null,
+  };
+  it("igual ao Nome (sem maiúsculas nem acento) vira nulo", () => {
+    expect(mudancaDoCampo(atual, "apelido", "  pag*jose DA silva ")).toEqual({ ok: true, valor: { coluna: "apelido", valor: null } });
+  });
+  it("sem Apelido antes, digitar o próprio Nome não grava nada", () => {
+    expect(mudancaDoCampo({ ...atual, apelido: null }, "apelido", "PAG*JOSE DA SILVA")).toEqual({ ok: true, valor: null });
+  });
+  it("igual ao de outro Nome vale: só o Nome desta linha conta", () => {
+    expect(mudancaDoCampo(atual, "apelido", "Celular")).toEqual({ ok: true, valor: { coluna: "apelido", valor: "Celular" } });
+  });
+});

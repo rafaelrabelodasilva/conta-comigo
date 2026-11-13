@@ -48,6 +48,8 @@ import {
   textoValorMudou,
   ROTULO_PREVISTO,
   perguntaAplicarAosPrevistos,
+  perguntaApelidoEmMassa,
+  rotuloApelidoAplicado,
   rotuloOrigemPrevisto,
   rotuloPrevistosAtualizados,
   rotuloPrevistosCriados,
@@ -681,6 +683,15 @@ describe("previstos (História 3.5)", () => {
     );
     expect(rotuloOrigemPrevisto({ nome: "MAGALU", parcela: "", vencimento: null })).toBe("criado a partir de MAGALU");
     expect(rotuloOrigemPrevisto(null)).toBe("criado a partir de uma parcela anterior desta compra");
+  });
+
+  it("Apelido em massa: pergunta com a contagem, aviso de troca e toast (História 3.9)", () => {
+    expect(perguntaApelidoEmMassa(12, "PAG*JOSE", 0, "Celular da mãe")).toBe("Aplicar a 12 lançamentos de PAG*JOSE?");
+    expect(perguntaApelidoEmMassa(1, "PAG*JOSE", 1, "Celular")).toBe("Aplicar a 1 lançamento de PAG*JOSE? 1 já tem outro Apelido e será trocado.");
+    expect(perguntaApelidoEmMassa(3, "PAG*JOSE", 2, "Celular")).toBe("Aplicar a 3 lançamentos de PAG*JOSE? 2 já têm outro Apelido e serão trocados.");
+    expect(perguntaApelidoEmMassa(4, "PAG*JOSE", 4, null)).toBe("Remover o Apelido de 4 lançamentos de PAG*JOSE?");
+    expect(rotuloApelidoAplicado(1, false)).toBe("Apelido aplicado a 1 lançamento");
+    expect(rotuloApelidoAplicado(5, true)).toBe("Apelido removido de 5 lançamentos");
   });
 
   it("pergunta, toast e passo 3", () => {

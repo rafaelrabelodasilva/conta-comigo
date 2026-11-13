@@ -32,6 +32,7 @@ export const COLUNAS_DO_LOTE = [
   "revisao_dados",
   "revisado_em",
   "editado_em",
+  "apelido",
 ] as const;
 
 export type ColunaDoLote = (typeof COLUNAS_DO_LOTE)[number];
@@ -46,6 +47,8 @@ export type CorpoDoLote = {
   revisao_dados?: unknown;
   revisado_em?: string | null;
   editado_em?: string | null;
+  /** Apelido em massa (História 3.9): o `apelido` novo, ou `null` para remover. */
+  apelido?: string | null;
 };
 
 /** Um item da RPC: a linha e as colunas que ela recebe. */

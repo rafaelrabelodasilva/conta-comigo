@@ -67,6 +67,7 @@
 // dele, o `restaurar`.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { planejarApelidoEmMassa, type OrigemDoApelido, type PlanoDoApelido } from "@/domain/apelido";
 import {
   itemParaRestaurar,
   juntarItensDividir,
@@ -175,6 +176,9 @@ export type ResultadoPropagacao =
   | { ok: true; preenchidos: number; aPerguntar: MudancaDoPrevisto[] }
   | { ok: false; codigo: CodigoFalhaGravacao };
 
+/** O plano do Apelido em massa (o que "Aplicar a todos" grava e o que o "Desfazer" devolve). */
+export type ResultadoPlanoDoApelido = { ok: true; plano: PlanoDoApelido } | { ok: false; codigo: CodigoFalhaGravacao };
+
 /** A linha que gerou um previsto (null no `origem`: ela foi apagada na reimportação). */
 export type OrigemDoPrevisto = {
   nome: string;
@@ -204,6 +208,9 @@ export type FalhaDaDivisao = CodigoFalhaGravacao | "divisao.com_ajuste" | "divis
 export type ResultadoDivisao =
   | { ok: true; linhas: LinhaLancamento[]; preenchidos: number; aPerguntar: ItemDividir[]; desfazer: ItemDividir[] }
   | { ok: false; codigo: FalhaDaDivisao };
+
+/** Teto de linhas lidas por Nome no Apelido em massa (o limite do PostgREST e da RPC do lote). */
+const LIMITE_DE_LINHAS_DO_NOME = 1000;
 
 export function criarRepoLancamentos(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
@@ -501,6 +508,55 @@ export function criarRepoLancamentos(deps: {
         if (!linhas) return FALHOU;
         memoria.aplicarLote(linhas);
         return { ok: true, linhas, gravadas: antes.length, antes: [] };
+      } catch {
+        return FALHOU;
+      }
+    },
+
+    /**
+     * Apelido em massa (História 3.9), passo 1: lê do banco as linhas de mesmo
+     * `nome_normalizado` (todos os Meses, previstos e filhas incluídos; a
+     * memória guarda só o Mês aberto) e deixa o núcleo (`planejarApelidoEmMassa`)
+     * dizer quais mudam. Não grava nada: a tela pergunta "Só este" / "Aplicar a
+     * todos" com `plano.mudam`.
+     */
+    async planejarApelido(origem: OrigemDoApelido, depois: string | null, agora: Date = new Date()): Promise<ResultadoPlanoDoApelido> {
+      const bloqueio = semConexao(online);
+      if (bloqueio) return bloqueio;
+      const cliente = obterCliente();
+      if (!cliente) return FALHOU;
+      try {
+        const { data, error } = await cliente
+          .from("lancamentos")
+          .select("id, nome_normalizado, apelido, lancado_por, editado_em, ajuste_de_id, dividido_de_id, excluido_em")
+          .eq("nome_normalizado", origem.nome_normalizado)
+          .is("excluido_em", null)
+          .limit(LIMITE_DE_LINHAS_DO_NOME);
+        // No teto de leitura pode faltar linha: melhor recusar do que aplicar pela metade.
+        if (error || !data || data.length >= LIMITE_DE_LINHAS_DO_NOME) return FALHOU;
+        return { ok: true, plano: planejarApelidoEmMassa(origem, depois, data, agora.toISOString()) };
+      } catch {
+        return FALHOU;
+      }
+    },
+
+    /**
+     * Apelido em massa, passo 2 ("Aplicar a todos") e também o "Desfazer"
+     * (`plano.antes`): a RPC do lote grava tudo numa transação, sem otimismo
+     * (as linhas são de outros Meses); o que voltar vai para a memória, que só
+     * guarda o Mês aberto.
+     */
+    async aplicarApelido(itens: readonly ItemDoLote[]): Promise<{ ok: true; gravadas: number } | { ok: false; codigo: CodigoFalhaGravacao }> {
+      if (itens.length === 0) return { ok: true, gravadas: 0 };
+      const bloqueio = semConexao(online);
+      if (bloqueio) return bloqueio;
+      const cliente = obterCliente();
+      if (!cliente) return FALHOU;
+      try {
+        const linhas = await chamarLote(cliente, itens);
+        if (!linhas) return FALHOU;
+        memoria.aplicarLote(linhas);
+        return { ok: true, gravadas: linhas.length };
       } catch {
         return FALHOU;
       }

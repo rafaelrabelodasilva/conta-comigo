@@ -31,12 +31,14 @@ import {
   TEXTOS_PAINEL,
   mensagem,
   perguntaAplicarAosPrevistos,
+  perguntaApelidoEmMassa,
   rotuloAjusteDaMae,
   rotuloAlteradoEmOutroAparelho,
   rotuloCartaoFinal,
   rotuloDetalhesLancamento,
   rotuloIncluidoEm,
   rotuloOrigemPrevisto,
+  rotuloApelidoAplicado,
   rotuloPrevistosAtualizados,
   rotuloSalvoAs,
   rotuloSegueAParcela,
@@ -59,6 +61,7 @@ import { Botao } from "@/ui/Botao";
 import { Campo } from "@/ui/Campo";
 import { cn } from "@/ui/cn";
 import { FaixaPergunta } from "@/ui/FaixaPergunta";
+import type { PlanoDoApelido } from "@/domain/apelido";
 import { Seletor, type OpcaoSeletor } from "@/ui/Seletor";
 import { useToast } from "@/ui/Toast";
 
@@ -333,6 +336,8 @@ function EditarLancamento({
   const [alteradoAs, setAlteradoAs] = useState<string | null>(null);
   // Previstos com outro valor, à espera do "Só este" / "Aplicar a todos" (História 3.5).
   const [aPerguntar, setAPerguntar] = useState<MudancaDoPrevisto[]>([]);
+  // Apelido em massa (História 3.9): as outras linhas do mesmo Nome, à espera do "Só este" / "Aplicar a todos".
+  const [apelidoPendente, setApelidoPendente] = useState<{ plano: PlanoDoApelido; depois: string | null; nome: string } | null>(null);
 
   // Refs para as gravações assíncronas lerem o estado atual.
   const rascunhosRef = useRef(rascunhos);
@@ -435,6 +440,7 @@ function EditarLancamento({
       setSalvoAs(formatarHora(r.linha.updated_at));
       definirEstado(campo, undefined);
       if (SEGUEM_A_MAE.includes(campo)) void propagar(antes, r.linha);
+      if (campo === "apelido") void perguntarApelido(r.linha);
       // O campo passa a mostrar a memória (já com o valor gravado, formatado).
       if (focado.current !== campo && rascunhosRef.current[campo] === texto) definirRascunho(campo, undefined);
     } else if (r.codigo === "conexao.gravar_sem_conexao") {
@@ -478,6 +484,39 @@ function EditarLancamento({
     // A gravação do campo já valeu: a falha só deixa os previstos como estão.
     if (!r.ok) return;
     if (montado.current) setAPerguntar(r.aPerguntar);
+  }
+
+  /** Apelido em massa: as outras linhas do mesmo Nome que mudariam; só pergunta se houver alguma. */
+  async function perguntarApelido(gravada: LinhaLancamento) {
+    if ((gravada.ajuste_de_id ?? null) !== null || (gravada.dividido_de_id ?? null) !== null) return;
+    setApelidoPendente(null);
+    try {
+      const r = await repo.planejarApelido({ id: gravada.id, nome_normalizado: gravada.nome_normalizado }, gravada.apelido);
+      // A gravação do campo já valeu: a falha só deixa as outras linhas como estão.
+      if (!r.ok || r.plano.mudam === 0 || !montado.current) return;
+      setApelidoPendente({ plano: r.plano, depois: gravada.apelido, nome: gravada.nome });
+    } catch {
+      // Sem pergunta; o Apelido da linha aberta já está gravado.
+    }
+  }
+
+  async function responderApelido(resposta: "so_este" | "aplicar_a_todos") {
+    const pendente = apelidoPendente;
+    setApelidoPendente(null);
+    if (resposta === "so_este" || pendente === null) return;
+    const r = await repo.aplicarApelido(pendente.plano.itens);
+    if (!r.ok) {
+      toast.mostrar({ texto: mensagem(r.codigo) });
+      return;
+    }
+    toast.mostrar({
+      texto: rotuloApelidoAplicado(pendente.plano.mudam, pendente.depois === null),
+      aoDesfazer: () => {
+        void repo.aplicarApelido(pendente.plano.antes).then((d) => {
+          if (!d.ok) toast.mostrar({ texto: mensagem(d.codigo) });
+        });
+      },
+    });
   }
 
   async function responderPrevistos(resposta: "so_este" | "aplicar_a_todos") {
@@ -730,6 +769,17 @@ function EditarLancamento({
         onChange={(e) => definirRascunho("apelido", e.target.value)}
         onBlur={() => sair("apelido")}
       />
+      {apelidoPendente ? (
+        <FaixaPergunta
+          pergunta={perguntaApelidoEmMassa(
+            apelidoPendente.plano.mudam,
+            apelidoPendente.nome,
+            apelidoPendente.plano.comOutro,
+            apelidoPendente.depois,
+          )}
+          aoResponder={(resposta) => void responderApelido(resposta)}
+        />
+      ) : null}
       {mae ? (
         // O Ajuste segue a mãe: Tipo e Responsável só para leitura.
         <div className="flex flex-col gap-1">

@@ -398,6 +398,25 @@ export function perguntaAplicarAosPrevistos(n: number): string {
     : `Aplicar também aos ${n} previstos desta compra?`;
 }
 
+/**
+ * A pergunta ao dar, trocar ou remover o Apelido (História 3.9):
+ * "Aplicar a 12 lançamentos de NOME? 2 já têm outro Apelido e serão trocados."
+ * Com `depois` nulo (remover): "Remover o Apelido de 12 lançamentos de NOME?".
+ */
+export function perguntaApelidoEmMassa(n: number, nome: string, comOutro: number, depois: string | null): string {
+  const alvo = n === 1 ? "1 lançamento" : `${n} lançamentos`;
+  if (depois === null) return `Remover o Apelido de ${alvo} de ${nome}?`;
+  const aviso =
+    comOutro === 0 ? "" : comOutro === 1 ? " 1 já tem outro Apelido e será trocado." : ` ${comOutro} já têm outro Apelido e serão trocados.`;
+  return `Aplicar a ${alvo} de ${nome}?${aviso}`;
+}
+
+/** Toast depois de "Aplicar a todos" do Apelido (com "Desfazer"). */
+export function rotuloApelidoAplicado(n: number, removido: boolean): string {
+  const alvo = n === 1 ? "1 lançamento" : `${n} lançamentos`;
+  return removido ? `Apelido removido de ${alvo}` : `Apelido aplicado a ${alvo}`;
+}
+
 /** Toast depois de "Aplicar a todos" ou do preenchimento dos previstos. */
 export function rotuloPrevistosAtualizados(n: number): string {
   return n === 1 ? "1 previsto atualizado" : `${n} previstos atualizados`;
