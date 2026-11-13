@@ -10,15 +10,16 @@ import {
 } from "./primeiro-uso";
 
 describe("passos do Primeiro uso", () => {
-  it("seguem a ordem Responsáveis → Tipos → Status → Ciclo", () => {
-    expect(PASSOS_PRIMEIRO_USO).toEqual(["responsaveis", "tipos", "status", "ciclo"]);
-    expect(PASSOS_PRIMEIRO_USO.map(numeroDoPasso)).toEqual([1, 2, 3, 4]);
+  it("seguem a ordem Responsáveis → Tipos → Status → Importar planilha → Ciclo", () => {
+    expect(PASSOS_PRIMEIRO_USO).toEqual(["responsaveis", "tipos", "status", "planilha", "ciclo"]);
+    expect(PASSOS_PRIMEIRO_USO.map(numeroDoPasso)).toEqual([1, 2, 3, 4, 5]);
   });
 
   it("o próximo passo anda um; no último não há próximo", () => {
     expect(proximoPasso("responsaveis")).toBe("tipos");
     expect(proximoPasso("tipos")).toBe("status");
-    expect(proximoPasso("status")).toBe("ciclo");
+    expect(proximoPasso("status")).toBe("planilha");
+    expect(proximoPasso("planilha")).toBe("ciclo");
     expect(proximoPasso("ciclo")).toBeNull();
   });
 
@@ -26,12 +27,13 @@ describe("passos do Primeiro uso", () => {
     expect(passoAnterior("responsaveis")).toBeNull();
     expect(passoAnterior("tipos")).toBe("responsaveis");
     expect(passoAnterior("status")).toBe("tipos");
-    expect(passoAnterior("ciclo")).toBe("status");
+    expect(passoAnterior("planilha")).toBe("status");
+    expect(passoAnterior("ciclo")).toBe("planilha");
   });
 
   it("os passos seguintes são os que ainda faltam", () => {
-    expect(passosSeguintes("responsaveis")).toEqual(["tipos", "status", "ciclo"]);
-    expect(passosSeguintes("status")).toEqual(["ciclo"]);
+    expect(passosSeguintes("responsaveis")).toEqual(["tipos", "status", "planilha", "ciclo"]);
+    expect(passosSeguintes("status")).toEqual(["planilha", "ciclo"]);
     expect(passosSeguintes("ciclo")).toEqual([]);
   });
 });

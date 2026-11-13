@@ -35,6 +35,7 @@ vi.mock("@/features/configuracoes/SecaoTipos", () => ({
   SecaoTipos: (p: { aoMudarRascunho?: (tem: boolean) => void }) => <SecaoComRascunho nome="tipos" {...p} />,
 }));
 vi.mock("@/features/configuracoes/SecaoStatus", () => ({ SecaoStatus: () => <section data-secao="status" /> }));
+vi.mock("@/features/configuracoes/SecaoImportarPlanilha", () => ({ SecaoImportarPlanilha: () => <section data-secao="planilha" /> }));
 vi.mock("@/features/configuracoes/SecaoCiclo", () => ({
   SecaoCiclo: (p: { aoMudarRascunho?: (tem: boolean) => void }) => <SecaoComRascunho nome="ciclo" {...p} />,
 }));
@@ -51,7 +52,7 @@ function montar(passoInicial: Parameters<typeof PassoAPasso>[0]["passoInicial"] 
 function passoNaTela() {
   const secoes = [...document.querySelectorAll("[data-secao]")].map((s) => s.getAttribute("data-secao"));
   expect(secoes).toHaveLength(1);
-  return { secao: secoes[0], cabecalho: screen.getByText(/^Passo \d de 4 · /).textContent };
+  return { secao: secoes[0], cabecalho: screen.getByText(/^Passo \d de 5 · /).textContent };
 }
 
 const botao = (nome: string) => screen.getByRole("button", { name: nome });
@@ -65,27 +66,28 @@ describe("PassoAPasso", () => {
 
   it("passo 1: Responsáveis, com pergunta, ajuda e próximos passos", () => {
     montar();
-    expect(passoNaTela()).toEqual({ secao: "responsaveis", cabecalho: "Passo 1 de 4 · Responsáveis" });
+    expect(passoNaTela()).toEqual({ secao: "responsaveis", cabecalho: "Passo 1 de 5 · Responsáveis" });
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(TEXTOS_PASSO.responsaveis.pergunta);
     expect(screen.getByText(TEXTOS_PASSO.responsaveis.ajuda)).toBeTruthy();
-    expect(screen.getByText("Próximos passos: Tipos → Status → Ciclo do cartão")).toBeTruthy();
+    expect(screen.getByText("Próximos passos: Tipos → Status → Importar planilha → Ciclo do cartão")).toBeTruthy();
     expect(botao(ROTULOS.pular)).toBeTruthy();
     expect(botao(ROTULOS.continuar)).toBeTruthy();
   });
 
-  it("segue a ordem Responsáveis → Tipos → Status → Ciclo; no último, Continuar vira Concluir", async () => {
+  it("segue a ordem Responsáveis → Tipos → Status → Importar planilha → Ciclo; no último, Continuar vira Concluir", async () => {
     const usuario = userEvent.setup();
     montar();
     const vistos = [passoNaTela()];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       await usuario.click(botao(ROTULOS.continuar));
       vistos.push(passoNaTela());
     }
     expect(vistos).toEqual([
-      { secao: "responsaveis", cabecalho: "Passo 1 de 4 · Responsáveis" },
-      { secao: "tipos", cabecalho: "Passo 2 de 4 · Tipos" },
-      { secao: "status", cabecalho: "Passo 3 de 4 · Status" },
-      { secao: "ciclo", cabecalho: "Passo 4 de 4 · Ciclo do cartão" },
+      { secao: "responsaveis", cabecalho: "Passo 1 de 5 · Responsáveis" },
+      { secao: "tipos", cabecalho: "Passo 2 de 5 · Tipos" },
+      { secao: "status", cabecalho: "Passo 3 de 5 · Status" },
+      { secao: "planilha", cabecalho: "Passo 4 de 5 · Importar planilha" },
+      { secao: "ciclo", cabecalho: "Passo 5 de 5 · Ciclo do cartão" },
     ]);
     expect(screen.queryByRole("button", { name: ROTULOS.continuar })).toBeNull();
     expect(botao(ROTULOS.concluir)).toBeTruthy();
@@ -149,7 +151,7 @@ describe("PassoAPasso", () => {
     it("volta um passo sem gravar e atualiza ?passo=", async () => {
       montar("status");
       await userEvent.setup().click(botao(ROTULOS.voltar));
-      expect(passoNaTela()).toEqual({ secao: "tipos", cabecalho: "Passo 2 de 4 · Tipos" });
+      expect(passoNaTela()).toEqual({ secao: "tipos", cabecalho: "Passo 2 de 5 · Tipos" });
       expect(window.location.search).toBe("?passo=tipos");
       expect(falso.concluirPrimeiroUso).not.toHaveBeenCalled();
       expect(falso.replace).not.toHaveBeenCalled();

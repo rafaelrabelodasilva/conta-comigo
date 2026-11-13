@@ -8,6 +8,7 @@ import {
   aprenderEmLote,
   aprenderRegra,
   avaliarRegra,
+  chaveDaPlanilha,
   chaveDeRegra,
   editarRegra,
   entradasDaReaplicacao,
@@ -15,6 +16,8 @@ import {
   lerContagem,
   ordenarRegras,
   outrosResponsaveisDaRegra,
+  regraDoNome,
+  regrasCriadasDesde,
   regrasUsadas,
   type EventoAprender,
   type RegraGravada,
@@ -488,5 +491,54 @@ describe("regrasUsadas (3.4)", () => {
     ];
     const usadas = regrasUsadas(["DM*SPOTIFY", "EBN SPOTIFY", "OUTRA", "SEM REGRA"], regras, ativos(["casal"], ["casa"]));
     expect(usadas).toEqual(["SPOTIFY"]);
+  });
+});
+
+describe("chaveDaPlanilha e regraDoNome (3.10)", () => {
+  it("a planilha perdeu o `*`: o `*` vira espaço e nada mais é tirado", () => {
+    expect(chaveDaPlanilha("SHOPEE *CELLSOLUTIONS")).toBe("SHOPEE CELLSOLUTIONS");
+    expect(chaveDaPlanilha("JIM COM* 57653822 BAR")).toBe("JIM COM 57653822 BAR");
+    expect(chaveDaPlanilha("MP *29596629YGORB")).toBe("MP 29596629YGORB");
+    expect(chaveDaPlanilha("  Mercado*Livre  ")).toBe("MERCADO LIVRE");
+  });
+
+  it("procura primeiro a chave de hoje e depois a da planilha", () => {
+    const hoje = regra({ chave: "29596629YGORB" });
+    const daPlanilha = regra({ chave: "MP 29596629YGORB" });
+    const mapa = new Map([[hoje.chave, hoje], [daPlanilha.chave, daPlanilha]]);
+    expect(regraDoNome(mapa, "MP *29596629YGORB")?.chave).toBe("29596629YGORB");
+    expect(regraDoNome(new Map([[daPlanilha.chave, daPlanilha]]), "MP *29596629YGORB")?.chave).toBe("MP 29596629YGORB");
+    expect(regraDoNome(new Map(), "MP *29596629YGORB")).toBeNull();
+  });
+
+  it("regrasUsadas marca a Regra da planilha que a importação aplicou", () => {
+    const r = regra({ chave: "SHOPEE CELLSOLUTIONS", responsavel_id: "rafael", tipo_id: "casa" });
+    expect(regrasUsadas(["SHOPEE *CELLSOLUTIONS"], [r], ativos(["rafael"], ["casa"]))).toEqual(["SHOPEE CELLSOLUTIONS"]);
+  });
+
+  it("entradasDaReaplicacao acha as linhas pela chave da planilha também", () => {
+    const linhas = [
+      { id: "1", nome: "SHOPEE *CELLSOLUTIONS", mes: "2026-11", excluido_em: null, ajuste_de_id: null, responsavel_id: null, tipo_id: null },
+    ];
+    expect(entradasDaReaplicacao("SHOPEE CELLSOLUTIONS", { tipo_id: "casa" }, linhas, "2026-11")).toHaveLength(1);
+  });
+});
+
+describe("regrasCriadasDesde (3.10)", () => {
+  const regras = [
+    { chave: "A", created_at: "2026-11-01T10:00:00+00:00" },
+    { chave: "B", created_at: "2026-11-13T12:00:00.123456+00:00" },
+    { chave: "C", created_at: "2026-11-13T12:00:00.2+00:00" },
+  ];
+
+  it("só as criadas a partir do instante (microssegundos comparados, não o texto)", () => {
+    expect(regrasCriadasDesde(regras, "2026-11-13T12:00:00.123456+00:00").map((r) => r.chave)).toEqual(["B", "C"]);
+    expect(regrasCriadasDesde(regras, "2026-11-13T12:00:00.2+00:00").map((r) => r.chave)).toEqual(["C"]);
+  });
+
+  it("sem instante ou ilegível, todas", () => {
+    expect(regrasCriadasDesde(regras, undefined)).toHaveLength(3);
+    expect(regrasCriadasDesde(regras, null)).toHaveLength(3);
+    expect(regrasCriadasDesde(regras, "ontem")).toHaveLength(3);
   });
 });

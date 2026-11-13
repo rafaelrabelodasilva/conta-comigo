@@ -34,6 +34,7 @@ import {
   ORDEM_PADRAO,
   alternarOrdem,
   distribuicaoPorResponsavel,
+  resumoDoHistorico,
   ehOrdemPadrao,
   linhasDoMes,
   mesAtual,
@@ -43,6 +44,7 @@ import {
 } from "@/domain/painel";
 import { repoFaturas } from "@/data/faturas-repo";
 import { repoLancamentos, type LinhaLancamento } from "@/data/lancamentos-repo";
+import { repoPlanilha } from "@/data/planilha-repo";
 import { gerenciador, useLinhas } from "@/data/realtime";
 import { ImportarFatura } from "@/features/importar/ImportarFatura";
 import { Botao } from "@/ui/Botao";
@@ -197,7 +199,20 @@ export function Painel({ titulo }: { titulo: string }) {
   );
 
   const mesesComFatura = useMemo(() => new Set(faturas.linhas.map((f) => f.mes)), [faturas.linhas]);
-  const meses = mesesDaLista([...mesesComFatura], atual, mesAberto);
+  // Meses com histórico importado da planilha (3.10) também entram no seletor.
+  const [mesesComHistorico, setMesesComHistorico] = useState<string[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    void repoPlanilha()
+      .mesesComHistorico()
+      .then((r) => {
+        if (vivo && r.ok) setMesesComHistorico(r.meses.map((m) => m.mes));
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+  const meses = mesesDaLista([...mesesComFatura, ...mesesComHistorico], atual, mesAberto);
   const fatura = faturas.linhas.find((f) => f.mes === mesAberto) ?? null;
 
   const retratos = [faturas, cartoes, lancamentos, responsaveis, tipos, status];
@@ -335,6 +350,8 @@ export function Painel({ titulo }: { titulo: string }) {
     // Soma, filtros, contagens, anúncio e seleção olham as unidades: a mãe dividida fica de fora e valem
     // as filhas (a mãe aparece só como cabeçalho). O Ajuste segue a mãe dele.
     const unidades = unidadesDoMes(doMes);
+    // Mês sem Fatura mas com histórico da planilha (3.10): o hero mostra o total dessas linhas.
+    const historico = fatura ? null : resumoDoHistorico(doMes);
     const maesDivididas = new Map(doMes.filter(ehMaeDividida).map((l) => [l.id, l]));
     const { maes, ajustesPorMae } = separarAjustes(unidades);
     // Sem Fatura não há o que verificar (nem a pílula): o filtro fica guardado.
@@ -414,6 +431,7 @@ export function Painel({ titulo }: { titulo: string }) {
             aoImportar={abrirImportar}
             conferencia={conferencia}
             aoVerificar={ligarVerificar}
+            historico={historico}
           />
         </div>
         {mostrarFaixa ? (

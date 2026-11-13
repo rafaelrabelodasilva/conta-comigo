@@ -80,10 +80,10 @@ vi.mock("@/data/lancamentos-repo", () => ({
   repoLancamentos: () => ({ classificarEmLote: estado.classificarEmLote, desfazerLote: estado.desfazerLote }),
 }));
 
-function abrir() {
+function abrir(criadasDesde?: string) {
   render(
     <ToastProvider>
-      <SecaoRegras />
+      <SecaoRegras criadasDesde={criadasDesde} />
     </ToastProvider>,
   );
   return userEvent.setup();
@@ -264,5 +264,34 @@ describe("SecaoRegras (História 3.4)", () => {
     await u.click(screen.getByRole("button", { name: rotuloExcluirRegra("SPOTIFY") }));
     await u.click(screen.getByRole("button", { name: T.confirmar_excluir }));
     expect(estado.excluir).toHaveBeenCalledWith("r1");
+  });
+});
+
+describe("SecaoRegras: filtro 'criadas agora' (História 3.10)", () => {
+  beforeEach(() => {
+    estado.lancamentos = [];
+    estado.lancamentosStatus = "pronto";
+    estado.mes = MES;
+    estado.regras = [
+      regra("r1", "ANTIGA", { created_at: "2026-11-01T10:00:00.000000+00:00" }),
+      regra("r2", "NOVA UM", { created_at: "2026-11-13T12:00:00.100000+00:00" }),
+      regra("r3", "NOVA DOIS", { created_at: "2026-11-13T12:00:00.250000+00:00" }),
+    ];
+  });
+
+  it("com `criadas_desde`, lista só as Regras criadas a partir do instante, com a faixa e o link para todas", () => {
+    abrir("2026-11-13T12:00:00.100000+00:00");
+    expect(screen.getByText("NOVA UM")).toBeTruthy();
+    expect(screen.getByText("NOVA DOIS")).toBeTruthy();
+    expect(screen.queryByText("ANTIGA")).toBeNull();
+    expect(screen.getByText("Mostrando as 2 Regras criadas agora pela planilha")).toBeTruthy();
+    const todas = screen.getByRole("link", { name: "Mostrar todas" });
+    expect(todas.getAttribute("href")).toBe("/configuracoes?secao=regras");
+  });
+
+  it("sem `criadas_desde` (ou ilegível) mostra todas e nenhuma faixa", () => {
+    abrir();
+    expect(screen.getByText("ANTIGA")).toBeTruthy();
+    expect(screen.queryByText(/criadas agora/)).toBeNull();
   });
 });

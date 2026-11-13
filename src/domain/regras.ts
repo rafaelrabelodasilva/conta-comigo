@@ -27,6 +27,7 @@
 //   maior `n`; no empate, o `responsavel_id` da Regra (senão, o primeiro da
 //   contagem).
 
+import { instanteEmMicros } from "./datas";
 import { copiarDivisao, divisaoComResponsaveisAtivos, lerDivisao, type Divisao } from "./divisao";
 import { normalizarNome } from "./importacao-fatura";
 import type { Resultado } from "./resultado";
@@ -86,11 +87,43 @@ export function chaveDeRegra(nome: string): string {
   return chave;
 }
 
+/**
+ * A chave das Regras que vêm da planilha (História 3.10): a planilha perdeu o
+ * `*` da Fatura ("SHOPEE CELLSOLUTIONS" no lugar de "SHOPEE *CELLSOLUTIONS"),
+ * então o `*` vira espaço e nada mais é tirado (nem prefixo nem dígitos). A
+ * importação da Fatura procura primeiro `chaveDeRegra` e, se não achar, esta.
+ */
+export function chaveDaPlanilha(nome: string): string {
+  return normalizarNome(nome).replace(/\*/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** A Regra da linha: a chave de hoje; senão, a da planilha. */
+export function regraDoNome<R>(porChave: ReadonlyMap<string, R>, nome: string): { chave: string; regra: R } | null {
+  const chave = chaveDeRegra(nome);
+  const regra = porChave.get(chave);
+  if (regra !== undefined) return { chave, regra };
+  const daPlanilha = chaveDaPlanilha(nome);
+  const outra = daPlanilha === chave ? undefined : porChave.get(daPlanilha);
+  return outra === undefined ? null : { chave: daPlanilha, regra: outra };
+}
+
 /** Uma entrada da contagem como está no banco (o id pode ter sido anulado). */
 export type EntradaContagem = { responsavel_id: string | null; n: number };
 
 /** A contagem já lida: um id por entrada, na ordem em que aparecem. */
 export type ContagemLida = { responsavel_id: string; n: number }[];
+
+/**
+ * "Criadas agora" (História 3.10): as Regras criadas a partir de `desde` (o
+ * `created_at` mais antigo das que a importação criou, do relógio do banco).
+ * `desde` ausente ou ilegível → todas.
+ */
+export function regrasCriadasDesde<R extends { created_at: string }>(regras: readonly R[], desde: string | null | undefined): R[] {
+  if (!desde) return [...regras];
+  const limite = instanteEmMicros(desde);
+  if (Number.isNaN(limite)) return [...regras];
+  return regras.filter((r) => instanteEmMicros(r.created_at) >= limite);
+}
 
 /** O que o núcleo usa de uma linha de `regras`. */
 export type RegraGravada = {
@@ -388,7 +421,7 @@ export function entradasDaReaplicacao(
   const entradas: { id: string; campos: { responsavel_id?: string; tipo_id?: string } }[] = [];
   for (const l of linhas) {
     if (l.mes !== mes || l.excluido_em !== null || l.ajuste_de_id !== null || (l.dividido_de_id ?? null) !== null) continue;
-    if (chaveDeRegra(l.nome) !== chave) continue;
+    if (chaveDeRegra(l.nome) !== chave && chaveDaPlanilha(l.nome) !== chave) continue;
     const muda =
       (campos.responsavel_id !== undefined && l.responsavel_id !== campos.responsavel_id) ||
       (campos.tipo_id !== undefined && l.tipo_id !== campos.tipo_id);
@@ -409,9 +442,8 @@ export function regrasUsadas(
   const porChave = new Map(regras.map((r) => [r.chave, r]));
   const usadas = new Set<string>();
   for (const nome of nomes) {
-    const chave = chaveDeRegra(nome);
-    const regra = porChave.get(chave);
-    if (regra && avaliarRegra(regra, ativos).tipo !== "nada") usadas.add(chave);
+    const achada = regraDoNome(porChave, nome);
+    if (achada && avaliarRegra(achada.regra, ativos).tipo !== "nada") usadas.add(achada.chave);
   }
   return [...usadas];
 }

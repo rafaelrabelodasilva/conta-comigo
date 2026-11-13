@@ -22,7 +22,7 @@
 
 import { partesDaImportacao, type Divisao } from "./divisao";
 import { normalizarNome } from "./importacao-fatura";
-import { avaliarRegra, chaveDeRegra, divisaoDaRegra, regrasUsadas, type CadastrosAtivos, type RegraGravada } from "./regras";
+import { avaliarRegra, divisaoDaRegra, regraDoNome, regrasUsadas, type CadastrosAtivos, type RegraGravada } from "./regras";
 
 /** Por que a linha está na fila do Revisar (enum `revisao_motivo` do banco). */
 export type MotivoRevisao =
@@ -114,7 +114,7 @@ function classificarLinha(
   temAjuste: boolean,
 ): Classificacao {
   const sugerido = tipoPeloNome(l.tipo_sugerido, cadastros);
-  const regra = regras.get(chaveDeRegra(l.nome));
+  const regra = regraDoNome(regras, l.nome)?.regra;
   const divisao = regra && !temAjuste ? divisaoDaRegra(regra, emUso) : null;
   if (regra && divisao && (l.valor_centavos === undefined || partesDaImportacao(l.valor_centavos, divisao) !== null)) {
     return { responsavel_id: null, tipo_id: regra.tipo_id, revisao_motivo: null, revisao_dados: null, divisao };

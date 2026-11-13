@@ -304,6 +304,7 @@ describe("textos do Primeiro uso (História 1.8)", () => {
       ROTULOS.responsaveis,
       ROTULOS.tipos,
       ROTULOS.status,
+      ROTULOS.importar_planilha,
       ROTULOS.ciclo,
     ]);
     for (const passo of PASSOS_PRIMEIRO_USO) {
@@ -314,7 +315,7 @@ describe("textos do Primeiro uso (História 1.8)", () => {
   });
 
   it("cabeçalho do passo, próximos passos e botões", () => {
-    expect(rotuloPasso(1, 4, "Responsáveis")).toBe("Passo 1 de 4 · Responsáveis");
+    expect(rotuloPasso(1, 5, "Responsáveis")).toBe("Passo 1 de 5 · Responsáveis");
     expect(rotuloProximosPassos(["Tipos", "Status", "Ciclo do cartão"])).toBe(
       "Próximos passos: Tipos → Status → Ciclo do cartão",
     );
@@ -753,5 +754,28 @@ describe("textos da História 3.6 (casamento)", () => {
     expect(rotuloManterClassificacao("MAGALU")).toBe("Manter classificação de MAGALU");
     expect(rotuloRemoverPrevisto("MAGALU")).toBe("Remover previsto de MAGALU");
     expect(rotuloManterPrevisto("MAGALU")).toBe("Manter previsto de MAGALU");
+  });
+});
+
+describe("textos da planilha (História 3.10)", () => {
+  it("o erro da aba, o resumo e os rótulos", async () => {
+    const m = await import("./mensagens");
+    expect(m.erroDaAba("03/2026")).toBe("Não foi possível ler a aba 03/2026");
+    expect(m.resumoDaImportacao({ lancamentos: 412, responsaveis: 5, tipos: 14, regras: 1 })).toBe(
+      "412 lançamentos, 5 Responsáveis, 14 Tipos, 1 Regra criada",
+    );
+    expect(m.resumoDaImportacao({ lancamentos: 1, responsaveis: 1, tipos: 1, regras: 2 })).toBe(
+      "1 lançamento, 1 Responsável, 1 Tipo, 2 Regras criadas",
+    );
+    expect(m.rotuloPreviaDaAba({ lancamentos: 48, divisoes: 1, series: 2, previstos: 14, digitadosAMao: 3 })).toBe(
+      "48 lançamentos · 1 Divisão · 2 Séries · 14 previstos · 3 digitados à mão",
+    );
+    expect(m.rotuloPreviaDaAba({ lancamentos: 1, divisoes: 0, series: 0, previstos: 0, digitadosAMao: 0 })).toBe("1 lançamento");
+    expect(m.rotuloCriadasAgora(1)).toBe("Mostrando a Regra criada agora pela planilha");
+    expect(m.rotuloApagarHistorico("2026-03", 2)).toContain("2 lançamentos");
+    expect(m.tituloApagarHistorico("2026-03")).toBe("Apagar o histórico de Mar/26?");
+    for (const codigo of ["planilha.mes_com_fatura", "planilha.serie_ocupada", "planilha.cabecalho", "planilha.valor_invalido", "planilha.parcela_invalida", "planilha.arquivo_invalido", "planilha.sem_abas"]) {
+      expect(m.ehCodigoConhecido(codigo)).toBe(true);
+    }
   });
 });

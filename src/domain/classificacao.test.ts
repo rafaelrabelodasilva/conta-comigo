@@ -255,3 +255,31 @@ describe("chavesDeRegrasUsadas (3.4)", () => {
     expect(usadas).toEqual(["SPOTIFY"]);
   });
 });
+
+describe("classificarImportacao com a Regra da planilha (3.10)", () => {
+  it("o Nome da fatura com `*` acha a Regra criada com o Nome da planilha (sem `*`)", () => {
+    const [r] = classificarImportacao(
+      [linha("SHOPEE *CELLSOLUTIONS")],
+      [regra("SHOPEE CELLSOLUTIONS", { responsavel_id: "rafael", tipo_id: "casa", contagem: [{ responsavel_id: "rafael", n: 3 }] })],
+      cadastros,
+    );
+    expect(classificacao(r)).toEqual({ responsavel_id: "rafael", tipo_id: "casa", revisao_motivo: null, revisao_dados: null });
+  });
+
+  it("a Regra de hoje vale mais que a da planilha para o mesmo Nome", () => {
+    const [r] = classificarImportacao(
+      [linha("SHOPEE *CELLSOLUTIONS")],
+      [
+        regra("SHOPEE CELLSOLUTIONS", { responsavel_id: "rafael", tipo_id: "casa", contagem: [{ responsavel_id: "rafael", n: 3 }] }),
+        regra("SHOPEE*CELLSOLUTIONS", { responsavel_id: "mae", tipo_id: "saude", contagem: [{ responsavel_id: "mae", n: 1 }] }),
+      ],
+      cadastros,
+    );
+    expect(classificacao(r)).toMatchObject({ responsavel_id: "mae", tipo_id: "saude" });
+  });
+
+  it("chavesDeRegrasUsadas devolve a chave da planilha que classificou", () => {
+    const regras = [regra("SHOPEE CELLSOLUTIONS", { responsavel_id: "rafael", tipo_id: "casa", contagem: [{ responsavel_id: "rafael", n: 1 }] })];
+    expect(chavesDeRegrasUsadas([{ nome: "SHOPEE *CELLSOLUTIONS", ajuste_de_ordem: null }], regras, cadastros)).toEqual(["SHOPEE CELLSOLUTIONS"]);
+  });
+});

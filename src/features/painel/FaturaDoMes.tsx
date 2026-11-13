@@ -14,6 +14,7 @@ import {
   rotuloSeloConferencia,
   rotuloTotalAPagar,
   sobrelinhaFatura,
+  sobrelinhaHistorico,
 } from "@/domain/mensagens";
 import type { ValorFiltro } from "@/domain/filtros-grade";
 import type { DistribuicaoPorResponsavel } from "@/domain/painel";
@@ -52,6 +53,11 @@ export type PropsFaturaDoMes = {
   conferencia?: Conferencia | null;
   /** Toque no selo de diferença: liga o filtro "Verificar". */
   aoVerificar?: () => void;
+  /**
+   * Mês sem Fatura com linhas do histórico da planilha (História 3.10): o hero
+   * mostra o total delas e a barra por Responsável, sem selo de Conferência.
+   */
+  historico?: { totalCentavos: number; quantidade: number } | null;
 };
 
 type Fatia = { id: string | null; nome: string; centavos: number; fundo: string };
@@ -135,6 +141,7 @@ export function FaturaDoMes({
   aoImportar,
   conferencia = null,
   aoVerificar,
+  historico = null,
 }: PropsFaturaDoMes) {
   const fatias: Fatia[] = distribuicao.segmentos.map((s) => {
     const r = responsaveis.get(s.responsavelId);
@@ -151,6 +158,23 @@ export function FaturaDoMes({
   }
   const barra =
     fatias.length > 0 ? <BarraPorResponsavel fatias={fatias} escolhidos={escolhidos} aoFiltrar={aoFiltrar} /> : null;
+
+  if (!fatura && historico) {
+    const sobrelinha = sobrelinhaHistorico(mes);
+    return (
+      <section aria-label={sobrelinha} className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
+        <p className="texto-eyebrow text-text-muted">{sobrelinha}</p>
+        <p className="texto-hero-value">
+          <span className="sr-only">{`${T.total_historico} `}</span>
+          {formatarDinheiro(historico.totalCentavos)}
+        </p>
+        <p className="texto-body text-text-muted">
+          {rotuloLancamentos(historico.quantidade)} · {T.do_historico}
+        </p>
+        {barra}
+      </section>
+    );
+  }
 
   if (!fatura) {
     return (

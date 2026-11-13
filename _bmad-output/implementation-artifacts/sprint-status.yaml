@@ -69,7 +69,7 @@ development_status:
   3-7-herdar-parcelas-sem-previsto: done
   3-8-dividir-um-lançamento: done
   3-9-dar-apelido: done
-  3-10-importar-o-histórico-da-planilha: backlog
+  3-10-importar-o-histórico-da-planilha: review
   3-11-reimportar-um-mês: done
   3-12-reimportar-mantendo-a-classificação: backlog
   epic-3-retrospective: optional

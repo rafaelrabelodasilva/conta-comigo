@@ -550,6 +550,7 @@ export type Database = {
     }
     Functions: {
       anular_id_jsonb: { Args: { de: string; doc: Json }; Returns: Json }
+      apagar_historico_do_mes: { Args: { p_mes: string }; Returns: Json }
       classificar_em_lote: { Args: { p_itens: Json }; Returns: Json }
       contar_usos_cadastro: {
         Args: { cadastro: string }
@@ -559,6 +560,10 @@ export type Database = {
         }[]
       }
       dividir_lancamento: { Args: { p_itens: Json }; Returns: Json }
+      importar_aba_planilha: {
+        Args: { p_linhas: Json; p_mes: string; p_previstos?: Json }
+        Returns: Json
+      }
       importar_fatura: {
         Args: {
           dados_cartoes: Json

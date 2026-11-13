@@ -6,6 +6,8 @@ import { temSessao } from "@/data/supabase/servidor";
 import { SecaoAparencia } from "@/features/configuracoes/SecaoAparencia";
 import { SecaoCiclo } from "@/features/configuracoes/SecaoCiclo";
 import { SecaoConferencia } from "@/features/configuracoes/SecaoConferencia";
+import { SecaoImportarPlanilha } from "@/features/configuracoes/SecaoImportarPlanilha";
+import type { PropsSecao } from "@/features/configuracoes/rascunho";
 import { SecaoRegras } from "@/features/configuracoes/SecaoRegras";
 import { SecaoResponsaveis } from "@/features/configuracoes/SecaoResponsaveis";
 import { SecaoStatus } from "@/features/configuracoes/SecaoStatus";
@@ -22,7 +24,7 @@ export const metadata: Metadata = { title: `${item.titulo} · Conta Comigo` };
 
 // Uma entrada por chave de CHAVES_SECAO (faltar uma é erro de tipo); a
 // ordem da lista à esquerda é a de CHAVES_SECAO e a escolhida vem de `?secao=`.
-const CONTEUDO_SECAO: Record<ChaveSecao, { rotulo: string; Conteudo: () => React.JSX.Element }> = {
+const CONTEUDO_SECAO: Record<ChaveSecao, { rotulo: string; Conteudo: (props: PropsSecao & { criadasDesde?: string }) => React.JSX.Element }> = {
   responsaveis: { rotulo: ROTULOS.responsaveis, Conteudo: SecaoResponsaveis },
   tipos: { rotulo: ROTULOS.tipos, Conteudo: SecaoTipos },
   status: { rotulo: ROTULOS.status, Conteudo: SecaoStatus },
@@ -30,6 +32,7 @@ const CONTEUDO_SECAO: Record<ChaveSecao, { rotulo: string; Conteudo: () => React
   conferencia: { rotulo: ROTULOS.conferencia, Conteudo: SecaoConferencia },
   regras: { rotulo: ROTULOS.regras_aprendidas, Conteudo: SecaoRegras },
   aparencia: { rotulo: ROTULOS.aparencia, Conteudo: SecaoAparencia },
+  planilha: { rotulo: ROTULOS.importar_planilha, Conteudo: SecaoImportarPlanilha },
 };
 
 const SECOES = CHAVES_SECAO.map((chave) => ({ chave, ...CONTEUDO_SECAO[chave] }));
@@ -45,8 +48,11 @@ export default async function PaginaConfiguracoes({
   // Confere a sessão aqui também, sem depender só do proxy.
   if (!(await temSessao())) redirect("/entrar");
 
-  const chave = secaoEscolhida((await searchParams).secao);
+  const parametros = await searchParams;
+  const chave = secaoEscolhida(parametros.secao);
   const { Conteudo } = CONTEUDO_SECAO[chave];
+  // "Criadas agora" (3.10): o instante vem da importação; texto qualquer vira "todas" no núcleo.
+  const desde = Array.isArray(parametros.criadas_desde) ? parametros.criadas_desde[0] : parametros.criadas_desde;
 
   return (
     <Tela titulo={item.titulo}>
@@ -88,7 +94,7 @@ export default async function PaginaConfiguracoes({
           </form>
         </nav>
         <div className="min-w-0 flex-1">
-          <Conteudo />
+          <Conteudo criadasDesde={desde} />
         </div>
       </div>
     </Tela>

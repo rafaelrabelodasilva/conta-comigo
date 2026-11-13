@@ -4,8 +4,10 @@
 // "hoje" entra como parâmetro (a tela lê o relógio).
 
 import { mesDaData, somarMeses } from "./ciclo";
+import { instanteEmMicros } from "./datas";
 import { ordenarDuvidasPrimeiro } from "./conferencia";
 import { formatarDinheiro } from "./dinheiro";
+import { linhasDaFatura, unidadesDoMes } from "./divisao";
 import {
   ROTULO_PREVISTO,
   TEXTOS_CONFERENCIA,
@@ -40,6 +42,8 @@ export type LancamentoGrade = {
   dividido_de_id?: string | null;
   /** A Divisão da mãe (`jsonb`); nulo na linha comum e na parte. */
   divisao?: unknown;
+  /** Desempate das linhas sem `ordem_fatura` (o histórico da planilha, 3.10): a ordem em que a aba foi gravada. */
+  created_at?: string | null;
 };
 
 export type LancadoPor = "fatura" | "sistema" | "manual" | "historico";
@@ -157,8 +161,15 @@ export function ordenarLancamentos<L extends LancamentoGrade>(
       const c = compararChaves(ca, cb) * sinal;
       if (c !== 0) return c;
     }
-    return ordemFatura(a) - ordemFatura(b);
+    return ordemFatura(a) - ordemFatura(b) || ordemDeCriacao(a, b);
   });
+}
+
+/** Sem `ordem_fatura` nas duas (histórico da planilha), vale a ordem de criação; sem `created_at`, empata. */
+function ordemDeCriacao(a: Pick<LancamentoGrade, "created_at">, b: Pick<LancamentoGrade, "created_at">): number {
+  if (!a.created_at || !b.created_at) return 0;
+  const d = instanteEmMicros(a.created_at) - instanteEmMicros(b.created_at);
+  return Number.isNaN(d) ? 0 : d;
 }
 
 /** É a ordem padrão (a da fatura, crescente)? */
@@ -179,6 +190,22 @@ export function ordenarGrade<L extends LancamentoGrade>(
   verificando: boolean,
 ): L[] {
   return verificando && ehOrdemPadrao(ordem) ? ordenarDuvidasPrimeiro(linhas) : ordenarLancamentos(linhas, ordem, nomes);
+}
+
+/**
+ * O hero de um Mês sem Fatura mas com histórico da planilha (História 3.10):
+ * a soma das linhas `historico` (as filhas valem no lugar da mãe dividida) e
+ * quantas são (a mãe dividida conta uma vez). Sem histórico → null.
+ */
+export function resumoDoHistorico(
+  doMes: readonly (Pick<LancamentoGrade, "lancado_por" | "valor_centavos" | "dividido_de_id" | "divisao">)[],
+): { totalCentavos: number; quantidade: number } | null {
+  const historico = doMes.filter((l) => l.lancado_por === "historico");
+  if (historico.length === 0) return null;
+  return {
+    totalCentavos: unidadesDoMes(historico).reduce((soma, l) => soma + l.valor_centavos, 0),
+    quantidade: linhasDaFatura(historico).length,
+  };
 }
 
 /** Soma dos valores (créditos negativos). */

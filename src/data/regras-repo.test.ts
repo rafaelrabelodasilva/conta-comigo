@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Database } from "./database.types";
 import type { EventoAprender } from "@/domain/regras";
 import { criarRepoRegras, type LinhaRegra } from "./regras-repo";
@@ -352,5 +352,36 @@ describe("repositório de Regras: editar, excluir e marcar uso", () => {
     expect(m.usos[0].corpo).toEqual({ ultimo_uso: "2026-11-09T12:00:00.000Z" });
     await m.repo.marcarUso([]);
     expect(m.usos).toHaveLength(3);
+  });
+});
+
+describe("criarIniciais (História 3.10)", () => {
+  it("grava as Regras da planilha por upsert que ignora as chaves já existentes e devolve só as criadas", async () => {
+    const chamadas: { corpo: unknown; opcoes: unknown }[] = [];
+    const cliente = {
+      from: () => ({
+        upsert: (corpo: unknown, opcoes: unknown) => ({
+          select: async () => {
+            chamadas.push({ corpo, opcoes });
+            return { data: [{ chave: "A" }], error: null };
+          },
+        }),
+      }),
+    } as unknown as SupabaseClient<Database>;
+    const aplicarLote = vi.fn();
+    const repo = criarRepoRegras({ obterCliente: () => cliente, memoria: { aplicarLote } as never });
+    const regra = (chave: string) => ({ chave, versao_normalizacao: 1, responsavel_id: "r", tipo_id: null, contagem: [{ responsavel_id: "r", n: 2 }], ultimo_uso: "2026-11-13T12:00:00.000Z", divisao: null });
+    const r = await repo.criarIniciais([regra("A"), regra("B")]);
+    expect(r).toEqual({ ok: true, criadas: [{ chave: "A" }] });
+    expect(chamadas[0].opcoes).toEqual({ onConflict: "owner_id,chave", ignoreDuplicates: true });
+    expect((chamadas[0].corpo as unknown[]).length).toBe(2);
+    expect(aplicarLote).toHaveBeenCalledWith([{ chave: "A" }]);
+  });
+
+  it("lista vazia não chama o banco; erro do banco é { ok: false }", async () => {
+    const cliente = { from: () => ({ upsert: () => ({ select: async () => ({ data: null, error: { code: "x" } }) }) }) } as unknown as SupabaseClient<Database>;
+    const repo = criarRepoRegras({ obterCliente: () => cliente });
+    expect(await repo.criarIniciais([])).toEqual({ ok: true, criadas: [] });
+    expect(await repo.criarIniciais([{ chave: "A", versao_normalizacao: 1, responsavel_id: null, tipo_id: null, contagem: [], ultimo_uso: "x", divisao: null }])).toEqual({ ok: false });
   });
 });

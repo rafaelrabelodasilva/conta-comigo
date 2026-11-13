@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { hojeEmSaoPaulo } from "@/domain/datas";
 import { lerDivisao } from "@/domain/divisao";
@@ -10,6 +11,7 @@ import {
   mensagem,
   perguntaReaplicar,
   rotuloClassificados,
+  rotuloCriadasAgora,
   textoDaDivisao,
   tituloExcluirRegra,
 } from "@/domain/mensagens";
@@ -19,11 +21,13 @@ import {
   filtrarRegras,
   ordenarRegras,
   outrosResponsaveisDaRegra,
+  regrasCriadasDesde,
   type EdicaoRegra,
 } from "@/domain/regras";
 import { repoLancamentos } from "@/data/lancamentos-repo";
 import { gerenciador, useLinhas } from "@/data/realtime";
 import { repoRegras } from "@/data/regras-repo";
+import { Botao } from "@/ui/Botao";
 import { Campo } from "@/ui/Campo";
 import { ConfirmarAcao } from "@/ui/ConfirmarAcao";
 import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
@@ -47,7 +51,7 @@ type Reaplicar = {
   mes: string;
 };
 
-export function SecaoRegras() {
+export function SecaoRegras({ criadasDesde }: { criadasDesde?: string } = {}) {
   const regras = useLinhas("regras");
   const responsaveis = useLinhas("responsaveis");
   const tipos = useLinhas("tipos");
@@ -79,9 +83,11 @@ export function SecaoRegras() {
     const d = lerDivisao(dados);
     return d === null ? null : textoDaDivisao(d, (id) => nomes.responsaveis.get(id) ?? T.sem_valor);
   };
+  // "Criadas agora" (3.10): só as Regras que a última importação da planilha criou.
+  const doFiltro = useMemo(() => regrasCriadasDesde(regras.linhas, criadasDesde), [regras.linhas, criadasDesde]);
   const lista = useMemo(
-    () => filtrarRegras(ordenarRegras(regras.linhas), busca, nomes),
-    [regras.linhas, busca, nomes],
+    () => filtrarRegras(ordenarRegras(doFiltro), busca, nomes),
+    [doFiltro, busca, nomes],
   );
   const editando = editandoId === null ? null : (regras.linhas.find((r) => r.id === editandoId) ?? null);
   const excluindo = excluindoId === null ? null : (regras.linhas.find((r) => r.id === excluindoId) ?? null);
@@ -230,6 +236,15 @@ export function SecaoRegras() {
           </div>
         ) : null}
       </header>
+
+      {criadasDesde ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-selection px-3 py-2 texto-body">
+          <p className="min-w-0 flex-1">{rotuloCriadasAgora(doFiltro.length)}</p>
+          <Botao asChild tamanho="compacto" variante="secundario">
+            <Link href="/configuracoes?secao=regras">{T.mostrar_todas}</Link>
+          </Botao>
+        </div>
+      ) : null}
 
       {pergunta && mudariam > 0 ? (
         <FaixaPergunta
