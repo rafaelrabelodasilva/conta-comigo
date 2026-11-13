@@ -156,14 +156,14 @@ begin
     select coalesce(array_agg(f.id), '{}') into ids_filhas
       from public.lancamentos as f
      where f.owner_id = dono and f.dividido_de_id = any (ids_previstos);
-    removidos_previstos := to_jsonb(ids_previstos || ids_filhas);
+    removidos_previstos := to_jsonb(array(select x from unnest(ids_previstos || ids_filhas) as x order by x));
     delete from public.lancamentos as p where p.owner_id = dono and p.id = any (ids_previstos);
 
     -- Linhas sem par (e as excluídas): apagadas, com as filhas e os Ajustes.
     select coalesce(array_agg(f.id), '{}') into ids_filhas
       from public.lancamentos as f
      where f.owner_id = dono and f.dividido_de_id = any (r_apagar || r_excluidas);
-    removidos_lancamentos := to_jsonb(r_apagar || r_excluidas || ids_filhas);
+    removidos_lancamentos := to_jsonb(array(select x from unnest(r_apagar || r_excluidas || ids_filhas) as x order by x));
     delete from public.lancamentos as l where l.owner_id = dono and l.id = any (r_apagar || r_excluidas);
 
     -- Sem par, mas com o que Rafael fez (`sumiram`): saem da Fatura como linha

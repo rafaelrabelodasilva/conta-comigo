@@ -10,7 +10,7 @@ import type { Json } from "../../src/data/database.types";
 import { somarMeses } from "../../src/domain/ciclo";
 import type { Importacao, LancamentoParaGravar } from "../../src/domain/importacao-fatura";
 import { gerarPrevistos, atribuirSeries } from "../../src/domain/previstos";
-import { ligado, supabaseLocal, type Cliente, type Usuario } from "./apoio";
+import { ligado, planoApagarTudo, supabaseLocal, type Cliente, type Usuario } from "./apoio";
 
 type Parcela = { nome: string; n: number | null; total: number | null; valor: number };
 
@@ -53,7 +53,9 @@ function fatura(mes: string, parcelas: Parcela[], mesesComFatura: string[] = [])
   };
 }
 
-function importar(cliente: Cliente, imp: Importacao, extra: { lidoEm?: string | null; substituir?: string } = {}) {
+async function importar(cliente: Cliente, imp: Importacao, extra: { lidoEm?: string | null; substituir?: string } = {}) {
+  // Reimportação (3.12): estes testes usam o plano "apagar tudo" (nenhuma linha nova pareia com as antigas).
+  const plano = extra.substituir ? await planoApagarTudo(cliente, extra.substituir) : null;
   return cliente.rpc("importar_fatura", {
     dados_fatura: imp.fatura as unknown as Json,
     dados_cartoes: imp.cartoes as unknown as Json,
@@ -61,6 +63,7 @@ function importar(cliente: Cliente, imp: Importacao, extra: { lidoEm?: string | 
     dados_previstos: imp.previstos as unknown as Json,
     ...(extra.lidoEm ? { lancamentos_atualizados_em: extra.lidoEm } : {}),
     ...(extra.substituir ? { substituir_fatura_id: extra.substituir } : {}),
+    ...(plano ? { dados_reimportacao: plano as unknown as Json } : {}),
   });
 }
 
@@ -231,7 +234,7 @@ describe.skipIf(!ligado)("Séries e previstos no Supabase local", () => {
     expect(meses).toContain("2026-03");
   });
 
-  it("reimportação (3.11 simplificada): a Série é reaproveitada, os previstos intocados são recriados, o editado fica e o excluído não ressuscita", async () => {
+  it("reimportação (plano 'apagar tudo' da 3.12): a Série é reaproveitada, os previstos intocados são recriados, o editado fica e o excluído não ressuscita", async () => {
     const mes = "2026-05";
     const primeira = await importar(a.cliente, fatura(mes, [{ nome: "LOJA S", n: 2, total: 6, valor: 9900 }]));
     expect(primeira.error).toBeNull();

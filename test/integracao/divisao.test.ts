@@ -21,7 +21,7 @@ import {
 } from "../../src/domain/divisao";
 import type { Importacao, LancamentoParaGravar } from "../../src/domain/importacao-fatura";
 import { aplicarCasamento, atribuirSeries, casarPrevistos, gerarPrevistos } from "../../src/domain/previstos";
-import { ligado, supabaseLocal, type Cliente, type Usuario } from "./apoio";
+import { ligado, planoApagarTudo, supabaseLocal, type Cliente, type Usuario } from "./apoio";
 
 type Linha = { nome: string; n: number | null; total: number | null; valor: number; ajusteDe?: number };
 
@@ -276,6 +276,7 @@ describe.skipIf(!ligado)("Divisão de um Lançamento no Supabase local", () => {
       previstos_sem_par: [] as unknown as Json,
       lancamentos_atualizados_em: ult![0].updated_at,
       substituir_fatura_id: out.fatura.id,
+      dados_reimportacao: (await planoApagarTudo(a.cliente, out.fatura.id)) as unknown as Json,
     });
     expect(r2.error).toBeNull();
     const { data: orfas } = await local.admin.from("lancamentos").select("id, dividido_de_id").eq("owner_id", a.id).not("dividido_de_id", "is", null);
