@@ -9,11 +9,9 @@ import {
   conferirImportacao,
   pareceFaturaSantander,
   prepararImportacao,
-  resumirReimportacao,
   type ConferenciaImportacao,
   type Importacao,
   type LancamentoParaGravar,
-  type ResumoReimportacao,
 } from "@/domain/importacao-fatura";
 import {
   ETAPAS_IMPORTACAO,
@@ -21,7 +19,6 @@ import {
   TEXTOS_IMPORTAR as T,
   TEXTOS_REVISAR,
   avisoReimportar,
-  avisoReimportarBloqueado,
   mensagem,
   rotuloConferencia,
   rotuloDespesasCreditos,
@@ -34,15 +31,17 @@ import {
   rotuloPrevistosCriados,
   rotuloPrevistosNaoVieram,
   rotuloSeraoGravados,
+  rotuloSumiramNaReimportacao,
   textoExtracaoIncompleta,
   tituloFaturaLida,
   type EtapaImportacao,
 } from "@/domain/mensagens";
 import { aplicarCasamento, casarPrevistos, gerarPrevistos } from "@/domain/previstos";
+import { aplicarReimportacao, casarSobrasComPrevistos, planejarReimportacao } from "@/domain/reimportacao";
 import type { RegraGravada } from "@/domain/regras";
 import type { Resultado } from "@/domain/resultado";
 import { resumoDaClassificacao } from "@/domain/revisar";
-import { repoFaturas, type LeituraDePrevistos, type Substituir } from "@/data/faturas-repo";
+import { repoFaturas, type LeituraDePrevistos, type LeituraReimportacao, type Substituir } from "@/data/faturas-repo";
 import { repoRegras } from "@/data/regras-repo";
 import { useLinhas } from "@/data/realtime";
 import { Botao } from "@/ui/Botao";
@@ -68,22 +67,22 @@ import { TotalAPagar } from "./TotalAPagar";
 // (`LIMITE_CLASSIFICAR_MS`); passado o limite, segue como se tivesse falhado.
 // Cancelar, recomeçar ou fechar a janela solta as esperas pendentes.
 //
-// Reimportação (História 3.11 simplificada): se o Mês já tem Fatura (na
-// memória, ao classificar; ou depois, pelo Realtime ou pelo erro
-// `fatura.mes_ja_importado` da RPC), lê do banco as linhas dela e o passo 3
-// mostra o aviso com os números do núcleo (`resumirReimportacao`), com
-// "Cancelar" e "Importar de novo" (destrutivo, um toque grava). Sem os
-// números (falha ao ler), só o erro e "Tentar de novo", que relê só o
-// resumo. A RPC recebe o id da Fatura e o `updated_at` lidos com o aviso;
-// `fatura.mes_mudou` volta ao erro com "Tentar de novo" (números novos).
+// Reimportação (História 3.12): se o Mês já tem Fatura (na memória, ao
+// classificar; ou depois, pelo Realtime ou pelo erro `fatura.mes_ja_importado`
+// da RPC), lê do banco as linhas dela e o núcleo (`reimportacao.ts`) casa as
+// linhas novas com elas e decide o destino das que sobram. O passo 3 mostra o
+// aviso com os números desse plano, com "Cancelar" e "Importar de novo"
+// (destrutivo, um toque grava). Sem os números (falha ao ler), só o erro e
+// "Tentar de novo", que relê o plano. A RPC recebe o id da Fatura, o
+// `updated_at` lido com o aviso e o plano; `fatura.mes_mudou` volta ao erro com
+// "Tentar de novo" (plano novo).
 //
 // Casamento (História 3.6): ao classificar, lê do banco os previstos do Mês
 // importado (e o `updated_at` do Mês, que vai como trava para a RPC); o núcleo
 // (`casarPrevistos`, `aplicarCasamento`) junta cada parcela real ao seu previsto
 // e marca os previstos que a Fatura não trouxe. O passo 3 diz quantos casaram e
 // quantos não vieram. Falhou ao ler os previstos: importa sem casar (a RPC
-// recusa se isso criaria duas linhas para a mesma parcela). Fatura com linhas
-// casadas não reimporta: o aviso só tem "Cancelar" (a RPC recusa também).
+// recusa se isso criaria duas linhas para a mesma parcela).
 //
 // Herança (História 3.7): junto dos previstos, lê do banco as parcelas n−1 do
 // Mês anterior (`lerParcelasDoMesAnterior`; a memória guarda só o Mês aberto).
@@ -106,7 +105,7 @@ type Passo = 1 | 2 | 3;
 /** O aviso "Importar de novo" do passo 3 (null: o Mês não tinha Fatura). */
 type AvisoReimportar =
   | { tipo: "lendo" }
-  | { tipo: "pronto"; substituir: Substituir; resumo: ResumoReimportacao }
+  | { tipo: "pronto"; substituir: Substituir; leitura: LeituraReimportacao }
   | { tipo: "falhou"; codigo: string }
   /** Lido do banco: o Mês não tem Fatura (importação normal). */
   | { tipo: "sem_fatura" };
@@ -119,7 +118,17 @@ type Estado =
   | { tipo: "processando"; passo: Passo; etapa: EtapaImportacao }
   | { tipo: "falha_leitura"; codigo: string }
   /** Gravou e há linhas para revisar: o resumo e os dois caminhos. */
-  | { tipo: "concluido"; classificados: number; paraRevisar: number; casados: number; naoVieram: number; herdadas: number; divididas: number }
+  | {
+      tipo: "concluido";
+      classificados: number;
+      paraRevisar: number;
+      casados: number;
+      naoVieram: number;
+      herdadas: number;
+      divididas: number;
+      /** Reimportação: linhas mexidas que saíram da Fatura e estão no Revisar. */
+      sumiram: number;
+    }
   | {
       tipo: "conferir";
       importacao: Importacao;
@@ -210,6 +219,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     base: Importacao;
     classificadas: LancamentoParaGravar[];
     candidatas: CandidataParaHerdar[];
+    previstosLidos: LeituraDePrevistos | null;
   } | null>(null);
 
   const gravando = estado.tipo === "conferir" && estado.gravando;
@@ -276,8 +286,8 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     const { responsaveis: r, tipos: t } = cadastros.current;
     const paraClassificar = prontos ? { responsaveis: r, tipos: t } : { responsaveis: [], tipos: [] };
     const classificadas = classificarImportacao(importacao.valor.lancamentos, lidas, paraClassificar);
-    planoDoCasamento.current = { mes, base: importacao.valor, classificadas, candidatas };
-    const classificada = montarComCasamento(importacao.valor, classificadas, previstosLidos, candidatas);
+    planoDoCasamento.current = { mes, base: importacao.valor, classificadas, candidatas, previstosLidos };
+    const classificada = montarComCasamento(importacao.valor, classificadas, previstosLidos, candidatas, reimportar);
     // As Regras que esta importação usou: ganham `ultimo_uso` quando a Fatura for gravada.
     regrasUsadasNaImportacao.current = chavesDeRegrasUsadas(importacao.valor.lancamentos, lidas, paraClassificar);
     setEstado({ tipo: "conferir", importacao: classificada, conferencia, gravando: false, erro: null, reimportar });
@@ -293,9 +303,33 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     classificadas: LancamentoParaGravar[],
     previstosLidos: LeituraDePrevistos | null,
     candidatas: readonly CandidataParaHerdar[],
+    reimportar: AvisoReimportar | null = null,
   ): Importacao {
     const mes = base.fatura.mes;
     const previstosDoMes = previstosLidos?.previstos ?? [];
+    if (reimportar?.tipo === "pronto") {
+      // Reimportação (3.12): as novas pareiam com as linhas antigas da Fatura; as sem par seguem o casamento com os previstos.
+      const { antigas, statusPadraoId, referenciadas, outrasDaSerie } = reimportar.leitura;
+      const plano = planejarReimportacao(classificadas, antigas, { statusPadraoId, referenciadas: new Set(referenciadas) });
+      const lancamentos = aplicarReimportacao(classificadas, plano, antigas, previstosDoMes, candidatas, outrasDaSerie);
+      previstosLidosEm.current = previstosLidos ? { mes, atualizadoEm: previstosLidos.atualizadoEm } : null;
+      return {
+        ...base,
+        lancamentos,
+        previstos: gerarPrevistos(
+          lancamentos,
+          mes,
+          atuais.current.faturas.map((f) => f.mes),
+        ),
+        previstos_sem_par: casarSobrasComPrevistos(classificadas, plano, previstosDoMes).semPar,
+        reimportacao: {
+          apagar: plano.apagar,
+          sumiram: plano.sumiram,
+          voltar_a_previsto: plano.voltar_a_previsto,
+          resumo: plano.resumo,
+        },
+      };
+    }
     const casamento = casarPrevistos(classificadas, previstosDoMes);
     const lancamentos = aplicarCasamento(classificadas, casamento, previstosDoMes, candidatas);
     previstosLidosEm.current = previstosLidos ? { mes, atualizadoEm: previstosLidos.atualizadoEm } : null;
@@ -322,6 +356,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     if (!plano || plano.mes !== mes) return null;
     const lidos = await lerPrevistos(mes);
     if (!lidos) return null;
+    plano.previstosLidos = lidos;
     return montarComCasamento(plano.base, plano.classificadas, lidos, plano.candidatas);
   }
 
@@ -351,21 +386,37 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
       const r = await repoFaturas().lerReimportacao(mes);
       if (!r.ok) return { tipo: "falhou", codigo: r.codigo };
       if (!r.valor) return { tipo: "sem_fatura" };
-      const { linhas, statusPadraoId, previstosAApagar, ...substituir } = r.valor;
-      return { tipo: "pronto", substituir, resumo: resumirReimportacao(linhas, statusPadraoId, previstosAApagar) };
+      return { tipo: "pronto", substituir: { faturaId: r.valor.faturaId, atualizadoEm: r.valor.atualizadoEm }, leitura: r.valor };
     } catch {
       return AVISO_NO_LIMITE;
     }
   }
 
-  /** Lê o aviso no passo 3 (sem chamar a leitura da Fatura de novo) e o põe no estado. */
+  /**
+   * Lê o aviso no passo 3 (sem chamar a leitura da Fatura de novo), refaz o
+   * plano da reimportação com os previstos de agora e põe tudo no estado.
+   */
   async function buscarAviso(mes: string) {
     const minha = geracao.current;
-    const aviso = await comLimite(lerAviso(mes), AVISO_NO_LIMITE);
+    const plano = planoDoCasamento.current;
+    const [aviso, previstos] = await Promise.all([
+      comLimite(lerAviso(mes), AVISO_NO_LIMITE),
+      plano && plano.mes === mes ? comLimite(lerPrevistos(mes), null) : Promise.resolve(null),
+    ]);
     if (minha !== geracao.current) return;
+    let importacao: Importacao | null = null;
+    if (aviso.tipo === "pronto" && plano && plano.mes === mes) {
+      if (previstos) plano.previstosLidos = previstos;
+      importacao = montarComCasamento(plano.base, plano.classificadas, plano.previstosLidos, plano.candidatas, aviso);
+    }
     setEstado((e) =>
       e.tipo === "conferir" && e.importacao.fatura.mes === mes
-        ? { ...e, reimportar: aviso, erro: e.erro === "fatura.mes_ja_importado" ? null : e.erro }
+        ? {
+            ...e,
+            importacao: importacao ?? e.importacao,
+            reimportar: aviso,
+            erro: e.erro === "fatura.mes_ja_importado" ? null : e.erro,
+          }
         : e,
     );
   }
@@ -493,10 +544,24 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     gravandoAgora.current = false;
     if (r.ok) {
       marcarUsoDasRegras(regrasUsadasNaImportacao.current);
-      const resumo = resumoDaClassificacao(atual.importacao.lancamentos, atual.importacao.previstos_sem_par?.length ?? 0);
+      const doPlano = atual.importacao.reimportacao?.resumo;
+      const base = resumoDaClassificacao(atual.importacao.lancamentos, atual.importacao.previstos_sem_par?.length ?? 0);
+      // Quem voltou a previsto também "não veio na fatura"; quem saiu da Fatura está no Revisar.
+      const resumo = {
+        ...base,
+        naoVieram: base.naoVieram + (doPlano?.voltaramAPrevisto ?? 0),
+        sumiram: doPlano?.sumiram ?? 0,
+      };
       if (substituir) toast.mostrar({ texto: rotuloReimportado(mes, r.quantidade) });
       aoImportar?.(mes);
-      if (resumo.paraRevisar > 0 || resumo.naoVieram > 0 || resumo.casados > 0 || resumo.herdadas > 0 || resumo.divididas > 0) {
+      if (
+        resumo.paraRevisar > 0 ||
+        resumo.naoVieram > 0 ||
+        resumo.sumiram > 0 ||
+        resumo.casados > 0 ||
+        resumo.herdadas > 0 ||
+        resumo.divididas > 0
+      ) {
         // Há o que revisar ou previstos casados: o passo 3 mostra o resumo e os caminhos.
         setEstado({ tipo: "concluido", ...resumo });
         return;
@@ -675,9 +740,10 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
         {estado.herdadas > 0 ? <p className="texto-body">{rotuloParcelasHerdadas(estado.herdadas)}</p> : null}
         {estado.divididas > 0 ? <p className="texto-body">{rotuloDivididosPelaRegra(estado.divididas)}</p> : null}
         {estado.naoVieram > 0 ? <p className="texto-body">{rotuloPrevistosNaoVieram(estado.naoVieram)}</p> : null}
+        {estado.sumiram > 0 ? <p className="texto-body">{rotuloSumiramNaReimportacao(estado.sumiram)}</p> : null}
       </div>
     );
-    const temRevisao = estado.paraRevisar > 0 || estado.naoVieram > 0;
+    const temRevisao = estado.paraRevisar > 0 || estado.naoVieram > 0 || estado.sumiram > 0;
     acoes = temRevisao ? (
       <>
         <Botao onClick={fechar}>{TEXTOS_REVISAR.ver_no_painel}</Botao>
@@ -710,8 +776,6 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     // Linhas novas que entram divididas (pela Regra ou pela parcela anterior, História 3.8).
     const divididas = importacao.lancamentos.filter((l) => (l.divisao ?? null) !== null && (l.previsto_id ?? null) === null).length;
     const naoVieram = importacao.previstos_sem_par?.length ?? 0;
-    // Fatura com linhas casadas não reimporta (a RPC recusa): só "Cancelar".
-    const bloqueadaPorCasados = aviso?.tipo === "pronto" && (aviso.resumo.casados ?? 0) > 0;
     corpo = (
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-1 rounded-lg border border-border bg-background p-3">
@@ -740,9 +804,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
         ) : null}
         {aviso?.tipo === "pronto" ? (
           <p role="alert" className="rounded-lg border border-alert-warning-border bg-alert-warning-bg p-3 texto-body">
-            {bloqueadaPorCasados
-              ? avisoReimportarBloqueado(f.mes, aviso.resumo.casados ?? 0)
-              : avisoReimportar(f.mes, aviso.resumo)}
+            {importacao.reimportacao ? avisoReimportar(f.mes, importacao.reimportacao.resumo, aviso.leitura.historico) : null}
           </p>
         ) : aviso?.tipo === "lendo" ? (
           <p role="status" className="texto-body text-text-muted">
@@ -779,9 +841,9 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
           ? T.importar_mesmo_assim
           : T.importar;
     const sessaoExpirou = erro === "auth.sessao_expirou" || (aviso?.tipo === "falhou" && aviso.codigo === "auth.sessao_expirou");
-    // Repetir não resolve: os previstos mudaram (importar a fatura de novo) ou a Fatura tem linhas casadas.
-    const semCasamento = erro === "fatura.previstos_sem_casamento" || erro === "fatura.reimportacao_com_casados";
-    acoes = sessaoExpirou || semCasamento || bloqueadaPorCasados || aviso?.tipo === "lendo" ? (
+    // Repetir não resolve: os previstos mudaram (importar a fatura de novo).
+    const semCasamento = erro === "fatura.previstos_sem_casamento";
+    acoes = sessaoExpirou || semCasamento || aviso?.tipo === "lendo" ? (
       cancelar
     ) : aviso?.tipo === "falhou" ? (
       <>
@@ -790,7 +852,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
           {ROTULOS.tentar_de_novo}
         </Botao>
       </>
-    ) : aviso?.tipo === "pronto" ? (
+    ) : aviso?.tipo === "pronto" && importacao.reimportacao ? (
       <>
         {cancelar}
         <Botao variante="destrutivo" disabled={estado.gravando} onClick={() => void gravar()}>

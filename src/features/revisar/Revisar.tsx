@@ -298,7 +298,7 @@ export function Revisar({ titulo }: { titulo: string }) {
       return;
     }
     toast.mostrar({
-      texto: T.previsto_removido,
+      texto: item.variante === "sumiu" ? T.linha_excluida : T.previsto_removido,
       aoDesfazer: () => {
         void repoLancamentosRevisar()
           .restaurar(item.id)
@@ -334,7 +334,7 @@ export function Revisar({ titulo }: { titulo: string }) {
       return;
     }
     toast.mostrar({
-      texto: T.previsto_mantido,
+      texto: item.variante === "sumiu" ? T.linha_mantida : T.previsto_mantido,
       aoDesfazer: () => {
         void repoLancamentosRevisar()
           .devolverAFila(item.id, anterior)

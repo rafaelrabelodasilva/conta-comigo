@@ -5,7 +5,7 @@ import { classificarImportacao } from "./classificacao";
 import { conferir } from "./conferencia";
 import { type Divisao } from "./divisao";
 import { mesclarHerdada } from "./heranca";
-import { resumirReimportacao } from "./importacao-fatura";
+import { planejarReimportacao, type AntigaParaReimportar } from "./reimportacao";
 import { planejarGravacao, planejarLote, type LinhaParaGravar } from "./lote";
 import { aplicarCasamento, casarPrevistos, gerarPrevistos, type PrevistoParaCasar } from "./previstos";
 import {
@@ -314,17 +314,32 @@ describe("fila, lote, Conferência e reimportação com Divisão", () => {
     expect(c.quantidade).toBe(1);
   });
 
-  it("o aviso da reimportação conta a mãe dividida como mexida e ignora as filhas", () => {
-    const base = { excluido_em: null, responsavel_id: null, tipo_id: null, observacao: null, status_id: "s" };
-    const r = resumirReimportacao(
-      [
-        { ...base, divisao: doisTercos },
-        { ...base, responsavel_id: RAFAEL, dividido_de_id: "m" },
-        { ...base, responsavel_id: MAE, dividido_de_id: "m" },
-        { ...base },
-      ],
-      "s",
-    );
-    expect(r).toMatchObject({ quantidade: 2, mexidos: 1, excluidos: 0 });
+  it("a reimportação mantém a mãe dividida (pareia pelo Nome) e não olha as filhas", () => {
+    const antiga: AntigaParaReimportar = {
+      id: "m",
+      nome_normalizado: "JIM COM",
+      valor_centavos: 46600,
+      parcela_n: null,
+      parcela_total: null,
+      ordem_fatura: 1,
+      ajuste_de_id: null,
+      casado_em: null,
+      excluido_em: null,
+      responsavel_id: null,
+      tipo_id: "t",
+      status_id: "s",
+      observacao: null,
+      apelido: null,
+      editado_em: null,
+      divisao: doisTercos,
+      revisao_motivo: null,
+      revisao_dados: null,
+      serie: null,
+    };
+    const nova = { nome_normalizado: "JIM COM", valor_centavos: 46600, parcela_n: null, parcela_total: null, ordem_fatura: 1, ajuste_de_ordem: null };
+    const plano = planejarReimportacao([nova], [antiga], { statusPadraoId: "s" });
+    expect(plano.pares).toEqual([{ ordem_fatura: 1, antiga_id: "m" }]);
+    expect(plano.resumo).toMatchObject({ quantidade: 1, mantidas: 1, novas: 0, apagadas: 0 });
   });
+
 });

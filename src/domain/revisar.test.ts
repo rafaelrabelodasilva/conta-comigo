@@ -399,6 +399,27 @@ describe("variantes do casamento (História 3.6)", () => {
     });
   });
 
+  it("'Sumiu na reimportação' (3.12): sem ✓, fora do lote e fora da faixa da Fatura", () => {
+    const item = itemUnico(linha({ revisao_motivo: "sumiu_na_reimportacao", fatura_id: null, responsavel_id: CASAL, tipo_id: CASA }));
+    expect(item).toMatchObject({
+      variante: "sumiu",
+      texto: "Sumiu na reimportação",
+      confirmavel: false,
+      aoConfirmar: null,
+      selecionavel: false,
+      daFatura: false,
+      preenchido: { responsavel_id: CASAL, tipo_id: CASA },
+    });
+  });
+
+  it("a linha que sumiu entra na fila e no contador; excluída não", () => {
+    const linhas = [
+      linha({ revisao_motivo: "sumiu_na_reimportacao" }),
+      linha({ revisao_motivo: "sumiu_na_reimportacao", excluido_em: "2026-12-02T10:00:00Z" }),
+    ];
+    expect(contarFila(linhas)).toBe(1);
+  });
+
   it("os dois motivos novos entram na fila e no contador como os outros", () => {
     const linhas = [
       linha({ revisao_motivo: "valor_mudou" }),

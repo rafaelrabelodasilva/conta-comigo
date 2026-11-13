@@ -10,7 +10,9 @@ import {
   rotuloConfirmarItem,
   rotuloFaltam,
   rotuloManterClassificacao,
+  rotuloExcluirSumiu,
   rotuloManterPrevisto,
+  rotuloManterSumiu,
   rotuloMudarItem,
   rotuloRemoverPrevisto,
   rotuloSelecionar,
@@ -879,6 +881,31 @@ describe("Revisar: variantes do casamento", () => {
       revisao_dados: null,
       revisado_em: null,
     });
+  });
+
+  it("'Sumiu na reimportação' tem 'Excluir' e 'Manter', sem ✓, sem 'Mudar' e sem caixa de lote", () => {
+    preparar([naoVeio("a1", { revisao_motivo: "sumiu_na_reimportacao", lancado_por: "manual" })]);
+    renderizar();
+    expect(screen.getByText(T.sumiu)).toBeTruthy();
+    expect(screen.getByRole("button", { name: rotuloExcluirSumiu("LOJA A1") }).textContent).toBe(T.excluir);
+    expect(screen.getByRole("button", { name: rotuloManterSumiu("LOJA A1") }).textContent).toBe(T.manter);
+    expect(screen.queryByRole("button", { name: rotuloConfirmarItem("LOJA A1") })).toBeNull();
+    expect(screen.queryByRole("button", { name: rotuloMudarItem("LOJA A1") })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: rotuloSelecionar("LOJA A1") })).toBeNull();
+  });
+
+  it("'Excluir' do que sumiu exclui a linha e o Desfazer a restaura; 'Manter' só tira da fila", async () => {
+    preparar([naoVeio("a1", { revisao_motivo: "sumiu_na_reimportacao", lancado_por: "manual" }), naoVeio("a2", { revisao_motivo: "sumiu_na_reimportacao", lancado_por: "manual" })]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: rotuloExcluirSumiu("LOJA A1") }));
+    expect(falso.excluir).toHaveBeenCalledExactlyOnceWith("a1");
+    expect(await screen.findByText(T.linha_excluida)).toBeTruthy();
+    await u.click(screen.getByRole("button", { name: ROTULOS.desfazer }));
+    expect(falso.restaurar).toHaveBeenCalledExactlyOnceWith("a1");
+    await u.click(screen.getByRole("button", { name: rotuloManterSumiu("LOJA A2") }));
+    expect(falso.manterPrevisto).toHaveBeenCalledExactlyOnceWith("a2");
+    expect(await screen.findByText(T.linha_mantida)).toBeTruthy();
   });
 
   it("falha ao remover ou manter: o item fica e o toast traz a mensagem do código", async () => {

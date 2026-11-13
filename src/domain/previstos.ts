@@ -255,8 +255,9 @@ export type RealParaCasar = Pick<
 export type PrevistoParaCasar = {
   id: string;
   nome_normalizado: string;
-  parcela_n: number;
-  parcela_total: number;
+  /** Nulo na linha à vista (a antiga que a reimportação, 3.12, pareia sem Série). */
+  parcela_n: number | null;
+  parcela_total: number | null;
   valor_centavos: number;
   ocorrencia: number;
   responsavel_id: string | null;

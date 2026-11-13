@@ -38,7 +38,7 @@ import {
   ETAPAS_IMPORTACAO,
   TEXTOS_IMPORTAR,
   avisoReimportar,
-  avisoReimportarBloqueado,
+  rotuloSumiramNaReimportacao,
   rotuloManterClassificacao,
   rotuloManterPrevisto,
   rotuloParcelasHerdadas,
@@ -612,19 +612,44 @@ describe("sugestão da fila no painel (História 3.1)", () => {
 });
 
 describe("reimportar um Mês (História 3.11)", () => {
-  it("aviso com N, X e os excluídos que voltam", () => {
-    expect(avisoReimportar("2026-11", { quantidade: 52, mexidos: 30, excluidos: 2 })).toBe(
-      "Esta fatura já foi importada. Importar de novo apaga os 52 lançamentos de novembro vindos da fatura (30 já classificados ou marcados à mão) e importa tudo de novo. Os 2 excluídos voltam.",
+  const plano = { quantidade: 0, mantidas: 0, valorMudou: 0, novas: 0, apagadas: 0, sumiram: 0, voltaramAPrevisto: 0, excluidos: 0 };
+
+  it("aviso (3.12): mantém a classificação, traz as novas, apaga o que sumiu e diz os excluídos que voltam", () => {
+    expect(
+      avisoReimportar("2026-11", { ...plano, quantidade: 47, mantidas: 44, valorMudou: 2, novas: 3, apagadas: 1, sumiram: 2, excluidos: 2 }),
+    ).toBe(
+      "Esta fatura já foi importada. Importar de novo mantém a classificação dos 44 lançamentos de novembro que continuam na fatura (2 com valor diferente) e traz 3 novos. 1 que não vem mais na fatura é apagado; 2 que você mexeu saem da fatura e vão para o Revisar. Os 2 excluídos voltam.",
     );
   });
 
-  it("singulares; sem excluídos, a última frase some", () => {
-    expect(avisoReimportar("2026-10", { quantidade: 1, mexidos: 1, excluidos: 1 })).toBe(
-      "Esta fatura já foi importada. Importar de novo apaga o 1 lançamento de outubro vindo da fatura (1 já classificado ou marcado à mão) e importa tudo de novo. O 1 excluído volta.",
+  it("singulares; sem sobras, sem excluídos e sem novas, as frases somem", () => {
+    expect(
+      avisoReimportar("2026-10", { ...plano, quantidade: 3, mantidas: 1, valorMudou: 1, novas: 1, apagadas: 1, sumiram: 1, voltaramAPrevisto: 1, excluidos: 1 }),
+    ).toBe(
+      "Esta fatura já foi importada. Importar de novo mantém a classificação do 1 lançamento de outubro que continua na fatura (1 com valor diferente) e traz 1 novo. 1 que não vem mais na fatura é apagado; 1 que você mexeu sai da fatura e vai para o Revisar; 1 volta a ser previsto. O 1 excluído volta.",
     );
-    expect(avisoReimportar("2026-10", { quantidade: 49, mexidos: 0, excluidos: 0 })).toBe(
-      "Esta fatura já foi importada. Importar de novo apaga os 49 lançamentos de outubro vindos da fatura (0 já classificados ou marcados à mão) e importa tudo de novo.",
+    expect(avisoReimportar("2026-10", { ...plano, quantidade: 49, mantidas: 49 })).toBe(
+      "Esta fatura já foi importada. Importar de novo mantém a classificação dos 49 lançamentos de outubro que continuam na fatura.",
     );
+  });
+
+  it("nada pareia: avisa que nenhuma classificação é mantida", () => {
+    expect(avisoReimportar("2026-10", { ...plano, quantidade: 5, novas: 4, apagadas: 5 })).toContain(
+      "não mantém nenhuma classificação (nenhum lançamento da fatura nova bate com os de outubro) e traz 4 novos",
+    );
+  });
+
+  it("o histórico da planilha do Mês entra no aviso e não é tocado", () => {
+    expect(avisoReimportar("2026-10", { ...plano, mantidas: 2 }, 12)).toContain(
+      "Este mês também tem 12 lançamentos do histórico da planilha, que não são tocados.",
+    );
+    expect(avisoReimportar("2026-10", { ...plano, mantidas: 2 }, 1)).toContain("1 lançamento do histórico da planilha, que não é tocado.");
+    expect(avisoReimportar("2026-10", { ...plano, mantidas: 2 }, 0)).not.toContain("histórico");
+  });
+
+  it("quem saiu da fatura aparece no resumo do passo 3", () => {
+    expect(rotuloSumiramNaReimportacao(1)).toBe("1 lançamento saiu da fatura e está no Revisar");
+    expect(rotuloSumiramNaReimportacao(3)).toBe("3 lançamentos saíram da fatura e estão no Revisar");
   });
 
   it("botão e toast", () => {
@@ -704,33 +729,14 @@ describe("previstos (História 3.5)", () => {
     expect(rotuloPrevistosCriados(17)).toBe("17 parcelas previstas serão criadas nos próximos meses");
   });
 
-  it("o aviso de reimportar só cita os previstos quando há", () => {
-    expect(avisoReimportar("2026-10", { quantidade: 49, mexidos: 0, excluidos: 0, previstos: 5 })).toBe(
-      "Esta fatura já foi importada. Importar de novo apaga os 49 lançamentos de outubro vindos da fatura (0 já classificados ou marcados à mão) e importa tudo de novo. Apaga também os 5 previstos que ela criou e você não mexeu.",
-    );
-    expect(avisoReimportar("2026-10", { quantidade: 1, mexidos: 0, excluidos: 1, previstos: 1 })).toBe(
-      "Esta fatura já foi importada. Importar de novo apaga o 1 lançamento de outubro vindo da fatura (0 já classificados ou marcados à mão) e importa tudo de novo. O 1 excluído volta. Apaga também o 1 previsto que ela criou e você não mexeu.",
-    );
-    expect(avisoReimportar("2026-10", { quantidade: 49, mexidos: 0, excluidos: 0, previstos: 0 })).not.toContain("previsto");
-  });
-
   it("a recusa sem casamento diz que nada foi gravado", () => {
     expect(mensagem("fatura.previstos_sem_casamento")).toContain("Nada foi gravado");
   });
 });
 
 describe("textos da História 3.6 (casamento)", () => {
-  it("o erro de previstos mudou e o da reimportação com casados têm mensagem própria", () => {
+  it("o erro de previstos mudou tem mensagem própria", () => {
     expect(mensagem("fatura.previstos_sem_casamento")).toContain("mudaram durante a importação");
-    expect(mensagem("fatura.reimportacao_com_casados")).toContain("Nada foi gravado");
-    expect(mensagem("fatura.reimportacao_com_casados")).not.toBe(mensagem("fatura.previstos_sem_casamento"));
-  });
-
-  it("o aviso bloqueado diz quantos vieram de previstos e que nada será apagado", () => {
-    expect(avisoReimportarBloqueado("2026-12", 21)).toBe(
-      "Esta fatura já foi importada e 21 lançamentos de dezembro vieram de parcelas previstas. Importar de novo apagaria a classificação deles, e a reimportação que mantém a classificação ainda não existe. Nada será apagado.",
-    );
-    expect(avisoReimportarBloqueado("2026-12", 1)).toContain("1 lançamento de dezembro veio de uma parcela prevista");
   });
 
   it("o resumo conta os previstos que casaram e os que não vieram", () => {

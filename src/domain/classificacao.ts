@@ -30,7 +30,9 @@ export type MotivoRevisao =
   | "sugestao"
   | "sugestao_duvida"
   | "valor_mudou"
-  | "nao_veio_na_fatura";
+  | "nao_veio_na_fatura"
+  /** A linha da Fatura antiga que a Fatura nova não trouxe e que Rafael tinha mexido (História 3.12). */
+  | "sumiu_na_reimportacao";
 
 export const MOTIVOS_REVISAO: readonly MotivoRevisao[] = [
   "sem_classificacao",
@@ -38,6 +40,7 @@ export const MOTIVOS_REVISAO: readonly MotivoRevisao[] = [
   "sugestao_duvida",
   "valor_mudou",
   "nao_veio_na_fatura",
+  "sumiu_na_reimportacao",
 ];
 
 /** `revisao_dados` de "Valor mudou" (História 3.6): o Valor do previsto antes da Fatura. */

@@ -18,8 +18,9 @@
 //   `tipo_sugerido` da extração e deixa as linhas sem classificação (o
 //   Ajuste sem motivo, as outras `sem_classificacao`); quem classifica é
 //   `classificarImportacao` (`classificacao.ts`), antes de gravar.
-// - Reimportação (História 3.11 simplificada): `resumirReimportacao` dá os
-//   números do aviso a partir das linhas da Fatura do Mês lidas do banco.
+// - Reimportação (História 3.12): o casamento das linhas novas com as antigas,
+//   o destino das que sobram e os números do aviso são de `reimportacao.ts`;
+//   aqui só ficam os campos que a RPC recebe (`antiga_id`, `reimportacao`).
 // - Séries e previstos (História 3.5): `prepararImportacao` dá a cada parcela
 //   a chave da Série (`atribuirSeries`, `previstos.ts`); depois de classificar,
 //   a tela chama `gerarPrevistos` com a classificação já calculada e grava o
@@ -39,6 +40,7 @@ import {
   type LancamentoExtraido,
 } from "./extracao-fatura";
 import { atribuirSeries, type ChaveDaSerie, type PrevistoParaGravar } from "./previstos";
+import type { ResumoDoPlano } from "./reimportacao";
 import type { Resultado } from "./resultado";
 
 /** Aceite de outubro/2026 (vence 06/10/26), do Épico 2. */
@@ -148,6 +150,8 @@ export type LancamentoParaGravar = {
   serie: ChaveDaSerie | null;
   /** Previsto que esta linha casou (História 3.6): a RPC o transforma nesta linha, mantendo o `id`. */
   previsto_id?: string | null;
+  /** Reimportação (História 3.12): a linha antiga da Fatura que esta substitui, mantendo o `id` e a classificação. */
+  antiga_id?: string | null;
   /** Herdados da parcela n−1 do Mês anterior (História 3.7); a RPC os grava na linha nova. */
   apelido?: string | null;
   observacao?: string | null;
@@ -167,6 +171,13 @@ export type Importacao = {
   previstos: PrevistoParaGravar[];
   /** Ids dos previstos do Mês que a Fatura não trouxe (História 3.6): ganham "Não veio na fatura". */
   previstos_sem_par?: string[];
+  /** Reimportação (História 3.12): o destino das linhas antigas sem par e os números do aviso. */
+  reimportacao?: {
+    apagar: string[];
+    sumiram: string[];
+    voltar_a_previsto: string[];
+    resumo: ResumoDoPlano;
+  };
 };
 
 const LEITURA_FALHOU = (detalhe: string): Resultado<never> => ({
@@ -371,76 +382,5 @@ export function comporTotalAPagar(
     calculadoCentavos: calculado,
     lidoCentavos: lido,
     diferencaCentavos: lido === null ? null : calculado - lido,
-  };
-}
-
-/** O que o aviso de reimportação precisa de cada linha da Fatura do Mês. */
-export type LinhaParaReimportar = {
-  /** Filha de uma Divisão (História 3.8): sai junto com a mãe e não conta. */
-  dividido_de_id?: string | null;
-  /** Mãe dividida: conta como "marcada à mão". */
-  divisao?: unknown;
-  excluido_em: string | null;
-  responsavel_id: string | null;
-  tipo_id: string | null;
-  observacao: string | null;
-  /** Apelido dado à mão (História 3.9): conta como "marcada à mão". */
-  apelido?: string | null;
-  status_id: string | null;
-  /** Quando o previsto foi casado com a Fatura (História 3.6); nulo se a linha nunca foi previsto. */
-  casado_em?: string | null;
-};
-
-export type ResumoReimportacao = {
-  /** Linhas não excluídas da Fatura (com os Ajustes): as que o aviso diz que apaga. */
-  quantidade: number;
-  /** Dessas, as com Responsável, Tipo, Observação ou Status fora do Status padrão. */
-  mexidos: number;
-  /** Linhas excluídas da Fatura, que voltam na importação nova. */
-  excluidos: number;
-  /** Previstos que a Fatura criou, ainda `sistema`, sem edição e não excluídos: a reimportação os apaga (História 3.5). */
-  previstos?: number;
-  /** Linhas da Fatura que nasceram de um previsto (não excluídas): a reimportação simples as apagaria e a RPC recusa (História 3.6). */
-  casados?: number;
-};
-
-/**
- * Os números do aviso "Importar de novo" (História 3.11 simplificada), a
- * partir das linhas da Fatura do Mês lidas do banco (só as com `fatura_id`
- * dela; manuais ficam de fora). `statusPadraoId` é o de `configuracoes`
- * (null: o padrão é "sem Status"). Observação só com espaços não conta.
- */
-export function resumirReimportacao(
-  linhas: readonly LinhaParaReimportar[],
-  statusPadraoId: string | null,
-  previstosAApagar = 0,
-): ResumoReimportacao {
-  let quantidade = 0;
-  let mexidos = 0;
-  let excluidos = 0;
-  let casados = 0;
-  for (const l of linhas) {
-    if ((l.dividido_de_id ?? null) !== null) continue;
-    if (l.excluido_em !== null) {
-      excluidos++;
-      continue;
-    }
-    quantidade++;
-    if ((l.casado_em ?? null) !== null) casados++;
-    const mexido =
-      (l.divisao ?? null) !== null ||
-      l.responsavel_id !== null ||
-      l.tipo_id !== null ||
-      (l.observacao !== null && l.observacao.trim() !== "") ||
-      (l.apelido ?? null) !== null ||
-      l.status_id !== statusPadraoId;
-    if (mexido) mexidos++;
-  }
-  return {
-    quantidade,
-    mexidos,
-    excluidos,
-    ...(previstosAApagar > 0 ? { previstos: previstosAApagar } : {}),
-    ...(casados > 0 ? { casados } : {}),
   };
 }

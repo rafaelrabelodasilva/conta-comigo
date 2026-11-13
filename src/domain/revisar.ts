@@ -84,7 +84,9 @@ export type VarianteDoItem =
   /** Casado com o Valor da Fatura diferente do previsto (História 3.6): ✓ "Manter classificação". */
   | "valor_mudou"
   /** Previsto que a Fatura não trouxe (História 3.6): "Remover previsto" / "Manter". */
-  | "nao_veio";
+  | "nao_veio"
+  /** Linha da Fatura antiga que a reimportação não trouxe e que saiu da Fatura (História 3.12): "Excluir" / "Manter". */
+  | "sumiu";
 
 /** O que a gravação do ✓ deixa na linha (e nos Ajustes). */
 export type ClassificacaoCompleta = { responsavel_id: string; tipo_id: string };
@@ -180,6 +182,22 @@ function montarItem(l: LinhaDaFila, linhas: readonly LinhaDaFila[], cadastros: C
       aoConfirmar: null,
       preenchido: { responsavel_id: l.responsavel_id, tipo_id: l.tipo_id },
       selecionavel: false,
+    };
+  }
+
+  // Sumiu na reimportação (3.12): sem classificação a confirmar, só "Excluir" e "Manter".
+  if (l.revisao_motivo === "sumiu_na_reimportacao") {
+    return {
+      ...comum,
+      variante: "sumiu",
+      sugestao: null,
+      duvida: null,
+      texto: TEXTOS_REVISAR.sumiu,
+      confirmavel: false,
+      aoConfirmar: null,
+      preenchido: { responsavel_id: l.responsavel_id, tipo_id: l.tipo_id },
+      selecionavel: false,
+      daFatura: false,
     };
   }
 

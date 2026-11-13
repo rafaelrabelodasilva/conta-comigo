@@ -2,7 +2,7 @@
 // real (História 3.6, FR-45, AD-8): a RPC `importar_fatura` transforma o
 // previsto casado na linha real (mesmo `id`, Série, Apelido e classificação),
 // marca o previsto sem par como "Não veio na fatura", recusa a reimportação
-// de uma Fatura com linhas casadas e recusa um plano velho (`mes_mudou`). O
+// sem o plano da 3.12 e recusa um plano velho (`mes_mudou`). O
 // teste de aceite: duas compras idênticas casam as duas parcelas seguintes
 // sem estourar a restrição única da Série.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -195,7 +195,7 @@ describe.skipIf(!ligado)("Casamento dos previstos no Supabase local", () => {
     expect(new Set(chaves).size).toBe(chaves.length);
   });
 
-  it("reimportar a Fatura com linhas casadas: fatura.reimportacao_com_casados e nada é apagado", async () => {
+  it("reimportar sem o plano da 3.12 (dados_reimportacao): salvar.falhou e nada é apagado", async () => {
     const { data: f } = await local.admin.from("faturas").select("id").eq("owner_id", a.id).eq("mes", "2026-11").single();
     const antes = await local.admin.from("lancamentos").select("id", { count: "exact", head: true }).eq("owner_id", a.id);
     const lido = await lerMes("2026-11");
@@ -203,7 +203,7 @@ describe.skipIf(!ligado)("Casamento dos previstos no Supabase local", () => {
       lidoEm: lido.atualizadoEm,
       substituir: f!.id,
     });
-    expect(error?.message).toBe("fatura.reimportacao_com_casados");
+    expect(error?.message).toBe("salvar.falhou");
     const depois = await local.admin.from("lancamentos").select("id", { count: "exact", head: true }).eq("owner_id", a.id);
     expect(depois.count).toBe(antes.count);
   });
