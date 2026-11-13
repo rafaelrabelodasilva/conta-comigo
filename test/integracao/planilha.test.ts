@@ -58,7 +58,8 @@ describe.skipIf(!ligado)("Histórico da planilha no Supabase local", () => {
     partes: null,
   });
 
-  const monjaro = {
+  // Função: os ids (`tipoMae`) só existem depois do `beforeAll`.
+  const monjaro = () => ({
     nome: "JIM COM 57653822 BAR",
     nome_normalizado: "JIM COM 57653822 BAR",
     valor_centavos: 46600,
@@ -80,7 +81,7 @@ describe.skipIf(!ligado)("Histórico da planilha no Supabase local", () => {
       { filha_id: null, responsavel_id: "MAE", valor_centavos: 31067, status_id: null },
       { filha_id: null, responsavel_id: "RAFAEL", valor_centavos: 15533, status_id: null },
     ],
-  };
+  });
 
   function comIds<T>(valor: T): T {
     return JSON.parse(JSON.stringify(valor).replaceAll("MAE", mae).replaceAll("RAFAEL", rafael));
@@ -104,7 +105,7 @@ describe.skipIf(!ligado)("Histórico da planilha no Supabase local", () => {
     u.cliente.rpc("importar_aba_planilha", { p_mes: mes, p_linhas: linhas as Json, p_previstos: previstos as Json });
 
   it("grava a aba: linhas `historico` sem Fatura, a Divisão com as filhas e os previstos da Série", async () => {
-    const { data, error } = await importar(a, "2026-08", comIds([oticas(8), monjaro]), [previsto(9, "2026-09"), previsto(10, "2026-10")]);
+    const { data, error } = await importar(a, "2026-08", comIds([oticas(8), monjaro()]), [previsto(9, "2026-09"), previsto(10, "2026-10")]);
     expect(error).toBeNull();
     const r = data as unknown as { lancamentos: { id: string }[]; previstos: { mes: string }[]; removidos: { lancamentos: string[] } };
     expect(r.lancamentos).toHaveLength(4); // 2 mães + 2 filhas
@@ -130,7 +131,7 @@ describe.skipIf(!ligado)("Histórico da planilha no Supabase local", () => {
 
   it("reimportar o mesmo Mês troca o histórico e os previstos intocados, sem duplicar", async () => {
     const antes = await local.admin.from("lancamentos").select("id").eq("owner_id", a.id).eq("mes", "2026-08").is("dividido_de_id", null);
-    const { error } = await importar(a, "2026-08", comIds([oticas(8), monjaro]), [previsto(9, "2026-09"), previsto(10, "2026-10")]);
+    const { error } = await importar(a, "2026-08", comIds([oticas(8), monjaro()]), [previsto(9, "2026-09"), previsto(10, "2026-10")]);
     expect(error).toBeNull();
     const depois = await local.admin.from("lancamentos").select("id").eq("owner_id", a.id).eq("mes", "2026-08").is("dividido_de_id", null);
     expect(depois.data).toHaveLength(2);
