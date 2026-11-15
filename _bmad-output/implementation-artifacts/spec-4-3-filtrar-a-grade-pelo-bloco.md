@@ -2,7 +2,7 @@
 title: 'História 4.3: Filtrar a grade pelo Bloco'
 type: 'feature'
 created: '2026-11-15'
-status: 'review'
+status: 'done'
 baseline_commit: '45e45e4'
 route: 'dispatch'
 review_loop_iteration: 0

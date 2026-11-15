@@ -201,9 +201,6 @@
   summary: Rodar no CI e conferir a migração `20261122120000_reordenar_blocos.sql`, o teste novo de `test/integracao/blocos.test.ts` (reordenar e excluir) e a igualdade da entrada `reordenar_blocos` de `src/data/database.types.ts` (escrita à mão) com `supabase gen types`.
   evidence: Medium, não verificado. Sem Docker nem Supabase CLI neste computador, a RPC só foi exercitada num Postgres em memória (pglite, fora do projeto) com uma tabela simplificada: ordem nova, lista parcial, id alheio e inexistente, duplicado, vazio e sem sessão. RLS, Realtime (o DELETE chegar ao outro aparelho) e o formato dos tipos só o job `supabase` do CI prova.
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-blocos-no-painel.md`
-  summary: Aplicar a migração `20261122120000_reordenar_blocos.sql` em produção (`npx.cmd supabase db push --linked`, antes um `--dry-run`) só depois do merge e com a confirmação do Rafael.
-  evidence: Medium. Antes disso o Painel já mostra os valores, edita, exclui e vê o cálculo (nada disso precisa da migração), mas "Reordenar" falha ao gravar (a RPC não existe) e o cartão volta à ordem de antes com o aviso "Não foi possível salvar".
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-blocos-no-painel.md`
   summary: Conferir no iPad o cartão dos Blocos: o valor em 3 colunas a 834 pt, o toque longo abrindo o menu, o arrasto pela alça (e se o toque na alça não rola a página), o tremor e o "reduzir movimento", e o VoiceOver lendo "Ações do Bloco {nome}", "Gerar mensagem do Bloco {nome}" (desativado) e "Mover o Bloco {nome} para antes".
   evidence: Low, não verificado. O jsdom só confere o DOM, os nomes e o arrasto com retângulos simulados; a grade `auto-fill` de 10,5 rem e o contraste da legenda "inclui previstos" (`forecast-fg`) nos dois modos não foram vistos num aparelho.
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-blocos-no-painel.md`
