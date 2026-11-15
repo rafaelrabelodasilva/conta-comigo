@@ -2,7 +2,7 @@
 title: 'História 4.6: Gerar a mensagem a partir da Seleção'
 type: 'feature'
 created: '2026-11-15'
-status: 'review'
+status: 'done'
 baseline_commit: 'c34f356'
 route: 'dispatch'
 review_loop_iteration: 0
