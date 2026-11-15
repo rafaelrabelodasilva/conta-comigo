@@ -126,6 +126,23 @@ insert into public.regras (
    '[{"responsavel_id": "b0000000-0000-4000-8000-000000000101", "n": 2}, {"responsavel_id": "b0000000-0000-4000-8000-000000000102", "n": 1}]',
    '2026-11-04 12:00:00+00');
 
+-- Blocos (História 4.1): um com a Fórmula Rangel + (Casal ÷ 2) (grupo e número),
+-- de cobrança, e o "meu Bloco" com Responsável em Tipo.
+insert into public.blocos (id, owner_id, nome, formula, ordem, de_cobranca, meu_bloco) values
+  ('b0000000-0000-4000-8000-000000000a01', 'b0000000-0000-4000-8000-000000000001',
+   'Rangel',
+   '{"tipo": "operacao", "operacao": "soma",
+     "esquerda": {"tipo": "responsavel", "id": "b0000000-0000-4000-8000-000000000101"},
+     "direita": {"tipo": "grupo", "interno": {"tipo": "operacao", "operacao": "divisao",
+       "esquerda": {"tipo": "responsavel", "id": "b0000000-0000-4000-8000-000000000102"},
+       "direita": {"tipo": "numero", "valor": "2"}}}}',
+   1, true, false),
+  ('b0000000-0000-4000-8000-000000000a02', 'b0000000-0000-4000-8000-000000000001',
+   'Meu gasto',
+   '{"tipo": "responsavel_em_tipo", "responsavel_id": "b0000000-0000-4000-8000-000000000101",
+     "tipo_id": "b0000000-0000-4000-8000-000000000201"}',
+   2, false, true);
+
 -- Séries e previstos (História 3.5): a Série de uma parcela 2/12, a linha real
 -- e o previsto 3/12 do Mês seguinte, que aponta para ela.
 insert into public.series (
