@@ -3,13 +3,19 @@ import { conferir } from "./conferencia";
 import {
   FILTROS_VAZIOS,
   alternarResponsavelUnico,
+  alternarBloco,
   aplicarFiltros,
   definirColuna,
   filtrosAtivosEm,
+  limparBloco,
   motivoDoVazio,
+  motivoParaDesfazerBloco,
   passaNaBusca,
+  resolverBloco,
+  restringirAoBloco,
   rotuloDaPilula,
   temFiltro,
+  textoDaPilulaDoBloco,
   valoresDaColuna,
   valoresDoLancamento,
   type CadastrosFiltro,
@@ -322,5 +328,127 @@ describe("pílula, hero e estado", () => {
     const novo = definirColuna(FILTROS_VAZIOS, "tipo", ["t-casa"]);
     expect(FILTROS_VAZIOS.colunas.tipo).toEqual([]);
     expect(novo.colunas.tipo).toEqual(["t-casa"]);
+  });
+});
+
+// ------------------------------------------------------- Bloco (História 4.3)
+
+describe("filtro por Bloco (FR-20)", () => {
+  const linha = (id: string, valor: number, responsavel: string | null, tipo: string | null = null) => ({
+    id,
+    valor_centavos: valor,
+    responsavel_id: responsavel,
+    tipo_id: tipo,
+  });
+  const projecao = [linha("a", 1000, "casal"), linha("b", 2000, "mae"), linha("c", 500, "mae", "saude"), linha("d", 700, null)];
+  const formulaMae = { tipo: "responsavel", id: "mae" } as const;
+  const blocos = [
+    { id: "b-mae", nome: "Mãe", formula: formulaMae },
+    { id: "b-todos", nome: "Todos", formula: { tipo: "todos" } as const },
+    { id: "b-ninguem", nome: "Lucas", formula: { tipo: "responsavel", id: "lucas" } as const },
+    {
+      id: "b-zero",
+      nome: "Dividido por zero",
+      formula: {
+        tipo: "operacao",
+        operacao: "divisao",
+        esquerda: formulaMae,
+        direita: { tipo: "numero", valor: "0" },
+      } as const,
+    },
+  ];
+
+  it("sem Bloco, o estado é inativo e nada é restringido", () => {
+    expect(FILTROS_VAZIOS.bloco).toBeNull();
+    const r = resolverBloco(FILTROS_VAZIOS, blocos, projecao);
+    expect(r).toEqual({ estado: "inativo" });
+    expect(restringirAoBloco(projecao, r)).toEqual(projecao);
+    expect(textoDaPilulaDoBloco(r)).toBeNull();
+  });
+
+  it("com o Bloco, entram os ids que `avaliar` devolve (a mesma conta do valor)", () => {
+    const r = resolverBloco({ bloco: "b-mae" }, blocos, projecao);
+    expect(r).toMatchObject({ estado: "ativo", id: "b-mae", nome: "Mãe" });
+    expect(restringirAoBloco(projecao, r).map((l) => l.id)).toEqual(["b", "c"]);
+    expect(textoDaPilulaDoBloco(r)).toBe("Bloco: Mãe");
+  });
+
+  it("'Todos' deixa passar tudo; Bloco que não pega nada deixa a grade vazia", () => {
+    expect(restringirAoBloco(projecao, resolverBloco({ bloco: "b-todos" }, blocos, projecao)).map((l) => l.id)).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+    ]);
+    const vazio = resolverBloco({ bloco: "b-ninguem" }, blocos, projecao);
+    expect(vazio.estado).toBe("ativo");
+    expect(restringirAoBloco(projecao, vazio)).toEqual([]);
+  });
+
+  it("o Bloco editado recalcula (a Fórmula nova vale no próximo cálculo) e o excluído some", () => {
+    const editados = blocos.map((b) => (b.id === "b-mae" ? { ...b, nome: "Mamãe", formula: { tipo: "responsavel", id: "casal" } as const } : b));
+    const r = resolverBloco({ bloco: "b-mae" }, editados, projecao);
+    expect(r).toMatchObject({ estado: "ativo", nome: "Mamãe" });
+    expect(restringirAoBloco(projecao, r).map((l) => l.id)).toEqual(["a"]);
+    expect(resolverBloco({ bloco: "b-mae" }, [], projecao)).toEqual({ estado: "ausente" });
+  });
+
+  it("o Mês novo recalcula `entram` pela projeção do Mês (o filtro fica, os ids mudam)", () => {
+    const outroMes = [linha("z", 900, "mae")];
+    const r = resolverBloco({ bloco: "b-mae" }, blocos, outroMes);
+    expect(restringirAoBloco(outroMes, r).map((l) => l.id)).toEqual(["z"]);
+    expect(restringirAoBloco([], resolverBloco({ bloco: "b-mae" }, blocos, [])).length).toBe(0);
+  });
+
+  it("Fórmula que não calcula: sem_valor, sem filtrar", () => {
+    const r = resolverBloco({ bloco: "b-zero" }, blocos, projecao);
+    expect(r).toEqual({ estado: "sem_valor", nome: "Dividido por zero" });
+    expect(restringirAoBloco(projecao, r)).toEqual(projecao);
+    expect(textoDaPilulaDoBloco(r)).toBeNull();
+  });
+
+  it("tocar liga, tocar de novo desfaz, tocar noutro troca (só um por vez)", () => {
+    const ligado = alternarBloco(FILTROS_VAZIOS, "b-mae");
+    expect(ligado.bloco).toBe("b-mae");
+    expect(alternarBloco(ligado, "b-mae").bloco).toBeNull();
+    expect(alternarBloco(ligado, "b-todos").bloco).toBe("b-todos");
+    expect(FILTROS_VAZIOS.bloco).toBeNull();
+    expect(limparBloco(ligado)).toEqual(FILTROS_VAZIOS);
+    // Já sem Bloco, devolve o mesmo objeto (nenhuma troca de estado à toa).
+    expect(limparBloco(FILTROS_VAZIOS)).toBe(FILTROS_VAZIOS);
+  });
+
+  it("o Bloco conta como filtro: 'Limpar filtros' aparece e a grade vazia é por filtros", () => {
+    const f = alternarBloco(FILTROS_VAZIOS, "b-mae");
+    expect(temFiltro(f)).toBe(true);
+    expect(temFiltro(FILTROS_VAZIOS)).toBe(false);
+    expect(motivoDoVazio(f, true)).toBe("filtros");
+    expect(motivoDoVazio(f, false)).toBeNull();
+  });
+
+  it("soma-se (E) à busca, às colunas e a 'Verificar'", () => {
+    const l = [
+      lanc("1", { nome: "FARMACIA", responsavel_id: "r-casal", tipo_id: "t-casa" }),
+      lanc("2", { nome: "FARMACIA CENTRO", responsavel_id: "r-rafael", tipo_id: "t-casa" }),
+      lanc("3", { nome: "MERCADO", responsavel_id: "r-casal", tipo_id: "t-casa" }),
+    ];
+    const noBloco = restringirAoBloco(l, { estado: "ativo", id: "b", nome: "Casal", entram: new Set(["1", "3"]) });
+    expect(ids(aplicarFiltros(noBloco, com({ busca: "farm" }), null))).toEqual(["1"]);
+    expect(ids(aplicarFiltros(noBloco, com({ colunas: { responsavel: ["r-rafael"] } }), null))).toEqual([]);
+    expect(ids(aplicarFiltros(noBloco, FILTROS_VAZIOS, null))).toEqual(["1", "3"]);
+    // A contagem do popover já vem restrita ao Bloco (o rascunho da coluna a ver).
+    const contagem = valoresDaColuna("responsavel", noBloco, FILTROS_VAZIOS, null, cadastros);
+    expect(contagem.find((o) => o.valor === "r-casal")?.contagem).toBe(2);
+    expect(contagem.find((o) => o.valor === "r-rafael")?.contagem).toBe(0);
+  });
+
+  it("desfaz sozinho só com o Bloco ausente (e a lista lida) ou sem valor", () => {
+    const ativo = resolverBloco({ bloco: "b-mae" }, blocos, projecao);
+    expect(motivoParaDesfazerBloco(ativo, true)).toBeNull();
+    expect(motivoParaDesfazerBloco({ estado: "inativo" }, true)).toBeNull();
+    expect(motivoParaDesfazerBloco({ estado: "ausente" }, true)).toBe("filtro_desfeito_excluido");
+    // Enquanto a lista de Blocos carrega, "ausente" não apaga o filtro.
+    expect(motivoParaDesfazerBloco({ estado: "ausente" }, false)).toBeNull();
+    expect(motivoParaDesfazerBloco({ estado: "sem_valor", nome: "X" }, false)).toBe("filtro_desfeito_sem_valor");
   });
 });

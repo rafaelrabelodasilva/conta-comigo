@@ -104,6 +104,7 @@ const repoL = vi.hoisted(() => {
 // O repositório de Blocos é falso: "Salvar" só registra o pedido e responde o que o teste mandar.
 const repoB = vi.hoisted(() => ({
   salvar: vi.fn<(pedido: Record<string, unknown>) => Promise<{ ok: boolean; codigo?: string }>>(async () => ({ ok: true })),
+  excluir: vi.fn<(id: string) => Promise<{ ok: boolean; codigo?: string }>>(async () => ({ ok: true })),
 }));
 vi.mock("@/data/blocos-repo", () => ({ repoBlocos: () => repoB }));
 vi.mock("@/data/lancamentos-repo", () => ({
@@ -1571,5 +1572,276 @@ describe("Blocos no Painel (História 4.2)", () => {
     renderizar();
     await userEvent.setup().click(screen.getByRole("button", { name: "Tentar de novo" }));
     expect(falso.recarregar).toHaveBeenCalledTimes(7);
+  });
+});
+
+describe("Filtrar a grade pelo Bloco (História 4.3, FR-20)", () => {
+  const bloco = (id: string, nome: string, ordem: number, formula: unknown) => ({
+    id,
+    owner_id: "dono",
+    nome,
+    formula,
+    ordem,
+    de_cobranca: false,
+    meu_bloco: false,
+    updated_at: "2026-11-03T12:00:00+00:00",
+  });
+  const casalBloco = bloco("b-casal", "Casal", 1, { tipo: "responsavel", id: "r-casal" });
+  const rafaelBloco = bloco("b-rafael", "Rafael", 2, { tipo: "responsavel", id: "r-rafael" });
+  const ninguemBloco = bloco("b-ninguem", "Ninguém", 3, { tipo: "responsavel", id: "r-ninguem" });
+
+  const regiaoBlocos = () => screen.getByRole("region", { name: "Blocos" });
+  const cartaoFiltra = (nome: string) =>
+    within(regiaoBlocos()).getByRole("button", { name: new RegExp("^Filtrar a grade pelo Bloco " + nome + ",") });
+  const pilulaBloco = (nome: string) => screen.queryByRole("button", { name: "Desfazer o filtro Bloco: " + nome });
+  const nomes = () => linhasDaGrade().map((r) => nomeVisivel(r));
+  /** O que os `role=status` anunciam (o anúncio de "N lançamentos" é um deles). */
+  const anuncios = () => screen.getAllByRole("status").map((e) => e.textContent);
+  const valorDoPrimeiroBloco = () => sem(within(regiaoBlocos()).getAllByText(/^R\$/, { selector: "b" })[0].textContent);
+  const linhaDoAjuste = () => linhasDaGrade().find((r) => r.dataset.ajuste);
+
+  /** Novembro: 3 do Casal (R$ 100 + R$ 50 + R$ 20), 2 do Rafael e 1 sem Responsável. */
+  function novembroComBlocos(blocos: unknown[] = [casalBloco, rafaelBloco], extras: LinhaLancamento[] = []) {
+    definir({
+      faturas: [novembro],
+      lancamentos: [
+        lanc("2026-11", { id: "c1", nome: "MERCADO", valor_centavos: 10000, responsavel_id: "r-casal" }),
+        lanc("2026-11", { id: "c2", nome: "FARMACIA", valor_centavos: 5000, responsavel_id: "r-casal" }),
+        lanc("2026-11", { id: "c3", nome: "PADARIA", valor_centavos: 2000, responsavel_id: "r-casal" }),
+        lanc("2026-11", { id: "r1", nome: "LIVRARIA", valor_centavos: 7000, responsavel_id: "r-rafael" }),
+        lanc("2026-11", { id: "r2", nome: "CINEMA", valor_centavos: 3000, responsavel_id: "r-rafael" }),
+        lanc("2026-11", { id: "s1", nome: "SEM DONO", valor_centavos: 900, responsavel_id: null }),
+        ...extras,
+      ],
+      blocos,
+    });
+  }
+
+  it("tocar no cartão filtra a grade, mostra a pílula e destaca o cartão; o total do rodapé é o valor do Bloco; tocar de novo desfaz", async () => {
+    novembroComBlocos();
+    renderizar();
+    const u = userEvent.setup();
+    expect(nomes()).toHaveLength(6);
+    await u.click(cartaoFiltra("Casal"));
+    expect(nomes().sort()).toEqual(["FARMACIA", "MERCADO", "PADARIA"]);
+    expect(pilulaBloco("Casal")).toBeTruthy();
+    expect(cartaoFiltra("Casal").getAttribute("aria-pressed")).toBe("true");
+    expect(cartaoFiltra("Casal").closest("li")!.className).toContain("ring-accent-line");
+    // O valor do cartão é o total da grade filtrada.
+    expect(valorDoPrimeiroBloco()).toBe("R$ 170,00");
+    expect(rodape()).toContain("R$ 170,00");
+    // O anúncio conta as linhas da grade.
+    expect(anuncios()).toContain("3 lançamentos");
+    await u.click(cartaoFiltra("Casal"));
+    expect(nomes()).toHaveLength(6);
+    expect(pilulaBloco("Casal")).toBeNull();
+    expect(cartaoFiltra("Casal").getAttribute("aria-pressed")).toBe("false");
+    expect(anuncios()).toContain("6 lançamentos");
+  });
+
+  it("o ✕ da pílula desfaz o filtro", async () => {
+    novembroComBlocos();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(cartaoFiltra("Rafael"));
+    expect(nomes().sort()).toEqual(["CINEMA", "LIVRARIA"]);
+    await u.click(pilulaBloco("Rafael")!);
+    expect(nomes()).toHaveLength(6);
+    expect(pilulaBloco("Rafael")).toBeNull();
+  });
+
+  it("só um Bloco por vez: tocar noutro troca o filtro", async () => {
+    novembroComBlocos();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(cartaoFiltra("Casal"));
+    await u.click(cartaoFiltra("Rafael"));
+    expect(nomes().sort()).toEqual(["CINEMA", "LIVRARIA"]);
+    expect(pilulaBloco("Casal")).toBeNull();
+    expect(pilulaBloco("Rafael")).toBeTruthy();
+    expect(cartaoFiltra("Casal").getAttribute("aria-pressed")).toBe("false");
+    expect(cartaoFiltra("Rafael").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("soma-se à busca e aos filtros de coluna (E)", async () => {
+    novembroComBlocos();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(cartaoFiltra("Casal"));
+    await u.type(screen.getByRole("searchbox", { name: TEXTOS_FILTROS.buscar }), "farm");
+    expect(nomes()).toEqual(["FARMACIA"]);
+    // A contagem do popover de Responsável já vem do Bloco.
+    await u.click(screen.getByRole("button", { name: "Responsável", expanded: false }));
+    const dialogo = screen.getByRole("dialog", { name: "Responsável (pode marcar vários)" });
+    expect(within(dialogo).getByRole("checkbox", { name: "Casal, 1 lançamento" })).toBeTruthy();
+    expect(within(dialogo).getByRole("checkbox", { name: "Rafael, 0 lançamentos" })).toBeTruthy();
+  });
+
+  it("Limpar filtros aparece com só o Bloco ativo e o desfaz", async () => {
+    novembroComBlocos();
+    renderizar();
+    const u = userEvent.setup();
+    expect(screen.queryByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toBeNull();
+    await u.click(cartaoFiltra("Casal"));
+    await u.click(screen.getByRole("button", { name: TEXTOS_FILTROS.limpar_filtros }));
+    expect(pilulaBloco("Casal")).toBeNull();
+    expect(nomes()).toHaveLength(6);
+    expect(screen.queryByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toBeNull();
+  });
+
+  it("Bloco que não pega nenhum Lançamento: grade vazia com a mensagem de filtros e Limpar filtros", async () => {
+    novembroComBlocos([casalBloco, ninguemBloco]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(cartaoFiltra("Ninguém"));
+    expect(linhasDaGrade()).toHaveLength(0);
+    expect(screen.getByText(TEXTOS_FILTROS.sem_resultado)).toBeTruthy();
+    expect(anuncios()).toContain("0 lançamentos");
+    // Um na barra e outro na própria grade vazia.
+    expect(screen.getAllByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toHaveLength(2);
+    await u.click(screen.getAllByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })[1]);
+    expect(nomes()).toHaveLength(6);
+  });
+
+  it("o Ajuste segue a mãe: aparece sob ela e o rodapé fecha no valor do Bloco", async () => {
+    novembroComBlocos(
+      [casalBloco],
+      [lanc("2026-11", { id: "aj", nome: "MERCADO", valor_centavos: -8, responsavel_id: "r-casal", ajuste_de_id: "c1", ordem_fatura: 99 })],
+    );
+    renderizar();
+    await userEvent.setup().click(cartaoFiltra("Casal"));
+    expect(linhasDaGrade().map((r) => (r.dataset.ajuste ? "↳" : nomeVisivel(r)))).toEqual(["MERCADO", "↳", "FARMACIA", "PADARIA"]);
+    expect(rodape()).toContain("R$ 169,92");
+    expect(valorDoPrimeiroBloco()).toBe("R$ 169,92");
+  });
+
+  it("Ajuste de outro Responsável que a mãe: só aparece no Bloco em que entra (vira linha comum)", async () => {
+    novembroComBlocos(
+      [casalBloco, rafaelBloco],
+      [lanc("2026-11", { id: "aj", nome: "MERCADO", valor_centavos: -8, responsavel_id: "r-rafael", ajuste_de_id: "c1", ordem_fatura: 99 })],
+    );
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(cartaoFiltra("Casal"));
+    expect(linhaDoAjuste()).toBeUndefined();
+    expect(rodape()).toContain("R$ 170,00");
+    await u.click(cartaoFiltra("Rafael"));
+    expect(linhaDoAjuste()).toBeUndefined();
+    // O Ajuste entra sozinho, como linha comum, e o total é o valor do Bloco.
+    expect(nomes()).toHaveLength(3);
+    expect(rodape()).toContain("R$ 99,92");
+    expect(valorDoPrimeiroBloco()).toBe("R$ 170,00");
+  });
+
+  it("mãe dividida: só as filhas que entram no Bloco somam, e a mãe nunca soma", async () => {
+    const divisao = {
+      modo: "proporcao",
+      partes: [
+        { responsavel_id: "r-casal", numerador: 1, denominador: 2 },
+        { responsavel_id: "r-rafael", numerador: 1, denominador: 2 },
+      ],
+    };
+    novembroComBlocos(
+      [casalBloco],
+      [
+        lanc("2026-11", { id: "mae", nome: "VIAGEM", valor_centavos: 4000, responsavel_id: null, divisao: divisao as never }),
+        lanc("2026-11", { id: "f1", nome: "VIAGEM", valor_centavos: 2000, responsavel_id: "r-casal", dividido_de_id: "mae" }),
+        lanc("2026-11", { id: "f2", nome: "VIAGEM", valor_centavos: 2000, responsavel_id: "r-rafael", dividido_de_id: "mae" }),
+      ],
+    );
+    renderizar();
+    await userEvent.setup().click(cartaoFiltra("Casal"));
+    // R$ 170,00 das três do Casal e a filha R$ 20,00.
+    expect(rodape()).toContain("R$ 190,00");
+    expect(valorDoPrimeiroBloco()).toBe("R$ 190,00");
+    expect(anuncios()).toContain("4 lançamentos");
+  });
+
+  it("trocar de Mês mantém o Bloco e recalcula quem entra no Mês novo", async () => {
+    definir({
+      faturas: [novembro, outubro],
+      lancamentos: [
+        lanc("2026-11", { id: "n1", nome: "NOV CASAL", valor_centavos: 10000, responsavel_id: "r-casal" }),
+        lanc("2026-11", { id: "n2", nome: "NOV RAFAEL", valor_centavos: 500, responsavel_id: "r-rafael" }),
+        lanc("2026-10", { id: "o1", nome: "OUT CASAL", valor_centavos: 3000, responsavel_id: "r-casal" }),
+        lanc("2026-10", { id: "o2", nome: "OUT RAFAEL", valor_centavos: 800, responsavel_id: "r-rafael" }),
+      ],
+      blocos: [casalBloco],
+    });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(cartaoFiltra("Casal"));
+    expect(nomes()).toEqual(["NOV CASAL"]);
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
+    expect(nomes()).toEqual(["OUT CASAL"]);
+    expect(pilulaBloco("Casal")).toBeTruthy();
+    expect(rodape()).toContain("R$ 30,00");
+  });
+
+  it("Bloco editado em outro aparelho (Fórmula e nome) recalcula o filtro e a pílula; reordenar não mexe nele", async () => {
+    novembroComBlocos();
+    renderizar();
+    await userEvent.setup().click(cartaoFiltra("Casal"));
+    expect(nomes()).toHaveLength(3);
+    mudarBanco("blocos", (ls) =>
+      ls.map((b) =>
+        (b as { id: string }).id === "b-casal"
+          ? { ...(b as object), nome: "Casal 2", formula: { tipo: "responsavel", id: "r-rafael" } }
+          : b,
+      ),
+    );
+    expect(nomes().sort()).toEqual(["CINEMA", "LIVRARIA"]);
+    expect(pilulaBloco("Casal 2")).toBeTruthy();
+    mudarBanco("blocos", (ls) => ls.map((b) => ({ ...(b as object), ordem: 3 - (b as { ordem: number }).ordem })));
+    expect(nomes().sort()).toEqual(["CINEMA", "LIVRARIA"]);
+    expect(pilulaBloco("Casal 2")).toBeTruthy();
+  });
+
+  it("Bloco excluído em outro aparelho: o filtro se desfaz e um aviso conta por quê", async () => {
+    novembroComBlocos();
+    renderizar();
+    await userEvent.setup().click(cartaoFiltra("Casal"));
+    expect(nomes()).toHaveLength(3);
+    mudarBanco("blocos", (ls) => ls.filter((b) => (b as { id: string }).id !== "b-casal"));
+    expect(nomes()).toHaveLength(6);
+    expect(pilulaBloco("Casal")).toBeNull();
+    expect(await screen.findByText("O Bloco foi excluído e o filtro foi desfeito")).toBeTruthy();
+  });
+
+  it("excluir o Bloco ativo aqui desfaz o filtro, com o aviso de sempre e sem o de outro aparelho", async () => {
+    novembroComBlocos();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(cartaoFiltra("Casal"));
+    await u.click(within(regiaoBlocos()).getByRole("button", { name: "Ações do Bloco Casal" }));
+    await u.click(screen.getByRole("menuitem", { name: "Excluir bloco" }));
+    await u.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Excluir bloco" }));
+    expect(repoB.excluir).toHaveBeenCalledWith("b-casal");
+    expect(pilulaBloco("Casal")).toBeNull();
+    expect(nomes()).toHaveLength(6);
+    expect(await screen.findByText("Bloco excluído")).toBeTruthy();
+    expect(screen.queryByText("O Bloco foi excluído e o filtro foi desfeito")).toBeNull();
+  });
+
+  it("a linha aberta no painel lateral que sai do filtro continua na grade, fora do total (opção A)", async () => {
+    novembroComBlocos();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(cartaoFiltra("Casal"));
+    await u.click(within(linhasDaGrade().find((r) => nomeVisivel(r) === "MERCADO")!).getAllByRole("cell")[1]);
+    expect(screen.getByRole("complementary")).toBeTruthy();
+    await u.click(cartaoFiltra("Rafael"));
+    expect(nomes().sort()).toEqual(["CINEMA", "LIVRARIA", "MERCADO"]);
+    expect(rodape()).toContain("R$ 100,00");
+    expect(rodape()).not.toContain("R$ 200,00");
+  });
+
+  it("o cartão que filtra, o ⋯ e o 💬 têm os nomes acessíveis esperados", () => {
+    novembroComBlocos();
+    renderizar();
+    const regiao = regiaoBlocos();
+    expect(within(regiao).getByRole("button", { name: "Ações do Bloco Casal" })).toBeTruthy();
+    expect((within(regiao).getByRole("button", { name: "Gerar mensagem do Bloco Casal" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(sem(cartaoFiltra("Casal").getAttribute("aria-label"))).toBe("Filtrar a grade pelo Bloco Casal, R$ 170,00");
   });
 });

@@ -21,16 +21,31 @@ import { MontadorBloco } from "./MontadorBloco";
 // entra por `linhas` e o valor muda no lugar, sem esqueleto. Aqui moram só o
 // estado das janelas (Montador, confirmação de excluir) e do modo Reordenar;
 // as regras são do núcleo e a gravação é do repositório de Blocos.
+//
+// Filtrar a grade (História 4.3, FR-20): o Painel passa o Bloco que filtra
+// (`ativoId`) e o que fazer ao tocar num cartão (`aoFiltrar`); o passo
+// "Blocos" do Primeiro uso não passa nenhum dos dois e o cartão não filtra.
+// `aoExcluindo` avisa o Painel antes de gravar a exclusão, para ele desfazer o
+// filtro daquele Bloco já (como o Painel fecha a linha aberta antes de excluir).
 
 type Montador = { modo: "novo" } | { modo: "editar" | "ver"; id: string };
 
 export function BlocosDoMes({
   linhas,
   mes,
+  ativoId,
+  aoFiltrar,
+  aoExcluindo,
 }: {
   /** Os Lançamentos do Mês aberto (a memória do Painel). */
   linhas: readonly LancamentoParaProjetar[];
   mes: string;
+  /** O Bloco que filtra a grade (borda em destaque). */
+  ativoId?: string | null;
+  /** Tocar no cartão: liga, desliga ou troca o filtro por Bloco. */
+  aoFiltrar?: (id: string) => void;
+  /** O Bloco vai ser excluído (antes de gravar). */
+  aoExcluindo?: (id: string) => void;
 }) {
   const toast = useToast();
   const blocosLidos = useLinhas("blocos");
@@ -63,6 +78,7 @@ export function BlocosDoMes({
           nome: b.nome,
           formula: textoDaFormula(b.formula, nomes),
           valor: resumo.valorCentavos === null ? T.sem_valor : formatarDinheiro(resumo.valorCentavos),
+          semValor: resumo.valorCentavos === null,
           incluiPrevistos: resumo.incluiPrevistos,
           corPessoa: resumo.responsavelId === null ? null : (corDoResponsavel.get(resumo.responsavelId) ?? null),
           arquivados: arquivadosNaFormula(b.formula, { responsaveis: responsaveis.linhas, tipos: tipos.linhas }),
@@ -96,6 +112,7 @@ export function BlocosDoMes({
   }
 
   async function excluir(id: string) {
+    aoExcluindo?.(id);
     const r = await repoBlocos().excluir(id);
     toast.mostrar({ texto: r.ok ? T.excluido : mensagem(r.codigo) });
   }
@@ -107,6 +124,8 @@ export function BlocosDoMes({
         carregando={blocosLidos.status === "carregando"}
         erro={blocosLidos.status === "erro"}
         reordenando={reordenandoDe}
+        ativoId={ativoId}
+        aoFiltrar={aoFiltrar}
         aoNovo={() => setMontador({ modo: "novo" })}
         aoTentarDeNovo={() => void gerenciador("blocos").recarregar()}
         aoAlternarReordenar={() => setReordenando(!reordenandoDe)}

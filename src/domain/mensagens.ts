@@ -1325,11 +1325,34 @@ export const TEXTOS_BLOCO = {
   sem_valor: "—",
   mensagem_em_breve: "A mensagem do Bloco chega numa próxima versão",
   reordenando: "Reordenando os Blocos: arraste ou use mover para antes e depois",
+  // Filtrar a grade pelo Bloco (História 4.3).
+  filtro_desfeito_excluido: "O Bloco foi excluído e o filtro foi desfeito",
+  filtro_desfeito_sem_valor: "O Bloco ficou sem valor e o filtro foi desfeito",
 } as const;
 
 /** Nome acessível do 💬 de um Bloco. */
 export function rotuloMensagemDoBloco(nome: string): string {
   return `Gerar mensagem do Bloco ${nome}`;
+}
+
+/**
+ * Nome acessível do cartão que filtra a grade (o estado vai em `aria-pressed`):
+ * "Filtrar a grade pelo Bloco Mãe, R$ 1.350,14". Sem valor (a Fórmula não
+ * calcula), o cartão não filtra e o nome diz isso.
+ */
+export function rotuloFiltrarPeloBloco(nome: string, valor: string | null): string {
+  const base = `Filtrar a grade pelo Bloco ${nome}`;
+  return valor === null ? `${base}, sem valor` : `${base}, ${valor}`;
+}
+
+/** Texto da pílula do filtro por Bloco na barra de filtros: "Bloco: Mãe" (o ✕ vai à parte). */
+export function rotuloPilulaBloco(nome: string): string {
+  return `Bloco: ${nome}`;
+}
+
+/** Nome acessível da pílula do Bloco: contém o texto visível e diz o que o toque faz. */
+export function rotuloDesfazerFiltroBloco(nome: string): string {
+  return `Desfazer o filtro ${rotuloPilulaBloco(nome)}`;
 }
 
 /** Nome acessível do ⋯ de um Bloco. */

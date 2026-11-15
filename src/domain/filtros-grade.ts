@@ -1,3 +1,9 @@
+// Bloco (História 4.3, FR-20): um Bloco por vez filtra a grade pelos
+// Lançamentos que `avaliar` diz que entram na Fórmula (`avaliacao.entram` do
+// `resumirBloco`, sobre `projetarPainel`). O estado guarda só o id; quem entra
+// é recalculado a cada render, então editar o Bloco ou trocar de Mês atualiza
+// o filtro sozinho. Soma-se (E) à busca, às colunas e a "Verificar".
+//
 // Barra de filtros da grade (História 2.6, FR-21, UX-DR9): o estado dos
 // filtros, quem passa por eles, a lista de valores de cada coluna com a
 // contagem e o texto da pílula. Nada é gravado: o estado vive na tela.
@@ -9,7 +15,9 @@
 // - Contagem de um valor: quantos Lançamentos do Mês teriam aquele valor com
 //   a busca, "Verificar" e as outras colunas aplicadas (a própria não entra).
 
+import { resumirBloco, type Bloco } from "./blocos";
 import { precisaVerificar, type Conferencia } from "./conferencia";
+import type { LinhaDaFormula } from "./formula";
 import { normalizarNome } from "./importacao-fatura";
 import {
   COLUNAS_FILTRO,
@@ -17,6 +25,7 @@ import {
   TEXTOS_FILTROS,
   TEXTOS_PAINEL,
   rotuloCartaoFinal,
+  rotuloPilulaBloco,
   rotuloPilulaFiltro,
 } from "./mensagens";
 import type { LancadoPor, LancamentoGrade } from "./painel";
@@ -51,12 +60,15 @@ export type FiltrosGrade = {
   verificar: boolean;
   /** Valores escolhidos por coluna; vazio é sem filtro naquela coluna. */
   colunas: Readonly<Record<ColunaFiltro, readonly ValorFiltro[]>>;
+  /** O id do Bloco que filtra a grade (um só por vez), ou `null`. */
+  bloco: string | null;
 };
 
 export const FILTROS_VAZIOS: FiltrosGrade = {
   busca: "",
   verificar: false,
   colunas: { responsavel: [], tipo: [], status: [], lancado_por: [], parcela: [], cartao: [] },
+  bloco: null,
 };
 
 /** O que os filtros usam de um Lançamento. */
@@ -258,9 +270,9 @@ export function alternarResponsavelUnico(filtros: FiltrosGrade, responsavelId: V
   return definirColuna(filtros, "responsavel", soEle ? [] : [responsavelId]);
 }
 
-/** Algum filtro de coluna ou a busca está ativo ("Verificar" não conta)? */
+/** Algum filtro de coluna, a busca ou o Bloco está ativo ("Verificar" não conta)? */
 function temFiltroAlemDeVerificar(filtros: FiltrosGrade): boolean {
-  return filtros.busca.trim() !== "" || COLUNAS_DA_BARRA.some((c) => filtros.colunas[c].length > 0);
+  return filtros.busca.trim() !== "" || filtros.bloco !== null || COLUNAS_DA_BARRA.some((c) => filtros.colunas[c].length > 0);
 }
 
 /** Há busca, filtro de coluna ou "Verificar"? */
@@ -283,5 +295,76 @@ export function filtrosAtivosEm(filtros: FiltrosGrade, colunas: readonly ColunaF
 export function motivoDoVazio(filtros: FiltrosGrade, mesTemLancamentos: boolean): "filtros" | "verificar" | null {
   if (mesTemLancamentos && temFiltroAlemDeVerificar(filtros)) return "filtros";
   if (filtros.verificar) return "verificar";
+  return null;
+}
+
+// ------------------------------------------------------- Bloco (História 4.3)
+
+/** O que o Painel precisa saber do filtro por Bloco, na renderização de agora. */
+export type BlocoNoFiltro =
+  | { estado: "inativo" }
+  | { estado: "ativo"; id: string; nome: string; entram: ReadonlySet<string> }
+  /** O Bloco do filtro não existe mais (excluído em outro aparelho). */
+  | { estado: "ausente" }
+  /** A Fórmula não calcula (divisão por zero, número grande demais): não há o que entra. */
+  | { estado: "sem_valor"; nome: string };
+
+/**
+ * Resolve o filtro por Bloco. `entram` é `avaliacao.entram` do `resumirBloco`
+ * sobre a projeção do Painel (`projetarPainel`): a mesma conta do valor do
+ * cartão, então o filtro e o valor nunca discordam.
+ */
+export function resolverBloco(
+  filtros: Pick<FiltrosGrade, "bloco">,
+  blocos: readonly Pick<Bloco, "id" | "nome" | "formula">[],
+  projecao: readonly LinhaDaFormula[],
+): BlocoNoFiltro {
+  if (filtros.bloco === null) return { estado: "inativo" };
+  const bloco = blocos.find((b) => b.id === filtros.bloco);
+  if (bloco === undefined) return { estado: "ausente" };
+  const { avaliacao } = resumirBloco(bloco, projecao, new Set());
+  if (avaliacao === null) return { estado: "sem_valor", nome: bloco.nome };
+  return { estado: "ativo", id: bloco.id, nome: bloco.nome, entram: new Set(avaliacao.entram) };
+}
+
+/**
+ * As unidades do Mês que o Bloco deixa passar (todas, sem Bloco ativo). Vem
+ * antes de `separarAjustes`: um Ajuste fica recuado sob a mãe só se os dois
+ * entram no Bloco; o que entra sozinho vira linha comum e o que não entra
+ * some. Assim as linhas da grade e os Ajustes visíveis são exatamente os que
+ * `avaliar` soma, e o total do rodapé de um Bloco de soma simples é o valor
+ * dele. Numa mãe dividida só as filhas que entram aparecem (a mãe é só o
+ * cabeçalho delas).
+ */
+export function restringirAoBloco<L extends { id: string }>(unidades: readonly L[], bloco: BlocoNoFiltro): L[] {
+  return bloco.estado === "ativo" ? unidades.filter((l) => bloco.entram.has(l.id)) : [...unidades];
+}
+
+/** Tocar no cartão: liga o filtro por aquele Bloco; tocar no mesmo desliga; tocar noutro troca. */
+export function alternarBloco(filtros: FiltrosGrade, id: string): FiltrosGrade {
+  return { ...filtros, bloco: filtros.bloco === id ? null : id };
+}
+
+/** Desfaz o filtro por Bloco, qualquer que seja o Bloco. */
+export function limparBloco(filtros: FiltrosGrade): FiltrosGrade {
+  return filtros.bloco === null ? filtros : { ...filtros, bloco: null };
+}
+
+/** O texto da pílula do Bloco ("Bloco: Mãe"), ou `null` sem Bloco filtrando. */
+export function textoDaPilulaDoBloco(bloco: BlocoNoFiltro): string | null {
+  return bloco.estado === "ativo" ? rotuloPilulaBloco(bloco.nome) : null;
+}
+
+/**
+ * Por que o filtro por Bloco precisa ser desfeito sozinho (a chave do aviso em
+ * `TEXTOS_BLOCO`), ou `null` se segue valendo. `blocosLidos`: só se desfaz
+ * com a lista de Blocos já lida, para não apagar o filtro enquanto ela carrega.
+ */
+export function motivoParaDesfazerBloco(
+  bloco: BlocoNoFiltro,
+  blocosLidos: boolean,
+): "filtro_desfeito_excluido" | "filtro_desfeito_sem_valor" | null {
+  if (bloco.estado === "sem_valor") return "filtro_desfeito_sem_valor";
+  if (bloco.estado === "ausente" && blocosLidos) return "filtro_desfeito_excluido";
   return null;
 }
