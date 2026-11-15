@@ -81,7 +81,7 @@ development_status:
   4-4-selecionar-e-ver-o-total: done
   4-5-configurar-o-modelo-da-mensagem: done
   4-6-gerar-a-mensagem-a-partir-da-seleção: done
-  4-7-gerar-a-mensagem-a-partir-de-um-bloco: review
+  4-7-gerar-a-mensagem-a-partir-de-um-bloco: done
   epic-4-retrospective: optional
 
   epic-5: backlog
