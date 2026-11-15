@@ -2,7 +2,7 @@
 title: 'História 5.2: Lista de Contas manuais'
 type: 'feature'
 created: '2026-11-15'
-status: 'review'
+status: 'done'
 baseline_commit: '8c936ae'
 route: 'dispatch'
 review_loop_iteration: 0
