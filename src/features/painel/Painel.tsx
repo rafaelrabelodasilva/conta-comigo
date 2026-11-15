@@ -627,6 +627,7 @@ export function Painel({ titulo }: { titulo: string }) {
             <BlocosDoMes
               linhas={lancamentos.linhas}
               mes={mesAberto}
+              temFatura={fatura !== null}
               ativoId={doBloco.estado === "ativo" ? doBloco.id : null}
               aoFiltrar={(id) => mudarFiltros((f) => alternarBloco(f, id))}
               aoExcluindo={(id) => mudarFiltros((f) => (f.bloco === id ? limparBloco(f) : f))}
@@ -655,6 +656,7 @@ export function Painel({ titulo }: { titulo: string }) {
           {anunciar ? rotuloLancamentos(naGrade.length) : ""}
         </p>
         <GradeLancamentos
+          mesTemFatura={fatura !== null}
           linhas={naGrade}
           ajustesPorMae={ajustesPorMae}
           maesDivididas={maesDivididas}

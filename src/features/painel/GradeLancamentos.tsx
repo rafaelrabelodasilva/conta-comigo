@@ -7,7 +7,7 @@ import type { ValorFiltro } from "@/domain/filtros-grade";
 import { formatarDinheiro } from "@/domain/dinheiro";
 import { formatarParcela } from "@/domain/importacao-fatura";
 import { estadoCaixaCabecalho, type EstadoCaixa } from "@/domain/lancamento";
-import { ehPrevisto } from "@/domain/previstos";
+import { ehPrevistoNoMes } from "@/domain/previstos";
 import {
   COLUNAS_GRADE as C,
   ROTULOS_LANCADO_POR,
@@ -121,6 +121,8 @@ export type PropsGradeLancamentos = {
   linhaFixa?: LancamentoGrade | null;
   /** A linha que não pode ser marcada (a fixa, fora do filtro): a caixa fica desativada. */
   semCaixaId?: string | null;
+  /** O Mês aberto tem Fatura? Sem ela, as Contas manuais são previstos (5.1). Padrão: tem. */
+  mesTemFatura?: boolean;
 };
 
 /** Nomes por id, para o núcleo ordenar pelo que a grade mostra. */
@@ -260,6 +262,7 @@ type PropsLinha = {
   /** Cabeçalho da mãe dividida ou parte dela (História 3.8). */
   papel?: PapelNaGrade;
   aoDividir?: (id: string) => void;
+  mesTemFatura: boolean;
 };
 
 /** Toque no corpo: abre o painel, menos na caixa, na `person-tag` e no ⋯ (e no menu, que fica num portal). */
@@ -285,6 +288,7 @@ function LinhaGrade({
   semCaixa = false,
   papel,
   aoDividir,
+  mesTemFatura,
 }: PropsLinha) {
   const [menuAberto, setMenuAberto] = useState(false);
   const abrirMenu = useCallback(() => setMenuAberto(true), []);
@@ -293,7 +297,7 @@ function LinhaGrade({
   const responsavel = l.responsavel_id === null ? undefined : cadastros.responsaveis.get(l.responsavel_id);
   const status = l.status_id === null ? undefined : cadastros.status.get(l.status_id);
   const nome = nomeExibido(l);
-  const previsto = ehPrevisto(l);
+  const previsto = ehPrevistoNoMes(l, mesTemFatura);
   // Com Apelido, o Nome original vai ao lado, em cinza.
   const temApelido = nome !== l.nome;
   const rotulo = rotuloLinhaAcessivel({
@@ -472,6 +476,7 @@ export function GradeLancamentos({
   aoExcluir = nada,
   linhaFixa = null,
   semCaixaId = null,
+  mesTemFatura = true,
 }: PropsGradeLancamentos) {
   // A linha aberta que saiu do filtro continua na grade (opção A), fora do total.
   const comFixa = linhaFixa && !linhas.some((l) => l.id === linhaFixa.id) ? [...linhas, linhaFixa] : linhas;
@@ -521,6 +526,7 @@ export function GradeLancamentos({
               aoAbrir={aoAbrir}
               aoExcluir={aoExcluir}
               semCaixa={l.id === semCaixaId}
+              mesTemFatura={mesTemFatura}
             />
           ))}
         </tbody>

@@ -42,6 +42,8 @@ export type LancamentoGrade = {
   dividido_de_id?: string | null;
   /** A Divisão da mãe (`jsonb`); nulo na linha comum e na parte. */
   divisao?: unknown;
+  /** A Conta manual que gerou a linha (5.1): previsto enquanto o Mês não tem Fatura. */
+  conta_manual_id?: string | null;
   /** Desempate das linhas sem `ordem_fatura` (o histórico da planilha, 3.10): a ordem em que a aba foi gravada. */
   created_at?: string | null;
 };

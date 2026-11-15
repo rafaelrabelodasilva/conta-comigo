@@ -290,6 +290,8 @@ export function criarRepoFaturas(deps: {
             .in("id", idsDasSeries);
           if (series.error || !series.data) return falhou(series.error);
           for (const sr of series.data) {
+            // A Série de uma Conta recorrente não tem total e nunca é de parcela de cartão.
+            if (sr.parcela_total === null) continue;
             dasSeries.set(sr.id, {
               nome_normalizado: sr.nome_normalizado,
               parcela_total: sr.parcela_total,
@@ -385,7 +387,7 @@ export function criarRepoFaturas(deps: {
         const dasSeries = new Map(series.data.map((s) => [s.id, s]));
         const previstos: PrevistoParaCasar[] = candidatos.flatMap((l) => {
           const serie = dasSeries.get(l.serie_id as string);
-          if (serie === undefined) return [];
+          if (serie === undefined || serie.parcela_total === null) return [];
           const ocorrencia = serie.ocorrencia;
           return [
             {
@@ -454,6 +456,8 @@ export function criarRepoFaturas(deps: {
           ]);
           if (series.error || !series.data || daSerie.error || !daSerie.data) return { ok: false, codigo: "carregar.falhou" };
           for (const sr of series.data) {
+            // A Série de uma Conta recorrente não tem total e nunca é de parcela de cartão.
+            if (sr.parcela_total === null) continue;
             dasSeries.set(sr.id, {
               nome_normalizado: sr.nome_normalizado,
               parcela_total: sr.parcela_total,

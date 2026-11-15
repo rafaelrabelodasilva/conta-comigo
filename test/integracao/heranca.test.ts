@@ -116,7 +116,7 @@ describe.skipIf(!ligado)("Herança das parcelas sem previsto no Supabase local",
           serie: s
             ? {
                 nome_normalizado: s.nome_normalizado,
-                parcela_total: s.parcela_total,
+                parcela_total: s.parcela_total!,
                 valor_parcela_centavos: s.valor_parcela_centavos,
                 mes_primeira_parcela: s.mes_primeira_parcela,
                 ocorrencia: s.ocorrencia,
