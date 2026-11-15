@@ -12,6 +12,7 @@ import {
   montarFormula,
   nomeDoOperando,
   normalizarNumero,
+  textoDaFormula,
   type Ficha,
   type NomesDaFormula,
 } from "@/domain/formula";
@@ -34,6 +35,11 @@ import { Seletor } from "@/ui/Seletor";
 // núcleo (`montarFormula`, `planejarSalvarBloco`): "Salvar" fica desativado
 // com a razão numa linha. O resultado é a Fórmula sobre `projetarPainel` do
 // Mês aberto. A gravação é de quem abre a janela (`aoSalvar`).
+//
+// "Ver cálculo" (História 4.2): com `somenteLeitura`, a mesma janela mostra o
+// Bloco `inicial` sem paleta nem campos: nome, fichas, resultado e passo a
+// passo (a mesma `avaliar` sobre a mesma `projetarPainel` do `block-card`,
+// então é o mesmo número) e só "Fechar".
 
 export type PropsMontadorBloco = {
   aberta: boolean;
@@ -49,6 +55,8 @@ export type PropsMontadorBloco = {
   inicial?: Bloco;
   /** Grava; devolve se deu certo (a janela se fecha). */
   aoSalvar: (pedido: BlocoParaGravar) => Promise<boolean>;
+  /** "Ver cálculo": mostra o Bloco `inicial` sem editar (não grava). */
+  somenteLeitura?: boolean;
 };
 
 const CHIP =
@@ -116,6 +124,7 @@ export function MontadorBloco({
   blocos,
   inicial,
   aoSalvar,
+  somenteLeitura = false,
 }: PropsMontadorBloco) {
   const [nome, setNome] = useState(inicial?.nome ?? "");
   const [fichas, setFichas] = useState<Ficha[]>(() => (inicial ? fichasDaFormula(inicial.formula) : []));
@@ -142,10 +151,12 @@ export function MontadorBloco({
   const projecao = useMemo(() => projetarPainel(linhas, mes), [linhas, mes]);
   const montada = useMemo(() => montarFormula(fichas), [fichas]);
   const avaliacao = useMemo(() => {
-    if (!montada.ok) return null;
-    const a = avaliar(montada.valor, projecao);
+    // "Ver cálculo" avalia a Fórmula gravada do Bloco; o Montador, a que está sendo montada.
+    const formula = somenteLeitura && inicial ? { ok: true as const, valor: inicial.formula } : montada;
+    if (!formula.ok) return null;
+    const a = avaliar(formula.valor, projecao);
     return a.ok ? a.valor : null;
-  }, [montada, projecao]);
+  }, [montada, projecao, somenteLeitura, inicial]);
 
   const plano = planejarSalvarBloco({ nome, fichas, de_cobranca: deCobranca, meu_bloco: meuBloco }, blocos, inicial?.id);
   // A razão do "Salvar" desativado; um valor grande demais só aparece com os dados.
@@ -178,6 +189,45 @@ export function MontadorBloco({
   }
 
   const semCadastros = listaResponsaveis.length === 0 && listaTipos.length === 0;
+
+  if (somenteLeitura && inicial) {
+    return (
+      <Janela
+        aberta={aberta}
+        aoMudar={aoMudar}
+        titulo={T.titulo_ver_calculo}
+        descricao={T.descricao_ver_calculo}
+        className="max-w-3xl"
+        rodape={<Botao onClick={() => aoMudar(false)}>{T.fechar}</Botao>}
+      >
+        <div className="flex flex-col gap-3">
+          <p className="texto-title text-text">{inicial.nome}</p>
+          <div className="flex flex-col gap-1">
+            <span className="texto-label text-text">{T.formula}</span>
+            <p className="texto-body-strong text-text">{textoDaFormula(inicial.formula, nomes)}</p>
+          </div>
+          <div className="flex flex-col gap-1 rounded-md bg-background p-3">
+            <div className="flex items-baseline gap-2.5">
+              <span className="texto-body text-text-muted">{T.resultado}</span>
+              <b className="texto-block-value text-text">{avaliacao ? formatarDinheiro(avaliacao.valorCentavos) : T.sem_valor}</b>
+            </div>
+            {avaliacao ? (
+              <p aria-label={T.passo_a_passo} className="texto-number text-text-muted">
+                {descreverCalculo(avaliacao, nomes)}
+                <span className="texto-caption"> · {T.arredondado}</span>
+              </p>
+            ) : null}
+          </div>
+          {inicial.de_cobranca || inicial.meu_bloco ? (
+            <ul className="flex flex-col gap-0.5 texto-body text-text-muted">
+              {inicial.de_cobranca ? <li>{T.usado_em_recebimentos}</li> : null}
+              {inicial.meu_bloco ? <li>{T.e_meu_bloco}</li> : null}
+            </ul>
+          ) : null}
+        </div>
+      </Janela>
+    );
+  }
 
   return (
     <Janela

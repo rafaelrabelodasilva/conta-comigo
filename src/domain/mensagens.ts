@@ -145,6 +145,7 @@ export const MENSAGENS = {
   "bloco.nome_vazio": "Dê um nome ao Bloco",
   "bloco.nome_longo": "Use até 30 caracteres.",
   "bloco.nome_repetido": "Já existe um Bloco com esse nome.",
+  "bloco.ordem_invalida": "Os Blocos mudaram em outro aparelho. Tente de novo.",
 } as const;
 
 /** Textos da janela "Importar fatura" (UX-DR20, mockup `importar.html`). */
@@ -1076,6 +1077,7 @@ export const ROTULOS = {
   descartar: "Descartar",
   regras_aprendidas: "Regras aprendidas",
   importar_planilha: "Importar planilha",
+  blocos: "Blocos",
 } as const;
 
 /**
@@ -1105,6 +1107,12 @@ export const TEXTOS_PASSO = {
     pergunta: "Quer trazer o histórico da sua planilha?",
     ajuda:
       "Escolha o arquivo .xlsx da planilha “Cartão” e as abas de 2026. O app aprende as Regras e já monta as parcelas em andamento. Dá para pular e fazer depois em Configurações.",
+  },
+  blocos: {
+    secao: ROTULOS.blocos,
+    pergunta: "Quais totais você quer ver no Painel?",
+    ajuda:
+      "Um Bloco é um total com nome, como “Rangel + (Casal ÷ 2)”. Monte tocando nas fichas. Sem Lançamentos ainda, os valores aparecem zerados. Dá para pular e criar depois, no Painel.",
   },
   ciclo: {
     secao: ROTULOS.ciclo,
@@ -1295,7 +1303,60 @@ export const TEXTOS_BLOCO = {
   abrir_parentese: "Abrir parêntese",
   fechar_parentese: "Fechar parêntese",
   sem_fichas: "Não há Responsáveis nem Tipos para escolher. Cadastre-os em Configurações.",
+  // Blocos no Painel (História 4.2).
+  reordenar: "Reordenar",
+  concluir_reordenar: "Concluir",
+  inclui_previstos: "inclui previstos",
+  editar_formula: "Editar fórmula",
+  ver_calculo: "Ver cálculo",
+  excluir_bloco: "Excluir bloco",
+  titulo_ver_calculo: "Cálculo do bloco",
+  descricao_ver_calculo: "O passo a passo do valor que aparece no Painel.",
+  fechar: "Fechar",
+  excluir_titulo: "Excluir bloco?",
+  excluir_confirmar: "Excluir bloco",
+  excluir_em_recebimentos: "Este Bloco aparece em Recebimentos.",
+  excluido: "Bloco excluído",
+  ordem_salva: "Ordem dos Blocos salva",
+  carregando: "Carregando os Blocos",
+  erro_carregar: "Não foi possível carregar os Blocos.",
+  usado_em_recebimentos: "Usado em Recebimentos",
+  e_meu_bloco: "É o meu Bloco",
+  sem_valor: "—",
+  mensagem_em_breve: "A mensagem do Bloco chega numa próxima versão",
+  reordenando: "Reordenando os Blocos: arraste ou use mover para antes e depois",
 } as const;
+
+/** Nome acessível do 💬 de um Bloco. */
+export function rotuloMensagemDoBloco(nome: string): string {
+  return `Gerar mensagem do Bloco ${nome}`;
+}
+
+/** Nome acessível do ⋯ de um Bloco. */
+export function rotuloAcoesDoBloco(nome: string): string {
+  return `Ações do Bloco ${nome}`;
+}
+
+/** A alça de arrastar de um Bloco no modo Reordenar. */
+export function rotuloArrastarBloco(nome: string): string {
+  return `Arrastar o Bloco ${nome}`;
+}
+
+/** Os botões de mover de um Bloco no modo Reordenar. */
+export function rotuloMoverBloco(nome: string, sentido: "antes" | "depois"): string {
+  return `Mover o Bloco ${nome} para ${sentido === "antes" ? "antes" : "depois"}`;
+}
+
+/** O aviso do Bloco cuja Fórmula cita cadastros arquivados: "Cita Rangel (arquivado)". */
+export function avisoCadastrosArquivados(nomes: readonly string[]): string {
+  return `Cita ${nomes.join(", ")} (arquivado)`;
+}
+
+/** Texto da confirmação de excluir um Bloco; o de cobrança avisa de Recebimentos. */
+export function descricaoExcluirBloco(nome: string, deCobranca: boolean): string {
+  const base = `O Bloco “${nome}” sai do Painel. Os Lançamentos não mudam.`;
+  return deCobranca ? `${TEXTOS_BLOCO.excluir_em_recebimentos} ${base}` : base;
+}
 
 /** O nome falado de uma operação, para o botão. */
 export const ROTULO_OPERACAO = {

@@ -6,6 +6,7 @@
 import { unidadesDoMes } from "./divisao";
 import type { LinhaDaFormula } from "./formula";
 import { linhasDoMes } from "./painel";
+import { ehPrevisto } from "./previstos";
 
 /** As colunas de `lancamentos` que a projeção do Painel lê. */
 export type LancamentoParaProjetar = {
@@ -21,6 +22,8 @@ export type LancamentoParaProjetar = {
   divisao?: unknown;
   /** Ajuste de centavos (2.8): a parcela dele. O Ajuste entra como linha própria, com a classificação da mãe. */
   ajuste_de_id?: string | null;
+  /** `sistema` = previsto (3.5). Sem a coluna, a linha não é previsto. */
+  lancado_por?: string;
 };
 
 /**
@@ -37,4 +40,16 @@ export function projetarPainel(linhas: readonly LancamentoParaProjetar[], mes: s
     responsavel_id: l.responsavel_id,
     tipo_id: l.tipo_id,
   }));
+}
+
+/**
+ * Os previstos que a projeção do Painel traz (`lancado_por = 'sistema'`): é o
+ * que os Blocos somam num Mês sem Fatura e mostram como "inclui previstos".
+ */
+export function idsDosPrevistos(linhas: readonly LancamentoParaProjetar[], mes: string): Set<string> {
+  return new Set(
+    unidadesDoMes(linhasDoMes(linhas, mes))
+      .filter((l) => l.lancado_por !== undefined && ehPrevisto({ lancado_por: l.lancado_por }))
+      .map((l) => l.id),
+  );
 }

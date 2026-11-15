@@ -305,6 +305,7 @@ describe("textos do Primeiro uso (História 1.8)", () => {
       ROTULOS.tipos,
       ROTULOS.status,
       ROTULOS.importar_planilha,
+      ROTULOS.blocos,
       ROTULOS.ciclo,
     ]);
     for (const passo of PASSOS_PRIMEIRO_USO) {

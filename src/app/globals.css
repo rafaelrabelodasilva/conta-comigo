@@ -377,3 +377,23 @@
     outline-offset: 2px;
   }
 }
+
+/*
+ * Modo "Reordenar" dos Blocos (História 4.2): o cartão treme de leve. Só com
+ * o movimento permitido (`prefers-reduced-motion: no-preference`); com
+ * "reduzir movimento" o cartão fica parado e só leva a borda tracejada.
+ */
+@keyframes bloco-tremer {
+  0%,
+  100% {
+    transform: rotate(-0.5deg);
+  }
+  50% {
+    transform: rotate(0.5deg);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bloco-tremendo {
+    animation: bloco-tremer 0.3s ease-in-out infinite;
+  }
+}

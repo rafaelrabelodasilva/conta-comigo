@@ -10,16 +10,17 @@ import {
 } from "./primeiro-uso";
 
 describe("passos do Primeiro uso", () => {
-  it("seguem a ordem Responsáveis → Tipos → Status → Importar planilha → Ciclo", () => {
-    expect(PASSOS_PRIMEIRO_USO).toEqual(["responsaveis", "tipos", "status", "planilha", "ciclo"]);
-    expect(PASSOS_PRIMEIRO_USO.map(numeroDoPasso)).toEqual([1, 2, 3, 4, 5]);
+  it("seguem a ordem Responsáveis → Tipos → Status → Importar planilha → Blocos → Ciclo", () => {
+    expect(PASSOS_PRIMEIRO_USO).toEqual(["responsaveis", "tipos", "status", "planilha", "blocos", "ciclo"]);
+    expect(PASSOS_PRIMEIRO_USO.map(numeroDoPasso)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it("o próximo passo anda um; no último não há próximo", () => {
     expect(proximoPasso("responsaveis")).toBe("tipos");
     expect(proximoPasso("tipos")).toBe("status");
     expect(proximoPasso("status")).toBe("planilha");
-    expect(proximoPasso("planilha")).toBe("ciclo");
+    expect(proximoPasso("planilha")).toBe("blocos");
+    expect(proximoPasso("blocos")).toBe("ciclo");
     expect(proximoPasso("ciclo")).toBeNull();
   });
 
@@ -28,12 +29,13 @@ describe("passos do Primeiro uso", () => {
     expect(passoAnterior("tipos")).toBe("responsaveis");
     expect(passoAnterior("status")).toBe("tipos");
     expect(passoAnterior("planilha")).toBe("status");
-    expect(passoAnterior("ciclo")).toBe("planilha");
+    expect(passoAnterior("blocos")).toBe("planilha");
+    expect(passoAnterior("ciclo")).toBe("blocos");
   });
 
   it("os passos seguintes são os que ainda faltam", () => {
-    expect(passosSeguintes("responsaveis")).toEqual(["tipos", "status", "planilha", "ciclo"]);
-    expect(passosSeguintes("status")).toEqual(["planilha", "ciclo"]);
+    expect(passosSeguintes("responsaveis")).toEqual(["tipos", "status", "planilha", "blocos", "ciclo"]);
+    expect(passosSeguintes("status")).toEqual(["planilha", "blocos", "ciclo"]);
     expect(passosSeguintes("ciclo")).toEqual([]);
   });
 });
