@@ -54,6 +54,7 @@ import {
   nomeExibido,
   type Ordem,
 } from "@/domain/painel";
+import { mensagemDaSelecao } from "@/domain/mensagem-janela";
 import { lerModelo } from "@/domain/modelo-mensagem";
 import { projetarPainel } from "@/domain/projecoes";
 import { ativos as responsaveisAtivos } from "@/domain/responsaveis";
@@ -90,6 +91,7 @@ import { FaturaDoMes } from "./FaturaDoMes";
 import { GradeLancamentos, type CadastrosGrade } from "./GradeLancamentos";
 import { JanelaClassificarEmLote } from "./JanelaClassificarEmLote";
 import { JanelaGerarMensagem } from "./JanelaGerarMensagem";
+import { JanelaMensagemDoBloco } from "./JanelaMensagemDoBloco";
 import { DividirLancamento } from "./DividirLancamento";
 import { PainelLancamento } from "./PainelLancamento";
 import { SeletorMes } from "./SeletorMes";
@@ -158,8 +160,9 @@ import { SeletorMes } from "./SeletorMes";
 // (`BarraSelecaoPainel`): "N selecionados · R$ total" (o texto e o total vêm do núcleo,
 // `resumoDaSelecao`, a mesma soma líquida do Revisar e do rodapé), "Limpar", "⋯ Mais"
 // (Classificar em lote, pela função da 3.3, e Excluir, com os Ajustes `junto`) e
-// "Gerar mensagem" (4.6: abre `JanelaGerarMensagem`, que lê a Seleção, o Mês, os Status e o modelo
-// da mensagem e acompanha o Realtime). A região `role=status` que anuncia o total
+// "Gerar mensagem" (4.6: abre `JanelaGerarMensagem`, que mostra a mensagem pronta do núcleo
+// (`mensagemDaSelecao`: a Seleção, o Mês, os Status e o modelo) e acompanha o Realtime). O 💬
+// do Bloco (4.7) abre a mesma janela pela `JanelaMensagemDoBloco` (a forma 2). A região `role=status` que anuncia o total
 // fica no DOM, vazia, antes da primeira marcação. Trocar de Mês limpa a Seleção e avisa
 // só se havia Seleção (`aoTrocarDeMes`).
 
@@ -227,6 +230,8 @@ export function Painel({ titulo }: { titulo: string }) {
   const [classificandoLote, setClassificandoLote] = useState(false);
   const [excluindoLote, setExcluindoLote] = useState(false);
   const [gerandoMensagem, setGerandoMensagem] = useState(false);
+  // O Bloco cuja janela "Gerar mensagem" (forma 2, 4.7) está aberta.
+  const [blocoDaMensagem, setBlocoDaMensagem] = useState<string | null>(null);
   const [lotando, setLotando] = useState(false);
   const toast = useToast();
   const router = useRouter();
@@ -339,6 +344,7 @@ export function Painel({ titulo }: { titulo: string }) {
     setPainel(null);
     setDividindo(null);
     setGerandoMensagem(false);
+    setBlocoDaMensagem(null);
   };
 
   // Esc fecha o painel (a janela de confirmação, os menus e os popovers fecham antes).
@@ -624,6 +630,7 @@ export function Painel({ titulo }: { titulo: string }) {
               ativoId={doBloco.estado === "ativo" ? doBloco.id : null}
               aoFiltrar={(id) => mudarFiltros((f) => alternarBloco(f, id))}
               aoExcluindo={(id) => mudarFiltros((f) => (f.bloco === id ? limparBloco(f) : f))}
+              aoGerarMensagem={setBlocoDaMensagem}
             />
           </div>
         </div>
@@ -701,16 +708,33 @@ export function Painel({ titulo }: { titulo: string }) {
               <JanelaGerarMensagem
                 aberta
                 aoMudar={setGerandoMensagem}
-                selecao={selecionados}
-                lancamentos={lancamentos.linhas}
-                mes={mesAberto}
                 temFatura={fatura !== null}
-                statusPagos={statusPagos}
-                modelo={modeloDaMensagem}
                 aoEditarModelo={() => router.push(`/configuracoes?secao=${SECAO_MODELO_DA_MENSAGEM}`)}
+                montar={(incluirPrevistos) =>
+                  mensagemDaSelecao(modeloDaMensagem, selecionados, lancamentos.linhas, {
+                    mes: mesAberto,
+                    statusPagos,
+                    temFatura: fatura !== null,
+                    incluirPrevistos,
+                  })
+                }
               />
             ) : null}
           </>
+        ) : null}
+        {blocoDaMensagem !== null ? (
+          <JanelaMensagemDoBloco
+            blocoId={blocoDaMensagem}
+            aoMudar={(aberta) => {
+              if (!aberta) setBlocoDaMensagem(null);
+            }}
+            lancamentos={lancamentos.linhas}
+            mes={mesAberto}
+            temFatura={fatura !== null}
+            statusPagos={statusPagos}
+            modelo={modeloDaMensagem}
+            aoEditarModelo={() => router.push(`/configuracoes?secao=${SECAO_MODELO_DA_MENSAGEM}`)}
+          />
         ) : null}
       </div>
     );

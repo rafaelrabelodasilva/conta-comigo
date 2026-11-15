@@ -522,3 +522,101 @@ export function descreverCalculo(avaliacao: Avaliacao, nomes: NomesDaFormula): s
     raiz.tipo === "operando" || raiz.tipo === "numero" || (raiz.tipo === "em_reais" && raiz.interno.tipo === "numero");
   return folha ? texto : `${texto} = ${formatarDinheiro(avaliacao.valorCentavos)}`;
 }
+
+// ------------------------------------------------------------------ termos
+
+/** Um fator de × ou ÷ por número: o texto vem de como Rafael montou ("2", "0,5", "(1 + 1)"). */
+export type FatorDoTermo = { operacao: "multiplicacao" | "divisao"; texto: string };
+
+/**
+ * Uma parcela da soma de mais alto nível da Fórmula (a base da mensagem em
+ * grupos, História 4.7). `no` é a parcela inteira, sem o sinal: avaliada
+ * sozinha dá o valor do grupo. `base` é o que o grupo mostra como subtotal
+ * (um operando, um parêntese de soma ou um número solto) e `fatores` são as
+ * operações × e ÷ por números que o grupo aplica a ele, de dentro para fora.
+ */
+export type Termo = {
+  no: No;
+  /** A parcela é subtraída ("Menos Casal"). */
+  subtraido: boolean;
+  base: No;
+  fatores: readonly FatorDoTermo[];
+};
+
+const SEM_NOMES: NomesDaFormula = { responsaveis: new Map(), tipos: new Map() };
+
+/** A árvore tem algum operando (Responsável, Tipo, Responsável em Tipo ou Todos)? */
+export function temOperando(no: No): boolean {
+  switch (no.tipo) {
+    case "operacao":
+      return temOperando(no.esquerda) || temOperando(no.direita);
+    case "grupo":
+      return temOperando(no.interno);
+    case "numero":
+      return false;
+    default:
+      return true;
+  }
+}
+
+/** Soma ou subtração no topo (com ou sem parênteses em volta). */
+function eAditivo(no: No): boolean {
+  if (no.tipo === "grupo") return eAditivo(no.interno);
+  return no.tipo === "operacao" && (no.operacao === "soma" || no.operacao === "subtracao");
+}
+
+/**
+ * A base e os fatores de uma parcela. Desce pelos × e ÷ cujo outro lado é só
+ * número e pelos parênteses de um termo só; para num operando, num número
+ * solto ou num parêntese de soma. Um × ou ÷ entre dois lados só de números
+ * (`2 × 3`) é um valor fixo: a base é ele mesmo.
+ */
+function baseDoTermo(no: No, fatores: FatorDoTermo[]): No {
+  if (no.tipo === "grupo") return eAditivo(no.interno) ? no : baseDoTermo(no.interno, fatores);
+  if (no.tipo !== "operacao" || (no.operacao !== "multiplicacao" && no.operacao !== "divisao")) return no;
+  const numeroEsquerda = !temOperando(no.esquerda);
+  const numeroDireita = !temOperando(no.direita);
+  if (numeroEsquerda && numeroDireita) return no;
+  if (numeroDireita) {
+    const base = baseDoTermo(no.esquerda, fatores);
+    fatores.push({ operacao: no.operacao, texto: textoDaFormula(no.direita, SEM_NOMES) });
+    return base;
+  }
+  if (numeroEsquerda && no.operacao === "multiplicacao") {
+    const base = baseDoTermo(no.direita, fatores);
+    fatores.push({ operacao: "multiplicacao", texto: textoDaFormula(no.esquerda, SEM_NOMES) });
+    return base;
+  }
+  // Os dois lados com operando (R$ × R$): a validação recusa; a parcela inteira vira a base.
+  return no;
+}
+
+function termoDe(no: No, subtraido: boolean): Termo {
+  const fatores: FatorDoTermo[] = [];
+  const base = baseDoTermo(no, fatores);
+  return { no, subtraido, base, fatores };
+}
+
+function achatar(no: No, subtraido: boolean, saida: Termo[]): void {
+  if (no.tipo === "operacao" && (no.operacao === "soma" || no.operacao === "subtracao")) {
+    achatar(no.esquerda, subtraido, saida);
+    achatar(no.direita, no.operacao === "subtracao" ? !subtraido : subtraido, saida);
+  } else if (no.tipo === "grupo" && eAditivo(no.interno)) {
+    achatar(no.interno, subtraido, saida);
+  } else {
+    saida.push(termoDe(no, subtraido));
+  }
+}
+
+/**
+ * Os termos da Fórmula na ordem em que Rafael os montou: a soma de mais alto
+ * nível achatada (um parêntese que só envolve soma ou subtração é desfeito e
+ * o sinal se propaga: `Rangel − (Casal + Mãe)` dá Rangel, −Casal, −Mãe). Todo
+ * termo de uma Fórmula válida cabe; nenhuma conta é feita aqui (a conta é
+ * `avaliar`).
+ */
+export function termosDaFormula(formula: Formula): Termo[] {
+  const termos: Termo[] = [];
+  achatar(formula, false, termos);
+  return termos;
+}

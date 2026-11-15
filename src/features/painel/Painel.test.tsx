@@ -1515,7 +1515,7 @@ describe("Blocos no Painel (História 4.2)", () => {
     expect(valorDoBloco()).toBe("R$ 5.639,35");
     const cartao = screen.getByRole("region", { name: "Blocos" });
     expect(within(cartao).getByRole("button", { name: "Ações do Bloco Casal" })).toBeTruthy();
-    expect((within(cartao).getByRole("button", { name: "Gerar mensagem do Bloco Casal" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(cartao).getByRole("button", { name: "Gerar mensagem do Bloco Casal" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("o valor muda no lugar quando um Lançamento muda em outro aparelho, sem esqueleto", () => {
@@ -1844,8 +1844,177 @@ describe("Filtrar a grade pelo Bloco (História 4.3, FR-20)", () => {
     renderizar();
     const regiao = regiaoBlocos();
     expect(within(regiao).getByRole("button", { name: "Ações do Bloco Casal" })).toBeTruthy();
-    expect((within(regiao).getByRole("button", { name: "Gerar mensagem do Bloco Casal" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(regiao).getByRole("button", { name: "Gerar mensagem do Bloco Casal" }) as HTMLButtonElement).disabled).toBe(false);
     expect(sem(cartaoFiltra("Casal").getAttribute("aria-label"))).toBe("Filtrar a grade pelo Bloco Casal, R$ 170,00");
+  });
+});
+
+describe("Gerar mensagem do Bloco (História 4.7, FR-53)", () => {
+  const bloco = (id: string, nome: string, ordem: number, formula: unknown) => ({
+    id,
+    owner_id: "dono",
+    nome,
+    formula,
+    ordem,
+    de_cobranca: false,
+    meu_bloco: false,
+    updated_at: "2026-11-03T12:00:00+00:00",
+  });
+  // Rangel = Rafael + (Casal ÷ 2): Rafael R$ 100,00 e Casal R$ 170,00, então R$ 185,00.
+  const rangel = bloco("b-rangel", "Rangel", 1, {
+    tipo: "operacao",
+    operacao: "soma",
+    esquerda: { tipo: "responsavel", id: "r-rafael" },
+    direita: {
+      tipo: "grupo",
+      interno: { tipo: "operacao", operacao: "divisao", esquerda: { tipo: "responsavel", id: "r-casal" }, direita: { tipo: "numero", valor: "2" } },
+    },
+  });
+  const modelo = { saudacao: "Oi", frase_total: "Esse mês deu {total}", chave_pix: "pix@exemplo.com", rodape: "", campos: { nome: true, parcela: true, valor: true } };
+  const comModelo = (m: unknown = modelo) => {
+    falso.banco.configuracoes = [{ id: "cfg", status_padrao_id: null, modelo_mensagem: m, updated_at: "2026-11-03T12:00:00+00:00" }];
+    falso.versao++;
+  };
+  function novembroDoRangel(extras: LinhaLancamento[] = []) {
+    definir({
+      faturas: [novembro],
+      lancamentos: [
+        lanc("2026-11", { id: "c1", nome: "MERCADO", valor_centavos: 10000, responsavel_id: "r-casal" }),
+        lanc("2026-11", { id: "c2", nome: "FARMACIA", valor_centavos: 5000, responsavel_id: "r-casal" }),
+        lanc("2026-11", { id: "c3", nome: "PADARIA", valor_centavos: 2000, responsavel_id: "r-casal" }),
+        lanc("2026-11", { id: "r1", nome: "LIVRARIA", valor_centavos: 10000, responsavel_id: "r-rafael" }),
+        ...extras,
+      ],
+      blocos: [rangel],
+    });
+    comModelo();
+  }
+  const regiao = () => screen.getByRole("region", { name: "Blocos" });
+  const abrirPeloEmoji = async (u: ReturnType<typeof userEvent.setup>) => {
+    await u.click(within(regiao()).getByRole("button", { name: "Gerar mensagem do Bloco Rangel" }));
+    return screen.findByRole("dialog", { name: "Gerar mensagem" });
+  };
+  const quadroDe = (janela: HTMLElement) => within(janela).getByRole("textbox", { name: "Mensagem" }) as HTMLTextAreaElement;
+  const valorDoCartao = () => sem(within(regiao()).getByText(/^R\$/, { selector: "b" }).textContent);
+
+  it("o 💬 abre a janela com a forma 2, e o total é o valor do Bloco no cartão", async () => {
+    novembroDoRangel();
+    renderizar();
+    const u = userEvent.setup();
+    expect(valorDoCartao()).toBe("R$ 185,00");
+    const janela = await abrirPeloEmoji(u);
+    expect(sem(quadroDe(janela).value)).toBe(
+      [
+        "Oi",
+        "Esse mês deu R$ 185,00",
+        "Pix pix@exemplo.com",
+        "",
+        "Detalhes:",
+        "Rafael: R$ 100,00",
+        "  LIVRARIA | R$ 100,00",
+        "Casal: R$ 170,00 ÷ 2 = R$ 85,00",
+        "  MERCADO | R$ 100,00",
+        "  FARMACIA | R$ 50,00",
+        "  PADARIA | R$ 20,00",
+        "Total: R$ 185,00",
+      ].join("\n"),
+    );
+    // A mesma janela da Seleção: foco no quadro, sem “Incluir previstos” num Mês com Fatura.
+    expect(document.activeElement).toBe(quadroDe(janela));
+    expect(within(janela).queryByRole("switch")).toBeNull();
+  });
+
+  it("o item “Gerar mensagem” do ⋯ abre a mesma janela", async () => {
+    novembroDoRangel();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(regiao()).getByRole("button", { name: "Ações do Bloco Rangel" }));
+    await u.click(screen.getByRole("menuitem", { name: "Gerar mensagem" }));
+    expect(await screen.findByRole("dialog", { name: "Gerar mensagem" })).toBeTruthy();
+  });
+
+  it("parte já paga: o total cai e a janela avisa quanto já foi pago", async () => {
+    novembroDoRangel([lanc("2026-11", { id: "c4", nome: "IPTU", valor_centavos: 10000, responsavel_id: "r-casal", status_id: "s-pago" })]);
+    renderizar();
+    const u = userEvent.setup();
+    // O cartão ainda soma o IPTU: 100 + (270 ÷ 2) = R$ 235,00.
+    expect(valorDoCartao()).toBe("R$ 235,00");
+    const janela = await abrirPeloEmoji(u);
+    expect(sem(quadroDe(janela).value)).toContain("Total: R$ 185,00");
+    expect(sem(janela.textContent)).toContain("1 item não entra: 1 já pago. R$ 50,00 já foram pagos e não entram");
+  });
+
+  it("modelo vazio: explica e “Editar modelo” leva a Configurações", async () => {
+    novembroDoRangel();
+    comModelo({});
+    renderizar();
+    const u = userEvent.setup();
+    const janela = await abrirPeloEmoji(u);
+    expect(within(janela).getByText(/O modelo da mensagem está vazio/)).toBeTruthy();
+    expect((within(janela).getByRole("button", { name: "Copiar" }) as HTMLButtonElement).disabled).toBe(true);
+    await u.click(within(janela).getByRole("button", { name: "Editar modelo" }));
+    expect(roteador.push).toHaveBeenCalledWith("/configuracoes?secao=mensagem");
+  });
+
+  it("outro aparelho muda um Lançamento: o texto se refaz e a janela avisa", async () => {
+    novembroDoRangel();
+    renderizar();
+    const u = userEvent.setup();
+    const janela = await abrirPeloEmoji(u);
+    mudarBanco("lancamentos", (ls) => ls.map((l) => ((l as { id: string }).id === "r1" ? { ...(l as object), valor_centavos: 20000 } : l)));
+    expect(sem(quadroDe(janela).value)).toContain("Total: R$ 285,00");
+    expect(within(janela).getByRole("status").textContent).toContain("A mensagem mudou");
+  });
+
+  it("outro aparelho muda o Bloco para uma conta que não calcula: a janela diz que está sem valor", async () => {
+    novembroDoRangel();
+    renderizar();
+    const u = userEvent.setup();
+    const janela = await abrirPeloEmoji(u);
+    mudarBanco("blocos", () => [
+      bloco("b-rangel", "Rangel", 1, { tipo: "operacao", operacao: "divisao", esquerda: { tipo: "responsavel", id: "r-casal" }, direita: { tipo: "numero", valor: "0" } }),
+    ]);
+    expect(within(janela).getByText("Este bloco está sem valor. Edite a fórmula para gerar a mensagem.")).toBeTruthy();
+    expect((within(janela).getByRole("button", { name: "Copiar" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(janela).getByRole("status").textContent).toContain("A mensagem mudou");
+  });
+
+  it("outro aparelho exclui o Bloco: a janela fecha e um aviso explica", async () => {
+    novembroDoRangel();
+    renderizar();
+    const u = userEvent.setup();
+    await abrirPeloEmoji(u);
+    mudarBanco("blocos", () => []);
+    expect(screen.queryByRole("dialog", { name: "Gerar mensagem" })).toBeNull();
+    expect(await screen.findByText("O Bloco foi excluído e a janela foi fechada")).toBeTruthy();
+  });
+
+  it("a janela fechada não reabre ao trocar de Mês e voltar", async () => {
+    novembroDoRangel();
+    renderizar();
+    const u = userEvent.setup();
+    await abrirPeloEmoji(u);
+    await u.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Gerar mensagem" })).toBeNull();
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.proximo_mes }));
+    expect(screen.queryByRole("dialog", { name: "Gerar mensagem" })).toBeNull();
+  });
+
+  it("a barra de Seleção e o 💬 usam a mesma janela, sem misturar as mensagens", async () => {
+    novembroDoRangel();
+    renderizar();
+    const u = userEvent.setup();
+    const janelaDoBloco = await abrirPeloEmoji(u);
+    expect(sem(quadroDe(janelaDoBloco).value)).toContain("Rafael: R$ 100,00");
+    await u.click(within(janelaDoBloco).getAllByRole("button", { name: "Fechar" }).at(-1)!);
+    const linha = linhasDaGrade().find((r) => nomeVisivel(r) === "MERCADO")!;
+    await u.click(within(linha).getByRole("checkbox"));
+    await u.click(within(screen.getByRole("region", { name: "Ações da seleção", hidden: true })).getByRole("button", { name: "Gerar mensagem" }));
+    const janelaDaSelecao = await screen.findByRole("dialog", { name: "Gerar mensagem" });
+    expect(sem(quadroDe(janelaDaSelecao).value)).toBe(
+      ["Oi", "Esse mês deu R$ 100,00", "Pix pix@exemplo.com", "", "Detalhes:", "MERCADO | R$ 100,00", "Total: R$ 100,00"].join("\n"),
+    );
   });
 });
 

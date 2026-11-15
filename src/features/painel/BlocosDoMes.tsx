@@ -27,6 +27,10 @@ import { MontadorBloco } from "./MontadorBloco";
 // "Blocos" do Primeiro uso não passa nenhum dos dois e o cartão não filtra.
 // `aoExcluindo` avisa o Painel antes de gravar a exclusão, para ele desfazer o
 // filtro daquele Bloco já (como o Painel fecha a linha aberta antes de excluir).
+//
+// Gerar mensagem (História 4.7, FR-53): `aoGerarMensagem` (o 💬 e o item do ⋯) avisa
+// o Painel, que abre a janela da forma 2. O passo "Blocos" do Primeiro uso não passa e
+// o cartão não oferece a mensagem.
 
 type Montador = { modo: "novo" } | { modo: "editar" | "ver"; id: string };
 
@@ -36,6 +40,7 @@ export function BlocosDoMes({
   ativoId,
   aoFiltrar,
   aoExcluindo,
+  aoGerarMensagem,
 }: {
   /** Os Lançamentos do Mês aberto (a memória do Painel). */
   linhas: readonly LancamentoParaProjetar[];
@@ -46,6 +51,8 @@ export function BlocosDoMes({
   aoFiltrar?: (id: string) => void;
   /** O Bloco vai ser excluído (antes de gravar). */
   aoExcluindo?: (id: string) => void;
+  /** O 💬 ou "Gerar mensagem" do ⋯ de um Bloco. Sem isto, o cartão não oferece a mensagem. */
+  aoGerarMensagem?: (id: string) => void;
 }) {
   const toast = useToast();
   const blocosLidos = useLinhas("blocos");
@@ -131,6 +138,7 @@ export function BlocosDoMes({
         aoAlternarReordenar={() => setReordenando(!reordenandoDe)}
         aoEditar={(id) => setMontador({ modo: "editar", id })}
         aoVerCalculo={(id) => setMontador({ modo: "ver", id })}
+        aoGerarMensagem={aoGerarMensagem}
         aoExcluir={setExcluindo}
         aoMudarOrdem={(ids) => void mudarOrdem(ids)}
       />

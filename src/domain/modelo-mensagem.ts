@@ -26,7 +26,15 @@ import { formatarMesExtenso } from "./datas";
 import { formatarParcela } from "./importacao-fatura";
 import { TEXTOS_GERAR, TEXTOS_MODELO } from "./mensagens";
 import { nomeExibido } from "./painel";
-import { projetarMensagem, type LancamentoParaMensagem, type ProjecaoDaMensagem } from "./projecoes";
+import { SIMBOLO_OPERACAO } from "./formula";
+import {
+  projetarMensagem,
+  type GrupoDoBloco,
+  type LancamentoParaMensagem,
+  type ProjecaoDaMensagem,
+  type ProjecaoDoBloco,
+} from "./projecoes";
+import type { Resultado } from "./resultado";
 
 // ------------------------------------------------------------------ o modelo
 
@@ -320,6 +328,8 @@ export function linhasDaMensagem(
 export type MensagemGerada =
   | { estado: "pronta"; texto: string; totalCentavos: number }
   | { estado: "nada_a_cobrar" }
+  /** Só do Bloco (4.7): a Fórmula não calcula. */
+  | { estado: "sem_valor" }
   | { estado: "modelo_vazio" }
   | { estado: "modelo_sem_campos" };
 
@@ -345,6 +355,61 @@ export function gerarMensagem(
     totalCentavos: projecao.totalCentavos,
   });
   return { estado: "pronta", texto, totalCentavos: projecao.totalCentavos };
+}
+
+// -------------------------------------------- gerar a mensagem do Bloco (4.7)
+
+/** O recuo dos itens embaixo do grupo. */
+export const RECUO_DO_GRUPO = "  ";
+
+/**
+ * A linha de um grupo da forma 2:
+ *
+ *     Nome: R$ X                       (somado)
+ *     Nome: R$ X ÷ 2 = R$ Y            (com × ou ÷; vários: R$ X ÷ 2 × 3 = R$ Y)
+ *     Menos Nome: - R$ X               (subtraído)
+ *     Menos Nome: R$ X ÷ 2 = - R$ Y    (subtraído com × ou ÷: o último valor é o que o grupo tira)
+ *     Valor fixo: R$ X                 (número solto; "Menos Valor fixo: - R$ X" se subtraído)
+ *
+ * O texto do grupo é sempre o valor: as caixas do modelo só mandam nos itens.
+ */
+export function linhaDoGrupo(grupo: Pick<GrupoDoBloco, "nome" | "subtraido" | "valorFixo" | "subtotalCentavos" | "fatores" | "resultadoCentavos">): string {
+  const rotulo = grupo.valorFixo ? TEXTOS_GERAR.valor_fixo : grupo.nome;
+  const prefixo = grupo.subtraido ? `${TEXTOS_GERAR.menos} ` : "";
+  if (grupo.valorFixo || grupo.fatores.length === 0) {
+    return `${prefixo}${rotulo}: ${formatarDinheiro(grupo.resultadoCentavos)}`;
+  }
+  const conta = [
+    formatarDinheiro(grupo.subtotalCentavos),
+    ...grupo.fatores.map((f) => `${SIMBOLO_OPERACAO[f.operacao]} ${f.texto}`),
+  ].join(" ");
+  return `${prefixo}${rotulo}: ${conta} = ${formatarDinheiro(grupo.resultadoCentavos)}`;
+}
+
+/**
+ * A mensagem da forma 2 (Bloco): cada grupo com a linha do valor e, recuados
+ * embaixo, os itens (`linhaDeDetalhe`, com o "↳ Ajuste" como na 4.6). O total é
+ * o da Fórmula sobre os itens que entram, e `renderizarModelo` põe o modelo em
+ * volta. Com a Fórmula sem valor, ou com total que não passa de R$ 0,00, não há
+ * o que cobrar; o "nada a cobrar" vem antes do modelo, como na forma 1. Um
+ * grupo sem itens (o "Rangel: R$ 0,00") continua na mensagem.
+ */
+export function gerarMensagemDoBloco(modelo: ModeloMensagem, projecao: Resultado<ProjecaoDoBloco>): MensagemGerada {
+  if (!projecao.ok) return { estado: "sem_valor" };
+  const bloco = projecao.valor;
+  if (bloco.totalCentavos <= 0) return { estado: "nada_a_cobrar" };
+  const prontidao = prontidaoDoModelo(modelo);
+  if (prontidao === "vazio") return { estado: "modelo_vazio" };
+  if (prontidao === "sem_campos") return { estado: "modelo_sem_campos" };
+  const detalhes = bloco.grupos.flatMap((g) => [
+    linhaDoGrupo(g),
+    ...linhasDaMensagem(
+      g.itens.map((i) => ({ item: itemDaMensagem(i), ajustes: i.ajustes.map((a) => a.valor_centavos) })),
+      modelo.campos,
+    ).map((linha) => RECUO_DO_GRUPO + linha),
+  ]);
+  const texto = renderizarModelo(modelo, { detalhes, totalCentavos: bloco.totalCentavos });
+  return { estado: "pronta", texto, totalCentavos: bloco.totalCentavos };
 }
 
 // ------------------------------------------------------------------- prévia

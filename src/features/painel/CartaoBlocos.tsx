@@ -21,8 +21,9 @@ import { MenuAcoes, useToqueLongo } from "@/ui/MenuAcoes";
 // Cartão "Blocos" do Painel (UX-DR8, História 4.2, FR-19): cada Bloco é um
 // `block-card` com a bolinha da pessoa (Bloco de um Responsável só), o valor,
 // o subtítulo com a Fórmula legível e, embaixo, ⋯ (Editar fórmula, Ver
-// cálculo, Reordenar, Excluir; o toque longo no cartão abre o mesmo menu) e 💬
-// (Gerar mensagem: só existe, desativado, até as Histórias 4.6 e 4.7). Em
+// cálculo, Gerar mensagem, Reordenar, Excluir; o toque longo no cartão abre o
+// mesmo menu) e 💬 (Gerar mensagem, História 4.7: a forma 2; sem `aoGerarMensagem`,
+// como no passo "Blocos" do Primeiro uso, nem o 💬 nem o item existem). Em
 // "Reordenar" os cartões tremem de leve (só com movimento permitido) e podem
 // ser arrastados pela alça; os botões de mover para antes e depois fazem o
 // mesmo para quem não arrasta (VoiceOver, teclado). O valor muda no lugar: o
@@ -68,6 +69,8 @@ export type PropsCartaoBlocos = {
   aoAlternarReordenar: () => void;
   aoEditar: (id: string) => void;
   aoVerCalculo: (id: string) => void;
+  /** Gera a mensagem do Bloco (o 💬 e o item do ⋯). Sem isto, o cartão não oferece a mensagem. */
+  aoGerarMensagem?: (id: string) => void;
   aoExcluir: (id: string) => void;
   /** Os Blocos na ordem nova (soltou o arrasto ou tocou em mover). */
   aoMudarOrdem: (ids: string[]) => void;
@@ -88,6 +91,7 @@ function BlocoCard({
   registrar,
   aoEditar,
   aoVerCalculo,
+  aoGerarMensagem,
   aoExcluir,
   aoReordenar,
   aoMover,
@@ -106,6 +110,7 @@ function BlocoCard({
   registrar: (id: string, el: HTMLLIElement | null) => void;
   aoEditar: () => void;
   aoVerCalculo: () => void;
+  aoGerarMensagem?: () => void;
   aoExcluir: () => void;
   aoReordenar: () => void;
   aoMover: (sentido: -1 | 1) => void;
@@ -211,20 +216,21 @@ function BlocoCard({
               itens={[
                 { rotulo: T.editar_formula, aoEscolher: aoEditar },
                 { rotulo: T.ver_calculo, aoEscolher: aoVerCalculo },
+                ...(aoGerarMensagem ? [{ rotulo: T.gerar_mensagem, aoEscolher: aoGerarMensagem }] : []),
                 { rotulo: T.reordenar, aoEscolher: aoReordenar },
                 { rotulo: T.excluir_bloco, aoEscolher: aoExcluir, destrutivo: true },
               ]}
             />
-            {/* A mensagem do Bloco é das Histórias 4.6 e 4.7: o botão já existe, desativado. */}
-            <button
-              type="button"
-              disabled
-              aria-label={rotuloMensagemDoBloco(item.nome)}
-              title={T.mensagem_em_breve}
-              className={BOTAO_ICONE}
-            >
-              <span aria-hidden>💬</span>
-            </button>
+            {aoGerarMensagem ? (
+              <button
+                type="button"
+                aria-label={rotuloMensagemDoBloco(item.nome)}
+                onClick={aoGerarMensagem}
+                className={BOTAO_ICONE}
+              >
+                <span aria-hidden>💬</span>
+              </button>
+            ) : null}
           </>
         )}
       </span>
@@ -244,6 +250,7 @@ export function CartaoBlocos({
   aoAlternarReordenar,
   aoEditar,
   aoVerCalculo,
+  aoGerarMensagem,
   aoExcluir,
   aoMudarOrdem,
 }: PropsCartaoBlocos) {
@@ -345,6 +352,7 @@ export function CartaoBlocos({
               registrar={registrar}
               aoEditar={() => aoEditar(item.id)}
               aoVerCalculo={() => aoVerCalculo(item.id)}
+              aoGerarMensagem={aoGerarMensagem ? () => aoGerarMensagem(item.id) : undefined}
               aoExcluir={() => aoExcluir(item.id)}
               aoReordenar={aoAlternarReordenar}
               aoMover={(sentido) => mover(item.id, sentido)}

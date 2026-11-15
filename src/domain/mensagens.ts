@@ -1384,6 +1384,7 @@ export const TEXTOS_BLOCO = {
   inclui_previstos: "inclui previstos",
   editar_formula: "Editar fórmula",
   ver_calculo: "Ver cálculo",
+  gerar_mensagem: "Gerar mensagem",
   excluir_bloco: "Excluir bloco",
   titulo_ver_calculo: "Cálculo do bloco",
   descricao_ver_calculo: "O passo a passo do valor que aparece no Painel.",
@@ -1398,7 +1399,6 @@ export const TEXTOS_BLOCO = {
   usado_em_recebimentos: "Usado em Recebimentos",
   e_meu_bloco: "É o meu Bloco",
   sem_valor: "—",
-  mensagem_em_breve: "A mensagem do Bloco chega numa próxima versão",
   reordenando: "Reordenando os Blocos: arraste ou use mover para antes e depois",
   // Filtrar a grade pelo Bloco (História 4.3).
   filtro_desfeito_excluido: "O Bloco foi excluído e o filtro foi desfeito",
@@ -1529,7 +1529,28 @@ export const TEXTOS_GERAR = {
   mudou: "A mensagem mudou desde que você abriu a janela. Confira o texto antes de copiar.",
   /** O início da linha do Ajuste, logo abaixo da parcela. */
   ajuste: "↳ Ajuste",
+  // A mensagem do Bloco, forma 2 (História 4.7, FR-53).
+  /** O prefixo do grupo subtraído: "Menos Casal". */
+  menos: "Menos",
+  /** O nome do grupo de um número solto na Fórmula. */
+  valor_fixo: "Valor fixo",
+  nada_a_cobrar_bloco: "Nada a cobrar neste bloco",
+  bloco_sem_valor: "Este bloco está sem valor. Edite a fórmula para gerar a mensagem.",
+  /** O toast quando outro aparelho exclui o Bloco com a janela aberta. */
+  bloco_excluido: "O Bloco foi excluído e a janela foi fechada",
 } as const;
+
+/** O aviso da forma 2: quanto dos itens já pagos o Bloco deixou de cobrar. */
+export function rotuloPagosNaoEntram(valor: string): string {
+  return `${valor} já foram pagos e não entram`;
+}
+
+/** O aviso de itens que a Fórmula usa em mais de um operando (e por isso contam em cada grupo). */
+export function rotuloItensEmVariosGrupos(quantidade: number): string {
+  return quantidade === 1
+    ? "1 item aparece em mais de um grupo e conta em cada um, como no Painel"
+    : `${quantidade} itens aparecem em mais de um grupo e contam em cada um, como no Painel`;
+}
 
 /**
  * O aviso dos itens que não entram: "2 itens não entram: 1 já pago, 1 de R$ 0,00".

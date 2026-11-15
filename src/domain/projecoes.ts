@@ -1,14 +1,27 @@
 // Projeções: as linhas que uma Fórmula (`avaliar`) recebe (AD-11). A Fórmula
 // nunca olha direto os Lançamentos: cada tela e cada regra pede a projeção
 // que lhe cabe, e o Painel, o passo a passo e a mensagem somam as mesmas
-// linhas. `projetarMensagem` (4.6, a regra de inclusão da mensagem) está no fim
-// deste arquivo; `projetarPendente` (Épico 6) virá aqui.
+// linhas. `projetarMensagem` (4.6, a regra de inclusão da mensagem) e
+// `projetarMensagemDoBloco` (4.7, a forma 2) estão no fim deste arquivo;
+// `projetarPendente` (Épico 6) virá aqui.
 
 import { unidadesDoMes } from "./divisao";
-import type { LinhaDaFormula } from "./formula";
+import {
+  avaliar,
+  nomeDoOperando,
+  termosDaFormula,
+  textoDaFormula,
+  type FatorDoTermo,
+  type Formula,
+  type LinhaDaFormula,
+  type No,
+  type NomesDaFormula,
+  temOperando,
+} from "./formula";
 import { compararPelaFatura, linhasDoMes } from "./painel";
 import { ehPrevisto } from "./previstos";
 import { rotuloItensDeFora } from "./mensagens";
+import type { Resultado } from "./resultado";
 
 /** As colunas de `lancamentos` que a projeção do Painel lê. */
 export type LancamentoParaProjetar = {
@@ -117,6 +130,11 @@ export type ProjecaoDaMensagem = {
   /** A soma líquida dos itens que entram (estornos reduzem). */
   totalCentavos: number;
   fora: ForaDaMensagem;
+  /**
+   * Os ids dos itens de fora por já estarem pagos, com os Ajustes deles: a 4.7 tira
+   * só estes da conta para dizer quanto "já foi pago" (um previsto não é pago).
+   */
+  idsPagos: readonly string[];
 };
 
 /** "Incluir previstos" só existe num Mês sem Fatura (a tela usa isto para mostrar o interruptor). */
@@ -167,6 +185,7 @@ export function projetarMensagem(
     .sort(compararPelaFatura);
 
   const entram: ItemProjetado[] = [];
+  const idsPagos: string[] = [];
   const porMotivo: Record<MotivoDeFora, number> = { pago: 0, zero: 0, previsto: 0 };
   for (const l of marcadas) {
     const motivo: MotivoDeFora | null =
@@ -179,6 +198,7 @@ export function projetarMensagem(
             : null;
     if (motivo !== null) {
       porMotivo[motivo] += 1;
+      if (motivo === "pago") idsPagos.push(l.id, ...(ajustesDe.get(l.id) ?? []).map((a) => a.id));
       continue;
     }
     const ajustes = (ajustesDe.get(l.id) ?? [])
@@ -200,10 +220,131 @@ export function projetarMensagem(
     entram,
     totalCentavos: entram.reduce((soma, i) => soma + i.liquido_centavos, 0),
     fora: { quantidade: porMotivo.pago + porMotivo.zero + porMotivo.previsto, porMotivo },
+    idsPagos,
   };
 }
 
 /** O aviso da janela: "2 itens não entram: 1 já pago, 1 de R$ 0,00"; vazio se nada ficou de fora. */
 export function avisoDosItensDeFora(fora: ForaDaMensagem): string {
   return rotuloItensDeFora(fora.quantidade, fora.porMotivo);
+}
+
+// ------------------------------------------------- projetarMensagemDoBloco (4.7)
+
+/** Um grupo da forma 2: um termo da Fórmula, com o subtotal, a operação aplicada e os itens dele. */
+export type GrupoDoBloco = {
+  /** "Casal", "Casa", "Todos", "Rangel + Casal" (parêntese de soma); sem o "Menos ". */
+  nome: string;
+  /** A parcela é subtraída ("Menos Casal"). */
+  subtraido: boolean;
+  /** Um número solto na Fórmula: o grupo é "Valor fixo" e não tem itens. */
+  valorFixo: boolean;
+  /** O subtotal da base, em R$ (o que o operando soma sozinho). */
+  subtotalCentavos: number;
+  /** As operações × e ÷ por números aplicadas ao subtotal, na ordem. */
+  fatores: readonly FatorDoTermo[];
+  /** O que o grupo contribui ao total, com sinal (negativo se subtraído), arredondado no fim do termo. */
+  resultadoCentavos: number;
+  /** Os itens da base, na ordem da fatura. Um item pode estar em mais de um grupo. */
+  itens: readonly ItemProjetado[];
+};
+
+export type ProjecaoDoBloco = {
+  mes: string;
+  grupos: readonly GrupoDoBloco[];
+  /** Os itens que entram na mensagem (cada um uma vez), na ordem da fatura. */
+  entram: readonly ItemProjetado[];
+  /** A Fórmula aplicada só aos itens que entram: uma conta, um arredondamento (FR-54). */
+  totalCentavos: number;
+  /** Quanto os itens já pagos tiram do valor do Bloco ("R$ X já foram pagos e não entram"); 0 se nada. */
+  pagosCentavos: number;
+  fora: ForaDaMensagem;
+  /** Quantos itens aparecem em mais de um grupo (e contam em cada um, como no Painel). */
+  itensEmVariosGrupos: number;
+};
+
+/** O nome do grupo: o do operando, ou a Fórmula do parêntese de soma ("Rangel + Casal"). */
+function nomeDaBase(base: No, nomes: NomesDaFormula): string {
+  if (base.tipo === "grupo") return textoDaFormula(base.interno, nomes);
+  if (base.tipo === "numero" || base.tipo === "operacao") return textoDaFormula(base, nomes);
+  return nomeDoOperando(base, nomes);
+}
+
+/**
+ * A mensagem da forma 2 (FR-53): a regra de inclusão da 4.6 sobre os Lançamentos
+ * que a Fórmula usa, mais a Fórmula aplicada só aos itens que entram.
+ *
+ * 1. `avaliar` sobre a projeção do Painel diz quais linhas o Bloco usa; só elas
+ *    viram a Seleção (o aviso de "fora" fala só do Bloco, não do Mês todo).
+ * 2. `projetarMensagem` decide quais entram, com o motivo dos de fora.
+ * 3. Os itens que entram (e os Ajustes deles, com a classificação do próprio
+ *    Lançamento, como no Painel) formam a projeção filtrada.
+ * 4. `avaliar` sobre a filtrada dá o total e o valor de cada termo.
+ *
+ * Erro só quando a Fórmula não calcula (`formula.divisao_por_zero`,
+ * `formula.valor_grande`...): é o Bloco "sem valor" do cartão.
+ */
+export function projetarMensagemDoBloco(
+  formula: Formula,
+  lancamentos: readonly LancamentoParaMensagem[],
+  opcoes: OpcoesDaMensagem,
+  nomes: NomesDaFormula,
+): Resultado<ProjecaoDoBloco> {
+  const painel = projetarPainel(lancamentos, opcoes.mes);
+  const noPainel = avaliar(formula, painel);
+  if (!noPainel.ok) return noPainel;
+
+  const projecao = projetarMensagem(new Set(noPainel.valor.entram), lancamentos, opcoes);
+  const classificacao = new Map(linhasDoMes(lancamentos, opcoes.mes).map((l) => [l.id, l]));
+  const filtrada: LinhaDaFormula[] = [];
+  const deLinha = (id: string, valor: number): LinhaDaFormula => {
+    const l = classificacao.get(id);
+    return { id, valor_centavos: valor, responsavel_id: l?.responsavel_id ?? null, tipo_id: l?.tipo_id ?? null };
+  };
+  for (const item of projecao.entram) {
+    filtrada.push(deLinha(item.id, item.valor_centavos));
+    for (const a of item.ajustes) filtrada.push(deLinha(a.id, a.valor_centavos));
+  }
+  const total = avaliar(formula, filtrada);
+  if (!total.ok) return total;
+
+  const pagos = new Set(projecao.idsPagos);
+  const semPagos = avaliar(
+    formula,
+    painel.filter((l) => !pagos.has(l.id)),
+  );
+  if (!semPagos.ok) return semPagos;
+
+  const grupos: GrupoDoBloco[] = [];
+  for (const termo of termosDaFormula(formula)) {
+    const resultado = avaliar(termo.no, filtrada);
+    if (!resultado.ok) return resultado;
+    const base = avaliar(termo.base, filtrada);
+    if (!base.ok) return base;
+    const valorFixo = !temOperando(termo.base);
+    const deste = new Set(base.valor.entram);
+    grupos.push({
+      nome: valorFixo ? "" : nomeDaBase(termo.base, nomes),
+      subtraido: termo.subtraido,
+      valorFixo,
+      subtotalCentavos: valorFixo ? resultado.valor.valorCentavos : base.valor.valorCentavos,
+      fatores: termo.fatores,
+      resultadoCentavos: termo.subtraido ? -resultado.valor.valorCentavos : resultado.valor.valorCentavos,
+      itens: projecao.entram.filter((i) => deste.has(i.id)),
+    });
+  }
+  const aparicoes = new Map<string, number>();
+  for (const g of grupos) for (const i of g.itens) aparicoes.set(i.id, (aparicoes.get(i.id) ?? 0) + 1);
+  return {
+    ok: true,
+    valor: {
+      mes: opcoes.mes,
+      grupos,
+      entram: projecao.entram,
+      totalCentavos: total.valor.valorCentavos,
+      pagosCentavos: noPainel.valor.valorCentavos - semPagos.valor.valorCentavos,
+      fora: projecao.fora,
+      itensEmVariosGrupos: [...aparicoes.values()].filter((n) => n > 1).length,
+    },
+  };
 }
