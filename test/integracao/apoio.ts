@@ -53,6 +53,7 @@ export function supabaseLocal(prefixo: string) {
 
   async function limpar() {
     for (const u of usuarios) {
+      await admin.from("blocos").delete().eq("owner_id", u.id);
       await admin.from("regras").delete().eq("owner_id", u.id);
       await admin.from("lancamentos").delete().eq("owner_id", u.id);
       await admin.from("series").delete().eq("owner_id", u.id);

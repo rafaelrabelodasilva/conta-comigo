@@ -101,6 +101,11 @@ const repoL = vi.hoisted(() => {
     religar: vi.fn<(id: string, mae: Record<string, unknown>) => Res>(),
   };
 });
+// O repositório de Blocos é falso: "Salvar" só registra o pedido e responde o que o teste mandar.
+const repoB = vi.hoisted(() => ({
+  salvar: vi.fn<(pedido: Record<string, unknown>) => Promise<{ ok: boolean; codigo?: string }>>(async () => ({ ok: true })),
+}));
+vi.mock("@/data/blocos-repo", () => ({ repoBlocos: () => repoB }));
 vi.mock("@/data/lancamentos-repo", () => ({
   repoLancamentos: () => repoL,
   mudancaDaColuna: (m: { coluna: string; valor: unknown }) => ({ [m.coluna]: m.valor }),
@@ -218,7 +223,7 @@ const status = [
 ];
 
 function definir(
-  dados: { faturas?: unknown[]; lancamentos?: unknown[]; fatura_cartoes?: unknown[] },
+  dados: { faturas?: unknown[]; lancamentos?: unknown[]; fatura_cartoes?: unknown[]; blocos?: unknown[]; tipos?: unknown[] },
   st = "pronto",
 ) {
   falso.banco = { faturas: [], fatura_cartoes: [], lancamentos: [], responsaveis, tipos: [], status, ...dados };
@@ -1381,5 +1386,101 @@ describe("Divisão no Painel (História 3.8)", () => {
     await u.click(within(linhasDaGrade()[0]).getAllByRole("cell")[3]);
     expect(linhasDaGrade().map((r) => r.dataset.papel ?? "linha")).toEqual(["cabecalho", "parte", "parte", "linha"]);
     expect(within(screen.getByRole("complementary")).getByRole("button", { name: "Editar divisão" })).toBeTruthy();
+  });
+});
+
+describe("Blocos (História 4.1)", () => {
+  const rangel = {
+    id: "b1",
+    owner_id: "dono",
+    nome: "Rangel",
+    formula: {
+      tipo: "operacao",
+      operacao: "soma",
+      esquerda: { tipo: "responsavel", id: "r-rafael" },
+      direita: {
+        tipo: "grupo",
+        interno: {
+          tipo: "operacao",
+          operacao: "divisao",
+          esquerda: { tipo: "responsavel", id: "r-casal" },
+          direita: { tipo: "numero", valor: "2" },
+        },
+      },
+    },
+    ordem: 1,
+    de_cobranca: false,
+    meu_bloco: false,
+    updated_at: "2026-11-03T12:00:00+00:00",
+  };
+
+  it("sem Blocos: convida a criar o primeiro, com 'Novo bloco'", () => {
+    renderizar();
+    const cartao = screen.getByRole("region", { name: "Blocos" });
+    expect(within(cartao).getByText("Crie seu primeiro Bloco para ver os totais por pessoa")).toBeTruthy();
+    expect((within(cartao).getByRole("button", { name: /Novo bloco/ }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("lista cada Bloco com a Fórmula legível, com os parênteses como montados", () => {
+    definir({ blocos: [rangel] });
+    renderizar();
+    const cartao = screen.getByRole("region", { name: "Blocos" });
+    expect(within(cartao).getByText("Rangel")).toBeTruthy();
+    expect(within(cartao).getByText("Rafael + (Casal ÷ 2)")).toBeTruthy();
+    expect(within(cartao).queryByText("Crie seu primeiro Bloco para ver os totais por pessoa")).toBeNull();
+  });
+
+  it("enquanto os Blocos carregam, o botão espera e a frase de vazio não aparece", () => {
+    falso.statusTabelas = { blocos: "carregando" };
+    falso.versao++;
+    renderizar();
+    const cartao = screen.getByRole("region", { name: "Blocos" });
+    expect((within(cartao).getByRole("button", { name: /Novo bloco/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(cartao).queryByText("Crie seu primeiro Bloco para ver os totais por pessoa")).toBeNull();
+  });
+
+  it("'Novo bloco' abre o Montador sobre o Mês aberto e 'Salvar' grava o pedido", async () => {
+    definir({
+      lancamentos: [lanc("2026-11", { valor_centavos: 563935, responsavel_id: "r-casal", tipo_id: "t-casa" })],
+      tipos: [{ id: "t-casa", nome: "Casa", arquivado: false }],
+    });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: /Novo bloco/ }));
+    const janela = await screen.findByRole("dialog", { name: "Novo bloco" });
+    await u.click(within(janela).getByRole("button", { name: "Casal" }));
+    expect(sem(janela.textContent)).toContain("R$ 5.639,35");
+    await u.type(within(janela).getByLabelText("Nome"), "Casal");
+    await u.click(within(janela).getByRole("button", { name: "Salvar" }));
+    expect(repoB.salvar).toHaveBeenCalledOnce();
+    expect(repoB.salvar.mock.calls[0][0]).toMatchObject({
+      p_id: null,
+      p_nome: "Casal",
+      p_formula: { tipo: "responsavel", id: "r-casal" },
+      p_ordem: 1,
+    });
+    expect(await screen.findByText("Bloco salvo")).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "Novo bloco" })).toBeNull();
+  });
+
+  it("se a gravação falhar, avisa e o Montador continua aberto", async () => {
+    repoB.salvar.mockResolvedValueOnce({ ok: false, codigo: "salvar.falhou" });
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: /Novo bloco/ }));
+    const janela = await screen.findByRole("dialog", { name: "Novo bloco" });
+    await u.click(within(janela).getByRole("button", { name: "Todos" }));
+    await u.type(within(janela).getByLabelText("Nome"), "Total");
+    await u.click(within(janela).getByRole("button", { name: "Salvar" }));
+    expect(await screen.findByText(mensagem("salvar.falhou"))).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Novo bloco" })).toBeTruthy();
+  });
+
+  it("um Bloco novo gravado em outro aparelho aparece na lista sem recarregar", () => {
+    renderizar();
+    const cartao = screen.getByRole("region", { name: "Blocos" });
+    expect(within(cartao).queryByText("Rangel")).toBeNull();
+    mudarBanco("blocos", (ls) => [...ls, rangel]);
+    expect(within(cartao).getByText("Rangel")).toBeTruthy();
   });
 });

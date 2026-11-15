@@ -39,6 +39,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      blocos: {
+        Row: {
+          created_at: string
+          de_cobranca: boolean
+          formula: NonNullable<Json>
+          id: string
+          meu_bloco: boolean
+          nome: string
+          ordem: number
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          de_cobranca?: boolean
+          formula: NonNullable<Json>
+          id?: string
+          meu_bloco?: boolean
+          nome: string
+          ordem: number
+          owner_id?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          de_cobranca?: boolean
+          formula?: NonNullable<Json>
+          id?: string
+          meu_bloco?: boolean
+          nome?: string
+          ordem?: number
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       config_ciclo: {
         Row: {
           created_at: string
@@ -610,6 +646,33 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "responsaveis"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      salvar_bloco: {
+        Args: {
+          p_de_cobranca: boolean
+          p_formula: Json
+          p_id?: string
+          p_meu_bloco: boolean
+          p_nome: string
+          p_ordem: number
+        }
+        Returns: {
+          created_at: string
+          de_cobranca: boolean
+          formula: NonNullable<Json>
+          id: string
+          meu_bloco: boolean
+          nome: string
+          ordem: number
+          owner_id: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "blocos"
           isOneToOne: false
           isSetofReturn: true
         }

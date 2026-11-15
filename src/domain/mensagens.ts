@@ -126,6 +126,25 @@ export const MENSAGENS = {
   "lancamento.apelido_longo": "Use até 60 caracteres.",
   "lancamento.observacao_longa": "Use até 500 caracteres.",
   "lancamento.sem_cartao": "Escolha o cartão",
+  // História 4.1: a Fórmula do Bloco. As razões que deixam "Salvar" desativado.
+  "formula.vazia": "Monte a fórmula tocando nas fichas",
+  "formula.invalida": "Não foi possível ler esta fórmula.",
+  "formula.grande": "A fórmula ficou grande demais",
+  "formula.comeca_com_operacao": "A fórmula começa com uma operação",
+  "formula.grupo_comeca_com_operacao": "Um parêntese não pode começar com uma operação",
+  "formula.operacoes_seguidas": "Há duas operações seguidas",
+  "formula.operacao_sem_valor": "Falta um valor depois da operação",
+  "formula.grupo_vazio": "Há um parêntese vazio",
+  "formula.fecha_sobrando": "Há um parêntese fechado sem abrir",
+  "formula.falta_operacao": "Falta uma operação entre dois valores",
+  "formula.termina_com_operacao": "A fórmula termina com uma operação",
+  "formula.parentese_aberto": "Falta fechar um parêntese",
+  "formula.divisao_por_zero": "Divisão por zero",
+  "formula.dinheiro_com_dinheiro": "× e ÷ pedem um número de um dos lados, não dois valores em R$",
+  "formula.valor_grande": "O valor da fórmula ficou grande demais",
+  "bloco.nome_vazio": "Dê um nome ao Bloco",
+  "bloco.nome_longo": "Use até 30 caracteres.",
+  "bloco.nome_repetido": "Já existe um Bloco com esse nome.",
 } as const;
 
 /** Textos da janela "Importar fatura" (UX-DR20, mockup `importar.html`). */
@@ -1240,4 +1259,53 @@ export function rotuloApagarHistorico(mes: string, quantidade: number): string {
 /** Título da confirmação de apagar o histórico de um Mês. */
 export function tituloApagarHistorico(mes: string): string {
   return `Apagar o histórico de ${formatarMes(mes)}?`;
+}
+
+/** Textos do Montador de Bloco e do cartão "Blocos" do Painel (História 4.1, UX-DR16). */
+export const TEXTOS_BLOCO = {
+  titulo_cartao: "Blocos",
+  novo: "Novo bloco",
+  sem_blocos: "Crie seu primeiro Bloco para ver os totais por pessoa",
+  titulo: "Novo bloco",
+  titulo_editar: "Editar bloco",
+  descricao: "Monte a fórmula tocando nas fichas. Nada é digitado.",
+  nome: "Nome",
+  formula: "Fórmula",
+  area_formula: "Fórmula do Bloco",
+  dica_vazia: "Toque nas fichas abaixo",
+  dica_remover: "Toque numa ficha para remover",
+  responsaveis: "Responsáveis",
+  tipos: "Tipos",
+  operacoes: "Operações e outros",
+  todos: "Todos",
+  numero: "Número…",
+  responsavel_em_tipo: "Responsável em Tipo…",
+  responsavel: "Responsável",
+  tipo: "Tipo",
+  usar: "Usar",
+  campo_numero: "Número",
+  usar_numero: "Usar número",
+  resultado: "Resultado",
+  passo_a_passo: "Passo a passo",
+  arredondado: "arredondado só no final",
+  usar_em_recebimentos: "Usar em Recebimentos",
+  meu_bloco: "É o meu Bloco",
+  salvar: "Salvar",
+  salvo: "Bloco salvo",
+  abrir_parentese: "Abrir parêntese",
+  fechar_parentese: "Fechar parêntese",
+  sem_fichas: "Não há Responsáveis nem Tipos para escolher. Cadastre-os em Configurações.",
+} as const;
+
+/** O nome falado de uma operação, para o botão. */
+export const ROTULO_OPERACAO = {
+  soma: "Somar",
+  subtracao: "Subtrair",
+  multiplicacao: "Multiplicar",
+  divisao: "Dividir",
+} as const;
+
+/** Rótulo do VoiceOver de uma ficha da Fórmula: "Remover Casal". */
+export function rotuloRemoverFicha(ficha: string): string {
+  return `Remover ${ficha}`;
 }
