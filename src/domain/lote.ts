@@ -15,6 +15,8 @@
 //   se a mãe sai da fila, `revisado_em`. Ajuste não tem motivo nem ensina Regra.
 // - `entradasDeSugestoes`: "Aplicar sugestões" (o que o ✓ de cada item grava).
 // - `totalDaSelecao`: a soma líquida dos selecionados (mãe mais Ajustes).
+// - `parcelasDoLote`: as parcelas com Série que o lote gravou, com a classificação
+//   de antes e de depois (o que a propagação aos previstos olha).
 
 import { idsQueAcompanham } from "./ajustes";
 import type { MotivoRevisao } from "./classificacao";
@@ -323,4 +325,47 @@ export function totalDaSelecao(
     for (const idAjuste of idsQueAcompanham(id, linhas)) somar(idAjuste);
   }
   return total;
+}
+
+/** O que `parcelasDoLote` lê de uma linha gravada pelo lote. */
+type LinhaGravadaDoLote = {
+  id: string;
+  serie_id: string | null;
+  parcela_n: number | null;
+  lancado_por: string;
+  responsavel_id: string | null;
+  tipo_id: string | null;
+};
+
+/**
+ * As parcelas do lote com Série, com a classificação de antes (o corpo de `antes`
+ * só tem o que mudou) e a de depois. Serve ao Revisar e à barra de Seleção do
+ * Painel, que propagam a classificação aos previstos da Série (História 3.5).
+ */
+export function parcelasDoLote<L extends LinhaGravadaDoLote>(resultado: {
+  antes: readonly ItemDoLote[];
+  linhas: readonly L[];
+}): {
+  serie_id: string | null;
+  parcela_n: number | null;
+  lancado_por: L["lancado_por"];
+  antes: { responsavel_id: string | null; tipo_id: string | null };
+  depois: { responsavel_id: string | null; tipo_id: string | null };
+}[] {
+  const antesDe = new Map(resultado.antes.map((i) => [i.id, i.corpo]));
+  return resultado.linhas
+    .filter((l) => l.serie_id !== null)
+    .map((l) => {
+      const a = antesDe.get(l.id);
+      return {
+        serie_id: l.serie_id,
+        parcela_n: l.parcela_n,
+        lancado_por: l.lancado_por,
+        antes: {
+          responsavel_id: a && "responsavel_id" in a ? (a.responsavel_id ?? null) : l.responsavel_id,
+          tipo_id: a && "tipo_id" in a ? (a.tipo_id ?? null) : l.tipo_id,
+        },
+        depois: { responsavel_id: l.responsavel_id, tipo_id: l.tipo_id },
+      };
+    });
 }

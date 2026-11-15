@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { conferir } from "@/domain/conferencia";
 import { alternarSelecao, alternarTodos, estadoCaixaCabecalho, selecaoValida } from "@/domain/lancamento";
-import { entradasDeSugestoes, totalDaSelecao, type EntradaDoLote } from "@/domain/lote";
+import { entradasDeSugestoes, parcelasDoLote, totalDaSelecao, type EntradaDoLote } from "@/domain/lote";
 import {
   TEXTOS_REVISAR as T,
   mensagem,
@@ -23,9 +23,7 @@ import { ativos as tiposAtivos } from "@/domain/tipos";
 import {
   repoLancamentosRevisar,
   type AnteriorDaFila,
-  type LinhaLancamento,
   type ParcelaReclassificada,
-  type ResultadoLote,
 } from "@/data/lancamentos-repo";
 import { gerenciador, gerenciadorFila, useFilaRevisar, useLinhas } from "@/data/realtime";
 import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
@@ -62,26 +60,6 @@ import { JanelaMudar } from "./JanelaMudar";
 // Previstos (História 3.5): classificar uma parcela real preenche sozinho os
 // previstos vazios da Série; se algum tem outro valor (✓ e "Mudar"), a faixa
 // "Só este" / "Aplicar a todos" pergunta. No lote, só o preenchimento.
-
-/** As parcelas do lote com Série, com a classificação de antes (o corpo de `antes` só tem o que mudou). */
-function parcelasDoLote(r: Extract<ResultadoLote, { ok: true }>): ParcelaReclassificada[] {
-  const antesDe = new Map(r.antes.map((i) => [i.id, i.corpo as Partial<Pick<LinhaLancamento, "responsavel_id" | "tipo_id">>]));
-  return r.linhas
-    .filter((l) => l.serie_id !== null)
-    .map((l) => {
-      const a = antesDe.get(l.id);
-      return {
-        serie_id: l.serie_id,
-        parcela_n: l.parcela_n,
-        lancado_por: l.lancado_por,
-        antes: {
-          responsavel_id: a && "responsavel_id" in a ? (a.responsavel_id ?? null) : l.responsavel_id,
-          tipo_id: a && "tipo_id" in a ? (a.tipo_id ?? null) : l.tipo_id,
-        },
-        depois: { responsavel_id: l.responsavel_id, tipo_id: l.tipo_id },
-      };
-    });
-}
 
 function EsqueletoRevisar() {
   return (

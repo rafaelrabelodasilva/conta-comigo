@@ -57,7 +57,8 @@ import { MenuAcoes, useToqueLongo } from "@/ui/MenuAcoes";
 // seleciona (fundo `selection`), a `person-tag` só filtra, e o ⋯ ou o toque
 // longo abrem o menu "Abrir" / "Excluir". A linha aberta no painel leva uma
 // borda à esquerda em `accent-line`. A caixa do cabeçalho marca ou desmarca
-// as linhas da grade (fica parcial com parte marcada).
+// as linhas da grade (fica parcial com parte marcada). A linha fixa (aberta no
+// painel, fora do filtro) mostra a caixa desativada: não entra na Seleção (4.4).
 //
 // Ajustes de centavos (História 2.8): cada Ajuste vem logo abaixo da mãe, em
 // qualquer ordenação, recuado 16 px, com "↳" antes do Nome e, embaixo, o
@@ -118,6 +119,8 @@ export type PropsGradeLancamentos = {
    * enquanto o painel estiver nela, mas não entra no total.
    */
   linhaFixa?: LancamentoGrade | null;
+  /** A linha que não pode ser marcada (a fixa, fora do filtro): a caixa fica desativada. */
+  semCaixaId?: string | null;
 };
 
 /** Nomes por id, para o núcleo ordenar pelo que a grade mostra. */
@@ -155,16 +158,19 @@ function Caixa({
   rotulo,
   estado,
   aoMudar,
+  desativada = false,
 }: {
   rotulo: string;
   estado: EstadoCaixa;
   aoMudar: () => void;
+  desativada?: boolean;
 }) {
   return (
-    <label className="flex min-h-toque w-full cursor-pointer items-center justify-center">
+    <label className={cn("flex min-h-toque w-full items-center justify-center", desativada ? "cursor-not-allowed opacity-50" : "cursor-pointer")}>
       <input
         type="checkbox"
         aria-label={rotulo}
+        disabled={desativada}
         checked={estado === "todos"}
         ref={(el) => {
           if (el) el.indeterminate = estado === "parcial";
@@ -249,6 +255,8 @@ type PropsLinha = {
   aoSelecionar: (id: string) => void;
   aoAbrir: (id: string) => void;
   aoExcluir: (id: string) => void;
+  /** A caixa fica desativada (a linha fixa, fora do filtro, não entra na Seleção). */
+  semCaixa?: boolean;
   /** Cabeçalho da mãe dividida ou parte dela (História 3.8). */
   papel?: PapelNaGrade;
   aoDividir?: (id: string) => void;
@@ -274,6 +282,7 @@ function LinhaGrade({
   aoSelecionar,
   aoAbrir,
   aoExcluir,
+  semCaixa = false,
   papel,
   aoDividir,
 }: PropsLinha) {
@@ -340,7 +349,12 @@ function LinhaGrade({
       <td className={cn(CELULA, FIXA_CAIXA, fundo, aberta && "shadow-[inset_3px_0_0_var(--color-accent-line)]")}>
         {/* O Ajuste não tem caixa: segue a seleção da mãe; o cabeçalho da Divisão também não (valem as partes). */}
         {mae || papel === "cabecalho" ? null : (
-          <Caixa rotulo={rotuloSelecionar(nome)} estado={selecionada ? "todos" : "nenhum"} aoMudar={() => aoSelecionar(l.id)} />
+          <Caixa
+            rotulo={rotuloSelecionar(nome)}
+            estado={selecionada ? "todos" : "nenhum"}
+            aoMudar={() => aoSelecionar(l.id)}
+            desativada={semCaixa}
+          />
         )}
       </td>
       <td className={cn(CELULA, FIXA_NOME, fundo)}>
@@ -457,6 +471,7 @@ export function GradeLancamentos({
   aoAbrir = nada,
   aoExcluir = nada,
   linhaFixa = null,
+  semCaixaId = null,
 }: PropsGradeLancamentos) {
   // A linha aberta que saiu do filtro continua na grade (opção A), fora do total.
   const comFixa = linhaFixa && !linhas.some((l) => l.id === linhaFixa.id) ? [...linhas, linhaFixa] : linhas;
@@ -505,6 +520,7 @@ export function GradeLancamentos({
               aoSelecionar={aoSelecionar}
               aoAbrir={aoAbrir}
               aoExcluir={aoExcluir}
+              semCaixa={l.id === semCaixaId}
             />
           ))}
         </tbody>

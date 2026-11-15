@@ -218,3 +218,18 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-filtrar-a-grade-pelo-bloco.md`
   summary: Num Bloco sem valor (a Fórmula não calcula) o botão de filtro fica desativado e, em alguns navegadores, o toque longo no corpo do cartão não abre o ⋯ (só o botão ⋯).
   evidence: Low. Um botão desativado não recebe eventos de ponteiro; hoje só acontece com Fórmula que estoura os números seguros, que o Montador já recusa na maioria dos casos.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-4-selecionar-e-ver-o-total.md`
+  summary: Conferir no iPad e no PC a barra de Seleção do Painel: a altura e o Toast acima dela, a barra deixando livre a coluna do painel lateral em lg e escondida abaixo de lg, o rodapé da grade sem ficar atrás dela, as caixas de 44 pt, o ⌘/Ctrl+A no navegador de verdade, e o VoiceOver anunciando "N selecionados · R$ total" desde a primeira marcação (a região fica no DOM, vazia, antes) e a cada toque.
+  evidence: Low, não verificado. O jsdom só confere o DOM, os nomes e as classes; o anúncio de uma região que muda de vazia para cheia só se prova num leitor de tela. Junta-se à pendência do VoiceOver da 2.4 e da 3.3.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-4-selecionar-e-ver-o-total.md`
+  summary: A barra de lote do Revisar (3.3) ainda tem a região `role="status"` dentro da barra, que nasce junto com ela; se o VoiceOver não anunciar a primeira marcação lá, aplicar o mesmo da 4.4 (região fixa e vazia no DOM, `regiaoPropria={false}`).
+  evidence: Low. A base `BarraSelecao` já aceita as duas formas; só o Painel usa a região fixa.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-4-selecionar-e-ver-o-total.md`
+  summary: Excluir em lote manda todos os ids (marcadas e Ajustes) num `UPDATE … IN (…)` pelo PostgREST; com centenas de ids a URL pode passar do limite de tamanho. Se acontecer, trocar por uma RPC (migração) ou gravar em blocos.
+  evidence: Low, não testado acima de poucas linhas. Um Mês tem em média algumas dezenas de Lançamentos; "selecionar todos" e "Excluir" num Mês inteiro é o pior caso.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-4-selecionar-e-ver-o-total.md`
+  summary: "Classificar em lote" não limpa a Observação (em branco é "não muda") e a parte de uma Divisão só recebe o Status; se Rafael sentir falta, acrescentar "Limpar observação" na janela e decidir se Tipo e Observação das partes devem seguir para a mãe.
+  evidence: Low. Decisão da 4.4: o lote atribui, não apaga; Tipo e Observação das partes seguem a mãe (3.8), então gravá-los na parte divergiria dela.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-4-selecionar-e-ver-o-total.md`
+  summary: Marcar linhas e depois digitar na busca (ou mudar um filtro) tira da Seleção as linhas que saem da grade, e elas não voltam ao limpar o filtro; se Rafael quiser juntar linhas de filtros diferentes numa mensagem só, a Seleção teria de sobreviver ao filtro (com a barra dizendo quantas estão escondidas).
+  evidence: Low. Decisão da 4.4 (spec, "Filtro que muda com itens marcados"): "Excluir" e "Classificar em lote" nunca agem em linha invisível.

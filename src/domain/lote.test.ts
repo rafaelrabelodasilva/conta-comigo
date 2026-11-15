@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   COLUNAS_DO_LOTE,
   entradasDeSugestoes,
+  parcelasDoLote,
   planejarGravacao,
   planejarLote,
   totalDaSelecao,
@@ -301,5 +302,42 @@ describe("totalDaSelecao", () => {
     expect(totalDaSelecao(new Set(["m", "aj"]), linhas)).toBe(992);
     expect(totalDaSelecao(new Set(["fantasma", "ex"]), linhas)).toBe(0);
     expect(totalDaSelecao(new Set(), linhas)).toBe(0);
+  });
+});
+
+describe("parcelasDoLote", () => {
+  const gravada = (id: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    serie_id: "s1",
+    parcela_n: 2,
+    lancado_por: "fatura",
+    responsavel_id: CASAL,
+    tipo_id: CASA,
+    ...extra,
+  });
+
+  it("só as parcelas com Série, com a classificação de antes (o que mudou) e a de depois", () => {
+    const r = parcelasDoLote({
+      antes: [{ id: "a", corpo: { responsavel_id: RAFAEL } }],
+      linhas: [gravada("a"), gravada("b", { serie_id: null })],
+    });
+    expect(r).toEqual([
+      {
+        serie_id: "s1",
+        parcela_n: 2,
+        lancado_por: "fatura",
+        antes: { responsavel_id: RAFAEL, tipo_id: CASA },
+        depois: { responsavel_id: CASAL, tipo_id: CASA },
+      },
+    ]);
+  });
+
+  it("coluna que o lote não tocou fica como está nos dois lados; nulo vira nulo", () => {
+    const r = parcelasDoLote({
+      antes: [{ id: "a", corpo: { tipo_id: null } }],
+      linhas: [gravada("a", { responsavel_id: null })],
+    });
+    expect(r[0].antes).toEqual({ responsavel_id: null, tipo_id: null });
+    expect(r[0].depois).toEqual({ responsavel_id: null, tipo_id: CASA });
   });
 });
