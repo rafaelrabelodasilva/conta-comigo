@@ -27,6 +27,8 @@ import {
   rotuloProximoCiclo,
   rotuloProximosPassos,
   TEXTOS_PASSO,
+  TEXTOS_MODELO,
+  rotuloPrevia,
   rotuloRegistros,
   tituloEmUso,
   tituloExcluir,
@@ -306,6 +308,7 @@ describe("textos do Primeiro uso (História 1.8)", () => {
       ROTULOS.status,
       ROTULOS.importar_planilha,
       ROTULOS.blocos,
+      ROTULOS.modelo_mensagem,
       ROTULOS.ciclo,
     ]);
     for (const passo of PASSOS_PRIMEIRO_USO) {
@@ -324,6 +327,37 @@ describe("textos do Primeiro uso (História 1.8)", () => {
     expect(ROTULOS.retomar_primeiro_uso).toBe("Retomar o Primeiro uso");
     expect(mensagem("rascunho.nao_salvo")).toBe("Você digitou algo que não foi salvo.");
     expect([ROTULOS.voltar_para_salvar, ROTULOS.descartar]).toEqual(["Voltar para salvar", "Descartar"]);
+  });
+});
+
+describe("textos do Modelo da mensagem (História 4.5)", () => {
+  it("os erros do modelo vêm do mapa único", () => {
+    for (const codigo of [
+      "modelo.saudacao_longa",
+      "modelo.frase_longa",
+      "modelo.pix_longo",
+      "modelo.rodape_longo",
+      "modelo.marcador_invalido",
+      "modelo.chaves_fora_da_frase",
+      "modelo.sem_campos",
+    ]) {
+      expect(ehCodigoConhecido(codigo)).toBe(true);
+      expect(mensagem(codigo)).not.toBe(mensagem("erro.desconhecido"));
+    }
+    expect(mensagem("modelo.sem_campos")).toBe("Marque ao menos um campo da linha de detalhe.");
+  });
+
+  it("os fixos do formato da mensagem", () => {
+    expect(TEXTOS_MODELO.titulo_detalhes).toBe("Detalhes:");
+    expect(TEXTOS_MODELO.rotulo_total).toBe("Total:");
+    expect(TEXTOS_MODELO.prefixo_pix).toBe("Pix");
+    expect(ROTULOS.modelo_mensagem).toBe("Modelo da mensagem");
+  });
+
+  it("a legenda da prévia diz de onde vêm os itens e o que o total é", () => {
+    expect(rotuloPrevia("mes", 5, "novembro/26")).toBe("Prévia com 5 lançamentos de novembro/26. O total é o desses itens.");
+    expect(rotuloPrevia("mes", 1, "novembro/26")).toBe("Prévia com 1 lançamento de novembro/26. O total é o desses itens.");
+    expect(rotuloPrevia("exemplo", 3, "")).toBe("Prévia com itens de exemplo: o Mês atual ainda não tem lançamentos a cobrar.");
   });
 });
 

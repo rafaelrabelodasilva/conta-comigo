@@ -35,6 +35,13 @@ export const MENSAGENS = {
   "app.em_breve": "Esta tela ainda está sendo construída.",
   "painel.vazio": "Importe sua primeira fatura",
   "rascunho.nao_salvo": "Você digitou algo que não foi salvo.",
+  "modelo.saudacao_longa": "Use até 120 caracteres.",
+  "modelo.frase_longa": "Use até 200 caracteres.",
+  "modelo.pix_longo": "Use até 300 caracteres.",
+  "modelo.rodape_longo": "Use até 500 caracteres.",
+  "modelo.marcador_invalido": "Só existe o marcador {total}. Confira as chaves { }.",
+  "modelo.chaves_fora_da_frase": "As chaves { } só valem como {total}, na frase do total.",
+  "modelo.sem_campos": "Marque ao menos um campo da linha de detalhe.",
   "carregar.falhou": "Não foi possível carregar.",
   "salvar.falhou": "Não foi possível salvar. Tente de novo.",
   "conexao.sem_conexao": "Sem conexão. Você pode consultar, mas não alterar.",
@@ -1139,6 +1146,7 @@ export const ROTULOS = {
   regras_aprendidas: "Regras aprendidas",
   importar_planilha: "Importar planilha",
   blocos: "Blocos",
+  modelo_mensagem: "Modelo da mensagem",
 } as const;
 
 /**
@@ -1174,6 +1182,12 @@ export const TEXTOS_PASSO = {
     pergunta: "Quais totais você quer ver no Painel?",
     ajuda:
       "Um Bloco é um total com nome, como “Rangel + (Casal ÷ 2)”. Monte tocando nas fichas. Sem Lançamentos ainda, os valores aparecem zerados. Dá para pular e criar depois, no Painel.",
+  },
+  mensagem: {
+    secao: ROTULOS.modelo_mensagem,
+    pergunta: "Como você quer escrever a mensagem de cobrança?",
+    ajuda:
+      "Defina a saudação, a frase do total, a chave Pix e o rodapé, e escolha os campos de cada linha. A prévia mostra como a mensagem vai ficar. Dá para pular e definir depois, em Configurações.",
   },
   ciclo: {
     secao: ROTULOS.ciclo,
@@ -1453,4 +1467,39 @@ export const ROTULO_OPERACAO = {
 /** Rótulo do VoiceOver de uma ficha da Fórmula: "Remover Casal". */
 export function rotuloRemoverFicha(ficha: string): string {
   return `Remover ${ficha}`;
+}
+
+/** Textos de Configurações → Modelo da mensagem e da mensagem em si (História 4.5, FR-23). */
+export const TEXTOS_MODELO = {
+  /** Fixos do formato (EXPERIENCE.md, "Formato da mensagem"): não são campos do modelo. */
+  prefixo_pix: "Pix",
+  titulo_detalhes: "Detalhes:",
+  rotulo_total: "Total:",
+  descricao:
+    "Esse é o texto padrão da mensagem de cobrança, igual para todas as pessoas. O título “Detalhes:” e a linha “Total:” no fim entram sozinhos.",
+  saudacao: "Saudação",
+  frase_total: "Frase do total",
+  ajuda_frase: "Escreva {total} onde o valor deve aparecer.",
+  chave_pix: "Chave Pix",
+  ajuda_pix: "A mensagem escreve “Pix” antes da chave.",
+  rodape: "Rodapé",
+  campos_da_linha: "Campos da linha de detalhe",
+  campo_nome: "Nome ou Apelido",
+  campo_parcela: "Parcela",
+  campo_valor: "Valor",
+  sem_marcador: "A frase não tem {total}. O valor só vai aparecer na linha “Total:” do fim.",
+  previa: "Prévia",
+  previa_vazia: "O modelo está vazio. Preencha os campos para ver a mensagem.",
+  mudou_em_outro_aparelho: "Este modelo mudou em outro aparelho. Seu rascunho continua aqui.",
+  usar_modelo_salvo: "Usar o modelo salvo",
+  salvo: "Modelo salvo",
+} as const;
+
+/** A legenda da prévia: de onde vieram os itens e o que o total quer dizer. */
+export function rotuloPrevia(origem: "mes" | "exemplo", quantidade: number, mes: string): string {
+  if (origem === "exemplo") {
+    return "Prévia com itens de exemplo: o Mês atual ainda não tem lançamentos a cobrar.";
+  }
+  const itens = quantidade === 1 ? "1 lançamento" : `${quantidade} lançamentos`;
+  return `Prévia com ${itens} de ${mes}. O total é o desses itens.`;
 }

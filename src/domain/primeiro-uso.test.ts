@@ -10,9 +10,9 @@ import {
 } from "./primeiro-uso";
 
 describe("passos do Primeiro uso", () => {
-  it("seguem a ordem Responsáveis → Tipos → Status → Importar planilha → Blocos → Ciclo", () => {
-    expect(PASSOS_PRIMEIRO_USO).toEqual(["responsaveis", "tipos", "status", "planilha", "blocos", "ciclo"]);
-    expect(PASSOS_PRIMEIRO_USO.map(numeroDoPasso)).toEqual([1, 2, 3, 4, 5, 6]);
+  it("seguem a ordem Responsáveis → Tipos → Status → Importar planilha → Blocos → Mensagem → Ciclo", () => {
+    expect(PASSOS_PRIMEIRO_USO).toEqual(["responsaveis", "tipos", "status", "planilha", "blocos", "mensagem", "ciclo"]);
+    expect(PASSOS_PRIMEIRO_USO.map(numeroDoPasso)).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 
   it("o próximo passo anda um; no último não há próximo", () => {
@@ -20,7 +20,8 @@ describe("passos do Primeiro uso", () => {
     expect(proximoPasso("tipos")).toBe("status");
     expect(proximoPasso("status")).toBe("planilha");
     expect(proximoPasso("planilha")).toBe("blocos");
-    expect(proximoPasso("blocos")).toBe("ciclo");
+    expect(proximoPasso("blocos")).toBe("mensagem");
+    expect(proximoPasso("mensagem")).toBe("ciclo");
     expect(proximoPasso("ciclo")).toBeNull();
   });
 
@@ -30,12 +31,13 @@ describe("passos do Primeiro uso", () => {
     expect(passoAnterior("status")).toBe("tipos");
     expect(passoAnterior("planilha")).toBe("status");
     expect(passoAnterior("blocos")).toBe("planilha");
-    expect(passoAnterior("ciclo")).toBe("blocos");
+    expect(passoAnterior("mensagem")).toBe("blocos");
+    expect(passoAnterior("ciclo")).toBe("mensagem");
   });
 
   it("os passos seguintes são os que ainda faltam", () => {
-    expect(passosSeguintes("responsaveis")).toEqual(["tipos", "status", "planilha", "blocos", "ciclo"]);
-    expect(passosSeguintes("status")).toEqual(["planilha", "blocos", "ciclo"]);
+    expect(passosSeguintes("responsaveis")).toEqual(["tipos", "status", "planilha", "blocos", "mensagem", "ciclo"]);
+    expect(passosSeguintes("status")).toEqual(["planilha", "blocos", "mensagem", "ciclo"]);
     expect(passosSeguintes("ciclo")).toEqual([]);
   });
 });

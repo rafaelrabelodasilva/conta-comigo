@@ -1,11 +1,11 @@
 // Regras puras do Primeiro uso (História 1.8): a lista e a ordem dos passos,
 // o passo pedido em `?passo=`, o passo seguinte e quando o Primeiro uso abre
-// sozinho. Os passos de épicos futuros (Mensagem, História 4.5)
-// entram em PASSOS_PRIMEIRO_USO na posição do EXPERIENCE.md
+// sozinho. Todos os passos do EXPERIENCE.md
+// já estão em PASSOS_PRIMEIRO_USO, na ordem dele
 // (Responsáveis → Tipos → Status → Importar planilha → Blocos → Mensagem → Ciclo).
 
 /** Os passos, na ordem em que aparecem. Fonte única da lista e da ordem. */
-export const PASSOS_PRIMEIRO_USO = ["responsaveis", "tipos", "status", "planilha", "blocos", "ciclo"] as const;
+export const PASSOS_PRIMEIRO_USO = ["responsaveis", "tipos", "status", "planilha", "blocos", "mensagem", "ciclo"] as const;
 
 export type PassoPrimeiroUso = (typeof PASSOS_PRIMEIRO_USO)[number];
 

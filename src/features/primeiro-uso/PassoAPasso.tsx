@@ -15,6 +15,7 @@ import { repoConfiguracoes } from "@/data/configuracoes-repo";
 import type { PropsSecao } from "@/features/configuracoes/rascunho";
 import { SecaoCiclo } from "@/features/configuracoes/SecaoCiclo";
 import { SecaoImportarPlanilha } from "@/features/configuracoes/SecaoImportarPlanilha";
+import { SecaoModeloMensagem } from "@/features/configuracoes/SecaoModeloMensagem";
 import { SecaoResponsaveis } from "@/features/configuracoes/SecaoResponsaveis";
 import { SecaoStatus } from "@/features/configuracoes/SecaoStatus";
 import { SecaoTipos } from "@/features/configuracoes/SecaoTipos";
@@ -40,6 +41,7 @@ const SECAO_DO_PASSO: Record<PassoPrimeiroUso, (props: PropsSecao) => React.JSX.
   status: SecaoStatus,
   planilha: SecaoImportarPlanilha,
   blocos: SecaoBlocos,
+  mensagem: SecaoModeloMensagem,
   ciclo: SecaoCiclo,
 };
 

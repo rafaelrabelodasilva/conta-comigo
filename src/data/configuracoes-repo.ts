@@ -5,6 +5,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Aparencia } from "@/domain/configuracoes";
+import { lerModelo, modelosIguais, validarModelo, type ModeloMensagem } from "@/domain/modelo-mensagem";
 import type { Database } from "./database.types";
 import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
 import { estaOnline } from "./conexao";
@@ -38,6 +39,7 @@ export type MudancaConfiguracoes = Partial<
     | "aparencia"
     | "limite_ajuste_centavos"
     | "tolerancia_atraso_dias"
+    | "modelo_mensagem"
     | "primeiro_uso_em"
   >
 >;
@@ -119,6 +121,25 @@ export function criarRepoConfiguracoes(deps: {
       return definir({
         limite_ajuste_centavos: valores.limite_ajuste_centavos,
         tolerancia_atraso_dias: valores.tolerancia_atraso_dias,
+      });
+    },
+
+    /**
+     * Grava o modelo da mensagem (FR-23) inteiro, numa coluna jsonb. Valida de
+     * novo com o núcleo (nunca grava texto com marcador errado nem modelo sem
+     * campos) e guarda o texto normalizado. Modelo igual ao que já está
+     * guardado não grava.
+     */
+    definirModeloMensagem(modelo: ModeloMensagem): Promise<ResultadoGravacao> {
+      const validado = validarModelo(modelo);
+      if (!validado.ok) return Promise.resolve(FALHOU);
+      const atual = configuracoesDoDono(memoria.linhas());
+      if (atual && modelosIguais(lerModelo(atual.modelo_mensagem), validado.valor)) {
+        return Promise.resolve(OK);
+      }
+      const { saudacao, frase_total, chave_pix, rodape, campos } = validado.valor;
+      return definir({
+        modelo_mensagem: { saudacao, frase_total, chave_pix, rodape, campos: { ...campos } },
       });
     },
 

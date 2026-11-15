@@ -233,3 +233,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-4-selecionar-e-ver-o-total.md`
   summary: Marcar linhas e depois digitar na busca (ou mudar um filtro) tira da Seleção as linhas que saem da grade, e elas não voltam ao limpar o filtro; se Rafael quiser juntar linhas de filtros diferentes numa mensagem só, a Seleção teria de sobreviver ao filtro (com a barra dizendo quantas estão escondidas).
   evidence: Low. Decisão da 4.4 (spec, "Filtro que muda com itens marcados"): "Excluir" e "Classificar em lote" nunca agem em linha invisível.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-5-configurar-o-modelo-da-mensagem.md`
+  summary: Conferir no iPad e no PC a seção Modelo da mensagem e o passo "Mensagem" do Primeiro uso: formulário e prévia lado a lado (e empilhados em pé), as três caixas de 44 pt, o foco visível, o rodapé em várias linhas, o aviso "mudou em outro aparelho" com dois aparelhos, e o VoiceOver lendo o grupo "Campos da linha de detalhe", a legenda e a região "Prévia" (sem anúncio a cada tecla).
+  evidence: Low, não verificado. O jsdom só confere o DOM, os nomes e as classes; layout, toque e leitor de tela só se provam num aparelho. Junta-se à pendência do VoiceOver da 2.4.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-5-configurar-o-modelo-da-mensagem.md`
+  summary: A prévia usa `amostraDoMes` (não pagos, sem R$ 0,00, previstos e Ajustes), que repete em pequeno a regra de inclusão da mensagem; quando a 4.6 criar `projetarMensagem`, trocar a amostra por ela (ou por um recorte dela) para a prévia e a mensagem nunca divergirem, e passar a mostrar o "Pago parcialmente" só pelo que falta.
+  evidence: Low. `amostraDoMes` e `ITENS_DE_EXEMPLO` ficam em `src/domain/modelo-mensagem.ts`; `renderizarModelo`, `linhaDeDetalhe` e `itemDaMensagem` são o contrato que a 4.6 e a 4.7 reaproveitam sem mudar.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-5-configurar-o-modelo-da-mensagem.md`
+  summary: Um modelo vazio (ou sem nenhuma caixa) ainda não tem tratamento no "Gerar mensagem": a 4.6 precisa decidir o que mostrar (aviso e "Editar modelo", provavelmente) e o botão continua desativado até lá.
+  evidence: Low. A 4.5 só guarda o modelo; `renderizarModelo` com modelo vazio devolve só "Detalhes:/linhas/Total:" sem cabeçalho.
