@@ -7,6 +7,7 @@ import { SecaoAparencia } from "@/features/configuracoes/SecaoAparencia";
 import { SecaoCiclo } from "@/features/configuracoes/SecaoCiclo";
 import { SecaoConferencia } from "@/features/configuracoes/SecaoConferencia";
 import { SecaoImportarPlanilha } from "@/features/configuracoes/SecaoImportarPlanilha";
+import { SecaoModeloMensagem } from "@/features/configuracoes/SecaoModeloMensagem";
 import type { PropsSecao } from "@/features/configuracoes/rascunho";
 import { SecaoRegras } from "@/features/configuracoes/SecaoRegras";
 import { SecaoResponsaveis } from "@/features/configuracoes/SecaoResponsaveis";
@@ -31,6 +32,7 @@ const CONTEUDO_SECAO: Record<ChaveSecao, { rotulo: string; Conteudo: (props: Pro
   ciclo: { rotulo: ROTULOS.ciclo, Conteudo: SecaoCiclo },
   conferencia: { rotulo: ROTULOS.conferencia, Conteudo: SecaoConferencia },
   regras: { rotulo: ROTULOS.regras_aprendidas, Conteudo: SecaoRegras },
+  mensagem: { rotulo: ROTULOS.modelo_mensagem, Conteudo: SecaoModeloMensagem },
   aparencia: { rotulo: ROTULOS.aparencia, Conteudo: SecaoAparencia },
   planilha: { rotulo: ROTULOS.importar_planilha, Conteudo: SecaoImportarPlanilha },
 };

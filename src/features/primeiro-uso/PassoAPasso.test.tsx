@@ -37,6 +37,9 @@ vi.mock("@/features/configuracoes/SecaoTipos", () => ({
 vi.mock("@/features/configuracoes/SecaoStatus", () => ({ SecaoStatus: () => <section data-secao="status" /> }));
 vi.mock("@/features/configuracoes/SecaoImportarPlanilha", () => ({ SecaoImportarPlanilha: () => <section data-secao="planilha" /> }));
 vi.mock("./SecaoBlocos", () => ({ SecaoBlocos: () => <section data-secao="blocos" /> }));
+vi.mock("@/features/configuracoes/SecaoModeloMensagem", () => ({
+  SecaoModeloMensagem: (p: { aoMudarRascunho?: (tem: boolean) => void }) => <SecaoComRascunho nome="mensagem" {...p} />,
+}));
 vi.mock("@/features/configuracoes/SecaoCiclo", () => ({
   SecaoCiclo: (p: { aoMudarRascunho?: (tem: boolean) => void }) => <SecaoComRascunho nome="ciclo" {...p} />,
 }));
@@ -53,7 +56,7 @@ function montar(passoInicial: Parameters<typeof PassoAPasso>[0]["passoInicial"] 
 function passoNaTela() {
   const secoes = [...document.querySelectorAll("[data-secao]")].map((s) => s.getAttribute("data-secao"));
   expect(secoes).toHaveLength(1);
-  return { secao: secoes[0], cabecalho: screen.getByText(/^Passo \d de 6 · /).textContent };
+  return { secao: secoes[0], cabecalho: screen.getByText(/^Passo \d de 7 · /).textContent };
 }
 
 const botao = (nome: string) => screen.getByRole("button", { name: nome });
@@ -67,29 +70,30 @@ describe("PassoAPasso", () => {
 
   it("passo 1: Responsáveis, com pergunta, ajuda e próximos passos", () => {
     montar();
-    expect(passoNaTela()).toEqual({ secao: "responsaveis", cabecalho: "Passo 1 de 6 · Responsáveis" });
+    expect(passoNaTela()).toEqual({ secao: "responsaveis", cabecalho: "Passo 1 de 7 · Responsáveis" });
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(TEXTOS_PASSO.responsaveis.pergunta);
     expect(screen.getByText(TEXTOS_PASSO.responsaveis.ajuda)).toBeTruthy();
-    expect(screen.getByText("Próximos passos: Tipos → Status → Importar planilha → Blocos → Ciclo do cartão")).toBeTruthy();
+    expect(screen.getByText("Próximos passos: Tipos → Status → Importar planilha → Blocos → Modelo da mensagem → Ciclo do cartão")).toBeTruthy();
     expect(botao(ROTULOS.pular)).toBeTruthy();
     expect(botao(ROTULOS.continuar)).toBeTruthy();
   });
 
-  it("segue a ordem Responsáveis → Tipos → Status → Importar planilha → Blocos → Ciclo; no último, Continuar vira Concluir", async () => {
+  it("segue a ordem Responsáveis → Tipos → Status → Importar planilha → Blocos → Mensagem → Ciclo; no último, Continuar vira Concluir", async () => {
     const usuario = userEvent.setup();
     montar();
     const vistos = [passoNaTela()];
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 6; i++) {
       await usuario.click(botao(ROTULOS.continuar));
       vistos.push(passoNaTela());
     }
     expect(vistos).toEqual([
-      { secao: "responsaveis", cabecalho: "Passo 1 de 6 · Responsáveis" },
-      { secao: "tipos", cabecalho: "Passo 2 de 6 · Tipos" },
-      { secao: "status", cabecalho: "Passo 3 de 6 · Status" },
-      { secao: "planilha", cabecalho: "Passo 4 de 6 · Importar planilha" },
-      { secao: "blocos", cabecalho: "Passo 5 de 6 · Blocos" },
-      { secao: "ciclo", cabecalho: "Passo 6 de 6 · Ciclo do cartão" },
+      { secao: "responsaveis", cabecalho: "Passo 1 de 7 · Responsáveis" },
+      { secao: "tipos", cabecalho: "Passo 2 de 7 · Tipos" },
+      { secao: "status", cabecalho: "Passo 3 de 7 · Status" },
+      { secao: "planilha", cabecalho: "Passo 4 de 7 · Importar planilha" },
+      { secao: "blocos", cabecalho: "Passo 5 de 7 · Blocos" },
+      { secao: "mensagem", cabecalho: "Passo 6 de 7 · Modelo da mensagem" },
+      { secao: "ciclo", cabecalho: "Passo 7 de 7 · Ciclo do cartão" },
     ]);
     expect(screen.queryByRole("button", { name: ROTULOS.continuar })).toBeNull();
     expect(botao(ROTULOS.concluir)).toBeTruthy();
@@ -104,6 +108,23 @@ describe("PassoAPasso", () => {
     montar("tipos");
     await userEvent.setup().click(botao(ROTULOS.pular));
     expect(passoNaTela().secao).toBe("status");
+    expect(falso.concluirPrimeiroUso).not.toHaveBeenCalled();
+    expect(falso.replace).not.toHaveBeenCalled();
+  });
+
+  it("o passo Mensagem fica entre Blocos e Ciclo e não grava a marca (só o último passo grava)", async () => {
+    const usuario = userEvent.setup();
+    montar("blocos");
+    await usuario.click(botao(ROTULOS.continuar));
+    expect(passoNaTela()).toEqual({ secao: "mensagem", cabecalho: "Passo 6 de 7 · Modelo da mensagem" });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(TEXTOS_PASSO.mensagem.pergunta);
+    expect(screen.getByText("Próximos passos: Ciclo do cartão")).toBeTruthy();
+    // Com algo digitado e não salvo, Continuar pergunta antes; sem, anda.
+    await usuario.click(botao("digitar sem salvar"));
+    await usuario.click(botao(ROTULOS.continuar));
+    expect(screen.queryByRole("dialog", { name: mensagem("rascunho.nao_salvo") })).not.toBeNull();
+    await usuario.click(botao(ROTULOS.descartar));
+    expect(passoNaTela().secao).toBe("ciclo");
     expect(falso.concluirPrimeiroUso).not.toHaveBeenCalled();
     expect(falso.replace).not.toHaveBeenCalled();
   });
@@ -153,7 +174,7 @@ describe("PassoAPasso", () => {
     it("volta um passo sem gravar e atualiza ?passo=", async () => {
       montar("status");
       await userEvent.setup().click(botao(ROTULOS.voltar));
-      expect(passoNaTela()).toEqual({ secao: "tipos", cabecalho: "Passo 2 de 6 · Tipos" });
+      expect(passoNaTela()).toEqual({ secao: "tipos", cabecalho: "Passo 2 de 7 · Tipos" });
       expect(window.location.search).toBe("?passo=tipos");
       expect(falso.concluirPrimeiroUso).not.toHaveBeenCalled();
       expect(falso.replace).not.toHaveBeenCalled();

@@ -95,4 +95,55 @@ describe.skipIf(!ligado)("Primeiro uso em configuracoes no Supabase local", () =
     expect(erroStatus).toBeNull();
     expect(await lerEstadoPrimeiroUso(comStatus.cliente)).toEqual(comCadastro);
   });
+
+  it("modelo_mensagem nasce {}, o dono grava e lê o modelo, e o banco só aceita objeto pequeno (História 4.5)", async () => {
+    const u = await local.criarUsuario("modelo");
+    const { data: criada, error } = await u.cliente
+      .from("configuracoes")
+      .upsert({ aparencia: "claro" }, { onConflict: "owner_id" })
+      .select()
+      .single();
+    expect(error).toBeNull();
+    expect(criada!.modelo_mensagem).toEqual({});
+
+    const modelo = {
+      saudacao: "Oi",
+      frase_total: "Esse mês deu {total}",
+      chave_pix: "rafael@exemplo.com",
+      rodape: "",
+      campos: { nome: true, parcela: true, valor: true },
+    };
+    const { data: gravada, error: erroGravar } = await u.cliente
+      .from("configuracoes")
+      .upsert({ modelo_mensagem: modelo }, { onConflict: "owner_id" })
+      .select()
+      .single();
+    expect(erroGravar).toBeNull();
+    expect(gravada!.id).toBe(criada!.id);
+    expect(gravada!.modelo_mensagem).toEqual(modelo);
+    // Só a coluna do modelo mudou.
+    expect(gravada!.aparencia).toBe("claro");
+
+    // Lista, texto solto e objeto grande demais não passam pelo check.
+    for (const ruim of [[], "texto", 7, null, { rodape: "a".repeat(9000) }]) {
+      const { error: recusa } = await u.cliente
+        .from("configuracoes")
+        .upsert({ modelo_mensagem: ruim as never }, { onConflict: "owner_id" })
+        .select()
+        .single();
+      expect(recusa, JSON.stringify(ruim).slice(0, 30)).not.toBeNull();
+    }
+    const { data: depois } = await u.cliente.from("configuracoes").select("modelo_mensagem").single();
+    expect(depois!.modelo_mensagem).toEqual(modelo);
+  });
+
+  it("outro usuário não lê o modelo do dono", async () => {
+    const dono = await local.criarUsuario("modelo-dono");
+    const outro = await local.criarUsuario("modelo-outro");
+    await dono.cliente
+      .from("configuracoes")
+      .upsert({ modelo_mensagem: { saudacao: "Oi" } }, { onConflict: "owner_id" });
+    const { data } = await outro.cliente.from("configuracoes").select("modelo_mensagem");
+    expect(data).toEqual([]);
+  });
 });

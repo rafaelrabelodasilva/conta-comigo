@@ -17,6 +17,7 @@ const linha = (extra: Partial<LinhaConfiguracoes> = {}): LinhaConfiguracoes => (
   aparencia: "sistema",
   limite_ajuste_centavos: 100,
   tolerancia_atraso_dias: 10,
+  modelo_mensagem: {},
   primeiro_uso_em: null,
   created_at: T1,
   updated_at: T1,
@@ -116,6 +117,42 @@ describe("repositório de Configurações", () => {
 
     const semCliente = criarRepoConfiguracoes({ obterCliente: () => null, memoria: recusa.memoria });
     expect(await semCliente.definirStatusPadrao("pago")).toEqual({ ok: false, codigo: "salvar.falhou" });
+  });
+
+  it("o modelo da mensagem grava inteiro, normalizado, numa só coluna", async () => {
+    const m = montar([linha()], (c) => ({
+      data: linha({ ...(c.corpo as object), updated_at: T2 }),
+      error: null,
+    }));
+    await pronto(m);
+    const modelo = {
+      saudacao: "  Oi ",
+      frase_total: "Esse mês deu {total}",
+      chave_pix: "rafael@exemplo.com",
+      rodape: "",
+      campos: { nome: true, parcela: true, valor: true },
+    };
+    expect(await m.repo.definirModeloMensagem(modelo)).toEqual({ ok: true });
+    expect(m.chamadas.map((c) => c.corpo)).toEqual([
+      { modelo_mensagem: { ...modelo, saudacao: "Oi" } },
+    ]);
+    // O mesmo modelo (mesmo com espaços a mais) não chama o banco.
+    expect(await m.repo.definirModeloMensagem(modelo)).toEqual({ ok: true });
+    expect(m.chamadas).toHaveLength(1);
+  });
+
+  it("modelo inválido nunca chega ao banco", async () => {
+    const m = montar([linha()], () => ({ data: null, error: null }));
+    await pronto(m);
+    const ruim = {
+      saudacao: "Oi",
+      frase_total: "Deu {totl}",
+      chave_pix: "",
+      rodape: "",
+      campos: { nome: true, parcela: false, valor: true },
+    };
+    expect(await m.repo.definirModeloMensagem(ruim)).toEqual({ ok: false, codigo: "salvar.falhou" });
+    expect(m.chamadas).toEqual([]);
   });
 
   it("Aparência e Conferência gravam só as colunas alteradas", async () => {
