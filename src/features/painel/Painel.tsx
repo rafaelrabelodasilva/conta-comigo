@@ -8,6 +8,7 @@ import { conferir } from "@/domain/conferencia";
 import { hojeEmSaoPaulo } from "@/domain/datas";
 import { ehMaeDividida, filhasPorMae, linhasDaFatura, unidadesDoMes } from "@/domain/divisao";
 import { alternarSelecao, alternarTodos, selecaoValida } from "@/domain/lancamento";
+import { parcelasDoLote, type CamposDoLote } from "@/domain/lote";
 import {
   COLUNAS_DA_BARRA,
   FILTROS_VAZIOS,
@@ -32,10 +33,14 @@ import {
   TEXTOS_IMPORTAR,
   TEXTOS_LANCAMENTO,
   TEXTOS_PAINEL as T,
+  TEXTOS_SELECAO,
+  descricaoExcluirEmLote,
   descricaoExcluirLancamento,
   mensagem,
   rotuloIncluidoEm,
   rotuloLancamentos,
+  rotuloLancamentosClassificados,
+  rotuloLancamentosExcluidos,
 } from "@/domain/mensagens";
 import {
   ORDEM_PADRAO,
@@ -50,6 +55,17 @@ import {
   type Ordem,
 } from "@/domain/painel";
 import { projetarPainel } from "@/domain/projecoes";
+import { ativos as responsaveisAtivos } from "@/domain/responsaveis";
+import {
+  aoTrocarDeMes,
+  planejarClassificacaoEmLote,
+  planejarExclusaoEmLote,
+  contarPartes,
+  resumoDaSelecao,
+  selecionarTudo,
+} from "@/domain/selecao";
+import { ativos as statusAtivos } from "@/domain/status";
+import { ativos as tiposAtivos } from "@/domain/tipos";
 import { repoFaturas } from "@/data/faturas-repo";
 import { repoLancamentos, type LinhaLancamento } from "@/data/lancamentos-repo";
 import { repoPlanilha } from "@/data/planilha-repo";
@@ -62,11 +78,14 @@ import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
 import { Esqueleto } from "@/ui/Esqueleto";
 import { Tela } from "@/ui/Tela";
 import { useToast } from "@/ui/Toast";
+import { AtalhoSelecionarTodos } from "./AtalhoSelecionarTodos";
 import { BarraFiltros } from "./BarraFiltros";
+import { BarraSelecaoPainel } from "./BarraSelecaoPainel";
 import { BlocosDoMes } from "./BlocosDoMes";
 import { FaixaConferencia } from "./FaixaConferencia";
 import { FaturaDoMes } from "./FaturaDoMes";
 import { GradeLancamentos, type CadastrosGrade } from "./GradeLancamentos";
+import { JanelaClassificarEmLote } from "./JanelaClassificarEmLote";
 import { DividirLancamento } from "./DividirLancamento";
 import { PainelLancamento } from "./PainelLancamento";
 import { SeletorMes } from "./SeletorMes";
@@ -124,8 +143,20 @@ import { SeletorMes } from "./SeletorMes";
 // pelos Lançamentos que `avaliar` diz que entram (`filtros.bloco` guarda só o id;
 // `resolverBloco` calcula quem entra a cada render, também no Mês novo). Soma-se
 // (E) à busca, às colunas e a "Verificar"; a pílula "Bloco: Nome ✕" e "Limpar
-// filtros" o desfazem. O hero, a Conferência e a Seleção seguem o Mês todo. Um
-// Bloco excluído em outro aparelho desfaz o filtro e avisa.
+// filtros" o desfazem. O hero e a Conferência seguem o Mês todo. Um Bloco excluído
+// em outro aparelho desfaz o filtro e avisa.
+//
+// Selecionar e ver o total (História 4.4, FR-48, UX-DR11, UX-DR12): a Seleção é um
+// conjunto de ids de um Mês só e sempre um subconjunto do que a grade mostra com os
+// filtros de agora (o que sai do filtro, ou é excluído em outro aparelho, sai dela).
+// A caixa do cabeçalho e ⌘/Ctrl+A (`AtalhoSelecionarTodos`) marcam todos do filtro, também
+// os que rolam para fora da vista. Com 1+ marcada aparece a `selection-bar`
+// (`BarraSelecaoPainel`): "N selecionados · R$ total" (o texto e o total vêm do núcleo,
+// `resumoDaSelecao`, a mesma soma líquida do Revisar e do rodapé), "Limpar", "⋯ Mais"
+// (Classificar em lote, pela função da 3.3, e Excluir, com os Ajustes `junto`) e
+// "Gerar mensagem" (desativado até a 4.6). A região `role=status` que anuncia o total
+// fica no DOM, vazia, antes da primeira marcação. Trocar de Mês limpa a Seleção e avisa
+// só se havia Seleção (`aoTrocarDeMes`).
 
 const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status", "blocos"] as const;
 
@@ -187,6 +218,10 @@ export function Painel({ titulo }: { titulo: string }) {
   const [excluindo, setExcluindo] = useState<string | null>(null);
   // A mãe cuja janela "Dividir" está aberta (História 3.8).
   const [dividindo, setDividindo] = useState<string | null>(null);
+  // As janelas da barra de Seleção (4.4) e a gravação em lote em curso.
+  const [classificandoLote, setClassificandoLote] = useState(false);
+  const [excluindoLote, setExcluindoLote] = useState(false);
+  const [lotando, setLotando] = useState(false);
   const toast = useToast();
   const router = useRouter();
 
@@ -205,6 +240,8 @@ export function Painel({ titulo }: { titulo: string }) {
   const blocos = useMemo(() => lerBlocos(blocosLidos.linhas), [blocosLidos.linhas]);
   const projecao = useMemo(() => projetarPainel(lancamentos.linhas, mesAberto), [lancamentos.linhas, mesAberto]);
   const doBloco = useMemo(() => resolverBloco(filtros, blocos, projecao), [filtros, blocos, projecao]);
+  // Os Lançamentos não excluídos do Mês aberto (a Seleção, a exclusão e a classificação em lote leem daqui).
+  const doMes = useMemo(() => linhasDoMes(lancamentos.linhas, mesAberto), [lancamentos.linhas, mesAberto]);
   // Para o "Desfazer" do "Desvincular" ler a classificação atual da mãe.
   const linhasRef = useRef(lancamentos.linhas);
   useEffect(() => {
@@ -280,10 +317,13 @@ export function Painel({ titulo }: { titulo: string }) {
     setOrdem(ORDEM_PADRAO);
   };
   const mudarMes = (mes: string) => {
+    // A Seleção é de um Mês só: o núcleo a limpa e diz se há o que avisar (só havendo Seleção).
+    const troca = aoTrocarDeMes(selecao, mesAbertoRef.current, mes);
+    if (troca.aviso !== null) toast.mostrar({ texto: troca.aviso });
     setMesAberto(mes);
     setAnunciar(false);
     // A seleção e o painel são do Mês.
-    setSelecao(new Set());
+    setSelecao(new Set(troca.selecao));
     setPainel(null);
     setDividindo(null);
   };
@@ -358,6 +398,76 @@ export function Painel({ titulo }: { titulo: string }) {
     });
   }
 
+  // A Seleção já vem podada à grade (só o que o filtro mostra), então estes dois agem exatamente nas marcadas.
+  const planoDaExclusao = planejarExclusaoEmLote(selecao, doMes);
+  const partesMarcadas = contarPartes(selecao, doMes);
+
+  /** "Classificar em lote": a função da 3.3, tudo ou nada; falhou, nada mudou e a Seleção fica. */
+  async function classificarSelecao(campos: CamposDoLote): Promise<boolean> {
+    const entradas = planejarClassificacaoEmLote(selecao, doMes, campos);
+    if (entradas.length === 0) {
+      toast.mostrar({ texto: TEXTOS_SELECAO.nada_a_mudar });
+      return true;
+    }
+    setLotando(true);
+    const r = await repoLancamentos().classificarEmLote(entradas);
+    setLotando(false);
+    if (!r.ok) {
+      toast.mostrar({ texto: mensagem(r.codigo) });
+      return false;
+    }
+    if (r.gravadas === 0) {
+      toast.mostrar({ texto: TEXTOS_SELECAO.nada_a_mudar });
+      return true;
+    }
+    // Como no Revisar: a parcela classificada preenche os previstos vazios da Série (sem perguntar).
+    const comSerie = parcelasDoLote(r);
+    if (comSerie.length > 0) void repoLancamentos().propagarAosPrevistos(comSerie);
+    toast.mostrar({
+      texto: rotuloLancamentosClassificados(r.gravadas),
+      aoDesfazer: () => {
+        void repoLancamentos()
+          .desfazerLote(r.antes)
+          .then((d) => {
+            if (!d.ok) toast.mostrar({ texto: mensagem(d.codigo) });
+          });
+      },
+    });
+    return true;
+  }
+
+  /** "Excluir": as marcadas e os Ajustes delas numa gravação só (`junto`), com "Desfazer". */
+  async function excluirSelecao() {
+    const { ids, ajustes } = planoDaExclusao;
+    const [principal, ...demais] = ids;
+    if (principal === undefined) return;
+    const junto = [...demais, ...ajustes];
+    // Fecha antes de gravar: as linhas saem do painel lateral e da Seleção.
+    setPainel((p) => (p?.modo === "editar" && (ids.includes(p.id) || ajustes.includes(p.id)) ? null : p));
+    setSelecao((s) => {
+      const nova = new Set(s);
+      for (const id of ids) nova.delete(id);
+      return nova;
+    });
+    setLotando(true);
+    const r = junto.length > 0 ? await repoLancamentos().excluir(principal, { junto }) : await repoLancamentos().excluir(principal);
+    setLotando(false);
+    if (!r.ok) {
+      toast.mostrar({ texto: mensagem(r.codigo) });
+      return;
+    }
+    toast.mostrar({
+      texto: rotuloLancamentosExcluidos(ids.length),
+      aoDesfazer: () => {
+        void repoLancamentos()
+          .restaurar(principal, ...(junto.length > 0 ? [{ junto }] : []))
+          .then((d) => {
+            if (!d.ok) toast.mostrar({ texto: mensagem(d.codigo) });
+          });
+      },
+    });
+  }
+
   async function dispensar(faturaId: string) {
     const r = await repoFaturas().dispensarAlerta(faturaId);
     if (!r.ok) {
@@ -389,7 +499,6 @@ export function Painel({ titulo }: { titulo: string }) {
   } else if (carregando) {
     conteudo = <EsqueletoPainel />;
   } else {
-    const doMes = linhasDoMes(lancamentos.linhas, mesAberto);
     // Conferência, "Total a pagar" e "verificar" usam a mãe; as filhas de uma Divisão não entram (História 3.8).
     const daFatura = fatura ? linhasDaFatura(doMes).filter((l) => l.fatura_id === fatura.id) : [];
     const conferencia = fatura ? conferir(fatura, cartoes.linhas, doMes) : null;
@@ -424,9 +533,14 @@ export function Painel({ titulo }: { titulo: string }) {
     // num Ajuste, fica a mãe (com ele embaixo). Uma linha que a grade já mostra não precisa dela.
     const linhaFixa =
       ehMaeDividida(abertaNoMes ?? {}) || naGrade.some((l) => l.id === abertaNoMes?.id) ? null : (maeDaAberta ?? abertaNoMes);
-    const idsDoMes = doMesTodo.maes.map((l) => l.id);
-    const selecionados = selecaoValida(selecao, idsDoMes);
     const idsNaGrade = naGrade.map((l) => l.id);
+    // A Seleção é sempre um subconjunto do que a grade mostra com os filtros de agora: o que sai do filtro
+    // (ou foi excluído em outro aparelho) sai dela, e a contagem e o total são só das marcadas à vista.
+    const selecionados = selecaoValida(selecao, idsNaGrade);
+    if (selecionados.size !== selecao.size) setSelecao(selecionados);
+    // O que o rodapé da grade soma: as mães filtradas e os Ajustes delas. O total da barra é desta mesma lista.
+    const visiveis = naGrade.flatMap((l) => [l, ...(ajustesPorMae.get(l.id) ?? [])]);
+    const resumo = resumoDaSelecao(selecionados, visiveis);
     const cartoesDaFatura = fatura
       ? cartoes.linhas
           .filter((c) => c.fatura_id === fatura.id)
@@ -541,13 +655,34 @@ export function Painel({ titulo }: { titulo: string }) {
           }
           aoLimparFiltros={motivo === null ? undefined : limparTudo}
           selecao={selecionados}
-          aoSelecionar={(id) => setSelecao((s) => alternarSelecao(selecaoValida(s, idsDoMes), id))}
-          aoSelecionarTodos={() => setSelecao((s) => alternarTodos(selecaoValida(s, idsDoMes), idsNaGrade))}
+          aoSelecionar={(id) => setSelecao((s) => alternarSelecao(selecaoValida(s, idsNaGrade), id))}
+          aoSelecionarTodos={() => setSelecao((s) => alternarTodos(selecaoValida(s, idsNaGrade), idsNaGrade))}
+          semCaixaId={linhaFixa?.id ?? null}
           abertoId={abertaNoMes?.id ?? null}
           aoAbrir={(id) => setPainel({ modo: "editar", id })}
           aoExcluir={setExcluindo}
           linhaFixa={linhaFixa}
         />
+        {/* A região do anúncio fica no DOM, vazia, antes da primeira marcação: assim o leitor de tela a anuncia desde a primeira. */}
+        <p role="status" className="sr-only">
+          {resumo.texto}
+        </p>
+        <AtalhoSelecionarTodos aoAtalho={() => setSelecao((s) => selecionarTudo(selecaoValida(s, idsNaGrade), idsNaGrade))} />
+        {selecionados.size > 0 ? (
+          <>
+            {/* Folga para a barra não cobrir o rodapé da grade. */}
+            <div aria-hidden style={{ height: "var(--altura-barra-inferior, 5rem)" }} />
+            <BarraSelecaoPainel
+              resumo={resumo}
+              ocupado={lotando}
+              comPainelLateral={painelLateral !== null}
+              podeExcluir={planoDaExclusao.ids.length > 0}
+              aoLimpar={() => setSelecao(new Set())}
+              aoClassificar={() => setClassificandoLote(true)}
+              aoExcluir={() => setExcluindoLote(true)}
+            />
+          </>
+        ) : null}
       </div>
     );
   }
@@ -595,6 +730,33 @@ export function Painel({ titulo }: { titulo: string }) {
             setExcluindo(null);
           }}
         />
+        <ConfirmarAcao
+          aberta={excluindoLote && selecao.size > 0 && planoDaExclusao.ids.length > 0}
+          aoMudar={(abrir) => {
+            if (!abrir) setExcluindoLote(false);
+          }}
+          titulo={TEXTOS_SELECAO.titulo_excluir}
+          descricao={descricaoExcluirEmLote(planoDaExclusao.ids.length, planoDaExclusao.ajustes.length, planoDaExclusao.partesQueFicam)}
+          rotuloConfirmar={TEXTOS_SELECAO.confirmar_excluir}
+          aoConfirmar={() => {
+            setExcluindoLote(false);
+            void excluirSelecao();
+          }}
+        />
+        {classificandoLote && selecao.size > 0 ? (
+          <JanelaClassificarEmLote
+            aberta
+            aoMudar={(abrir) => {
+              if (!abrir) setClassificandoLote(false);
+            }}
+            quantidade={selecao.size}
+            partes={partesMarcadas}
+            responsaveis={responsaveisAtivos(responsaveis.linhas)}
+            tipos={tiposAtivos(tipos.linhas)}
+            status={statusAtivos(status.linhas)}
+            aoAplicar={classificarSelecao}
+          />
+        ) : null}
         <DividirLancamento
           alvoId={dividindo}
           aoFechar={() => setDividindo(null)}

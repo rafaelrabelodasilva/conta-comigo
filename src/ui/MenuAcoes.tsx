@@ -11,6 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { variantesBotao } from "./Botao";
 import { cn } from "./cn";
 import { criarDetectorToqueLongo } from "./toque-longo";
 
@@ -37,6 +38,11 @@ export type PropsMenuAcoes = {
    */
   aberto?: boolean;
   aoMudarAberto?: (aberto: boolean) => void;
+  /**
+   * Um botão com texto no lugar do ⋯ redondo (ex.: o "⋯ Mais" da barra de
+   * Seleção). O nome acessível é o próprio texto.
+   */
+  gatilhoComTexto?: { texto: string; className?: string; desativado?: boolean };
 };
 
 const temporizadoresDoNavegador = {
@@ -104,7 +110,15 @@ export function useToqueLongo(aoToqueLongo: () => void) {
   };
 }
 
-export function MenuAcoes({ rotulo, itens, children, className, aberto: abertoFora, aoMudarAberto }: PropsMenuAcoes) {
+export function MenuAcoes({
+  rotulo,
+  itens,
+  children,
+  className,
+  aberto: abertoFora,
+  aoMudarAberto,
+  gatilhoComTexto,
+}: PropsMenuAcoes) {
   const [abertoDentro, setAbertoDentro] = useState(false);
   const aberto = abertoFora ?? abertoDentro;
   const setAberto = (v: boolean) => {
@@ -119,12 +133,22 @@ export function MenuAcoes({ rotulo, itens, children, className, aberto: abertoFo
 
   const botao = (
     <DropdownMenu.Root open={aberto} onOpenChange={setAberto}>
-      <DropdownMenu.Trigger
-        aria-label={rotulo}
-        className="area-toque inline-flex size-icone shrink-0 cursor-pointer items-center justify-center rounded-sm border border-border bg-surface text-text texto-body-strong"
-      >
-        <span aria-hidden>⋯</span>
-      </DropdownMenu.Trigger>
+      {gatilhoComTexto ? (
+        <DropdownMenu.Trigger
+          disabled={gatilhoComTexto.desativado}
+          className={cn(variantesBotao({ variante: "secundario" }), gatilhoComTexto.className)}
+        >
+          <span aria-hidden>⋯</span>
+          {gatilhoComTexto.texto}
+        </DropdownMenu.Trigger>
+      ) : (
+        <DropdownMenu.Trigger
+          aria-label={rotulo}
+          className="area-toque inline-flex size-icone shrink-0 cursor-pointer items-center justify-center rounded-sm border border-border bg-surface text-text texto-body-strong"
+        >
+          <span aria-hidden>⋯</span>
+        </DropdownMenu.Trigger>
+      )}
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           align="end"

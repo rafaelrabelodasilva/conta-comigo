@@ -99,6 +99,9 @@ const repoL = vi.hoisted(() => {
     restaurar: vi.fn<(id: string, o?: { junto?: string[] }) => Res>(),
     desvincular: vi.fn<(id: string) => Res>(),
     religar: vi.fn<(id: string, mae: Record<string, unknown>) => Res>(),
+    classificarEmLote: vi.fn<(entradas: { id: string; campos: Record<string, unknown> }[]) => Promise<unknown>>(),
+    desfazerLote: vi.fn<(antes: unknown[]) => Promise<unknown>>(),
+    propagarAosPrevistos: vi.fn<(parcelas: unknown[]) => Promise<unknown>>(async () => ({ ok: true, preenchidos: 0, aPerguntar: [] })),
   };
 });
 // O repositório de Blocos é falso: "Salvar" só registra o pedido e responde o que o teste mandar.
@@ -1843,5 +1846,382 @@ describe("Filtrar a grade pelo Bloco (História 4.3, FR-20)", () => {
     expect(within(regiao).getByRole("button", { name: "Ações do Bloco Casal" })).toBeTruthy();
     expect((within(regiao).getByRole("button", { name: "Gerar mensagem do Bloco Casal" }) as HTMLButtonElement).disabled).toBe(true);
     expect(sem(cartaoFiltra("Casal").getAttribute("aria-label"))).toBe("Filtrar a grade pelo Bloco Casal, R$ 170,00");
+  });
+});
+
+describe("Selecionar e ver o total (História 4.4, FR-48)", () => {
+  const bloco = (id: string, nome: string, ordem: number, formula: unknown) => ({
+    id,
+    owner_id: "dono",
+    nome,
+    formula,
+    ordem,
+    de_cobranca: false,
+    meu_bloco: false,
+    updated_at: "2026-11-03T12:00:00+00:00",
+  });
+  const casalBloco = bloco("b-casal", "Casal", 1, { tipo: "responsavel", id: "r-casal" });
+  const tiposDoTeste = [{ id: "t-casa", nome: "Casa", arquivado: false, ordem: 1 }];
+
+  const linhaPorNome = (nome: string) => linhasDaGrade().find((r) => nomeVisivel(r) === nome)!;
+  const caixaDe = (nome: string) => within(linhaPorNome(nome)).getByRole("checkbox") as HTMLInputElement;
+  const cabecalho = () => screen.getByRole("checkbox", { name: TEXTOS_LANCAMENTO.selecionar_todos }) as HTMLInputElement;
+  const barra = () => screen.queryByRole("region", { name: "Ações da seleção", hidden: true });
+  /** O texto que a barra mostra ("3 selecionados · R$ 170,00"). */
+  const textoDaBarra = () => sem(barra()?.querySelector("p")?.textContent);
+  /** A região de anúncio que fica no DOM (vazia sem Seleção). */
+  const regiaoDoAnuncio = () =>
+    screen.getAllByRole("status").filter((e) => e.className.includes("sr-only")).at(-1)!;
+  const cartaoFiltra = (nome: string) =>
+    within(screen.getByRole("region", { name: "Blocos" })).getByRole("button", {
+      name: new RegExp("^Filtrar a grade pelo Bloco " + nome + ","),
+    });
+  /** Os Nomes que a grade mostra. */
+  const nomesDaGrade = () => linhasDaGrade().map((r) => nomeVisivel(r));
+
+  /** Novembro: 3 do Casal (R$ 100 + R$ 50 + R$ 20), 2 do Rafael e 1 sem Responsável. */
+  function novembroComSelecao(extras: LinhaLancamento[] = [], blocos: unknown[] = [casalBloco]) {
+    definir({
+      faturas: [novembro],
+      lancamentos: [
+        lanc("2026-11", { id: "c1", nome: "MERCADO", valor_centavos: 10000, responsavel_id: "r-casal" }),
+        lanc("2026-11", { id: "c2", nome: "FARMACIA", valor_centavos: 5000, responsavel_id: "r-casal" }),
+        lanc("2026-11", { id: "c3", nome: "PADARIA", valor_centavos: 2000, responsavel_id: "r-casal" }),
+        lanc("2026-11", { id: "r1", nome: "LIVRARIA", valor_centavos: 7000, responsavel_id: "r-rafael" }),
+        lanc("2026-11", { id: "r2", nome: "CINEMA", valor_centavos: 3000, responsavel_id: "r-rafael" }),
+        lanc("2026-11", { id: "s1", nome: "SEM DONO", valor_centavos: 900, responsavel_id: null }),
+        ...extras,
+      ],
+      blocos,
+      tipos: tiposDoTeste,
+    });
+  }
+
+  const divisao = () => [
+    lanc("2026-11", { id: "mae", nome: "MONJARO", valor_centavos: 46600, divisao: { modo: "proporcao", partes: [] } as never }),
+    lanc("2026-11", { id: "p1", nome: "MONJARO", valor_centavos: 31067, dividido_de_id: "mae", responsavel_id: "r-casal" }),
+    lanc("2026-11", { id: "p2", nome: "MONJARO", valor_centavos: 15533, dividido_de_id: "mae", responsavel_id: "r-rafael" }),
+  ];
+  const comAjuste = () => [
+    lanc("2026-11", { id: "msc", nome: "MSC CRUZEIROS", valor_centavos: 114074, ordem_fatura: 1 }),
+    lanc("2026-11", { id: "aj", nome: "MSC CRUZEIROS", valor_centavos: -8, ordem_fatura: 2, ajuste_de_id: "msc" }),
+  ];
+
+  it("sem Seleção não há barra, e a região de anúncio já está no DOM, vazia", () => {
+    novembroComSelecao();
+    renderizar();
+    expect(barra()).toBeNull();
+    expect(regiaoDoAnuncio().textContent).toBe("");
+  });
+
+  it("a caixa da linha seleciona (fundo selection) sem abrir o painel; a barra e o anúncio mostram o total a cada toque", async () => {
+    novembroComSelecao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(caixaDe("MERCADO"));
+    expect(linhaPorNome("MERCADO").className).toContain("bg-selection");
+    expect(screen.queryByRole("complementary")).toBeNull();
+    expect(textoDaBarra()).toBe("1 selecionado · R$ 100,00");
+    expect(sem(regiaoDoAnuncio().textContent)).toBe("1 selecionado · R$ 100,00");
+    await u.click(caixaDe("FARMACIA"));
+    expect(textoDaBarra()).toBe("2 selecionados · R$ 150,00");
+    expect(sem(regiaoDoAnuncio().textContent)).toBe("2 selecionados · R$ 150,00");
+    expect(barra()!.querySelector("strong")!.className).toContain("texto-body-strong");
+    // Desmarcar tudo: a barra some e o anúncio esvazia.
+    await u.click(caixaDe("MERCADO"));
+    await u.click(caixaDe("FARMACIA"));
+    expect(barra()).toBeNull();
+    expect(regiaoDoAnuncio().textContent).toBe("");
+  });
+
+  it("a caixa do cabeçalho marca todos do filtro (parcial com parte marcada) e, de novo, desmarca todos", async () => {
+    novembroComSelecao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(caixaDe("MERCADO"));
+    expect(cabecalho().indeterminate).toBe(true);
+    await u.click(cabecalho());
+    expect(cabecalho().checked).toBe(true);
+    expect(textoDaBarra()).toBe("6 selecionados · R$ 279,00");
+    await u.click(cabecalho());
+    expect(barra()).toBeNull();
+    expect(cabecalho().checked).toBe(false);
+  });
+
+  it("com o Bloco filtrado, 'selecionar todos' soma o que o Bloco soma (o total do rodapé e do cartão)", async () => {
+    novembroComSelecao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(cartaoFiltra("Casal"));
+    await u.click(cabecalho());
+    expect(textoDaBarra()).toBe("3 selecionados · R$ 170,00");
+    expect(rodape()).toContain("R$ 170,00");
+  });
+
+  it("aceite: o Bloco Mãe de outubro/2026 filtrado e 'selecionar todos' mostram '7 selecionados · R$ 1.350,14'", async () => {
+    const mae = [50000, 30000, 25014, 20000, 15000, -2590, -2410].map((v, i) =>
+      lanc("2026-10", { id: `m${i + 1}`, nome: `MAE ${i + 1}`, valor_centavos: v, responsavel_id: "r-mae" }),
+    );
+    definir({
+      faturas: [outubro],
+      lancamentos: [...mae, lanc("2026-10", { id: "x", nome: "OUTRO", valor_centavos: 99900, responsavel_id: "r-casal" })],
+      blocos: [bloco("b-mae", "Mãe", 1, { tipo: "responsavel", id: "r-mae" })],
+    });
+    falso.banco.responsaveis = [...responsaveis, { id: "r-mae", nome: "Mãe", cor: 3, ordem: 3 }];
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
+    await u.click(cartaoFiltra("Mãe"));
+    await u.click(cabecalho());
+    expect(textoDaBarra()).toBe("7 selecionados · R$ 1.350,14");
+  });
+
+  it("o Ajuste segue a mãe: conta uma vez e o total é o líquido", async () => {
+    novembroComSelecao(comAjuste());
+    renderizar();
+    await userEvent.setup().click(screen.getByRole("checkbox", { name: "Selecionar MSC CRUZEIROS" }));
+    expect(textoDaBarra()).toBe("1 selecionado · R$ 1.140,66");
+  });
+
+  it("a mãe dividida não conta: valem as partes", async () => {
+    novembroComSelecao(divisao());
+    renderizar();
+    await userEvent.setup().click(cabecalho());
+    expect(textoDaBarra()).toBe("8 selecionados · R$ 745,00");
+  });
+
+  it("o filtro muda e quem sai da grade sai da Seleção (e não volta ao limpar o filtro)", async () => {
+    novembroComSelecao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(cabecalho());
+    expect(textoDaBarra()).toBe("6 selecionados · R$ 279,00");
+    await u.click(within(linhaPorNome("MERCADO")).getByRole("button", { name: "Filtrar por Casal" }));
+    expect(textoDaBarra()).toBe("3 selecionados · R$ 170,00");
+    await u.click(screen.getAllByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })[0]);
+    expect(textoDaBarra()).toBe("3 selecionados · R$ 170,00");
+    expect(caixaDe("LIVRARIA").checked).toBe(false);
+  });
+
+  it("Lançamento excluído em outro aparelho sai da Seleção e o total recalcula", async () => {
+    novembroComSelecao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(caixaDe("MERCADO"));
+    await u.click(caixaDe("FARMACIA"));
+    expect(textoDaBarra()).toBe("2 selecionados · R$ 150,00");
+    mudarBanco("lancamentos", (ls) =>
+      ls.map((l) => ((l as { id: string }).id === "c1" ? { ...(l as object), excluido_em: "2026-11-08T00:00:00Z" } : l)),
+    );
+    expect(textoDaBarra()).toBe("1 selecionado · R$ 50,00");
+  });
+
+  it("⌘/Ctrl+A marca todos do filtro; num campo de texto fica com o navegador; só marca, nunca desmarca", async () => {
+    novembroComSelecao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("searchbox", { name: TEXTOS_FILTROS.buscar }));
+    await u.keyboard("{Control>}a{/Control}");
+    expect(barra()).toBeNull();
+    await u.click(document.body);
+    await u.keyboard("{Control>}a{/Control}");
+    expect(textoDaBarra()).toBe("6 selecionados · R$ 279,00");
+    await u.keyboard("{Meta>}a{/Meta}");
+    expect(textoDaBarra()).toBe("6 selecionados · R$ 279,00");
+  });
+
+  it("⌘/Ctrl+A com o filtro marca só o filtro; com uma janela aberta, não faz nada", async () => {
+    novembroComSelecao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhaPorNome("MERCADO")).getByRole("button", { name: "Filtrar por Casal" }));
+    await u.click(document.body);
+    await u.keyboard("{Control>}a{/Control}");
+    expect(textoDaBarra()).toBe("3 selecionados · R$ 170,00");
+    await u.click(cabecalho());
+    expect(barra()).toBeNull();
+    await u.click(within(linhaPorNome("MERCADO")).getByRole("button", { name: "Ações de MERCADO" }));
+    await u.click(screen.getByRole("menuitem", { name: "Excluir" }));
+    expect(await screen.findByRole("alertdialog")).toBeTruthy();
+    await u.keyboard("{Control>}a{/Control}");
+    expect(barra()).toBeNull();
+  });
+
+  it("trocar de Mês com Seleção a limpa e avisa 'Seleção limpa ao trocar de mês'; sem Seleção, nada a dizer", async () => {
+    novembroComSelecao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
+    expect(screen.queryByText("Seleção limpa ao trocar de mês")).toBeNull();
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.proximo_mes }));
+    await u.click(caixaDe("MERCADO"));
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
+    expect(await screen.findByText("Seleção limpa ao trocar de mês")).toBeTruthy();
+    expect(barra()).toBeNull();
+    await u.click(screen.getByRole("button", { name: TEXTOS_PAINEL.proximo_mes }));
+    expect(caixaDe("MERCADO").checked).toBe(false);
+  });
+
+  it("'Limpar' desmarca tudo; 'Gerar mensagem' existe e fica desativado (a 4.6 o liga)", async () => {
+    novembroComSelecao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(caixaDe("MERCADO"));
+    expect((within(barra()!).getByRole("button", { name: "Gerar mensagem" }) as HTMLButtonElement).disabled).toBe(true);
+    await u.click(within(barra()!).getByRole("button", { name: "Limpar" }));
+    expect(barra()).toBeNull();
+    expect(caixaDe("MERCADO").checked).toBe(false);
+  });
+
+  it("com o painel lateral aberto, a barra deixa a coluna dele livre", async () => {
+    novembroComSelecao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(caixaDe("MERCADO"));
+    expect(barra()!.parentElement!.hasAttribute("data-com-painel-lateral")).toBe(false);
+    await u.click(within(linhaPorNome("FARMACIA")).getAllByRole("cell")[1]);
+    expect(screen.getByRole("complementary")).toBeTruthy();
+    expect(barra()!.parentElement!.hasAttribute("data-com-painel-lateral")).toBe(true);
+    expect(barra()!.parentElement!.className).toContain("lg:right-painel-lateral");
+  });
+
+  it("a linha aberta que o filtro tirou da grade fica com a caixa desativada e fora da Seleção", async () => {
+    novembroComSelecao();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhaPorNome("MERCADO")).getAllByRole("cell")[1]);
+    await u.click(within(linhaPorNome("LIVRARIA")).getByRole("button", { name: "Filtrar por Rafael" }));
+    expect(caixaDe("MERCADO").disabled).toBe(true);
+    await u.click(cabecalho());
+    expect(textoDaBarra()).toBe("2 selecionados · R$ 100,00");
+  });
+
+  describe("⋯ Mais", () => {
+    const abrirMais = async (u: ReturnType<typeof userEvent.setup>) => {
+      await u.click(within(barra()!).getByRole("button", { name: "Mais" }));
+    };
+
+    it("Excluir: confirma, leva os Ajustes junto numa gravação só, avisa e o 'Desfazer' restaura", async () => {
+      novembroComSelecao(comAjuste());
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await u.click(screen.getByRole("checkbox", { name: "Selecionar MSC CRUZEIROS" }));
+      await abrirMais(u);
+      await u.click(screen.getByRole("menuitem", { name: "Excluir" }));
+      const dialogo = await screen.findByRole("alertdialog");
+      expect(sem(dialogo.textContent)).toContain("2 lançamentos saem da grade junto com 1 Ajuste");
+      await u.click(within(dialogo).getByRole("button", { name: "Excluir lançamentos" }));
+      expect(repoL.excluir).toHaveBeenCalledWith("c1", { junto: ["msc", "aj"] });
+      expect(await screen.findByText("2 lançamentos excluídos")).toBeTruthy();
+      expect(barra()).toBeNull();
+      expect(nomesDaGrade()).not.toContain("MERCADO");
+      await u.click(screen.getByRole("button", { name: "Desfazer" }));
+      expect(repoL.restaurar).toHaveBeenCalledWith("c1", { junto: ["msc", "aj"] });
+      expect(nomesDaGrade()).toContain("MERCADO");
+    });
+
+    it("Excluir falhando: a mensagem do código", async () => {
+      novembroComSelecao();
+      repoL.excluir.mockResolvedValueOnce({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await abrirMais(u);
+      await u.click(screen.getByRole("menuitem", { name: "Excluir" }));
+      await u.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Excluir lançamentos" }));
+      expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
+    });
+
+    it("a parte de uma Divisão não se exclui: só ela marcada, 'Excluir' nem aparece; com outra, a confirmação avisa", async () => {
+      novembroComSelecao(divisao().slice(0, 2));
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(screen.getByRole("checkbox", { name: "Selecionar MONJARO" }));
+      await abrirMais(u);
+      expect(screen.queryByRole("menuitem", { name: "Excluir" })).toBeNull();
+      await u.keyboard("{Escape}");
+      await u.click(caixaDe("MERCADO"));
+      await abrirMais(u);
+      await u.click(screen.getByRole("menuitem", { name: "Excluir" }));
+      const dialogo = await screen.findByRole("alertdialog");
+      expect(sem(dialogo.textContent)).toContain("1 parte de uma Divisão fica");
+      await u.click(within(dialogo).getByRole("button", { name: "Excluir lançamentos" }));
+      expect(repoL.excluir).toHaveBeenCalledWith("c1");
+    });
+
+    it("Classificar em lote: atribui Responsável, Tipo, Status e Observação pela função da 3.3, com 'Desfazer'", async () => {
+      novembroComSelecao();
+      repoL.classificarEmLote.mockResolvedValueOnce({
+        ok: true,
+        linhas: [],
+        gravadas: 2,
+        antes: [{ id: "c1", corpo: { tipo_id: null } }],
+      });
+      repoL.desfazerLote.mockResolvedValueOnce({ ok: true, linhas: [], gravadas: 1, antes: [] });
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await u.click(caixaDe("FARMACIA"));
+      await abrirMais(u);
+      await u.click(screen.getByRole("menuitem", { name: "Classificar em lote" }));
+      const janela = await screen.findByRole("dialog", { name: "Classificar em lote" });
+      const aplicar = within(janela).getByRole("button", { name: "Aplicar a 2" }) as HTMLButtonElement;
+      expect(aplicar.disabled).toBe(true);
+      await u.selectOptions(within(janela).getByLabelText("Responsável"), "r-rafael");
+      await u.selectOptions(within(janela).getByLabelText("Tipo"), "t-casa");
+      await u.selectOptions(within(janela).getByLabelText("Status"), "s-pago");
+      await u.type(within(janela).getByLabelText("Observação"), "  conferido ");
+      expect(aplicar.disabled).toBe(false);
+      await u.click(aplicar);
+      const campos = { responsavel_id: "r-rafael", tipo_id: "t-casa", status_id: "s-pago", observacao: "conferido" };
+      expect(repoL.classificarEmLote).toHaveBeenCalledWith([
+        { id: "c1", campos },
+        { id: "c2", campos },
+      ]);
+      expect(screen.queryByRole("dialog", { name: "Classificar em lote" })).toBeNull();
+      expect(await screen.findByText("2 lançamentos classificados")).toBeTruthy();
+      // A Seleção continua para a próxima ação.
+      expect(textoDaBarra()).toBe("2 selecionados · R$ 150,00");
+      await u.click(screen.getByRole("button", { name: "Desfazer" }));
+      expect(repoL.desfazerLote).toHaveBeenCalledWith([{ id: "c1", corpo: { tipo_id: null } }]);
+    });
+
+    it("Classificar em lote falhando: tudo ou nada, a janela e a Seleção ficam e o aviso diz o motivo", async () => {
+      novembroComSelecao();
+      repoL.classificarEmLote.mockResolvedValueOnce({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await abrirMais(u);
+      await u.click(screen.getByRole("menuitem", { name: "Classificar em lote" }));
+      const janela = await screen.findByRole("dialog", { name: "Classificar em lote" });
+      await u.selectOptions(within(janela).getByLabelText("Status"), "__sem_status__");
+      await u.click(within(janela).getByRole("button", { name: "Aplicar a 1" }));
+      expect(repoL.classificarEmLote).toHaveBeenCalledWith([{ id: "c1", campos: { status_id: null } }]);
+      expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
+      expect(screen.getByRole("dialog", { name: "Classificar em lote" })).toBeTruthy();
+      expect(textoDaBarra()).toBe("1 selecionado · R$ 100,00");
+    });
+
+    it("a parte de uma Divisão só recebe o Status: a janela avisa e as entradas levam só o Status", async () => {
+      novembroComSelecao(divisao().slice(0, 2));
+      repoL.classificarEmLote.mockResolvedValueOnce({ ok: true, linhas: [], gravadas: 2, antes: [] });
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(screen.getByRole("checkbox", { name: "Selecionar MONJARO" }));
+      await u.click(caixaDe("MERCADO"));
+      await abrirMais(u);
+      await u.click(screen.getByRole("menuitem", { name: "Classificar em lote" }));
+      const janela = await screen.findByRole("dialog", { name: "Classificar em lote" });
+      expect(within(janela).getByText(/1 parte de uma Divisão só recebe o Status/)).toBeTruthy();
+      await u.selectOptions(within(janela).getByLabelText("Tipo"), "t-casa");
+      await u.selectOptions(within(janela).getByLabelText("Status"), "s-pago");
+      await u.click(within(janela).getByRole("button", { name: "Aplicar a 2" }));
+      expect(repoL.classificarEmLote).toHaveBeenCalledWith([
+        { id: "c1", campos: { tipo_id: "t-casa", status_id: "s-pago" } },
+        { id: "p1", campos: { status_id: "s-pago" } },
+      ]);
+    });
   });
 });

@@ -788,6 +788,67 @@ export function rotuloSelecionados(n: number): string {
   return n === 1 ? "1 selecionado" : `${n} selecionados`;
 }
 
+/**
+ * A barra de Seleção do Painel (História 4.4, FR-48, UX-DR12): "N selecionados ·
+ * R$ total", "Limpar", "⋯ Mais" (Classificar em lote, Excluir) e "Gerar mensagem".
+ */
+export const TEXTOS_SELECAO = {
+  /** Nome acessível da barra. */
+  barra: "Ações da seleção",
+  limpar: "Limpar",
+  mais: "Mais",
+  classificar_em_lote: "Classificar em lote",
+  excluir: "Excluir",
+  /** Só existe, desativado, até a História 4.6. */
+  gerar_mensagem: "Gerar mensagem",
+  /** O aviso de trocar de Mês com Seleção (só quando havia Seleção). */
+  limpa_ao_trocar_de_mes: "Seleção limpa ao trocar de mês",
+  /** A janela "Classificar em lote". */
+  titulo_classificar: "Classificar em lote",
+  nao_mudar: "Não mudar",
+  observacao: "Observação",
+  observacao_dica: "Em branco, não muda",
+  escolha_ao_menos_um: "Escolha ao menos um campo para mudar",
+  /** O lote não tinha o que gravar (já estava assim, ou só partes de uma Divisão sem Status). */
+  nada_a_mudar: "Nada a mudar nos selecionados",
+  /** Excluir em lote. */
+  titulo_excluir: "Excluir lançamentos?",
+  confirmar_excluir: "Excluir lançamentos",
+} as const;
+
+/** O aviso de uma classificação em lote que gravou: "3 lançamentos classificados" (o "Desfazer" vem do toast). */
+export function rotuloLancamentosClassificados(n: number): string {
+  return n === 1 ? "1 lançamento classificado" : `${n} lançamentos classificados`;
+}
+
+/** O aviso da exclusão em lote: "3 lançamentos excluídos" (o "Desfazer" vem do toast). */
+export function rotuloLancamentosExcluidos(n: number): string {
+  return n === 1 ? "1 lançamento excluído" : `${n} lançamentos excluídos`;
+}
+
+/**
+ * Nota da janela de classificar: as partes de uma Divisão só recebem o Status
+ * (o Responsável é delas na Divisão; o Tipo e a Observação seguem a mãe).
+ */
+export function notaPartesDaDivisao(partes: number): string {
+  return partes === 1
+    ? "1 parte de uma Divisão só recebe o Status; o resto dela segue a Divisão"
+    : `${partes} partes de uma Divisão só recebem o Status; o resto delas segue a Divisão`;
+}
+
+/** A descrição da confirmação de Excluir em lote (a parte de uma Divisão não se exclui). */
+export function descricaoExcluirEmLote(n: number, ajustes: number, partes: number): string {
+  const alvo = n === 1 ? "1 lançamento sai" : `${n} lançamentos saem`;
+  const juntos = ajustes === 0 ? "" : ajustes === 1 ? " junto com 1 Ajuste" : ` junto com ${ajustes} Ajustes`;
+  const ficam =
+    partes === 0
+      ? ""
+      : partes === 1
+        ? " 1 parte de uma Divisão fica (desfaça a Divisão para excluir)."
+        : ` ${partes} partes de uma Divisão ficam (desfaça a Divisão para excluir).`;
+  return `${alvo} da grade${juntos}. Dá para desfazer logo depois.${ficam}`;
+}
+
 /** O botão da janela do lote: "Aplicar a 3". */
 export function rotuloAplicarA(n: number): string {
   return `Aplicar a ${n}`;

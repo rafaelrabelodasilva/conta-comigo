@@ -12,8 +12,10 @@ import {
   type Formula,
   type NomesDaFormula,
 } from "./formula";
+import { alternarTodos } from "./lancamento";
 import { linhasDoMes, somarValores } from "./painel";
 import { projetarPainel, type LancamentoParaProjetar } from "./projecoes";
+import { resumoDaSelecao } from "./selecao";
 
 // Testes de aceite da História 4.1 (AD, "Testes"): os totais de outubro/2026 do
 // Painel, sobre um Mês montado à mão (sem dado pessoal): quatro pessoas, uma
@@ -246,5 +248,48 @@ describe("grade filtrada pelo Bloco (aceite da 4.3)", () => {
     const g = gradeDoBloco(f);
     expect(g.valorDoBloco).toBe(281968);
     expect(g.total).toBe(563935);
+  });
+});
+
+// --------------------------------------------------- Seleção e total (4.4)
+
+/** "Selecionar todos" sobre a grade filtrada pelo Bloco, como o Painel faz, e o texto da barra. */
+function barraDoBloco(f: Formula, lancadas: readonly LancamentoParaProjetar[] = lancamentos) {
+  const g = gradeDoBloco(f, lancadas);
+  const selecao = alternarTodos(new Set(), g.linhas.map((x) => x.id));
+  return { g, resumo: resumoDaSelecao(selecao, g.visiveis) };
+}
+
+describe("Seleção e total (aceite da 4.4)", () => {
+  it("Bloco Mãe filtrado e 'selecionar todos': '7 selecionados · R$ 1.350,14'", () => {
+    const { resumo } = barraDoBloco(formula(r("mae")));
+    expect(resumo.texto).toBe(e("7 selecionados · R$ 1.350,14"));
+  });
+
+  it("o total da barra é o valor do Bloco de soma simples, de cada pessoa e de Todos", () => {
+    for (const f of [formula(r("mae")), formula(r("casal")), formula(r("lucas")), formula(r("rafael")), formula({ tipo: "todos" })]) {
+      const { g, resumo } = barraDoBloco(f);
+      expect(resumo.totalCentavos).toBe(g.valorDoBloco);
+    }
+  });
+
+  it("Casal: o Ajuste segue a mãe (não é um item) e as filhas da Divisão contam, nunca a mãe dividida", () => {
+    const { resumo } = barraDoBloco(formula(r("casal")));
+    // c1, c2, c3, c4 (com o Ajuste), as duas filhas do Monjaro e c6.
+    expect(resumo.quantidade).toBe(7);
+    expect(resumo.totalCentavos).toBe(563935);
+  });
+
+  it("Ajuste de outro Responsável: o total é o do Bloco (só o que o Bloco soma)", () => {
+    const divergente = lancamentos.map((x) => (x.id === "c4-ajuste" ? { ...x, responsavel_id: "mae" } : x));
+    for (const id of ["casal", "mae"]) {
+      const { g, resumo } = barraDoBloco(formula(r(id)), divergente);
+      expect(resumo.totalCentavos).toBe(g.valorDoBloco);
+    }
+  });
+
+  it("sem Bloco, 'selecionar todos' do Mês fecha no Total de R$ 9.280,23", () => {
+    const { resumo } = barraDoBloco(formula({ tipo: "todos" }));
+    expect(resumo.totalCentavos).toBe(928023);
   });
 });
