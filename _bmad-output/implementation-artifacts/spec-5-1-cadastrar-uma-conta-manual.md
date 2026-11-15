@@ -2,7 +2,7 @@
 title: 'História 5.1: Cadastrar uma Conta manual'
 type: 'feature'
 created: '2026-11-15'
-status: 'review'
+status: 'done'
 baseline_commit: 'ba01d33'
 route: 'dispatch'
 review_loop_iteration: 0
