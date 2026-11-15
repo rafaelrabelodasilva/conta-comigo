@@ -38,6 +38,8 @@ vi.mock("@/data/realtime", async () => {
   };
 });
 
+const gerar = vi.hoisted(() => vi.fn<(id: string) => void>());
+
 const repo = vi.hoisted(() => ({
   salvar: vi.fn<(pedido: Record<string, unknown>) => Promise<{ ok: boolean; codigo?: string }>>(async () => ({ ok: true })),
   excluir: vi.fn<(id: string) => Promise<{ ok: boolean; codigo?: string }>>(async () => ({ ok: true })),
@@ -113,7 +115,7 @@ function mudarBanco(tabela: string, mudar: (linhas: unknown[]) => unknown[]) {
 }
 
 function renderizar(linhas: unknown[] = [lanc()], mes = MES) {
-  return render(<BlocosDoMes linhas={linhas as never} mes={mes} />, { wrapper: ToastProvider });
+  return render(<BlocosDoMes linhas={linhas as never} mes={mes} aoGerarMensagem={gerar} />, { wrapper: ToastProvider });
 }
 
 const cartao = () => screen.getByRole("region", { name: "Blocos" });
@@ -129,6 +131,7 @@ const nomesNaOrdem = () => within(cartao()).getAllByRole("listitem").map((l) => 
 beforeEach(() => {
   seq = 0;
   falso.recarregar.mockReset();
+  gerar.mockClear();
   repo.salvar.mockClear().mockResolvedValue({ ok: true });
   repo.excluir.mockClear().mockResolvedValue({ ok: true });
   repo.reordenar.mockClear().mockResolvedValue({ ok: true });
@@ -156,13 +159,34 @@ describe("block-card (UX-DR8)", () => {
     expect(sem(card.textContent)).toContain("R$ 2.819,68");
   });
 
-  it("o 💬 só existe, desativado, e o VoiceOver lê 'Gerar mensagem do Bloco {nome}'", async () => {
-    definir([bloco("b1", "Casal", 1, formulaCasal)]);
+  it("o 💬 gera a mensagem do Bloco, e o VoiceOver lê 'Gerar mensagem do Bloco {nome}' (4.7)", async () => {
+    definir([bloco("b1", "Casal", 1, formulaCasal), bloco("b2", "Rafael", 2, formulaCasal)]);
     renderizar();
     const botao = within(cartaoDoBloco("Casal")).getByRole("button", { name: "Gerar mensagem do Bloco Casal" });
-    expect((botao as HTMLButtonElement).disabled).toBe(true);
+    expect((botao as HTMLButtonElement).disabled).toBe(false);
     await userEvent.setup().click(botao);
+    expect(gerar).toHaveBeenCalledTimes(1);
+    expect(gerar).toHaveBeenCalledWith("b1");
     expect(repo.salvar).not.toHaveBeenCalled();
+  });
+
+  it("um Bloco sem valor também gera: é a janela que explica", async () => {
+    const dividePorZero = { tipo: "operacao", operacao: "divisao", esquerda: formulaCasal, direita: { tipo: "numero", valor: "0" } };
+    definir([bloco("b1", "Casal", 1, dividePorZero)]);
+    renderizar();
+    const botao = within(cartaoDoBloco("Casal")).getByRole("button", { name: "Gerar mensagem do Bloco Casal" });
+    expect((botao as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.setup().click(botao);
+    expect(gerar).toHaveBeenCalledWith("b1");
+  });
+
+  it("sem `aoGerarMensagem` (o passo Blocos do Primeiro uso) nem o 💬 nem o item do ⋯ existem", async () => {
+    definir([bloco("b1", "Casal", 1, formulaCasal)]);
+    render(<BlocosDoMes linhas={[lanc()] as never} mes={MES} />, { wrapper: ToastProvider });
+    const card = cartaoDoBloco("Casal");
+    expect(within(card).queryByRole("button", { name: "Gerar mensagem do Bloco Casal" })).toBeNull();
+    await userEvent.setup().click(within(card).getByRole("button", { name: "Ações do Bloco Casal" }));
+    expect(screen.queryByRole("menuitem", { name: "Gerar mensagem" })).toBeNull();
   });
 
   it("sem Blocos: convida a criar o primeiro", () => {
@@ -259,16 +283,26 @@ describe("menu ⋯", () => {
     return u;
   }
 
-  it("oferece Editar fórmula, Ver cálculo, Reordenar e Excluir bloco", async () => {
+  it("oferece Editar fórmula, Ver cálculo, Gerar mensagem, Reordenar e Excluir bloco", async () => {
     definir([bloco("b1", "Casal", 1, formulaCasal), bloco("b2", "Rafael", 2, formulaCasal)]);
     renderizar();
     await abrirMenu("Casal");
     expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
       "Editar fórmula",
       "Ver cálculo",
+      "Gerar mensagem",
       "Reordenar",
       "Excluir bloco",
     ]);
+  });
+
+  it("“Gerar mensagem” do ⋯ abre a mesma mensagem do 💬", async () => {
+    definir([bloco("b1", "Casal", 1, formulaCasal), bloco("b2", "Rafael", 2, formulaCasal)]);
+    renderizar();
+    const u = await abrirMenu("Rafael");
+    await u.click(screen.getByRole("menuitem", { name: "Gerar mensagem" }));
+    expect(gerar).toHaveBeenCalledTimes(1);
+    expect(gerar).toHaveBeenCalledWith("b2");
   });
 
   it("toque longo no cartão abre o mesmo menu (clique direito no teste)", () => {
@@ -514,6 +548,7 @@ describe("filtrar a grade pelo Bloco (História 4.3, FR-20)", () => {
         ativoId={opcoes.ativoId ?? null}
         aoFiltrar={aoFiltrar}
         aoExcluindo={aoExcluindo}
+        aoGerarMensagem={gerar}
       />,
       { wrapper: ToastProvider },
     );

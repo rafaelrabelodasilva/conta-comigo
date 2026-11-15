@@ -3,15 +3,17 @@ import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ESPACO } from "@/domain/dinheiro";
+import { mensagemDaSelecao, type MensagemDaJanela } from "@/domain/mensagem-janela";
 import type { ModeloMensagem } from "@/domain/modelo-mensagem";
 import type { LancamentoParaMensagem } from "@/domain/projecoes";
 import { ToastProvider } from "@/ui/Toast";
 import { JanelaGerarMensagem, type PropsJanelaGerarMensagem } from "./JanelaGerarMensagem";
 
-// A janela "Gerar mensagem" (História 4.6, UX-DR17), sozinha: o texto, o aviso do
-// que ficou de fora, Copiar (e a falha), "Incluir previstos", o modelo que não serve
-// e a mensagem que muda com a janela aberta. A regra de inclusão e o formato têm os
-// testes de aceite em `src/domain/gerar-mensagem.test.ts`.
+// A janela "Gerar mensagem" (Histórias 4.6 e 4.7, UX-DR17), sozinha: o texto, os avisos,
+// Copiar (e a falha), "Incluir previstos", o modelo que não serve e a mensagem que muda
+// com a janela aberta. Ela recebe a mensagem pronta (`montar`); aqui a da Seleção
+// (forma 1). A regra de inclusão e o formato têm os testes de aceite em
+// `src/domain/gerar-mensagem.test.ts` e `gerar-mensagem-bloco.test.ts`.
 
 const e = (texto: string) => texto.replaceAll("R$ ", `R$${ESPACO}`).replaceAll("- R$", `-${ESPACO}R$`);
 
@@ -44,18 +46,37 @@ function l(id: string, nome: string, valor: number, extra: Partial<LancamentoPar
 
 const LANCAMENTOS = [l("a1", "MERCADO", 15990), l("a2", "FARMACIA", 32797), l("a3", "PAGO", 5000, { status_id: "pago" }), l("a4", "ZERO", 0)];
 
-function props(extra: Partial<PropsJanelaGerarMensagem> = {}): PropsJanelaGerarMensagem {
-  return {
-    aberta: true,
-    aoMudar: vi.fn(),
+type Entrada = {
+  selecao: ReadonlySet<string>;
+  lancamentos: readonly LancamentoParaMensagem[];
+  modelo: ModeloMensagem;
+  temFatura: boolean;
+  aoMudar: PropsJanelaGerarMensagem["aoMudar"];
+  aoEditarModelo: PropsJanelaGerarMensagem["aoEditarModelo"];
+};
+
+function props(extra: Partial<Entrada> = {}): PropsJanelaGerarMensagem {
+  const x: Entrada = {
     selecao: new Set(["a1", "a2"]),
     lancamentos: LANCAMENTOS,
-    mes: "2026-11",
-    temFatura: true,
-    statusPagos: new Set(["pago"]),
     modelo: MODELO,
+    temFatura: true,
+    aoMudar: vi.fn(),
     aoEditarModelo: vi.fn(),
     ...extra,
+  };
+  return {
+    aberta: true,
+    aoMudar: x.aoMudar,
+    aoEditarModelo: x.aoEditarModelo,
+    temFatura: x.temFatura,
+    montar: (incluirPrevistos) =>
+      mensagemDaSelecao(x.modelo, x.selecao, x.lancamentos, {
+        mes: "2026-11",
+        statusPagos: new Set(["pago"]),
+        temFatura: x.temFatura,
+        incluirPrevistos,
+      }),
   };
 }
 
@@ -169,7 +190,7 @@ describe("JanelaGerarMensagem", () => {
     expect(screen.getByRole("status").textContent).toBe("");
     // Outro aparelho muda o valor do Mercado.
     act(() => {
-      rerender(<JanelaGerarMensagem {...p} lancamentos={[l("a1", "MERCADO", 20000), ...LANCAMENTOS.slice(1)]} />);
+      rerender(<JanelaGerarMensagem {...p} montar={props({ lancamentos: [l("a1", "MERCADO", 20000), ...LANCAMENTOS.slice(1)] }).montar} />);
     });
     expect(quadro().value).toContain(e("MERCADO | R$ 200,00"));
     expect(screen.getByRole("status").textContent).toBe("A mensagem mudou desde que você abriu a janela. Confira o texto antes de copiar.");
@@ -179,10 +200,49 @@ describe("JanelaGerarMensagem", () => {
     const p = props();
     const { rerender } = renderizar(p);
     act(() => {
-      rerender(<JanelaGerarMensagem {...p} modelo={{ ...MODELO, saudacao: "Olá" }} />);
+      rerender(<JanelaGerarMensagem {...p} montar={props({ modelo: { ...MODELO, saudacao: "Olá" } }).montar} />);
     });
     expect(quadro().value.startsWith("Olá\n")).toBe(true);
     expect(within(screen.getByRole("dialog")).getByRole("status").textContent).toContain("A mensagem mudou");
+  });
+
+  it("vários avisos (de fora, pagos) ficam juntos na descrição, nunca no texto", () => {
+    const m: MensagemDaJanela = {
+      gerada: { estado: "pronta", texto: "Oi\nTotal", totalCentavos: 100 },
+      semTexto: "",
+      avisos: ["1 item não entra: 1 já pago", e("R$ 500,00 já foram pagos e não entram")],
+    };
+    renderizar({ ...props(), montar: () => m });
+    const descricao = screen.getByText((t) => t.includes("já foram pagos"));
+    expect(descricao.textContent).toBe(e("1 item não entra: 1 já pago. R$ 500,00 já foram pagos e não entram"));
+    expect(quadro().value).toBe("Oi\nTotal");
+  });
+
+  it("não sabe de onde veio: sem mensagem, mostra o texto que o núcleo mandou e desativa Copiar", () => {
+    const m: MensagemDaJanela = {
+      gerada: { estado: "sem_valor" },
+      semTexto: "Este bloco está sem valor. Edite a fórmula para gerar a mensagem.",
+      avisos: [],
+    };
+    renderizar({ ...props(), montar: () => m });
+    expect(screen.getByText(m.semTexto)).toBeTruthy();
+    expect(botao("Copiar").disabled).toBe(true);
+    expect(screen.queryByRole("textbox", { name: "Mensagem" })).toBeNull();
+    // “Editar modelo” não é o principal: o modelo está bem.
+    expect(botao("Editar modelo").className).not.toContain("bg-accent");
+  });
+
+  it("o Bloco que fica sem valor com a janela aberta avisa que a mensagem mudou", () => {
+    const pronta: MensagemDaJanela = { gerada: { estado: "pronta", texto: "Oi", totalCentavos: 100 }, semTexto: "", avisos: [] };
+    const semValor: MensagemDaJanela = { gerada: { estado: "sem_valor" }, semTexto: "Este bloco está sem valor. Edite a fórmula para gerar a mensagem.", avisos: [] };
+    const base = props();
+    const { rerender } = renderizar({ ...base, montar: () => pronta });
+    expect(screen.getByRole("status").textContent).toBe("");
+    act(() => {
+      rerender(<JanelaGerarMensagem {...base} montar={() => semValor} />);
+    });
+    expect(screen.getByRole("status").textContent).toContain("A mensagem mudou");
+    expect(botao("Copiar").disabled).toBe(true);
   });
 
   it("Fechar fecha a janela", async () => {
