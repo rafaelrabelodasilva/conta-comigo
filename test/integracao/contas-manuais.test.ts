@@ -382,7 +382,7 @@ describe.skipIf(!ligado)("Contas manuais no Supabase local", () => {
     } finally {
       await outro.removeAllChannels();
     }
-  });
+  }, 40_000);
 
   // A lista da 5.2 lê `contas_manuais` pelo gerenciador de Realtime: a Conta
   // nova, alterada e apagada em outro aparelho precisa chegar (a tabela está na
@@ -425,5 +425,5 @@ describe.skipIf(!ligado)("Contas manuais no Supabase local", () => {
     } finally {
       await outro.removeAllChannels();
     }
-  });
+  }, 40_000);
 });
