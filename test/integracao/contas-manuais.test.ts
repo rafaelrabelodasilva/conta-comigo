@@ -383,4 +383,47 @@ describe.skipIf(!ligado)("Contas manuais no Supabase local", () => {
       await outro.removeAllChannels();
     }
   });
+
+  // A lista da 5.2 lê `contas_manuais` pelo gerenciador de Realtime: a Conta
+  // nova, alterada e apagada em outro aparelho precisa chegar (a tabela está na
+  // publicação com `replica identity full`, então o DELETE traz o `id`).
+  it("Realtime (5.2): a Conta salva, alterada e apagada chega ao outro aparelho (INSERT, UPDATE e DELETE)", async () => {
+    const outro = await local.entrar(a.email, a.senha);
+    try {
+      const conta = nova(bombinhas({ nome: "Lista", repeticao: "mensal", parcelas: "", comecaEm: "2026-11", partes: [{ responsavel_id: mae, texto: "" }] }));
+      const inserida = await esperarEvento<{ id: string; nome: string; valor_centavos: number }>(
+        outro,
+        "contas_manuais",
+        "INSERT",
+        (c) => c.id === conta.id,
+        () => salvar(a.cliente, conta),
+      );
+      expect(inserida).toMatchObject({ id: conta.id, nome: "Lista", valor_centavos: 31_800 });
+
+      const alterada = await esperarEvento<{ id: string; encerrada_em_mes: string | null; updated_at: string }>(
+        outro,
+        "contas_manuais",
+        "UPDATE",
+        (c) => c.id === conta.id,
+        () => local.admin.from("contas_manuais").update({ encerrada_em_mes: "2027-01" }).eq("id", conta.id),
+      );
+      expect(alterada.encerrada_em_mes).toBe("2027-01");
+
+      const apagada = await esperarEvento<{ id: string }>(
+        outro,
+        "contas_manuais",
+        "DELETE",
+        (c) => c.id === conta.id,
+        async () => {
+          // A Série e os Lançamentos seguram a Conta (a exclusão de verdade é da 5.4).
+          await local.admin.from("lancamentos").delete().eq("conta_manual_id", conta.id);
+          await local.admin.from("series").delete().eq("conta_manual_id", conta.id);
+          return local.admin.from("contas_manuais").delete().eq("id", conta.id);
+        },
+      );
+      expect(apagada.id).toBe(conta.id);
+    } finally {
+      await outro.removeAllChannels();
+    }
+  });
 });

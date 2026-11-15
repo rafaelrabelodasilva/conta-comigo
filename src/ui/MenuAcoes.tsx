@@ -23,6 +23,10 @@ export type ItemMenuAcoes = {
   aoEscolher: () => void;
   /** Ações que apagam dados ficam em `danger-fg`. */
   destrutivo?: boolean;
+  /** Visível mas sem efeito (o toque não faz nada); o `motivo` explica por que. */
+  desativado?: boolean;
+  /** Uma linha pequena sob o rótulo ("Em breve"); entra no nome acessível do item. */
+  motivo?: string;
 };
 
 export type PropsMenuAcoes = {
@@ -158,13 +162,21 @@ export function MenuAcoes({
           {itens.map((item, i) => (
             <DropdownMenu.Item
               key={`${i}-${item.rotulo}`}
+              disabled={item.desativado}
               onSelect={item.aoEscolher}
               className={cn(
-                "flex min-h-toque cursor-pointer items-center rounded-sm px-3 texto-body select-none data-highlighted:bg-selection",
+                "flex min-h-toque cursor-pointer items-center rounded-sm px-3 texto-body select-none data-highlighted:bg-selection data-disabled:cursor-not-allowed data-disabled:opacity-60",
                 item.destrutivo && "text-danger-fg",
               )}
             >
-              {item.rotulo}
+              {item.motivo === undefined ? (
+                item.rotulo
+              ) : (
+                <span className="flex flex-col">
+                  {item.rotulo}
+                  <span className="texto-caption text-text-muted">{item.motivo}</span>
+                </span>
+              )}
             </DropdownMenu.Item>
           ))}
         </DropdownMenu.Content>

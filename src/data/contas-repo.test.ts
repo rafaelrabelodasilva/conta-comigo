@@ -110,12 +110,14 @@ function montar(opcoes: {
   } as unknown as SupabaseClient<Database>;
   const memoria = criarGerenciador<Lancamento>({ tabela: "lancamentos", obterCliente: () => cliente, porMes: true });
   if (opcoes.mesAberto) memoria.abrirMes(opcoes.mesAberto);
+  const memoriaContas = criarGerenciador<LinhaConta>({ tabela: "contas_manuais", obterCliente: () => cliente });
   const repo = criarRepoContas({
     obterCliente: () => cliente,
     memoriaLancamentos: memoria,
+    memoriaContas,
     online: () => opcoes.online ?? true,
   });
-  return { repo, chamadas, filtros, memoria, leituras: () => leituras };
+  return { repo, chamadas, filtros, memoria, memoriaContas, leituras: () => leituras };
 }
 
 describe("salvar uma Conta manual", () => {
@@ -210,6 +212,41 @@ describe("salvar uma Conta manual", () => {
     });
     await repo.salvar(nova(), "2026-11");
     expect(memoria.linhas().map((l) => l.mes)).toEqual(["2026-11"]);
+  });
+
+  it("a Conta devolvida entra no gerenciador de contas_manuais (a lista a mostra sem esperar o Realtime)", async () => {
+    const { repo, memoriaContas } = montar({
+      rpc: () => ({ data: { conta: linhaConta(), lancamentos: [mae(1)] }, error: null }),
+    });
+    expect(memoriaContas.linhas()).toEqual([]);
+    await repo.salvar(nova(), "2026-11");
+    expect(memoriaContas.linhas()).toEqual([linhaConta()]);
+    expect(memoriaContas.linha("c1")?.nome).toBe("Bombinhas");
+  });
+
+  it("salvar de novo a mesma Conta não duplica na memória; a resposta mais nova substitui", async () => {
+    const { repo, memoriaContas } = montar({
+      rpc: (n) => ({
+        data: { conta: linhaConta(n === 1 ? {} : { nome: "Bombinhas 2", updated_at: "2026-11-24T13:00:00+00:00" }), lancamentos: [] },
+        error: null,
+      }),
+    });
+    await repo.salvar(nova(), "2026-11");
+    await repo.salvar(nova(), "2026-11");
+    expect(memoriaContas.linhas()).toHaveLength(1);
+    expect(memoriaContas.linhas()[0].nome).toBe("Bombinhas 2");
+  });
+
+  it("recusa, resposta torta e sem internet não põem nada na memória de Contas", async () => {
+    const recusa = montar({ rpc: () => ({ data: null, error: { message: "qualquer" } }) });
+    await recusa.repo.salvar(nova(), "2026-11");
+    const torta = montar({ rpc: () => ({ data: { conta: null }, error: null }) });
+    await torta.repo.salvar(nova(), "2026-11");
+    const offline = montar({ online: false, rpc: () => ({ data: null, error: null }) });
+    await offline.repo.salvar(nova(), "2026-11");
+    expect(recusa.memoriaContas.linhas()).toEqual([]);
+    expect(torta.memoriaContas.linhas()).toEqual([]);
+    expect(offline.memoriaContas.linhas()).toEqual([]);
   });
 
   it("o banco recusa: salvar.falhou; resposta torta também", async () => {
