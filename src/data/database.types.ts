@@ -631,6 +631,26 @@ export type Database = {
           tabela: string
         }[]
       }
+      reordenar_blocos: {
+        Args: { p_ids: string[] }
+        Returns: {
+          created_at: string
+          de_cobranca: boolean
+          formula: NonNullable<Json>
+          id: string
+          meu_bloco: boolean
+          nome: string
+          ordem: number
+          owner_id: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "blocos"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       reordenar_responsaveis: {
         Args: { ids: string[] }
         Returns: {

@@ -2,7 +2,16 @@
 // uma Fórmula. Aqui, as regras do cadastro (nome, ordem, "meu Bloco", o que a
 // gravação recebe); a conta é de `formula.ts`. Puro: sem relógio, rede ou banco.
 
-import { montarFormula, lerFormula, type Ficha, type Formula } from "./formula";
+import {
+  avaliar,
+  lerFormula,
+  montarFormula,
+  type Avaliacao,
+  type Ficha,
+  type Formula,
+  type LinhaDaFormula,
+  type No,
+} from "./formula";
 import { validarNomeCadastro } from "./nome-cadastro";
 import type { Resultado } from "./resultado";
 
@@ -105,4 +114,161 @@ export function planejarSalvarBloco(
       p_meu_bloco: rascunho.meu_bloco,
     },
   };
+}
+
+// ----------------------------------------------------- Blocos no Painel (4.2)
+
+/** O que o `block-card` mostra de um Bloco: tudo sai de `avaliar` sobre a projeção do Painel. */
+export type ResumoDoBloco = {
+  id: string;
+  /** O valor arredondado; `null` só quando a Fórmula não cabe nos números seguros. */
+  valorCentavos: number | null;
+  /** A avaliação inteira: "Ver cálculo" mostra o passo a passo desta mesma. */
+  avaliacao: Avaliacao | null;
+  /** Algum previsto entra na conta: o Bloco mostra "inclui previstos". */
+  incluiPrevistos: boolean;
+  /** O Responsável de um Bloco que é de uma pessoa só (a bolinha). */
+  responsavelId: string | null;
+};
+
+/**
+ * Calcula o Bloco sobre a projeção do Painel do Mês (`projetarPainel`). Os
+ * previstos já estão na projeção (um Mês sem Fatura é feito deles);
+ * `incluiPrevistos` diz se algum deles entra neste Bloco. O valor do
+ * `block-card`, o passo a passo e, depois, a mensagem leem esta avaliação.
+ */
+export function resumirBloco(
+  bloco: Pick<Bloco, "id" | "formula">,
+  projecao: readonly LinhaDaFormula[],
+  idsDosPrevistos: ReadonlySet<string>,
+): ResumoDoBloco {
+  const a = avaliar(bloco.formula, projecao);
+  const avaliacao = a.ok ? a.valor : null;
+  return {
+    id: bloco.id,
+    valorCentavos: avaliacao ? avaliacao.valorCentavos : null,
+    avaliacao,
+    incluiPrevistos: avaliacao ? avaliacao.entram.some((id) => idsDosPrevistos.has(id)) : false,
+    responsavelId: responsavelUnico(bloco.formula),
+  };
+}
+
+/** Os Responsáveis e Tipos que a Fórmula cita, sem repetir, na ordem em que aparecem. */
+export function citacoesDaFormula(formula: Formula): { responsaveis: string[]; tipos: string[] } {
+  const responsaveis = new Set<string>();
+  const tipos = new Set<string>();
+  const visitar = (n: No): void => {
+    switch (n.tipo) {
+      case "responsavel":
+        responsaveis.add(n.id);
+        return;
+      case "tipo":
+        tipos.add(n.id);
+        return;
+      case "responsavel_em_tipo":
+        responsaveis.add(n.responsavel_id);
+        tipos.add(n.tipo_id);
+        return;
+      case "operacao":
+        visitar(n.esquerda);
+        visitar(n.direita);
+        return;
+      case "grupo":
+        visitar(n.interno);
+        return;
+      default:
+    }
+  };
+  visitar(formula);
+  return { responsaveis: [...responsaveis], tipos: [...tipos] };
+}
+
+/**
+ * O Responsável de um Bloco "de uma pessoa só": todo operando é dele
+ * (Responsável ou Responsável em Tipo). Com Tipo, Todos ou mais de uma
+ * pessoa (como "Rangel + (Casal ÷ 2)"), não há bolinha.
+ */
+export function responsavelUnico(formula: Formula): string | null {
+  let soResponsaveis = true;
+  const visitar = (n: No): void => {
+    switch (n.tipo) {
+      case "tipo":
+      case "todos":
+        soResponsaveis = false;
+        return;
+      case "operacao":
+        visitar(n.esquerda);
+        visitar(n.direita);
+        return;
+      case "grupo":
+        visitar(n.interno);
+        return;
+      default:
+    }
+  };
+  visitar(formula);
+  if (!soResponsaveis) return null;
+  const { responsaveis } = citacoesDaFormula(formula);
+  return responsaveis.length === 1 ? responsaveis[0] : null;
+}
+
+/**
+ * Os nomes dos Responsáveis e Tipos arquivados que a Fórmula cita. Arquivar
+ * mantém o cadastro nas somas (AD-16), então o valor não muda; o Bloco só avisa.
+ */
+export function arquivadosNaFormula(
+  formula: Formula,
+  cadastros: {
+    responsaveis: readonly { id: string; nome: string; arquivado: boolean }[];
+    tipos: readonly { id: string; nome: string; arquivado: boolean }[];
+  },
+): string[] {
+  const citados = citacoesDaFormula(formula);
+  const nomes: string[] = [];
+  for (const id of citados.responsaveis) {
+    const r = cadastros.responsaveis.find((x) => x.id === id);
+    if (r?.arquivado) nomes.push(r.nome);
+  }
+  for (const id of citados.tipos) {
+    const t = cadastros.tipos.find((x) => x.id === id);
+    if (t?.arquivado) nomes.push(t.nome);
+  }
+  return nomes;
+}
+
+/** Move o item de `de` para `para`; índice fora da lista, ou igual, devolve a mesma ordem. */
+export function moverNaOrdem<T>(itens: readonly T[], de: number, para: number): T[] {
+  const copia = [...itens];
+  if (de === para || de < 0 || para < 0 || de >= copia.length || para >= copia.length) return copia;
+  const [item] = copia.splice(de, 1);
+  copia.splice(para, 0, item);
+  return copia;
+}
+
+/** O que a gravação da ordem recebe. */
+export type PlanoDeOrdem = {
+  /** Os Blocos na ordem nova (a RPC `reordenar_blocos` recebe isto). */
+  ids: string[];
+  /** A `ordem` de cada um depois (1, 2, 3…): o que a tela mostra enquanto grava. */
+  ordens: { id: string; ordem: number }[];
+  /** Falso quando a ordem nova é a que já valia (nada a gravar). */
+  mudou: boolean;
+};
+
+/**
+ * Confere a ordem nova (os mesmos Blocos, sem repetir nem faltar) e devolve o
+ * que gravar.
+ */
+export function planejarReordenar(
+  blocos: readonly Pick<Bloco, "id" | "ordem">[],
+  idsNovos: readonly string[],
+): Resultado<PlanoDeOrdem> {
+  const atuais = new Set(blocos.map((b) => b.id));
+  const novos = new Set(idsNovos);
+  if (novos.size !== idsNovos.length || novos.size !== atuais.size || idsNovos.some((id) => !atuais.has(id))) {
+    return { ok: false, erro: { codigo: "bloco.ordem_invalida" } };
+  }
+  const ordens = idsNovos.map((id, i) => ({ id, ordem: i + 1 }));
+  const mudou = ordens.some((o) => blocos.find((b) => b.id === o.id)?.ordem !== o.ordem);
+  return { ok: true, valor: { ids: [...idsNovos], ordens, mudou } };
 }

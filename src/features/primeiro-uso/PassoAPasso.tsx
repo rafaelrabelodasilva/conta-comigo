@@ -21,6 +21,7 @@ import { SecaoTipos } from "@/features/configuracoes/SecaoTipos";
 import { Botao } from "@/ui/Botao";
 import { Janela } from "@/ui/Janela";
 import { useToast } from "@/ui/Toast";
+import { SecaoBlocos } from "./SecaoBlocos";
 
 // Passo a passo do Primeiro uso (mockup `primeiro-uso.html`): cada passo
 // mostra a seção de Configurações como ela é, com "Pular" e "Continuar".
@@ -38,6 +39,7 @@ const SECAO_DO_PASSO: Record<PassoPrimeiroUso, (props: PropsSecao) => React.JSX.
   tipos: SecaoTipos,
   status: SecaoStatus,
   planilha: SecaoImportarPlanilha,
+  blocos: SecaoBlocos,
   ciclo: SecaoCiclo,
 };
 

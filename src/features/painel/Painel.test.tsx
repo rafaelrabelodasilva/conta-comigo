@@ -444,7 +444,7 @@ describe("Painel do Mês", () => {
     renderizar();
     expect(screen.getByText(mensagem("carregar.falhou"))).toBeTruthy();
     await userEvent.setup().click(screen.getByRole("button", { name: "Tentar de novo" }));
-    expect(falso.recarregar).toHaveBeenCalledTimes(6);
+    expect(falso.recarregar).toHaveBeenCalledTimes(7);
   });
 
   it("trocar de Mês mostra o esqueleto enquanto o Mês novo carrega", async () => {
@@ -1482,5 +1482,94 @@ describe("Blocos (História 4.1)", () => {
     expect(within(cartao).queryByText("Rangel")).toBeNull();
     mudarBanco("blocos", (ls) => [...ls, rangel]);
     expect(within(cartao).getByText("Rangel")).toBeTruthy();
+  });
+});
+
+describe("Blocos no Painel (História 4.2)", () => {
+  const casalBloco = {
+    id: "b-casal",
+    owner_id: "dono",
+    nome: "Casal",
+    formula: { tipo: "responsavel", id: "r-casal" },
+    ordem: 1,
+    de_cobranca: false,
+    meu_bloco: false,
+    updated_at: "2026-11-03T12:00:00+00:00",
+  };
+  const valorDoBloco = () => sem(within(screen.getByRole("region", { name: "Blocos" })).getByText(/^R\$/, { selector: "b" }).textContent);
+
+  it("o block-card mostra o valor da Fórmula sobre os Lançamentos do Mês aberto", () => {
+    definir({
+      faturas: [novembro],
+      lancamentos: [
+        lanc("2026-11", { valor_centavos: 563935, responsavel_id: "r-casal" }),
+        lanc("2026-11", { valor_centavos: 1000, responsavel_id: "r-rafael" }),
+      ],
+      blocos: [casalBloco],
+    });
+    renderizar();
+    expect(valorDoBloco()).toBe("R$ 5.639,35");
+    const cartao = screen.getByRole("region", { name: "Blocos" });
+    expect(within(cartao).getByRole("button", { name: "Ações do Bloco Casal" })).toBeTruthy();
+    expect((within(cartao).getByRole("button", { name: "Gerar mensagem do Bloco Casal" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("o valor muda no lugar quando um Lançamento muda em outro aparelho, sem esqueleto", () => {
+    definir({ faturas: [novembro], lancamentos: [lanc("2026-11", { valor_centavos: 10000, responsavel_id: "r-casal" })], blocos: [casalBloco] });
+    renderizar();
+    expect(valorDoBloco()).toBe("R$ 100,00");
+    mudarBanco("lancamentos", (ls) => [...ls, lanc("2026-11", { valor_centavos: 2550, responsavel_id: "r-casal" })]);
+    expect(valorDoBloco()).toBe("R$ 125,50");
+    // Excluir um Lançamento (em outro aparelho) também muda o valor.
+    mudarBanco("lancamentos", (ls) =>
+      ls.map((l, i) => (i === 0 ? { ...(l as object), excluido_em: "2026-11-08T00:14:00Z" } : l)),
+    );
+    expect(valorDoBloco()).toBe("R$ 25,50");
+    expect(screen.queryByRole("status", { busy: true })).toBeNull();
+    expect(falso.recarregar).not.toHaveBeenCalled();
+  });
+
+  it("Mês sem Fatura: o Bloco soma os previstos e diz 'inclui previstos'", () => {
+    definir({
+      lancamentos: [lanc("2026-11", { valor_centavos: 7000, responsavel_id: "r-casal", lancado_por: "sistema" })],
+      blocos: [casalBloco],
+    });
+    renderizar();
+    expect(valorDoBloco()).toBe("R$ 70,00");
+    expect(within(screen.getByRole("region", { name: "Blocos" })).getByText("inclui previstos")).toBeTruthy();
+  });
+
+  it("trocar de Mês recalcula os Blocos para o Mês novo", async () => {
+    definir({
+      faturas: [novembro, outubro],
+      lancamentos: [
+        lanc("2026-11", { valor_centavos: 10000, responsavel_id: "r-casal" }),
+        lanc("2026-10", { valor_centavos: 3000, responsavel_id: "r-casal" }),
+      ],
+      blocos: [casalBloco],
+    });
+    renderizar();
+    expect(valorDoBloco()).toBe("R$ 100,00");
+    await userEvent.setup().click(screen.getByRole("button", { name: TEXTOS_PAINEL.mes_anterior }));
+    expect(valorDoBloco()).toBe("R$ 30,00");
+  });
+
+  it("falha de leitura só dos Blocos: o Painel segue de pé e o cartão avisa, com 'Tentar de novo'", async () => {
+    definir({ faturas: [novembro], lancamentos: [lanc("2026-11")] });
+    falso.statusTabelas = { blocos: "erro" };
+    falso.versao++;
+    renderizar();
+    expect(linhasDaGrade()).toHaveLength(1);
+    const cartao = screen.getByRole("region", { name: "Blocos" });
+    expect(within(cartao).getByText("Não foi possível carregar os Blocos.")).toBeTruthy();
+    await userEvent.setup().click(within(cartao).getByRole("button", { name: "Tentar de novo" }));
+    expect(falso.recarregar).toHaveBeenCalledTimes(1);
+  });
+
+  it("o 'Tentar de novo' do Painel também relê os Blocos", async () => {
+    definir({}, "erro");
+    renderizar();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Tentar de novo" }));
+    expect(falso.recarregar).toHaveBeenCalledTimes(7);
   });
 });

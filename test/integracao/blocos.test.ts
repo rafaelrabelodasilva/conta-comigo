@@ -208,4 +208,84 @@ describe.skipIf(!ligado)("blocos no Supabase local", () => {
       });
     });
   });
+  // Blocos no Painel (História 4.2): reordenar e excluir.
+  describe("reordenar e excluir (História 4.2)", () => {
+    let dono: Usuario;
+    let outro: Usuario;
+    let ids: Record<string, string>;
+
+    const ordem = async (u: Usuario) => {
+      const { data } = await u.cliente.from("blocos").select("nome, ordem").order("ordem");
+      return (data ?? []).map((l) => `${l.nome}:${l.ordem}`);
+    };
+
+    beforeAll(async () => {
+      dono = await local.criarUsuario("ordem");
+      outro = await local.criarUsuario("ordem-outro");
+      ids = {};
+      for (const [i, nome] of ["Um", "Dois", "Três", "Quatro"].entries()) {
+        const { data, error } = await salvar(dono, nome, { tipo: "todos" }, { ordem: i + 1 });
+        expect(error).toBeNull();
+        ids[nome] = data![0].id;
+      }
+      const { error } = await salvar(outro, "Do outro", { tipo: "todos" }, { ordem: 1 });
+      expect(error).toBeNull();
+    });
+
+    it("grava a ordem numa transação e devolve só as linhas que mudaram", async () => {
+      const { data, error } = await dono.cliente.rpc("reordenar_blocos", {
+        p_ids: [ids["Três"], ids["Um"], ids["Dois"], ids["Quatro"]],
+      });
+      expect(error).toBeNull();
+      expect(data!.map((l) => l.nome).sort()).toEqual(["Dois", "Três", "Um"]);
+      expect(await ordem(dono)).toEqual(["Três:1", "Um:2", "Dois:3", "Quatro:4"]);
+      // A mesma ordem de novo: nada muda, nada volta.
+      const { data: igual } = await dono.cliente.rpc("reordenar_blocos", {
+        p_ids: [ids["Três"], ids["Um"], ids["Dois"], ids["Quatro"]],
+      });
+      expect(igual).toEqual([]);
+    });
+
+    it("Bloco que ficou fora da lista (criado em outro aparelho) vai depois, na ordem que tinha", async () => {
+      const { error } = await dono.cliente.rpc("reordenar_blocos", { p_ids: [ids["Quatro"], ids["Dois"]] });
+      expect(error).toBeNull();
+      expect(await ordem(dono)).toEqual(["Quatro:1", "Dois:2", "Três:3", "Um:4"]);
+    });
+
+    it("ignora id de outro dono e não mexe nos Blocos dele", async () => {
+      const { data: doOutro } = await outro.cliente.from("blocos").select("id, ordem");
+      const idDoOutro = doOutro![0].id;
+      const { error } = await dono.cliente.rpc("reordenar_blocos", { p_ids: [idDoOutro, ids["Um"]] });
+      expect(error).toBeNull();
+      const { data: depois } = await outro.cliente.from("blocos").select("ordem").eq("id", idDoOutro);
+      expect(depois).toEqual([{ ordem: doOutro![0].ordem }]);
+    });
+
+    it("sem sessão não grava", async () => {
+      const { error } = await local.anonimo.rpc("reordenar_blocos", { p_ids: [ids["Um"]] });
+      expect(error).not.toBeNull();
+    });
+
+    it("excluir apaga só o Bloco do dono; o de outro dono continua", async () => {
+      const { data: doOutro } = await outro.cliente.from("blocos").select("id");
+      // O dono não enxerga nem apaga o do outro (RLS: nenhuma linha afetada).
+      await dono.cliente.from("blocos").delete().eq("id", doOutro![0].id);
+      expect((await outro.cliente.from("blocos").select("id")).data).toHaveLength(1);
+
+      const { error } = await dono.cliente.from("blocos").delete().eq("id", ids["Quatro"]);
+      expect(error).toBeNull();
+      const { data } = await dono.cliente.from("blocos").select("id").eq("id", ids["Quatro"]);
+      expect(data).toEqual([]);
+    });
+
+    it('excluir o "meu Bloco" libera a marca: nenhum outro a herda e outro Bloco pode recebê-la', async () => {
+      const { data: meu } = await salvar(dono, "Meu", { tipo: "todos" }, { ordem: 9, meu_bloco: true });
+      const { error } = await dono.cliente.from("blocos").delete().eq("id", meu![0].id);
+      expect(error).toBeNull();
+      const { data: marcados } = await local.admin.from("blocos").select("nome").eq("owner_id", dono.id).eq("meu_bloco", true);
+      expect(marcados).toEqual([]);
+      const { error: depois } = await salvar(dono, "Novo meu", { tipo: "todos" }, { ordem: 10, meu_bloco: true });
+      expect(depois).toBeNull();
+    });
+  });
 });

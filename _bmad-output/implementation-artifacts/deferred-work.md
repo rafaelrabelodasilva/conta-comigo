@@ -88,7 +88,7 @@
   evidence: Low. `mesesDaLista` termina em atual + 1 e "as setas andam sem limite" (2.4); os previstos vão até o último mês da Série.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-5-series-e-parcelas-previstas.md`
   summary: Rever se a barra por Responsável do Painel deve incluir os previstos (hoje inclui, como o resto do Mês) quando os Blocos e a Previsão chegarem (Épico 4/7).
-  evidence: Low. O "Total a pagar", a Conferência e o "verificar" filtram por `fatura_id` e ignoram os previstos; a barra por Responsável e a contagem da grade usam todas as linhas do Mês aberto (`linhasDoMes`).
+  evidence: Low. O "Total a pagar", a Conferência e o "verificar" filtram por `fatura_id` e ignoram os previstos; a barra por Responsável e a contagem da grade usam todas as linhas do Mês aberto (`linhasDoMes`). Decidido na 4.2: a barra continua incluindo os previstos, como os Blocos (o Bloco "Todos" e a soma das barras batem); reabrir só se a Previsão (Épico 7) pedir.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-5-series-e-parcelas-previstas.md`
   summary: Conferir no iPad se o VoiceOver lê "Nome, previsto, Valor, Parcela, Responsável, Status" na linha de um previsto.
   evidence: Low, não verificado. Junta-se à pendência do VoiceOver da 2.4; o jsdom só confere o `aria-label`.
@@ -192,17 +192,23 @@
   summary: Rodar no CI e conferir a migração `20261121120000_blocos.sql` e `test/integracao/blocos.test.ts`, e a igualdade de `src/data/database.types.ts` (escrito à mão) com o gerado.
   evidence: Medium, não verificado. Sem Docker nem Supabase CLI neste computador, a tabela, a RPC `salvar_bloco`, o índice de `meu_bloco`, `referencias_cadastro()` e o ramo jsonb com `conta_uso` (que a 1.6 deixou sem prova até as Fórmulas) só rodam no job `supabase` do CI. O job também compara os tipos escritos à mão (`NonNullable<Json>` na Fórmula, `p_id?` com default) com `supabase gen types`.
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-1-montar-um-bloco-com-fichas.md`
-  summary: Aplicar a migração dos Blocos em produção (`supabase db push`) só depois do merge e com a confirmação do Rafael.
-  evidence: Medium. Antes disso o cartão "Blocos" do Painel mostra o botão desativado (a leitura de `blocos` falha sem derrubar o Painel); depois, "＋ Novo bloco" passa a gravar.
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-montar-um-bloco-com-fichas.md`
   summary: Conferir no iPad o Montador (toque de 44 pt nas fichas, a janela com o teclado numérico do "Número…", o VoiceOver lendo "Remover Casal" e o resultado ao vivo) e o contraste da ficha `formula-chip` nos dois modos.
   evidence: Low, não verificado. O jsdom só confere os rótulos e os estados; o layout da paleta em 834 pt e a rolagem da janela com muitas fichas não foram vistos num aparelho.
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-1-montar-um-bloco-com-fichas.md`
-  summary: A 4.2 liga "Editar fórmula" e "Ver cálculo" ao `MontadorBloco`, que já aceita `inicial` (o teste de componente cobre a edição) mas só abre vazio no Painel; e troca a lista simples de nome e Fórmula do `CartaoBlocos` pelos `block-card`.
-  evidence: Low. O botão "Tentar de novo" do Painel também não relê `blocos` (a tabela não está em `TABELAS`); entra junto quando a 4.2 puser os valores dos Blocos no Painel.
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-montar-um-bloco-com-fichas.md`
-  summary: Rever se a barra por Responsável do Painel deve incluir os previstos, agora que os Blocos incluem (decisão da 4.1: "todos os Lançamentos do Mês", como a grade).
-  evidence: Low. Fecha em parte a pendência da 3.5: o Bloco "Todos" e a soma da barra por Responsável coincidem hoje, porque as duas leem as mesmas unidades do Mês; só diverge se a barra passar a ignorar os previstos (4.2 e Épico 7).
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-montar-um-bloco-com-fichas.md`
-  summary: Uma Fórmula que cita um Responsável ou Tipo arquivado continua valendo e a paleta não o oferece mais, sem aviso no Bloco; `lerBlocos` deixa de fora, sem aviso, uma linha de `blocos` cuja Fórmula não passa no schema.
-  evidence: Low. Arquivar mantém o cadastro nas somas (AD-16), então o valor não muda; a Fórmula ilegível só existiria por edição direta do banco (a RPC grava o que o núcleo montou).
+  summary: `lerBlocos` deixa de fora, sem aviso, uma linha de `blocos` cuja Fórmula não passa no schema.
+  evidence: Low. A Fórmula ilegível só existiria por edição direta do banco (a RPC grava o que o núcleo montou). O aviso de Responsável ou Tipo arquivado no Bloco foi feito na 4.2 (`arquivadosNaFormula`, "Cita Rangel (arquivado)").
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-blocos-no-painel.md`
+  summary: Rodar no CI e conferir a migração `20261122120000_reordenar_blocos.sql`, o teste novo de `test/integracao/blocos.test.ts` (reordenar e excluir) e a igualdade da entrada `reordenar_blocos` de `src/data/database.types.ts` (escrita à mão) com `supabase gen types`.
+  evidence: Medium, não verificado. Sem Docker nem Supabase CLI neste computador, a RPC só foi exercitada num Postgres em memória (pglite, fora do projeto) com uma tabela simplificada: ordem nova, lista parcial, id alheio e inexistente, duplicado, vazio e sem sessão. RLS, Realtime (o DELETE chegar ao outro aparelho) e o formato dos tipos só o job `supabase` do CI prova.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-blocos-no-painel.md`
+  summary: Aplicar a migração `20261122120000_reordenar_blocos.sql` em produção (`npx.cmd supabase db push --linked`, antes um `--dry-run`) só depois do merge e com a confirmação do Rafael.
+  evidence: Medium. Antes disso o Painel já mostra os valores, edita, exclui e vê o cálculo (nada disso precisa da migração), mas "Reordenar" falha ao gravar (a RPC não existe) e o cartão volta à ordem de antes com o aviso "Não foi possível salvar".
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-blocos-no-painel.md`
+  summary: Conferir no iPad o cartão dos Blocos: o valor em 3 colunas a 834 pt, o toque longo abrindo o menu, o arrasto pela alça (e se o toque na alça não rola a página), o tremor e o "reduzir movimento", e o VoiceOver lendo "Ações do Bloco {nome}", "Gerar mensagem do Bloco {nome}" (desativado) e "Mover o Bloco {nome} para antes".
+  evidence: Low, não verificado. O jsdom só confere o DOM, os nomes e o arrasto com retângulos simulados; a grade `auto-fill` de 10,5 rem e o contraste da legenda "inclui previstos" (`forecast-fg`) nos dois modos não foram vistos num aparelho.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-blocos-no-painel.md`
+  summary: Ligar o 💬 do `block-card` (hoje desativado) à janela Gerar mensagem quando a 4.7 chegar, e pôr "Gerar mensagem" no menu ⋯ junto com ele.
+  evidence: Low. A 4.2 só deixa o botão com o nome acessível "Gerar mensagem do Bloco {nome}"; o EXPERIENCE.md pede "Gerar mensagem" também no ⋯, que a AC da 4.2 não lista.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-blocos-no-painel.md`
+  summary: No passo "Blocos" do Primeiro uso, os valores aparecem zerados enquanto não há Lançamentos do Mês atual, e a janela do Montador cobre o passo (sem rascunho a avisar).
+  evidence: Low. Rafael novo ainda não importou nada, então o resultado ao vivo mostra R$ 0,00; o texto do passo avisa. Se incomodar, o passo pode esperar a primeira Fatura (volta como passo opcional do Painel vazio).
