@@ -5,7 +5,6 @@ import {
   ITENS_DE_EXEMPLO,
   LIMITES_DO_MODELO,
   MODELO_VAZIO,
-  amostraDoMes,
   fraseSemMarcador,
   itemDaMensagem,
   lerModelo,
@@ -17,9 +16,10 @@ import {
   previaDoModelo,
   renderizarModelo,
   validarModelo,
-  type LancamentoParaAmostra,
   type ModeloMensagem,
 } from "./modelo-mensagem";
+import { TEXTOS_GERAR } from "./mensagens";
+import type { LancamentoParaMensagem } from "./projecoes";
 
 const R = (centavos: number) => formatarDinheiro(centavos);
 
@@ -294,9 +294,11 @@ describe("renderizarModelo", () => {
   });
 });
 
-describe("amostra e prévia do Mês", () => {
+describe("prévia do Mês (um recorte de projetarMensagem)", () => {
   const MES = "2026-11";
-  const base = (extra: Partial<LancamentoParaAmostra> & { id?: string }): LancamentoParaAmostra => ({
+  let contador = 0;
+  const base = (extra: Partial<LancamentoParaMensagem>): LancamentoParaMensagem => ({
+    id: `l${(contador += 1)}`,
     mes: MES,
     excluido_em: null,
     nome: "Compra",
@@ -307,23 +309,30 @@ describe("amostra e prévia do Mês", () => {
     status_id: null,
     lancado_por: "fatura",
     ordem_fatura: 1,
+    responsavel_id: null,
+    tipo_id: null,
     ...extra,
   });
   const PAGOS = new Set(["pago"]);
+  const NOME = { ...MODELO_DO_RAFAEL, campos: { nome: true, parcela: false, valor: false } };
+  /** Os nomes que a prévia mostra, na ordem. */
+  const nomes = (linhas: LancamentoParaMensagem[]) => {
+    const texto = previaDoModelo(NOME, linhas, MES, PAGOS).texto;
+    return texto.split("\n").slice(texto.split("\n").indexOf("Detalhes:") + 1, -1);
+  };
 
   it("fica com as unidades do Mês, na ordem da fatura, no máximo ITENS_DA_AMOSTRA", () => {
     const linhas = Array.from({ length: 8 }, (_, i) => base({ nome: `C${i}`, ordem_fatura: 8 - i }));
-    const amostra = amostraDoMes(linhas, MES, PAGOS);
-    expect(amostra).toHaveLength(ITENS_DA_AMOSTRA);
-    expect(amostra.map((i) => i.nome)).toEqual(["C7", "C6", "C5", "C4", "C3"]);
+    expect(previaDoModelo(NOME, linhas, MES, PAGOS).quantidade).toBe(ITENS_DA_AMOSTRA);
+    expect(nomes(linhas)).toEqual(["C7", "C6", "C5", "C4", "C3"]);
   });
 
-  it("deixa de fora R$ 0,00, previstos, Ajustes, pagos, excluídos, outros Meses e a mãe dividida", () => {
+  it("deixa de fora R$ 0,00, previstos, pagos, excluídos, outros Meses e a mãe dividida; o Ajuste vai sob a parcela", () => {
     const linhas = [
-      base({ nome: "ok", ordem_fatura: 1 }),
+      base({ id: "ok", nome: "ok", ordem_fatura: 1 }),
+      base({ nome: "ajuste", ajuste_de_id: "ok", valor_centavos: -8, ordem_fatura: 9 }),
       base({ nome: "zero", valor_centavos: 0 }),
       base({ nome: "previsto", lancado_por: "sistema" }),
-      base({ nome: "ajuste", ajuste_de_id: "x" }),
       base({ nome: "pago", status_id: "pago" }),
       base({ nome: "excluido", excluido_em: "2026-11-02T00:00:00Z" }),
       base({ nome: "outro mes", mes: "2026-10" }),
@@ -331,12 +340,12 @@ describe("amostra e prévia do Mês", () => {
       base({ nome: "parte", dividido_de_id: "m", ordem_fatura: 2 }),
       base({ nome: "estorno", valor_centavos: -2590, ordem_fatura: 3 }),
     ];
-    expect(amostraDoMes(linhas, MES, PAGOS).map((i) => i.nome)).toEqual(["ok", "parte", "estorno"]);
+    expect(nomes(linhas)).toEqual(["ok", TEXTOS_GERAR.ajuste, "parte", "estorno"]);
   });
 
   it("sem ordem da fatura (manual), vai para o fim", () => {
     const linhas = [base({ nome: "manual", ordem_fatura: null }), base({ nome: "fatura", ordem_fatura: 5 })];
-    expect(amostraDoMes(linhas, MES, PAGOS).map((i) => i.nome)).toEqual(["fatura", "manual"]);
+    expect(nomes(linhas)).toEqual(["fatura", "manual"]);
   });
 
   it("a prévia usa o Mês e soma só os itens mostrados", () => {

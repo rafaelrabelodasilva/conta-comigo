@@ -10,24 +10,23 @@
 // - o título "Detalhes:", o prefixo "Pix " e a linha final "Total: R$ X" NÃO
 //   são campos: entram sozinhos (EXPERIENCE.md, "Formato da mensagem").
 //
-// Contrato para a 4.6 e a 4.7 (não refazer): a geração real decide QUAIS
-// itens entram (`projetarMensagem`: só do Mês, não pagos, sem R$ 0,00, sem
-// previstos) e monta as linhas de detalhe com `linhaDeDetalhe` (a 4.7, em
-// grupos por operando, e as de "↳ Ajuste"); depois entrega tudo a
-// `renderizarModelo(modelo, { detalhes, totalCentavos })`, que só põe o
-// texto do modelo em volta. `renderizarModelo` não filtra nada e não soma:
-// o total vem de fora (a soma dos itens na forma 1, a Fórmula na forma 2).
-// A prévia desta história (`previaDoModelo`) é só uma amostra, e a 4.6 não
-// precisa dela.
+// Contrato para a 4.6 e a 4.7 (não refazer): `projetarMensagem` (em
+// `projecoes.ts`) decide QUAIS itens entram (só do Mês, não pagos, sem R$ 0,00,
+// sem previstos); `gerarMensagem` monta as linhas com `linhaDeDetalhe` (e as
+// de "↳ Ajuste") e entrega tudo a `renderizarModelo(modelo, { detalhes,
+// totalCentavos })`, que só põe o texto do modelo em volta. `renderizarModelo`
+// não filtra nada e não soma: o total vem de fora (a soma dos itens na forma 1,
+// a Fórmula na forma 2, que a 4.7 monta em grupos por operando). A prévia de
+// Configurações é um recorte da mesma `projetarMensagem`: a prévia e a
+// mensagem nunca divergem.
 
 import { z } from "zod";
 import { formatarDinheiro } from "./dinheiro";
 import { formatarMesExtenso } from "./datas";
 import { formatarParcela } from "./importacao-fatura";
-import { TEXTOS_MODELO } from "./mensagens";
-import { linhasDoMes, nomeExibido } from "./painel";
-import { ehPrevisto } from "./previstos";
-import { unidadesDoMes } from "./divisao";
+import { TEXTOS_GERAR, TEXTOS_MODELO } from "./mensagens";
+import { nomeExibido } from "./painel";
+import { projetarMensagem, type LancamentoParaMensagem, type ProjecaoDaMensagem } from "./projecoes";
 
 // ------------------------------------------------------------------ o modelo
 
@@ -284,6 +283,70 @@ export function renderizarModelo(modelo: ModeloMensagem, corpo: CorpoDaMensagem)
   return blocos.join("\n\n");
 }
 
+// ------------------------------------------------- gerar a mensagem (4.6)
+
+/** O modelo serve para gerar? Vazio e sem caixa marcada não geram texto. */
+export type ProntidaoDoModelo = "pronto" | "vazio" | "sem_campos";
+
+export function prontidaoDoModelo(modelo: ModeloMensagem): ProntidaoDoModelo {
+  if (modeloEstaVazio(modelo)) return "vazio";
+  if (CAMPOS_DA_LINHA.every((c) => !modelo.campos[c])) return "sem_campos";
+  return "pronto";
+}
+
+/** Um item e os valores dos Ajustes dele (na ordem), prontos para virar linhas. */
+export type ItemParaLinhas = { item: ItemDaMensagem; ajustes: readonly number[] };
+
+/** A linha do Ajuste: "↳ Ajuste | - R$ 0,08" (o valor só com a caixa Valor marcada). */
+function linhaDoAjuste(valorCentavos: number, campos: Readonly<Record<CampoDaLinha, boolean>>): string {
+  return [TEXTOS_GERAR.ajuste, ...(campos.valor ? [formatarDinheiro(valorCentavos)] : [])].join(" | ");
+}
+
+/**
+ * As linhas de detalhe: a de cada item e, logo abaixo da parcela, uma linha
+ * "↳ Ajuste" para cada Ajuste dela. Um item sem nada a mostrar (linha vazia)
+ * some junto com os Ajustes.
+ */
+export function linhasDaMensagem(
+  itens: readonly ItemParaLinhas[],
+  campos: Readonly<Record<CampoDaLinha, boolean>>,
+): string[] {
+  return itens.flatMap(({ item, ajustes }) => {
+    const linha = linhaDeDetalhe(item, campos);
+    return linha === "" ? [] : [linha, ...ajustes.map((valor) => linhaDoAjuste(valor, campos))];
+  });
+}
+
+export type MensagemGerada =
+  | { estado: "pronta"; texto: string; totalCentavos: number }
+  | { estado: "nada_a_cobrar" }
+  | { estado: "modelo_vazio" }
+  | { estado: "modelo_sem_campos" };
+
+/**
+ * A mensagem da forma 1 (Seleção): `renderizarModelo` sobre as linhas dos itens
+ * que a projeção deixou entrar. O total é o líquido da projeção (estornos
+ * reduzem). Sem item, ou com total que não passa de R$ 0,00 (só estornos, ou
+ * estorno que zera a conta), não há o que cobrar; antes do modelo vem o "nada a
+ * cobrar", que é do que Rafael selecionou. Depois, modelo vazio ou sem caixa
+ * não gera texto.
+ */
+export function gerarMensagem(
+  modelo: ModeloMensagem,
+  projecao: Pick<ProjecaoDaMensagem, "entram" | "totalCentavos">,
+): MensagemGerada {
+  if (projecao.entram.length === 0 || projecao.totalCentavos <= 0) return { estado: "nada_a_cobrar" };
+  const prontidao = prontidaoDoModelo(modelo);
+  if (prontidao === "vazio") return { estado: "modelo_vazio" };
+  if (prontidao === "sem_campos") return { estado: "modelo_sem_campos" };
+  const itens = projecao.entram.map((i) => ({ item: itemDaMensagem(i), ajustes: i.ajustes.map((a) => a.valor_centavos) }));
+  const texto = renderizarModelo(modelo, {
+    detalhes: linhasDaMensagem(itens, modelo.campos),
+    totalCentavos: projecao.totalCentavos,
+  });
+  return { estado: "pronta", texto, totalCentavos: projecao.totalCentavos };
+}
+
 // ------------------------------------------------------------------- prévia
 
 /** Quantos itens a prévia mostra. */
@@ -295,49 +358,6 @@ export const ITENS_DE_EXEMPLO: readonly ItemDaMensagem[] = [
   { nome: "Celular", parcela: "05/10", valor_centavos: 57750 },
   { nome: "Estorno de loja", parcela: "", valor_centavos: -2590 },
 ];
-
-/** O que a amostra lê de um Lançamento do Mês. */
-export type LancamentoParaAmostra = {
-  mes: string;
-  excluido_em: string | null;
-  nome: string;
-  apelido: string | null;
-  parcela_n: number | null;
-  parcela_total: number | null;
-  valor_centavos: number;
-  status_id: string | null;
-  lancado_por: string;
-  ordem_fatura: number | null;
-  ajuste_de_id?: string | null;
-  dividido_de_id?: string | null;
-  divisao?: unknown;
-};
-
-/**
- * Até `ITENS_DA_AMOSTRA` itens do Mês para a prévia, na ordem da fatura: as
- * unidades da grade (as partes de uma Divisão, nunca a mãe), sem R$ 0,00, sem
- * previstos, sem Ajustes e sem os de Status que conta como pago. É só uma
- * amostra honesta do que a mensagem mostraria: a regra completa de inclusão
- * (Pago parcialmente, Dívidas programadas, "Incluir previstos") é da
- * `projetarMensagem` da 4.6, que não passa por aqui.
- */
-export function amostraDoMes(
-  lancamentos: readonly LancamentoParaAmostra[],
-  mes: string,
-  statusPagos: ReadonlySet<string>,
-): ItemDaMensagem[] {
-  return unidadesDoMes(linhasDoMes(lancamentos, mes))
-    .filter(
-      (l) =>
-        l.valor_centavos !== 0 &&
-        !ehPrevisto(l) &&
-        (l.ajuste_de_id ?? null) === null &&
-        !(l.status_id !== null && statusPagos.has(l.status_id)),
-    )
-    .sort((a, b) => (a.ordem_fatura ?? Number.MAX_SAFE_INTEGER) - (b.ordem_fatura ?? Number.MAX_SAFE_INTEGER))
-    .slice(0, ITENS_DA_AMOSTRA)
-    .map(itemDaMensagem);
-}
 
 export type Previa = {
   /** A mensagem renderizada; vazia se o modelo está vazio (a tela mostra a dica). */
@@ -351,26 +371,34 @@ export type Previa = {
 };
 
 /**
- * A prévia ao vivo do modelo (a cada tecla): a amostra do Mês atual ou, se
- * ele não tem nada a cobrar, os itens de exemplo. O total da prévia é a soma
- * dos itens mostrados (não o do Mês). Aceita o rascunho como está, mesmo
- * inválido: o que o erro do campo diz é o que a prévia mostra.
+ * A prévia ao vivo do modelo (a cada tecla): um recorte da `projetarMensagem`
+ * (a mesma regra da mensagem real) sobre o Mês atual, com até `ITENS_DA_AMOSTRA`
+ * itens, os Ajustes deles e o total só desses itens. Sem nada a cobrar no Mês
+ * (ou sem o Mês carregado), usa os itens de exemplo. Previstos ficam de fora (o
+ * Mês atual tem Fatura). Aceita o rascunho como está, mesmo inválido: o que o
+ * erro do campo diz é o que a prévia mostra.
  */
 export function previaDoModelo(
   modelo: ModeloMensagem,
-  lancamentos: readonly LancamentoParaAmostra[],
+  lancamentos: readonly LancamentoParaMensagem[],
   mes: string,
   statusPagos: ReadonlySet<string>,
 ): Previa {
-  const amostra = amostraDoMes(lancamentos, mes, statusPagos);
+  const projecao = projetarMensagem(new Set(lancamentos.map((l) => l.id)), lancamentos, {
+    mes,
+    statusPagos,
+    temFatura: true,
+    incluirPrevistos: false,
+  });
+  const amostra = projecao.entram.slice(0, ITENS_DA_AMOSTRA);
   const doMes = amostra.length > 0;
-  const itens = doMes ? amostra : ITENS_DE_EXEMPLO;
+  const itens: ItemParaLinhas[] = doMes
+    ? amostra.map((i) => ({ item: itemDaMensagem(i), ajustes: i.ajustes.map((a) => a.valor_centavos) }))
+    : ITENS_DE_EXEMPLO.map((item) => ({ item, ajustes: [] }));
+  const total = (doMes ? amostra.map((i) => i.liquido_centavos) : ITENS_DE_EXEMPLO.map((i) => i.valor_centavos)).reduce((s, v) => s + v, 0);
   const texto = modeloEstaVazio(modelo)
     ? ""
-    : renderizarModelo(modelo, {
-        detalhes: itens.map((item) => linhaDeDetalhe(item, modelo.campos)),
-        totalCentavos: itens.reduce((soma, item) => soma + item.valor_centavos, 0),
-      });
+    : renderizarModelo(modelo, { detalhes: linhasDaMensagem(itens, modelo.campos), totalCentavos: total });
   return {
     texto,
     origem: doMes ? "mes" : "exemplo",

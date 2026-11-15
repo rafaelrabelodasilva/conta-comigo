@@ -9,7 +9,7 @@ import { MenuAcoes } from "@/ui/MenuAcoes";
 // Barra de Seleção do Painel (História 4.4, FR-48, UX-DR12): a `selection-bar`
 // presa embaixo, só com 1+ itens, com "N selecionados · R$ total" (o texto vem do
 // núcleo), "Limpar", "⋯ Mais" (Classificar em lote, Excluir) e "Gerar mensagem"
-// (FR-14), que só existe e fica desativado até a História 4.6. "Aplicar status" e
+// (FR-24, História 4.6), que abre a janela com a mensagem da Seleção. "Aplicar status" e
 // "Programar dívida" são dos Épicos 6 e 7. O anúncio ao leitor de tela é de uma
 // região que o Painel mantém no DOM, vazia, antes da primeira marcação.
 
@@ -24,6 +24,7 @@ export type PropsBarraSelecaoPainel = {
   aoLimpar: () => void;
   aoClassificar: () => void;
   aoExcluir: () => void;
+  aoGerarMensagem: () => void;
 };
 
 export function BarraSelecaoPainel({
@@ -34,6 +35,7 @@ export function BarraSelecaoPainel({
   aoLimpar,
   aoClassificar,
   aoExcluir,
+  aoGerarMensagem,
 }: PropsBarraSelecaoPainel) {
   return (
     <BarraSelecao
@@ -54,8 +56,7 @@ export function BarraSelecaoPainel({
           ...(podeExcluir ? [{ rotulo: T.excluir, aoEscolher: aoExcluir, destrutivo: true as const }] : []),
         ]}
       />
-      {/* FR-14: a mensagem chega na História 4.6; até lá o botão só existe. */}
-      <Botao variante="primario" disabled>
+      <Botao variante="primario" disabled={ocupado} onClick={aoGerarMensagem}>
         {T.gerar_mensagem}
       </Botao>
     </BarraSelecao>

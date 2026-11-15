@@ -80,7 +80,7 @@ development_status:
   4-3-filtrar-a-grade-pelo-bloco: done
   4-4-selecionar-e-ver-o-total: done
   4-5-configurar-o-modelo-da-mensagem: done
-  4-6-gerar-a-mensagem-a-partir-da-seleção: backlog
+  4-6-gerar-a-mensagem-a-partir-da-seleção: review
   4-7-gerar-a-mensagem-a-partir-de-um-bloco: backlog
   epic-4-retrospective: optional
 

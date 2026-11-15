@@ -54,6 +54,7 @@ import {
   nomeExibido,
   type Ordem,
 } from "@/domain/painel";
+import { lerModelo } from "@/domain/modelo-mensagem";
 import { projetarPainel } from "@/domain/projecoes";
 import { ativos as responsaveisAtivos } from "@/domain/responsaveis";
 import {
@@ -66,10 +67,12 @@ import {
 } from "@/domain/selecao";
 import { ativos as statusAtivos } from "@/domain/status";
 import { ativos as tiposAtivos } from "@/domain/tipos";
+import { configuracoesDoDono } from "@/data/configuracoes-repo";
 import { repoFaturas } from "@/data/faturas-repo";
 import { repoLancamentos, type LinhaLancamento } from "@/data/lancamentos-repo";
 import { repoPlanilha } from "@/data/planilha-repo";
 import { gerenciador, useLinhas } from "@/data/realtime";
+import { SECAO_MODELO_DA_MENSAGEM } from "@/features/configuracoes/secoes";
 import { ImportarFatura } from "@/features/importar/ImportarFatura";
 import { Botao } from "@/ui/Botao";
 import { cn } from "@/ui/cn";
@@ -86,6 +89,7 @@ import { FaixaConferencia } from "./FaixaConferencia";
 import { FaturaDoMes } from "./FaturaDoMes";
 import { GradeLancamentos, type CadastrosGrade } from "./GradeLancamentos";
 import { JanelaClassificarEmLote } from "./JanelaClassificarEmLote";
+import { JanelaGerarMensagem } from "./JanelaGerarMensagem";
 import { DividirLancamento } from "./DividirLancamento";
 import { PainelLancamento } from "./PainelLancamento";
 import { SeletorMes } from "./SeletorMes";
@@ -154,7 +158,8 @@ import { SeletorMes } from "./SeletorMes";
 // (`BarraSelecaoPainel`): "N selecionados · R$ total" (o texto e o total vêm do núcleo,
 // `resumoDaSelecao`, a mesma soma líquida do Revisar e do rodapé), "Limpar", "⋯ Mais"
 // (Classificar em lote, pela função da 3.3, e Excluir, com os Ajustes `junto`) e
-// "Gerar mensagem" (desativado até a 4.6). A região `role=status` que anuncia o total
+// "Gerar mensagem" (4.6: abre `JanelaGerarMensagem`, que lê a Seleção, o Mês, os Status e o modelo
+// da mensagem e acompanha o Realtime). A região `role=status` que anuncia o total
 // fica no DOM, vazia, antes da primeira marcação. Trocar de Mês limpa a Seleção e avisa
 // só se havia Seleção (`aoTrocarDeMes`).
 
@@ -221,6 +226,7 @@ export function Painel({ titulo }: { titulo: string }) {
   // As janelas da barra de Seleção (4.4) e a gravação em lote em curso.
   const [classificandoLote, setClassificandoLote] = useState(false);
   const [excluindoLote, setExcluindoLote] = useState(false);
+  const [gerandoMensagem, setGerandoMensagem] = useState(false);
   const [lotando, setLotando] = useState(false);
   const toast = useToast();
   const router = useRouter();
@@ -261,6 +267,12 @@ export function Painel({ titulo }: { titulo: string }) {
       status: new Map(status.linhas.map((s) => [s.id, { nome: s.nome, conta_como_pago: s.conta_como_pago }])),
     }),
     [tipos.linhas, responsaveis.linhas, status.linhas],
+  );
+  // Para a mensagem (4.6): os Status que contam como pago e o modelo salvo.
+  const statusPagos = useMemo(() => new Set(status.linhas.filter((s) => s.conta_como_pago).map((s) => s.id)), [status.linhas]);
+  const modeloDaMensagem = useMemo(
+    () => lerModelo(configuracoesDoDono(configuracoes.linhas)?.modelo_mensagem),
+    [configuracoes.linhas],
   );
   const ordemResponsaveis = useMemo(
     () => [...responsaveis.linhas].sort((a, b) => a.ordem - b.ordem).map((r) => r.id),
@@ -326,6 +338,7 @@ export function Painel({ titulo }: { titulo: string }) {
     setSelecao(new Set(troca.selecao));
     setPainel(null);
     setDividindo(null);
+    setGerandoMensagem(false);
   };
 
   // Esc fecha o painel (a janela de confirmação, os menus e os popovers fecham antes).
@@ -541,6 +554,8 @@ export function Painel({ titulo }: { titulo: string }) {
     // O que o rodapé da grade soma: as mães filtradas e os Ajustes delas. O total da barra é desta mesma lista.
     const visiveis = naGrade.flatMap((l) => [l, ...(ajustesPorMae.get(l.id) ?? [])]);
     const resumo = resumoDaSelecao(selecionados, visiveis);
+    // Sem Seleção a janela da mensagem fecha (excluída em outro aparelho): o estado não pode reabri-la na próxima marcação.
+    if (gerandoMensagem && selecionados.size === 0) setGerandoMensagem(false);
     const cartoesDaFatura = fatura
       ? cartoes.linhas
           .filter((c) => c.fatura_id === fatura.id)
@@ -680,7 +695,21 @@ export function Painel({ titulo }: { titulo: string }) {
               aoLimpar={() => setSelecao(new Set())}
               aoClassificar={() => setClassificandoLote(true)}
               aoExcluir={() => setExcluindoLote(true)}
+              aoGerarMensagem={() => setGerandoMensagem(true)}
             />
+            {gerandoMensagem ? (
+              <JanelaGerarMensagem
+                aberta
+                aoMudar={setGerandoMensagem}
+                selecao={selecionados}
+                lancamentos={lancamentos.linhas}
+                mes={mesAberto}
+                temFatura={fatura !== null}
+                statusPagos={statusPagos}
+                modelo={modeloDaMensagem}
+                aoEditarModelo={() => router.push(`/configuracoes?secao=${SECAO_MODELO_DA_MENSAGEM}`)}
+              />
+            ) : null}
           </>
         ) : null}
       </div>
