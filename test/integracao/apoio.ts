@@ -82,7 +82,7 @@ export function supabaseLocal(prefixo: string) {
  */
 export async function esperarEvento<T>(
   ouvinte: Cliente,
-  tabela: "status" | "configuracoes" | "config_ciclo" | "faturas" | "fatura_cartoes" | "lancamentos" | "regras",
+  tabela: "status" | "configuracoes" | "config_ciclo" | "faturas" | "fatura_cartoes" | "lancamentos" | "regras" | "contas_manuais",
   evento: "INSERT" | "UPDATE" | "DELETE",
   aceita: (linha: T) => boolean,
   gravar: (tentativa: number) => PromiseLike<unknown>,

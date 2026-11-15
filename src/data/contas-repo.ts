@@ -3,7 +3,9 @@
 // Série e as parcelas numa transação, só com o que o núcleo calculou
 // (`pedidoSalvarConta`). As linhas devolvidas vão para o gerenciador de
 // Lançamentos (que só guarda as do Mês aberto; os outros Meses chegam quando
-// são abertos, e o Realtime avisa os outros aparelhos).
+// são abertos, e o Realtime avisa os outros aparelhos). A Conta devolvida entra
+// no gerenciador de `contas_manuais` (a lista da 5.2 a mostra sem esperar o
+// evento do Realtime; o evento, quando chega, não duplica nada: o `id` é o mesmo).
 //
 // - Sem conexão, nada começa (AD-3): `conexao.gravar_sem_conexao`.
 // - A `ocorrencia` da Série (duas Contas idênticas) é lida aqui e escolhida
@@ -44,10 +46,12 @@ function codigoDoErro(erro: { message?: string } | null | undefined): CodigoFalh
 export function criarRepoContas(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
   memoriaLancamentos: Gerenciador<LinhaLancamento>;
+  /** A memória das Contas (a lista da tela Contas lê dela). */
+  memoriaContas: Gerenciador<LinhaConta>;
   /** Há conexão? Padrão: o detector único (`conexao.ts`). */
   online?: Online;
 }) {
-  const { obterCliente, memoriaLancamentos, online = estaOnline } = deps;
+  const { obterCliente, memoriaLancamentos, memoriaContas, online = estaOnline } = deps;
 
   /** As `ocorrencia` já usadas pela mesma chave (de qualquer Série) e a da própria Conta, se ela já tem Série. */
   async function lerOcorrencias(
@@ -85,6 +89,7 @@ export function criarRepoContas(deps: {
     const resposta = data as { conta?: LinhaConta; lancamentos?: LinhaLancamento[] } | null;
     if (!resposta || !resposta.conta || !Array.isArray(resposta.lancamentos)) return FALHOU;
     memoriaLancamentos.aplicarLote(resposta.lancamentos);
+    memoriaContas.aplicarLote([resposta.conta]);
     return {
       ok: true,
       conta: resposta.conta,
@@ -125,6 +130,7 @@ export function repoContas(): RepoContas {
   repo ??= criarRepoContas({
     obterCliente: () => criarClienteNavegador() as SupabaseClient<Database> | null,
     memoriaLancamentos: gerenciador("lancamentos"),
+    memoriaContas: gerenciador("contas_manuais"),
   });
   return repo;
 }

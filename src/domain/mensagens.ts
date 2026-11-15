@@ -1296,11 +1296,73 @@ export const TEXTOS_CONTAS = {
   cancelar: "Cancelar",
   salvar: "Salvar",
   salvando: "Salvando…",
-  salvas_agora: "Salvas agora",
   sem_internet: "Sem conexão. Você pode consultar, mas não alterar.",
   nota_passado: "Os meses anteriores também recebem a conta.",
   explicacao_vazio: "As contas que você cadastrar aparecem nos meses certos do Painel.",
+  // Lista (História 5.2, UX-DR24).
+  lista: "Lista de contas manuais",
+  filtrar: "Filtrar contas",
+  filtro_ativas: "Ativas",
+  filtro_encerradas: "Encerradas",
+  filtro_todas: "Todas",
+  coluna_conta: "Conta",
+  coluna_valor: "Valor por mês",
+  coluna_responsavel: "Responsável ou Divisão",
+  coluna_tipo: "Tipo",
+  coluna_situacao: "Situação",
+  coluna_acoes: "Ações",
+  por_parcela: "por parcela",
+  situacao_ativa: "Ativa",
+  situacao_encerrada: "Encerrada",
+  vazio: "Nenhuma conta manual",
+  vazio_ativas: "Nenhuma conta ativa",
+  vazio_encerradas: "Nenhuma conta encerrada",
+  carregando: "Carregando as contas",
+  removido: "Removido",
+  sem_valor: "—",
+  editar: "Editar",
+  encerrar: "Encerrar",
+  excluir: "Excluir",
+  em_breve: "Em breve",
+  sem_internet_acao: "Sem conexão",
 } as const;
+
+/** O nome de um cadastro arquivado na lista: "Cita Rangel (arquivado)" (4.2) vira "Rangel (arquivado)". */
+export function rotuloArquivado(nome: string): string {
+  return `${nome} (arquivado)`;
+}
+
+/** "1 conta" / "3 contas". */
+function rotuloContas(n: number): string {
+  return n === 1 ? "1 conta" : `${n} contas`;
+}
+
+/** O nome acessível de um filtro, com a contagem: "Ativas, 3 contas". */
+export function rotuloFiltroDeContas(nome: string, n: number): string {
+  return `${nome}, ${rotuloContas(n)}`;
+}
+
+/** O que o leitor de tela ouve quando o filtro muda: "3 contas ativas", "Nenhuma conta encerrada", "4 contas". */
+export function rotuloResultadoDaLista(filtro: "ativas" | "encerradas" | "todas", n: number): string {
+  if (filtro === "todas") return n === 0 ? TEXTOS_CONTAS.vazio : rotuloContas(n);
+  if (n === 0) return filtro === "ativas" ? TEXTOS_CONTAS.vazio_ativas : TEXTOS_CONTAS.vazio_encerradas;
+  const plural = n !== 1;
+  const adjetivo = filtro === "ativas" ? "ativa" : "encerrada";
+  return `${rotuloContas(n)} ${plural ? `${adjetivo}s` : adjetivo}`;
+}
+
+/** O nome acessível do ⋯ de uma linha: "Ações de Bombinhas". */
+export function rotuloAcoesDaConta(nome: string): string {
+  return `Ações de ${nome}`;
+}
+
+/** A Divisão na linha da Conta: "3 partes de R$ 106,00" (iguais) ou "3 partes: R$ 200,00 · R$ 118,00". */
+export function rotuloPartesDaConta(valoresCentavos: readonly number[]): string {
+  const n = valoresCentavos.length;
+  const iguais = valoresCentavos.every((v) => v === valoresCentavos[0]);
+  if (iguais) return `${n} partes de ${formatarDinheiro(valoresCentavos[0])}`;
+  return `${n} partes: ${valoresCentavos.map((v) => formatarDinheiro(v)).join(" · ")}`;
+}
 
 /** "6 parcelas" ("1 parcela" não existe: o mínimo é 2). */
 export function rotuloParcelasDaConta(n: number): string {

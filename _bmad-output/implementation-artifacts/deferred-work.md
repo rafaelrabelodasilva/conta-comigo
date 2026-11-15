@@ -264,14 +264,11 @@
   summary: Rodar no CI e conferir a migração `20261124120000_contas_manuais.sql`, `test/integracao/contas-manuais.test.ts` e a igualdade de `src/data/database.types.ts` (escrito à mão) com o gerado.
   evidence: Medium, não verificado. Sem Docker nem Supabase CLI neste computador (e o teste em Postgres em memória foi negado pelo ambiente), a tabela `contas_manuais`, as RPCs `salvar_conta_manual` e `materializar_contas_manuais`, o `on conflict` com predicado parcial, `series.parcela_total` nulável, o índice `series_conta_chave_key`, `lancamentos.conta_manual_id`, a restrição `lancamentos_parcela_par_check` relaxada, a nova `referencias_cadastro()` (e o `referencias_fk_nao_listadas`) e o Realtime só rodam no job `supabase` do CI. Os tipos: conferir a quebra de linha de `materializar_contas_manuais` e `salvar_conta_manual`. A migração NÃO foi aplicada: `supabase db push` à mão, depois do merge.
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-cadastrar-uma-conta-manual.md`
-  summary: 5.2 (lista): ler `contas_manuais` por um gerenciador de Realtime (a tabela já está na publicação com `replica identity full`); mostrar `descricaoDaRepeticao` e as etiquetas Responsável ou Divisão; a tela da 5.1 só mostra as Contas salvas na visita ("Salvas agora").
-  evidence: Medium. A 5.1 entrega o cadastro e o núcleo da descrição (`descricaoDaRepeticao`, já com `encerrada_em_mes`); falta ler as Contas do banco, filtrar Ativas/Encerradas/Todas e o ⋯ (Editar, Encerrar, Excluir).
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-cadastrar-uma-conta-manual.md`
   summary: 5.3 (cron): `materializar_contas_manuais(p_ate_mes, p_parcelas)` e `salvar_conta_manual` são `security invoker` e usam `auth.uid()`; o cron com a chave secreta não tem usuário.
   evidence: Medium. A 5.3 precisa decidir como materializar em nome do dono (uma variante da RPC que receba o dono e só aceite a chave secreta, ou o login do dono no servidor). O pedido já sai do núcleo (`pedidoMaterializar`, testado). O épico escreve `materializar_contas_manuais(ate_mes)` com um argumento: a 5.1 acrescentou `p_parcelas` por causa do AD-1 (decisão 1 da spec).
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-cadastrar-uma-conta-manual.md`
   summary: 5.4 (alterar, encerrar, excluir): `salvar_conta_manual` com um `id` que já existe não altera a Conta; mudar Nome, Valor ou Mês inicial muda a chave da Série (AD-8), e a identidade é `series.conta_manual_id`.
-  evidence: Medium. A 5.4 recria só as linhas com `mes ≥ Mês atual` sem `pagamento_itens` e com `editado_em` nulo (AD-15), atualiza a chave da Série e define o que "Excluir" faz com `lancamentos.conta_manual_id` (a FK é `on delete set null`, e uma linha sem Conta deixa de ser previsto). `encerrada_em_mes` e `parcelasDaConta` já respeitam o encerramento.
+  evidence: Medium. A 5.4 recria só as linhas com `mes ≥ Mês atual` sem `pagamento_itens` e com `editado_em` nulo (AD-15), atualiza a chave da Série e define o que "Excluir" faz com `lancamentos.conta_manual_id` (a FK é `on delete set null`, e uma linha sem Conta deixa de ser previsto). `encerrada_em_mes` e `parcelasDaConta` já respeitam o encerramento. Atenção: `series.conta_manual_id` referencia `contas_manuais` **sem** `on delete`, então apagar a Conta falha enquanto a Série existir; a RPC de excluir precisa apagar ou soltar a Série (e os Lançamentos que ficam órfãos) na mesma transação.
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-cadastrar-uma-conta-manual.md`
   summary: Alterar a classificação de uma parcela de Conta (no painel do Lançamento) não propaga às outras parcelas da Conta.
   evidence: Low. A propagação da 3.5/3.8 só mexe nos previstos `sistema` da Série; as parcelas de Conta são `manual`. A 5.4 (alterar a Conta) é o caminho para mudar todas.
@@ -287,6 +284,21 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-cadastrar-uma-conta-manual.md`
   summary: Conferir no iPad o formulário: o seletor de Mês nativo (`type=month`), o teclado numérico nos campos de valor, a janela com o teclado aberto e muitas partes, o foco ao tocar em "Salvar" com erro e o VoiceOver lendo "Responsável da parte 2" e "Remover parte 2".
   evidence: Low, não verificado. O jsdom só confere o DOM, os nomes e as classes de 44 pt; o layout em 834 pt e o comportamento do teclado só um aparelho prova.
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-lista-de-contas-manuais.md`
+  summary: 5.4 (alterar, encerrar, excluir): ligar os três callbacks de `ContasManuais` (`acoes.aoEditar`, `aoEncerrar`, `aoExcluir`, cada um recebe a `LinhaConta`); hoje os itens do ⋯ estão visíveis e desativados com "Em breve", e com callback já respeitam "Sem conexão". Decidir também o que o toque na linha faz (hoje nada: a linha não é um botão) e se o toque longo abre o ⋯.
+  evidence: Medium. A lista não precisa mudar além disso: a situação é derivada de `encerrada_em_mes` e da contagem de parcelas (`situacaoDaConta`), então encerrar grava `encerrada_em_mes` e a Conta passa a Encerrada sozinha. "Encerrar" numa Conta que já está Encerrada continua no menu; a 5.4 decide se reabre ou se desativa.
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-lista-de-contas-manuais.md`
+  summary: 5.3 (cron): nada novo vem da lista, mas a situação "Encerrada" de uma parcelada que acabou depende só do Mês atual (derivada), então o cron não precisa tocar em `contas_manuais` para a lista mudar.
+  evidence: Low. A 5.3 segue só com a materialização (`pedidoMaterializar`) e o 401 sem segredo.
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-lista-de-contas-manuais.md`
+  summary: A lista não pagina: o gerenciador de `contas_manuais` lê a tabela inteira e o PostgREST corta em 1000 linhas.
+  evidence: Low. São contas da casa, dezenas em toda a vida do app; a Conta é uma linha (as parcelas são Lançamentos, que têm escopo por Mês). Se um dia chegar perto, o gerenciador ganha paginação e a tela não muda.
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-lista-de-contas-manuais.md`
+  summary: A lista fica na ordem Ativas primeiro e por Nome (o mockup mostra a ordem de cadastro: Silvia, William, TVbox, Bombinhas), não ordena ao toque no cabeçalho e não mostra o "Total da conta" (R$ 1.908,00) nem os valores por parte das Contas sem Divisão.
+  evidence: Low. Decisões 3 e 4 do spec da 5.2. `ordenarContas` é a única ordem; ordenar por coluna ou mostrar o total cabe depois sem mudar o repositório.
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-lista-de-contas-manuais.md`
+  summary: Conferir no iPad a lista de Contas: o layout em 834 pt em pé e deitado (as seis colunas sem rolagem lateral, as etiquetas quebrando para baixo, o Valor por mês com a legenda "por parcela"), o cabeçalho fixo ao rolar, o toque de 44 pt na linha e no ⋯, os filtros ao toque e o VoiceOver lendo "Ativas, 4 contas", "Ações de Bombinhas" e "Editar Em breve" (e se um item desativado do menu é alcançado pelo gesto de deslizar).
+  evidence: Low, não verificado. O jsdom só confere o DOM, os nomes, os `role` e as classes de 44 pt; o layout, o `sticky` e o VoiceOver só um aparelho prova. O Realtime de `contas_manuais` entre aparelhos só o job `supabase` do CI prova (`test/integracao/contas-manuais.test.ts`, teste novo, não rodou aqui: sem Docker nem CLI).
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-cadastrar-uma-conta-manual.md`
-  summary: O Épico 5 abre com a 5.1 (em `review`; `done` só depois do merge, em PR separada).
-  evidence: Low. `epic-5` passou a `in-progress` em `sprint-status.yaml`; faltam a 5.2 a 5.4.
+  summary: O Épico 5 abre com a 5.1 (`done`) e segue com a 5.2 (em `review`; `done` só depois do merge, em PR separada).
+  evidence: Low. `epic-5` está `in-progress` em `sprint-status.yaml`; faltam a 5.3 e a 5.4.
