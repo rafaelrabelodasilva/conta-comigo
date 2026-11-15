@@ -2,7 +2,7 @@
 title: 'História 5.3: Contas que se repetem sozinhas todo dia'
 type: 'feature'
 created: '2026-11-15'
-status: 'review'
+status: 'done'
 baseline_commit: 'f08f5cf'
 route: 'dispatch'
 review_loop_iteration: 0
