@@ -111,7 +111,7 @@ export type Database = {
           created_at: string
           id: string
           limite_ajuste_centavos: number
-          modelo_mensagem: Json
+          modelo_mensagem: NonNullable<Json>
           owner_id: string
           primeiro_uso_em: string | null
           status_padrao_id: string | null
@@ -123,7 +123,7 @@ export type Database = {
           created_at?: string
           id?: string
           limite_ajuste_centavos?: number
-          modelo_mensagem?: Json
+          modelo_mensagem?: NonNullable<Json>
           owner_id?: string
           primeiro_uso_em?: string | null
           status_padrao_id?: string | null
@@ -135,7 +135,7 @@ export type Database = {
           created_at?: string
           id?: string
           limite_ajuste_centavos?: number
-          modelo_mensagem?: Json
+          modelo_mensagem?: NonNullable<Json>
           owner_id?: string
           primeiro_uso_em?: string | null
           status_padrao_id?: string | null
