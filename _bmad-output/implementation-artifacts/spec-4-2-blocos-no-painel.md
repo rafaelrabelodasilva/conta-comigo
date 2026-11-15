@@ -2,7 +2,7 @@
 title: 'História 4.2: Blocos no Painel'
 type: 'feature'
 created: '2026-11-15'
-status: 'review'
+status: 'done'
 baseline_commit: '136e793127939f1c5e2a0e976b467f3eee212c93'
 route: 'dispatch'
 review_loop_iteration: 0
