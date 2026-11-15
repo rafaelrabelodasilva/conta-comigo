@@ -56,6 +56,11 @@ describe("decidirAcesso", () => {
       expect(
         decidirAcesso({ caminho: "/api/fatura/extrair", autenticado: false, tinhaCookieAuth }),
       ).toEqual({ tipo: "seguir" });
+      // O Cron da Vercel não tem sessão: o proxy não pode levá-lo para Entrar.
+      // A rota confere o `Authorization: Bearer CRON_SECRET` e responde 401 (AD-12).
+      expect(
+        decidirAcesso({ caminho: "/api/cron/diario", autenticado: false, tinhaCookieAuth }),
+      ).toEqual({ tipo: "seguir" });
     }
     expect(
       decidirAcesso({ caminho: "/apis", autenticado: false, tinhaCookieAuth: false }).tipo,

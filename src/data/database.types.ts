@@ -704,6 +704,10 @@ export type Database = {
         Returns: Json
       }
       materializar_contas_manuais: { Args: { p_ate_mes: string; p_parcelas: Json }; Returns: Json }
+      materializar_contas_manuais_do_dono: {
+        Args: { p_ate_mes: string; p_owner_id: string; p_parcelas: Json }
+        Returns: Json
+      }
       recriar_filhas: { Args: { p_mae_id: string; p_partes: Json }; Returns: string[] }
       referencias_cadastro: {
         Args: never

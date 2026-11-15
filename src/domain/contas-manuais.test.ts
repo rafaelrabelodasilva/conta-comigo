@@ -4,10 +4,12 @@ import {
   adicionarParte,
   avaliarFormularioConta,
   chaveDaSerieDaConta,
+  contaLegivel,
   descricaoDaRepeticao,
   horizonteDasContas,
   parcelasDaConta,
   pedidoMaterializar,
+  pedidoMaterializarDoDono,
   pedidoSalvarConta,
   proximaOcorrencia,
   rascunhoInicialDaConta,
@@ -540,5 +542,29 @@ describe("Mês futuro: previsto, Bloco com “inclui previstos” e fim da grade
       criada("fatura-1", "2026-11-14T09:00:00.000Z", 1),
     ];
     expect([...grade].sort(compararPelaFatura).map((l) => l.id)).toEqual(["fatura-1", "fatura-2", "conta-a", "conta-b"]);
+  });
+});
+
+describe("o pedido do cron (5.3): o mesmo pedido, mais o dono", () => {
+  it("pedidoMaterializarDoDono = pedidoMaterializar + p_owner_id", () => {
+    const b = comoCadastro(conta(BOMBINHAS, "b"));
+    const base = pedidoMaterializar([b], "2027-11");
+    expect(pedidoMaterializarDoDono("dono-1", [b], "2027-11")).toEqual({ p_owner_id: "dono-1", ...base });
+  });
+
+  it("contaLegivel: o mesmo critério de `parcelasDaConta` (ilegível = nenhuma parcela, nunca uma errada)", () => {
+    const b = comoCadastro(conta(BOMBINHAS, "b"));
+    expect(contaLegivel(b)).toBe(true);
+    expect(contaLegivel({ ...b, valor_centavos: 0 })).toBe(false);
+    expect(contaLegivel({ ...b, mes_inicial: "2026-13" })).toBe(false);
+    expect(contaLegivel({ ...b, parcela_total: null })).toBe(false);
+    expect(contaLegivel({ ...b, repeticao: "mensal" })).toBe(false); // mensal com total
+    expect(contaLegivel({ ...b, divisao: { modo: "valor", partes: "x" } })).toBe(false);
+    for (const ruim of [{ ...b, valor_centavos: 0 }, { ...b, parcela_total: null }, { ...b, divisao: { modo: "valor", partes: "x" } }]) {
+      expect(parcelasDaConta(ruim, "2027-11")).toEqual([]);
+    }
+    // Encerrada ou além do horizonte não é ilegível: só não tem parcelas a pedir.
+    expect(contaLegivel({ ...b, encerrada_em_mes: b.mes_inicial })).toBe(true);
+    expect(parcelasDaConta({ ...b, encerrada_em_mes: b.mes_inicial }, "2027-11")).toEqual([]);
   });
 });
