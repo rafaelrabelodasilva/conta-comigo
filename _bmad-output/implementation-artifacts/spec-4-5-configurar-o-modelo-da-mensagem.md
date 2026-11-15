@@ -2,7 +2,7 @@
 title: 'História 4.5: Configurar o modelo da mensagem'
 type: 'feature'
 created: '2026-11-15'
-status: 'review'
+status: 'done'
 baseline_commit: '02e64f3'
 route: 'dispatch'
 review_loop_iteration: 0
