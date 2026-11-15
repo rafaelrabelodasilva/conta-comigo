@@ -167,4 +167,43 @@ insert into public.lancamentos (
    'MAGALU', 'MAGALU', 44589, 3, 12, '2026-11',
    'sistema', 'b0000000-0000-4000-8000-000000000a01', 'b0000000-0000-4000-8000-000000000805');
 
+-- Contas manuais (História 5.1): uma recorrente com Divisão, a Série dela (sem
+-- total), a parcela 2 (parcela_n sem parcela_total) e uma filha.
+insert into public.contas_manuais (
+  id, owner_id, nome, valor_centavos, tipo_id, observacao, mes_inicial, repeticao, parcela_total, divisao
+) values
+  ('b0000000-0000-4000-8000-000000000b01', 'b0000000-0000-4000-8000-000000000001',
+   'Conta Ção 🐱', 31800, 'b0000000-0000-4000-8000-000000000201', 'Plano família',
+   '2026-10', 'mensal', null,
+   '{"modo": "valor", "partes": [
+     {"responsavel_id": "b0000000-0000-4000-8000-000000000101", "numerador": 1, "denominador": 3},
+     {"responsavel_id": "b0000000-0000-4000-8000-000000000102", "numerador": 2, "denominador": 3}]}');
+
+insert into public.series (
+  id, owner_id, nome_normalizado, parcela_total, valor_parcela_centavos, mes_primeira_parcela, ocorrencia, conta_manual_id
+) values
+  ('b0000000-0000-4000-8000-000000000a02', 'b0000000-0000-4000-8000-000000000001',
+   'CONTA CAO', null, 31800, '2026-10', 1, 'b0000000-0000-4000-8000-000000000b01');
+
+insert into public.lancamentos (
+  id, owner_id, nome, nome_normalizado, valor_centavos, parcela_n, mes, lancado_por, tipo_id,
+  serie_id, conta_manual_id, divisao
+) values
+  ('b0000000-0000-4000-8000-000000000807', 'b0000000-0000-4000-8000-000000000001',
+   'Conta Ção 🐱', 'CONTA CAO', 31800, 2, '2026-11', 'manual', 'b0000000-0000-4000-8000-000000000201',
+   'b0000000-0000-4000-8000-000000000a02', 'b0000000-0000-4000-8000-000000000b01',
+   '{"modo": "valor", "partes": [
+     {"responsavel_id": "b0000000-0000-4000-8000-000000000101", "numerador": 1, "denominador": 3},
+     {"responsavel_id": "b0000000-0000-4000-8000-000000000102", "numerador": 2, "denominador": 3}]}');
+
+insert into public.lancamentos (
+  id, owner_id, nome, nome_normalizado, valor_centavos, parcela_n, mes, lancado_por, tipo_id,
+  responsavel_id, serie_id, conta_manual_id, dividido_de_id
+) values
+  ('b0000000-0000-4000-8000-000000000808', 'b0000000-0000-4000-8000-000000000001',
+   'Conta Ção 🐱', 'CONTA CAO', 10600, 2, '2026-11', 'manual', 'b0000000-0000-4000-8000-000000000201',
+   'b0000000-0000-4000-8000-000000000101',
+   'b0000000-0000-4000-8000-000000000a02', 'b0000000-0000-4000-8000-000000000b01',
+   'b0000000-0000-4000-8000-000000000807');
+
 commit;
