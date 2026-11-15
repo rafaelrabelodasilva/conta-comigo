@@ -162,3 +162,105 @@ export function dividirEmPartes(valorCentavos: number, fracoes: readonly Fracao[
   partes.push(valorCentavos - soma);
   return { ok: true, valor: partes };
 }
+
+// ------------------------------------------------- racional exato (Fórmula)
+
+// Os intermediários de uma Fórmula (Bloco) são racionais exatos
+// (`numerador / denominador`, em centavos, `bigint`). Só o resultado final
+// passa por `arredondarRacional`, com a mesma regra de `arredondar`: meio
+// para longe do zero. Sem literais `0n`: o alvo do TypeScript é ES2017.
+
+const ZERO = BigInt(0);
+const UM = BigInt(1);
+const DOIS = BigInt(2);
+const CINCO = BigInt(5);
+const DEZ = BigInt(10);
+const CEM = BigInt(100);
+const MAIOR_INTEIRO_SEGURO = BigInt(Number.MAX_SAFE_INTEGER);
+
+/** Máximo de casas decimais que um valor exato mostra; mais que isso sai aproximado. */
+const MAX_CASAS_EXATAS = 6;
+/** Casas de um valor aproximado (que não termina em decimal). */
+const CASAS_APROXIMADO = 3;
+
+function mdcBig(a: bigint, b: bigint): bigint {
+  while (b !== ZERO) [a, b] = [b, a % b];
+  return a;
+}
+
+/**
+ * `numerador / denominador` arredondado meio para longe do zero (0,5 → 1;
+ * -0,5 → -1). `denominador` precisa ser maior que zero; resultado fora dos
+ * inteiros seguros lança, como `arredondar`.
+ */
+export function arredondarRacional(numerador: bigint, denominador: bigint): number {
+  if (denominador <= ZERO) throw new Error(`Arredondamento inválido: ${numerador}/${denominador}`);
+  const negativo = numerador < ZERO;
+  const absoluto = negativo ? -numerador : numerador;
+  const quociente = absoluto / denominador;
+  const resto = absoluto % denominador;
+  const arredondado = resto * DOIS >= denominador ? quociente + UM : quociente;
+  if (arredondado > MAIOR_INTEIRO_SEGURO) {
+    throw new Error(`Arredondamento fora dos inteiros seguros: ${numerador}/${denominador}`);
+  }
+  const resultado = Number(arredondado);
+  return resultado === 0 ? 0 : negativo ? -resultado : resultado;
+}
+
+/** O valor em casas decimais: `inteiro` e `fracao` (texto), exato ou aproximado a 3 casas. */
+function emDecimal(
+  numerador: bigint,
+  denominador: bigint,
+  minimoDeCasas: number,
+): { negativo: boolean; inteiro: bigint; fracao: string; aproximado: boolean } {
+  const negativo = numerador < ZERO;
+  const absoluto = negativo ? -numerador : numerador;
+  const g = mdcBig(absoluto, denominador);
+  const n = g === ZERO ? ZERO : absoluto / g;
+  const d = g === ZERO ? UM : denominador / g;
+  // Termina em decimal quando o denominador só tem os fatores 2 e 5.
+  let resto = d;
+  let dois = 0;
+  let cinco = 0;
+  while (resto % DOIS === ZERO) {
+    resto /= DOIS;
+    dois++;
+  }
+  while (resto % CINCO === ZERO) {
+    resto /= CINCO;
+    cinco++;
+  }
+  const exato = resto === UM && Math.max(dois, cinco) <= MAX_CASAS_EXATAS;
+  const casas = exato ? Math.max(dois, cinco, minimoDeCasas) : CASAS_APROXIMADO;
+  const escala = DEZ ** BigInt(casas);
+  let escalado = (n * escala) / d;
+  if (!exato && ((n * escala) % d) * DOIS >= d) escalado += UM;
+  return {
+    negativo: negativo && escalado !== ZERO,
+    inteiro: escalado / escala,
+    fracao: casas === 0 ? "" : String(escalado % escala).padStart(casas, "0"),
+    aproximado: !exato,
+  };
+}
+
+/**
+ * Um valor em centavos que pode ter fração ("R$ 2.819,675" para 281967,5
+ * centavos), com as casas que precisar (no mínimo 2). Um valor que não
+ * termina em decimal sai aproximado, com "≈" na frente ("≈ R$ 1.666,667").
+ */
+export function formatarRacionalEmReais(numerador: bigint, denominador: bigint): string {
+  // Reais = centavos / 100.
+  const d = emDecimal(numerador, denominador * CEM, 2);
+  const texto = `R$${ESPACO}${milhares(String(d.inteiro))},${d.fracao}`;
+  const comAproximacao = d.aproximado ? `≈${ESPACO}${texto}` : texto;
+  return d.negativo ? `-${ESPACO}${comAproximacao}` : comAproximacao;
+}
+
+/** Um número sem unidade ("2", "0,5", "≈ 0,333"), com as casas que precisar. */
+export function formatarRacionalDecimal(numerador: bigint, denominador: bigint): string {
+  const d = emDecimal(numerador, denominador, 0);
+  const inteiro = milhares(String(d.inteiro));
+  const corpo = d.fracao === "" ? inteiro : `${inteiro},${d.fracao}`;
+  const comAproximacao = d.aproximado ? `≈${ESPACO}${corpo}` : corpo;
+  return d.negativo ? `-${comAproximacao}` : comAproximacao;
+}

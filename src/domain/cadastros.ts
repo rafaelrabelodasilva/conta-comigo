@@ -57,6 +57,9 @@ export const REFERENCIAS_JSONB: readonly Referencia[] = [
   // História 3.8: as partes da Divisão da linha-mãe e da Regra (as filhas e a Regra é que contam uso).
   { cadastro: "responsavel", tabela: "lancamentos", coluna: "divisao", contaUso: false },
   { cadastro: "responsavel", tabela: "regras", coluna: "divisao", contaUso: false },
+  // História 4.1: a Fórmula do Bloco cita Responsáveis e Tipos (só como valores). Conta uso: sem substituto, a Fórmula quebraria.
+  { cadastro: "responsavel", tabela: "blocos", coluna: "formula", contaUso: true },
+  { cadastro: "tipo", tabela: "blocos", coluna: "formula", contaUso: true },
 ];
 
 /**

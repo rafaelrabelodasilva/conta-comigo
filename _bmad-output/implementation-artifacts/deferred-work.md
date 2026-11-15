@@ -188,3 +188,21 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-12-reimportar-mantendo-a-classificacao.md`
   summary: A casada que volta a previsto mantém o Valor da Fatura (o previsto original não guardava o "antes") e a que sai da Fatura vira linha `manual` com Mês fixo; o "Manter" só limpa o motivo.
   evidence: Low. Decisões Q3-A da 3.12; Rafael corrige o Valor abrindo a linha se o previsto voltar errado.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-montar-um-bloco-com-fichas.md`
+  summary: Rodar no CI e conferir a migração `20261121120000_blocos.sql` e `test/integracao/blocos.test.ts`, e a igualdade de `src/data/database.types.ts` (escrito à mão) com o gerado.
+  evidence: Medium, não verificado. Sem Docker nem Supabase CLI neste computador, a tabela, a RPC `salvar_bloco`, o índice de `meu_bloco`, `referencias_cadastro()` e o ramo jsonb com `conta_uso` (que a 1.6 deixou sem prova até as Fórmulas) só rodam no job `supabase` do CI. O job também compara os tipos escritos à mão (`NonNullable<Json>` na Fórmula, `p_id?` com default) com `supabase gen types`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-montar-um-bloco-com-fichas.md`
+  summary: Aplicar a migração dos Blocos em produção (`supabase db push`) só depois do merge e com a confirmação do Rafael.
+  evidence: Medium. Antes disso o cartão "Blocos" do Painel mostra o botão desativado (a leitura de `blocos` falha sem derrubar o Painel); depois, "＋ Novo bloco" passa a gravar.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-montar-um-bloco-com-fichas.md`
+  summary: Conferir no iPad o Montador (toque de 44 pt nas fichas, a janela com o teclado numérico do "Número…", o VoiceOver lendo "Remover Casal" e o resultado ao vivo) e o contraste da ficha `formula-chip` nos dois modos.
+  evidence: Low, não verificado. O jsdom só confere os rótulos e os estados; o layout da paleta em 834 pt e a rolagem da janela com muitas fichas não foram vistos num aparelho.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-montar-um-bloco-com-fichas.md`
+  summary: A 4.2 liga "Editar fórmula" e "Ver cálculo" ao `MontadorBloco`, que já aceita `inicial` (o teste de componente cobre a edição) mas só abre vazio no Painel; e troca a lista simples de nome e Fórmula do `CartaoBlocos` pelos `block-card`.
+  evidence: Low. O botão "Tentar de novo" do Painel também não relê `blocos` (a tabela não está em `TABELAS`); entra junto quando a 4.2 puser os valores dos Blocos no Painel.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-montar-um-bloco-com-fichas.md`
+  summary: Rever se a barra por Responsável do Painel deve incluir os previstos, agora que os Blocos incluem (decisão da 4.1: "todos os Lançamentos do Mês", como a grade).
+  evidence: Low. Fecha em parte a pendência da 3.5: o Bloco "Todos" e a soma da barra por Responsável coincidem hoje, porque as duas leem as mesmas unidades do Mês; só diverge se a barra passar a ignorar os previstos (4.2 e Épico 7).
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-montar-um-bloco-com-fichas.md`
+  summary: Uma Fórmula que cita um Responsável ou Tipo arquivado continua valendo e a paleta não o oferece mais, sem aviso no Bloco; `lerBlocos` deixa de fora, sem aviso, uma linha de `blocos` cuja Fórmula não passa no schema.
+  evidence: Low. Arquivar mantém o cadastro nas somas (AD-16), então o valor não muda; a Fórmula ilegível só existiria por edição direta do banco (a RPC grava o que o núcleo montou).

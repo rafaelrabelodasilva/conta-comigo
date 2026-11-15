@@ -6,6 +6,8 @@ import { idsQueAcompanham, separarAjustes } from "@/domain/ajustes";
 import { conferir } from "@/domain/conferencia";
 import { hojeEmSaoPaulo } from "@/domain/datas";
 import { ehMaeDividida, filhasPorMae, linhasDaFatura, unidadesDoMes } from "@/domain/divisao";
+import { lerBlocos, type BlocoParaGravar } from "@/domain/blocos";
+import { textoDaFormula } from "@/domain/formula";
 import { alternarSelecao, alternarTodos, selecaoValida } from "@/domain/lancamento";
 import {
   COLUNAS_DA_BARRA,
@@ -20,6 +22,7 @@ import {
   type OpcaoFiltro,
 } from "@/domain/filtros-grade";
 import {
+  TEXTOS_BLOCO,
   TEXTOS_CONFERENCIA,
   TEXTOS_FILTROS,
   TEXTOS_IMPORTAR,
@@ -42,6 +45,7 @@ import {
   nomeExibido,
   type Ordem,
 } from "@/domain/painel";
+import { repoBlocos } from "@/data/blocos-repo";
 import { repoFaturas } from "@/data/faturas-repo";
 import { repoLancamentos, type LinhaLancamento } from "@/data/lancamentos-repo";
 import { repoPlanilha } from "@/data/planilha-repo";
@@ -55,10 +59,12 @@ import { Esqueleto } from "@/ui/Esqueleto";
 import { Tela } from "@/ui/Tela";
 import { useToast } from "@/ui/Toast";
 import { BarraFiltros } from "./BarraFiltros";
+import { CartaoBlocos } from "./CartaoBlocos";
 import { FaixaConferencia } from "./FaixaConferencia";
 import { FaturaDoMes } from "./FaturaDoMes";
 import { GradeLancamentos, type CadastrosGrade } from "./GradeLancamentos";
 import { DividirLancamento } from "./DividirLancamento";
+import { MontadorBloco } from "./MontadorBloco";
 import { PainelLancamento } from "./PainelLancamento";
 import { SeletorMes } from "./SeletorMes";
 
@@ -101,6 +107,11 @@ import { SeletorMes } from "./SeletorMes";
 //
 // Fila do Revisar (História 3.2): o passo final da importação leva à tela
 // Revisar ("Ir para revisão") pelo roteador.
+//
+// Blocos (História 4.1, FR-19): o cartão "Blocos" tem "＋ Novo bloco", que abre
+// o Montador (fichas, resultado e passo a passo ao vivo sobre os Lançamentos
+// do Mês aberto); a lista de Blocos lê `blocos` pelo gerenciador de Realtime.
+// Os `block-card` com valor, ⋯ e 💬 são da 4.2.
 
 const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status"] as const;
 
@@ -162,6 +173,8 @@ export function Painel({ titulo }: { titulo: string }) {
   const [excluindo, setExcluindo] = useState<string | null>(null);
   // A mãe cuja janela "Dividir" está aberta (História 3.8).
   const [dividindo, setDividindo] = useState<string | null>(null);
+  // O Montador de Bloco está aberto (História 4.1).
+  const [montando, setMontando] = useState(false);
   const toast = useToast();
   const router = useRouter();
 
@@ -173,6 +186,7 @@ export function Painel({ titulo }: { titulo: string }) {
   const status = useLinhas("status");
   const ciclo = useLinhas("config_ciclo");
   const configuracoes = useLinhas("configuracoes");
+  const blocosLidos = useLinhas("blocos");
   // Para o "Desfazer" do "Desvincular" ler a classificação atual da mãe.
   const linhasRef = useRef(lancamentos.linhas);
   useEffect(() => {
@@ -192,6 +206,14 @@ export function Painel({ titulo }: { titulo: string }) {
       status: new Map(status.linhas.map((s) => [s.id, { nome: s.nome, conta_como_pago: s.conta_como_pago }])),
     }),
     [tipos.linhas, responsaveis.linhas, status.linhas],
+  );
+  // Os nomes para escrever a Fórmula dos Blocos (com os arquivados: uma Fórmula antiga ainda os cita).
+  const nomesDaFormula = useMemo(
+    () => ({
+      responsaveis: new Map(responsaveis.linhas.map((r) => [r.id, r.nome])),
+      tipos: new Map(tipos.linhas.map((t) => [t.id, t.nome])),
+    }),
+    [responsaveis.linhas, tipos.linhas],
   );
   const ordemResponsaveis = useMemo(
     () => [...responsaveis.linhas].sort((a, b) => a.ordem - b.ordem).map((r) => r.id),
@@ -220,6 +242,14 @@ export function Painel({ titulo }: { titulo: string }) {
   // A memória ainda é de outro Mês até o gerenciador abrir este.
   const carregando =
     retratos.some((r) => r.status === "carregando") || (lancamentos.mes !== undefined && lancamentos.mes !== mesAberto);
+
+  const blocos = useMemo(() => lerBlocos(blocosLidos.linhas), [blocosLidos.linhas]);
+
+  async function salvarBloco(pedido: BlocoParaGravar): Promise<boolean> {
+    const r = await repoBlocos().salvar(pedido);
+    toast.mostrar({ texto: r.ok ? TEXTOS_BLOCO.salvo : mensagem(r.codigo) });
+    return r.ok;
+  }
 
   const abrirImportar = () => setImportando(true);
   const mudarFiltros = (atualizar: (f: FiltrosGrade) => FiltrosGrade) => {
@@ -418,21 +448,30 @@ export function Painel({ titulo }: { titulo: string }) {
     const motivo = motivoDoVazio(efetivos, doMes.length > 0);
     conteudo = (
       <div className="flex flex-col gap-3">
-        {/* iPad deitado e PC: o cartão da fatura ocupa 40% (os Blocos virão ao lado); em pé, a largura toda. */}
-        <div className="w-full lg:w-2/5">
-          <FaturaDoMes
-            mes={mesAberto}
-            fatura={fatura}
-            valoresDaFaturaCentavos={daFatura.map((l) => l.valor_centavos)}
-            distribuicao={distribuicaoPorResponsavel(unidades, ordemResponsaveis)}
-            responsaveis={cadastros.responsaveis}
-            escolhidos={filtros.colunas.responsavel}
-            aoFiltrar={filtrar}
-            aoImportar={abrirImportar}
-            conferencia={conferencia}
-            aoVerificar={ligarVerificar}
-            historico={historico}
-          />
+        {/* iPad deitado e PC: o cartão da fatura ocupa 40% e os Blocos o resto; em pé, a largura toda. */}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+          <div className="w-full lg:w-2/5">
+            <FaturaDoMes
+              mes={mesAberto}
+              fatura={fatura}
+              valoresDaFaturaCentavos={daFatura.map((l) => l.valor_centavos)}
+              distribuicao={distribuicaoPorResponsavel(unidades, ordemResponsaveis)}
+              responsaveis={cadastros.responsaveis}
+              escolhidos={filtros.colunas.responsavel}
+              aoFiltrar={filtrar}
+              aoImportar={abrirImportar}
+              conferencia={conferencia}
+              aoVerificar={ligarVerificar}
+              historico={historico}
+            />
+          </div>
+          <div className="w-full lg:w-3/5">
+            <CartaoBlocos
+              itens={blocos.map((b) => ({ id: b.id, nome: b.nome, formula: textoDaFormula(b.formula, nomesDaFormula) }))}
+              pronto={blocosLidos.status === "pronto"}
+              aoNovo={() => setMontando(true)}
+            />
+          </div>
         </div>
         {mostrarFaixa ? (
           <FaixaConferencia
@@ -537,6 +576,18 @@ export function Painel({ titulo }: { titulo: string }) {
           cadastros={{ responsaveis: responsaveis.linhas, status: status.linhas }}
           statusPadraoId={configuracoes.linhas[0]?.status_padrao_id ?? null}
         />
+        {montando && !erro && !carregando ? (
+          <MontadorBloco
+            aberta
+            aoMudar={setMontando}
+            linhas={lancamentos.linhas}
+            mes={mesAberto}
+            responsaveis={responsaveis.linhas}
+            tipos={tipos.linhas}
+            blocos={blocos}
+            aoSalvar={salvarBloco}
+          />
+        ) : null}
         <ImportarFatura
           aberta={importando}
           aoMudar={setImportando}
