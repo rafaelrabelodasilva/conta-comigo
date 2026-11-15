@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { idsQueAcompanham, separarAjustes } from "@/domain/ajustes";
+import { lerBlocos } from "@/domain/blocos";
 import { conferir } from "@/domain/conferencia";
 import { hojeEmSaoPaulo } from "@/domain/datas";
 import { ehMaeDividida, filhasPorMae, linhasDaFatura, unidadesDoMes } from "@/domain/divisao";
@@ -10,9 +11,14 @@ import { alternarSelecao, alternarTodos, selecaoValida } from "@/domain/lancamen
 import {
   COLUNAS_DA_BARRA,
   FILTROS_VAZIOS,
+  alternarBloco,
   alternarResponsavelUnico,
   aplicarFiltros,
+  limparBloco,
   motivoDoVazio,
+  motivoParaDesfazerBloco,
+  resolverBloco,
+  restringirAoBloco,
   temFiltro,
   valoresDaColuna,
   type ColunaFiltro,
@@ -20,6 +26,7 @@ import {
   type OpcaoFiltro,
 } from "@/domain/filtros-grade";
 import {
+  TEXTOS_BLOCO,
   TEXTOS_CONFERENCIA,
   TEXTOS_FILTROS,
   TEXTOS_IMPORTAR,
@@ -42,6 +49,7 @@ import {
   nomeExibido,
   type Ordem,
 } from "@/domain/painel";
+import { projetarPainel } from "@/domain/projecoes";
 import { repoFaturas } from "@/data/faturas-repo";
 import { repoLancamentos, type LinhaLancamento } from "@/data/lancamentos-repo";
 import { repoPlanilha } from "@/data/planilha-repo";
@@ -111,6 +119,13 @@ import { SeletorMes } from "./SeletorMes";
 // (com "Tentar de novo"); o "Tentar de novo" do Painel também a relê. A barra
 // por Responsável do hero, como os Blocos, soma todos os Lançamentos do Mês,
 // previstos incluídos (decisão da 4.2): "Todos" e a soma das barras batem.
+//
+// Filtrar pelo Bloco (História 4.3, FR-20): tocar num `block-card` filtra a grade
+// pelos Lançamentos que `avaliar` diz que entram (`filtros.bloco` guarda só o id;
+// `resolverBloco` calcula quem entra a cada render, também no Mês novo). Soma-se
+// (E) à busca, às colunas e a "Verificar"; a pílula "Bloco: Nome ✕" e "Limpar
+// filtros" o desfazem. O hero, a Conferência e a Seleção seguem o Mês todo. Um
+// Bloco excluído em outro aparelho desfaz o filtro e avisa.
 
 const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status", "blocos"] as const;
 
@@ -183,6 +198,13 @@ export function Painel({ titulo }: { titulo: string }) {
   const status = useLinhas("status");
   const ciclo = useLinhas("config_ciclo");
   const configuracoes = useLinhas("configuracoes");
+  // O Bloco que filtra a grade (História 4.3): quem entra vem de `avaliar` sobre a
+  // projeção do Painel, a mesma do valor do cartão, e é recalculado a cada
+  // mudança (Bloco editado, Lançamento mudado, outro Mês).
+  const blocosLidos = useLinhas("blocos");
+  const blocos = useMemo(() => lerBlocos(blocosLidos.linhas), [blocosLidos.linhas]);
+  const projecao = useMemo(() => projetarPainel(lancamentos.linhas, mesAberto), [lancamentos.linhas, mesAberto]);
+  const doBloco = useMemo(() => resolverBloco(filtros, blocos, projecao), [filtros, blocos, projecao]);
   // Para o "Desfazer" do "Desvincular" ler a classificação atual da mãe.
   const linhasRef = useRef(lancamentos.linhas);
   useEffect(() => {
@@ -236,6 +258,20 @@ export function Painel({ titulo }: { titulo: string }) {
     setFiltros(atualizar);
     setAnunciar(true);
   };
+  // O Bloco do filtro foi excluído em outro aparelho (ou ficou sem valor): o filtro
+  // se desfaz e um aviso conta por quê. A exclusão feita aqui desfaz antes de gravar
+  // (`aoExcluindo`), então nunca cai aqui. Só vale com a lista de Blocos já lida.
+  const motivoDesfazerBloco = motivoParaDesfazerBloco(doBloco, blocosLidos.status === "pronto");
+  const [blocosDesfeitos, setBlocosDesfeitos] = useState<{ n: number; texto: string }>({ n: 0, texto: "" });
+  if (motivoDesfazerBloco !== null) {
+    // Ajuste durante a renderização: desfaz já e conta o aviso para o efeito.
+    setFiltros(limparBloco);
+    setAnunciar(true);
+    setBlocosDesfeitos((d) => ({ n: d.n + 1, texto: TEXTOS_BLOCO[motivoDesfazerBloco] }));
+  }
+  useEffect(() => {
+    if (blocosDesfeitos.n > 0) toast.mostrar({ texto: blocosDesfeitos.texto });
+  }, [blocosDesfeitos, toast]);
   const filtrar = (id: string | null) => mudarFiltros((f) => alternarResponsavelUnico(f, id));
   // O selo e "Ver lançamentos" ligam "Verificar" sem mexer nos outros filtros.
   const ligarVerificar = () => mudarFiltros((f) => ({ ...f, verificar: true }));
@@ -363,7 +399,13 @@ export function Painel({ titulo }: { titulo: string }) {
     // Mês sem Fatura mas com histórico da planilha (3.10): o hero mostra o total dessas linhas.
     const historico = fatura ? null : resumoDoHistorico(doMes);
     const maesDivididas = new Map(doMes.filter(ehMaeDividida).map((l) => [l.id, l]));
-    const { maes, ajustesPorMae } = separarAjustes(unidades);
+    // O Mês todo (painel do Lançamento, Seleção) e o que a grade julga: com um Bloco
+    // filtrando, só as unidades que `avaliar` diz que entram, separadas dos Ajustes
+    // depois (assim a grade, os Ajustes sob cada mãe e o total do rodapé são
+    // exatamente o que o Bloco soma; ver `restringirAoBloco`).
+    const doMesTodo = separarAjustes(unidades);
+    const daGrade = doBloco.estado === "ativo" ? separarAjustes(restringirAoBloco(unidades, doBloco)) : doMesTodo;
+    const { maes, ajustesPorMae } = daGrade;
     // Sem Fatura não há o que verificar (nem a pílula): o filtro fica guardado.
     const verificando = filtros.verificar && conferencia !== null;
     const efetivos = { ...filtros, verificar: verificando };
@@ -375,13 +417,14 @@ export function Painel({ titulo }: { titulo: string }) {
     const abertaNoMes = aberta && aberta.excluido_em === null ? aberta : null;
     // A mãe do Ajuste aberto (se ele é Ajuste de uma linha do Mês).
     const maeDaAberta =
-      abertaNoMes?.ajuste_de_id && ajustesPorMae.get(abertaNoMes.ajuste_de_id)?.some((a) => a.id === abertaNoMes.id)
+      abertaNoMes?.ajuste_de_id && doMesTodo.ajustesPorMae.get(abertaNoMes.ajuste_de_id)?.some((a) => a.id === abertaNoMes.id)
         ? (doMes.find((l) => l.id === abertaNoMes.ajuste_de_id) ?? null)
         : null;
-    // A linha aberta que uma edição tirou do filtro continua na grade (opção A);
-    // num Ajuste, fica a mãe (com ele embaixo).
-    const linhaFixa = ehMaeDividida(abertaNoMes ?? {}) ? null : (maeDaAberta ?? abertaNoMes);
-    const idsDoMes = maes.map((l) => l.id);
+    // A linha aberta que uma edição (ou o Bloco) tirou do filtro continua na grade (opção A);
+    // num Ajuste, fica a mãe (com ele embaixo). Uma linha que a grade já mostra não precisa dela.
+    const linhaFixa =
+      ehMaeDividida(abertaNoMes ?? {}) || naGrade.some((l) => l.id === abertaNoMes?.id) ? null : (maeDaAberta ?? abertaNoMes);
+    const idsDoMes = doMesTodo.maes.map((l) => l.id);
     const selecionados = selecaoValida(selecao, idsDoMes);
     const idsNaGrade = naGrade.map((l) => l.id);
     const cartoesDaFatura = fatura
@@ -412,7 +455,7 @@ export function Painel({ titulo }: { titulo: string }) {
           modo="editar"
           linha={abertaNoMes}
           mae={maeDaAberta}
-          ajustes={maeDaAberta ? [] : (ajustesPorMae.get(abertaNoMes.id) ?? [])}
+          ajustes={maeDaAberta ? [] : (doMesTodo.ajustesPorMae.get(abertaNoMes.id) ?? [])}
           filhas={filhasPorMae(doMes).get(abertaNoMes.id) ?? []}
           maeDaParte={abertaNoMes.dividido_de_id ? (doMes.find((l) => l.id === abertaNoMes.dividido_de_id) ?? null) : null}
           aoDividir={setDividindo}
@@ -446,7 +489,13 @@ export function Painel({ titulo }: { titulo: string }) {
             />
           </div>
           <div className="w-full lg:w-3/5">
-            <BlocosDoMes linhas={lancamentos.linhas} mes={mesAberto} />
+            <BlocosDoMes
+              linhas={lancamentos.linhas}
+              mes={mesAberto}
+              ativoId={doBloco.estado === "ativo" ? doBloco.id : null}
+              aoFiltrar={(id) => mudarFiltros((f) => alternarBloco(f, id))}
+              aoExcluindo={(id) => mudarFiltros((f) => (f.bloco === id ? limparBloco(f) : f))}
+            />
           </div>
         </div>
         {mostrarFaixa ? (
@@ -462,6 +511,7 @@ export function Painel({ titulo }: { titulo: string }) {
           opcoes={opcoes}
           listar={listar}
           comVerificar={conferencia !== null}
+          bloco={doBloco.estado === "ativo" ? { nome: doBloco.nome } : null}
           mostrarLimpar={temFiltro(efetivos) || !ehOrdemPadrao(ordem)}
           aoLimparTudo={limparTudo}
         />

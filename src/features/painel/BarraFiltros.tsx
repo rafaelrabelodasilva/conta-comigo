@@ -4,12 +4,19 @@ import { Popover } from "radix-ui";
 import {
   definirColuna,
   filtrosAtivosEm,
+  limparBloco,
   type ColunaFiltro,
   type FiltrosGrade,
   type OpcaoFiltro,
   type ValorFiltro,
 } from "@/domain/filtros-grade";
-import { TEXTOS_CONFERENCIA, TEXTOS_FILTROS, rotuloMaisFiltros } from "@/domain/mensagens";
+import {
+  TEXTOS_CONFERENCIA,
+  TEXTOS_FILTROS,
+  rotuloDesfazerFiltroBloco,
+  rotuloMaisFiltros,
+  rotuloPilulaBloco,
+} from "@/domain/mensagens";
 import { cn } from "@/ui/cn";
 import { CLASSES_POPOVER, PopoverFiltro, classesPilula } from "./PopoverFiltro";
 
@@ -19,7 +26,10 @@ import { CLASSES_POPOVER, PopoverFiltro, classesPilula } from "./PopoverFiltro";
 // filtros" à direita. iPad em pé (abaixo de `lg`): Lançado por, Parcela,
 // cartão e "Verificar" vão para o popover "Mais", que diz quantos filtros
 // ativos guarda; deitado e no PC, tudo numa linha. As regras (quem passa,
-// contagens, textos) são do núcleo (`filtros-grade.ts`).
+// contagens, textos) são do núcleo (`filtros-grade.ts`). Com um Bloco
+// filtrando (História 4.3), a pílula "Bloco: Nome ✕" aparece depois das
+// outras, também no iPad em pé (não vai para "Mais"), e o toque nela desfaz o
+// filtro.
 
 /** As colunas que ficam na barra também no iPad em pé. */
 const SEMPRE: readonly ColunaFiltro[] = ["responsavel", "tipo", "status"];
@@ -35,7 +45,9 @@ export type PropsBarraFiltros = {
   listar?: (coluna: ColunaFiltro, extras: readonly ValorFiltro[]) => readonly OpcaoFiltro[];
   /** O Mês tem Fatura: mostra "Verificar". */
   comVerificar: boolean;
-  /** Mostra "Limpar filtros" (há busca, filtro, "Verificar" ou ordem fora da padrão). */
+  /** O Bloco que filtra a grade (pílula "Bloco: Nome ✕"), se algum. */
+  bloco?: { nome: string } | null;
+  /** Mostra "Limpar filtros" (há busca, filtro, Bloco, "Verificar" ou ordem fora da padrão). */
   mostrarLimpar: boolean;
   aoLimparTudo: () => void;
 };
@@ -46,6 +58,7 @@ export function BarraFiltros({
   opcoes,
   listar,
   comVerificar,
+  bloco = null,
   mostrarLimpar,
   aoLimparTudo,
 }: PropsBarraFiltros) {
@@ -116,6 +129,17 @@ export function BarraFiltros({
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
+      {bloco ? (
+        <button
+          type="button"
+          aria-label={rotuloDesfazerFiltroBloco(bloco.nome)}
+          onClick={() => aoMudar(limparBloco)}
+          className={classesPilula(true)}
+        >
+          {rotuloPilulaBloco(bloco.nome)}
+          <span aria-hidden>✕</span>
+        </button>
+      ) : null}
       {mostrarLimpar ? (
         <button
           type="button"

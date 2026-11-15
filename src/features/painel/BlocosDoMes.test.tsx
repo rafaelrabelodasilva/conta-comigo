@@ -502,3 +502,134 @@ describe("Novo bloco", () => {
     expect(sem(janela.textContent)).toContain("R$ 5.639,35");
   });
 });
+
+describe("filtrar a grade pelo Bloco (História 4.3, FR-20)", () => {
+  function renderizarFiltrando(opcoes: { ativoId?: string | null; aoFiltrar?: (id: string) => void; linhas?: unknown[] } = {}) {
+    const aoFiltrar = opcoes.aoFiltrar ?? vi.fn();
+    const aoExcluindo = vi.fn();
+    const r = render(
+      <BlocosDoMes
+        linhas={(opcoes.linhas ?? [lanc({ valor_centavos: 563_935 })]) as never}
+        mes={MES}
+        ativoId={opcoes.ativoId ?? null}
+        aoFiltrar={aoFiltrar}
+        aoExcluindo={aoExcluindo}
+      />,
+      { wrapper: ToastProvider },
+    );
+    return { ...r, aoFiltrar, aoExcluindo };
+  }
+  const botaoFiltrar = (nome: string) => within(cartaoDoBloco(nome)).getByRole("button", { name: new RegExp("^Filtrar a grade pelo Bloco " + nome) });
+
+  it("o corpo do cartão é um botão com nome, valor e estado, e tocar nele pede o filtro daquele Bloco", async () => {
+    definir([bloco("b1", "Casal", 1, formulaCasal)]);
+    const { aoFiltrar } = renderizarFiltrando();
+    const botao = botaoFiltrar("Casal");
+    expect(sem(botao.getAttribute("aria-label"))).toBe("Filtrar a grade pelo Bloco Casal, R$ 5.639,35");
+    expect(botao.getAttribute("aria-pressed")).toBe("false");
+    await userEvent.setup().click(botao);
+    expect(aoFiltrar).toHaveBeenCalledExactlyOnceWith("b1");
+  });
+
+  it("o Bloco ativo ganha a borda accent-line mais 1 px de contorno e aria-pressed", () => {
+    definir([bloco("b1", "Casal", 1, formulaCasal), bloco("b2", "Rafael", 2, { tipo: "responsavel", id: "r-rafael" })]);
+    renderizarFiltrando({ ativoId: "b1" });
+    const ativo = cartaoDoBloco("Casal");
+    expect(ativo.className).toContain("border-accent-line");
+    expect(ativo.className).toContain("ring-1");
+    expect(botaoFiltrar("Casal").getAttribute("aria-pressed")).toBe("true");
+    const outro = cartaoDoBloco("Rafael");
+    expect(outro.className).not.toContain("accent-line");
+    expect(botaoFiltrar("Rafael").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("não há botão dentro de botão: ⋯ e 💬 são irmãos do botão de filtro", () => {
+    definir([bloco("b1", "Casal", 1, formulaCasal)]);
+    renderizarFiltrando();
+    const card = cartaoDoBloco("Casal");
+    expect(card.querySelectorAll("button button, [role=button] button, button [role=button]").length).toBe(0);
+    expect(botaoFiltrar("Casal").contains(within(card).getByRole("button", { name: "Ações do Bloco Casal" }))).toBe(false);
+    expect(within(card).getByRole("button", { name: "Gerar mensagem do Bloco Casal" })).toBeTruthy();
+  });
+
+  it("o ⋯ abre o menu sem filtrar", async () => {
+    definir([bloco("b1", "Casal", 1, formulaCasal)]);
+    const { aoFiltrar } = renderizarFiltrando();
+    await userEvent.setup().click(within(cartaoDoBloco("Casal")).getByRole("button", { name: "Ações do Bloco Casal" }));
+    expect(screen.getByRole("menuitem", { name: "Editar fórmula" })).toBeTruthy();
+    expect(aoFiltrar).not.toHaveBeenCalled();
+  });
+
+  it("toque longo abre o ⋯ e o clique engolido depois dele não filtra; o toque seguinte filtra", () => {
+    definir([bloco("b1", "Casal", 1, formulaCasal)]);
+    const { aoFiltrar } = renderizarFiltrando();
+    const botao = botaoFiltrar("Casal");
+    vi.useFakeTimers();
+    try {
+      fireEvent.pointerDown(botao, { pointerType: "touch", clientX: 10, clientY: 10 });
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(screen.getByRole("menuitem", { name: "Editar fórmula" })).toBeTruthy();
+      fireEvent.pointerUp(botao, { pointerType: "touch", clientX: 10, clientY: 10 });
+      fireEvent.click(botao);
+      expect(aoFiltrar).not.toHaveBeenCalled();
+      // Um toque curto depois filtra normalmente.
+      fireEvent.pointerDown(botao, { pointerType: "touch", clientX: 10, clientY: 10 });
+      fireEvent.pointerUp(botao, { pointerType: "touch", clientX: 10, clientY: 10 });
+      fireEvent.click(botao);
+      expect(aoFiltrar).toHaveBeenCalledExactlyOnceWith("b1");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("no modo Reordenar o toque não filtra: o corpo do cartão não é botão de filtro", async () => {
+    definir([bloco("b1", "Casal", 1, formulaCasal), bloco("b2", "Rafael", 2, { tipo: "responsavel", id: "r-rafael" })]);
+    const { aoFiltrar } = renderizarFiltrando({ ativoId: "b1" });
+    const u = userEvent.setup();
+    await u.click(within(cartao()).getByRole("button", { name: "Reordenar" }));
+    expect(within(cartao()).queryByRole("button", { name: /^Filtrar a grade/ })).toBeNull();
+    // Tocar no valor (o corpo) de cada cartão não faz nada.
+    await u.click(cartaoDoBloco("Rafael").querySelector("b") as HTMLElement);
+    await u.click(cartaoDoBloco("Casal").querySelector("b") as HTMLElement);
+    expect(aoFiltrar).not.toHaveBeenCalled();
+    // O Bloco ativo continua em destaque, e ao concluir o botão volta.
+    expect(cartaoDoBloco("Casal").className).toContain("ring-accent-line");
+    await u.click(within(cartao()).getByRole("button", { name: "Concluir" }));
+    expect(botaoFiltrar("Casal").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("Bloco sem valor (a Fórmula não calcula) não filtra: botão desativado", async () => {
+    definir([
+      bloco("b1", "Enorme", 1, {
+        tipo: "operacao",
+        operacao: "multiplicacao",
+        esquerda: formulaCasal,
+        direita: { tipo: "numero", valor: "999999999" },
+      }),
+    ]);
+    const { aoFiltrar } = renderizarFiltrando({ linhas: [lanc({ valor_centavos: Number.MAX_SAFE_INTEGER })] });
+    const botao = within(cartaoDoBloco("Enorme")).getByRole("button", { name: "Filtrar a grade pelo Bloco Enorme, sem valor" });
+    expect((botao as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.setup().click(botao);
+    expect(aoFiltrar).not.toHaveBeenCalled();
+  });
+
+  it("sem aoFiltrar (passo Blocos do Primeiro uso) o cartão não filtra", () => {
+    definir([bloco("b1", "Casal", 1, formulaCasal)]);
+    renderizar();
+    expect(within(cartao()).queryByRole("button", { name: /^Filtrar a grade/ })).toBeNull();
+  });
+
+  it("excluir avisa o Painel antes de gravar, para ele desfazer o filtro", async () => {
+    definir([bloco("b1", "Casal", 1, formulaCasal)]);
+    const { aoExcluindo } = renderizarFiltrando({ ativoId: "b1" });
+    const u = userEvent.setup();
+    await u.click(within(cartaoDoBloco("Casal")).getByRole("button", { name: "Ações do Bloco Casal" }));
+    await u.click(screen.getByRole("menuitem", { name: "Excluir bloco" }));
+    await u.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Excluir bloco" }));
+    expect(aoExcluindo).toHaveBeenCalledWith("b1");
+    expect(repo.excluir).toHaveBeenCalledWith("b1");
+  });
+});

@@ -8,6 +8,7 @@ import {
   avisoCadastrosArquivados,
   rotuloAcoesDoBloco,
   rotuloArrastarBloco,
+  rotuloFiltrarPeloBloco,
   rotuloMensagemDoBloco,
   rotuloMoverBloco,
 } from "@/domain/mensagens";
@@ -26,6 +27,14 @@ import { MenuAcoes, useToqueLongo } from "@/ui/MenuAcoes";
 // ser arrastados pela alça; os botões de mover para antes e depois fazem o
 // mesmo para quem não arrasta (VoiceOver, teclado). O valor muda no lugar: o
 // cartão só recebe o texto pronto (`valor`) de quem calculou no núcleo.
+//
+// Filtrar a grade (História 4.3, FR-20): com `aoFiltrar`, o corpo do cartão é
+// um botão `aria-pressed` que liga e desliga o filtro daquele Bloco (o ativo
+// ganha a borda `accent-line` mais 1 px de contorno). O ⋯ e o 💬 são irmãos
+// desse botão (posicionados por cima dele), nunca filhos: não há botão dentro
+// de botão. O clique que vem logo depois do toque longo é engolido por
+// `useToqueLongo`, então abrir o menu não filtra. Em "Reordenar" o toque não
+// filtra (o corpo vira texto parado); sem valor, o cartão não filtra.
 
 export type ItemDoCartaoBlocos = {
   id: string;
@@ -34,6 +43,8 @@ export type ItemDoCartaoBlocos = {
   formula: string;
   /** O valor já formatado ("R$ 2.819,68"), ou "—" quando não há. */
   valor: string;
+  /** A Fórmula não calcula: não há Lançamentos que entram, então o cartão não filtra. */
+  semValor?: boolean;
   incluiPrevistos: boolean;
   /** Cor (1..8) do Responsável de um Bloco de uma pessoa só; senão `null`. */
   corPessoa: number | null;
@@ -48,6 +59,10 @@ export type PropsCartaoBlocos = {
   /** A leitura dos Blocos falhou. */
   erro: boolean;
   reordenando: boolean;
+  /** O Bloco que filtra a grade agora (borda em destaque), se algum. */
+  ativoId?: string | null;
+  /** Tocar no cartão filtra a grade por aquele Bloco. Sem isto, o cartão não filtra. */
+  aoFiltrar?: (id: string) => void;
   aoNovo: () => void;
   aoTentarDeNovo: () => void;
   aoAlternarReordenar: () => void;
@@ -66,6 +81,8 @@ type Arrasto = { id: string; ordem: string[] };
 function BlocoCard({
   item,
   reordenando,
+  ativo,
+  aoFiltrar,
   posicao,
   total,
   registrar,
@@ -82,6 +99,8 @@ function BlocoCard({
 }: {
   item: ItemDoCartaoBlocos;
   reordenando: boolean;
+  ativo: boolean;
+  aoFiltrar?: () => void;
   posicao: number;
   total: number;
   registrar: (id: string, el: HTMLLIElement | null) => void;
@@ -99,18 +118,10 @@ function BlocoCard({
   const [menuAberto, setMenuAberto] = useState(false);
   const abrirMenu = useCallback(() => setMenuAberto(true), []);
   const toqueLongo = useToqueLongo(abrirMenu);
+  const filtra = !reordenando && aoFiltrar !== undefined;
 
-  return (
-    <li
-      ref={(el) => registrar(item.id, el)}
-      data-bloco-id={item.id}
-      className={cn(
-        "flex min-w-0 flex-col gap-1 rounded-md border bg-background p-3",
-        reordenando ? "bloco-tremendo border-dashed border-accent-line" : "border-border",
-        arrastando && "opacity-60",
-      )}
-      {...(reordenando ? {} : toqueLongo)}
-    >
+  const corpo = (
+    <>
       <div className="flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-1.5 texto-label text-text">
           {item.corPessoa !== null ? (
@@ -137,57 +148,86 @@ function BlocoCard({
       {item.arquivados.length > 0 ? (
         <span className="texto-caption text-text-muted">{avisoCadastrosArquivados(item.arquivados)}</span>
       ) : null}
-      <div className="mt-auto flex items-end justify-between gap-2 pt-1">
-        <span className="min-w-0 break-words texto-caption text-text-muted">{item.formula}</span>
-        <span className="flex shrink-0 items-center gap-1.5">
-          {reordenando ? (
-            <>
-              <button
-                type="button"
-                aria-label={rotuloMoverBloco(item.nome, "antes")}
-                disabled={posicao === 0}
-                onClick={() => aoMover(-1)}
-                className={BOTAO_ICONE}
-              >
-                <span aria-hidden>‹</span>
-              </button>
-              <button
-                type="button"
-                aria-label={rotuloMoverBloco(item.nome, "depois")}
-                disabled={posicao === total - 1}
-                onClick={() => aoMover(1)}
-                className={BOTAO_ICONE}
-              >
-                <span aria-hidden>›</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <MenuAcoes
-                rotulo={rotuloAcoesDoBloco(item.nome)}
-                aberto={menuAberto}
-                aoMudarAberto={setMenuAberto}
-                itens={[
-                  { rotulo: T.editar_formula, aoEscolher: aoEditar },
-                  { rotulo: T.ver_calculo, aoEscolher: aoVerCalculo },
-                  { rotulo: T.reordenar, aoEscolher: aoReordenar },
-                  { rotulo: T.excluir_bloco, aoEscolher: aoExcluir, destrutivo: true },
-                ]}
-              />
-              {/* A mensagem do Bloco é das Histórias 4.6 e 4.7: o botão já existe, desativado. */}
-              <button
-                type="button"
-                disabled
-                aria-label={rotuloMensagemDoBloco(item.nome)}
-                title={T.mensagem_em_breve}
-                className={BOTAO_ICONE}
-              >
-                <span aria-hidden>💬</span>
-              </button>
-            </>
-          )}
-        </span>
-      </div>
+      {/* A Fórmula fica embaixo, à esquerda; o espaço da direita é dos botões (⋯ e 💬, ou ‹ ›). */}
+      <span className="mt-auto min-h-icone break-words pr-16 pt-1 texto-caption text-text-muted">{item.formula}</span>
+    </>
+  );
+
+  return (
+    <li
+      ref={(el) => registrar(item.id, el)}
+      data-bloco-id={item.id}
+      className={cn(
+        "relative flex min-w-0 flex-col rounded-md border bg-background",
+        reordenando ? "bloco-tremendo border-dashed border-accent-line" : "border-border",
+        ativo && !reordenando && "border-accent-line ring-1 ring-accent-line",
+        ativo && reordenando && "ring-1 ring-accent-line",
+        arrastando && "opacity-60",
+      )}
+      {...(reordenando ? {} : toqueLongo)}
+    >
+      {filtra ? (
+        <button
+          type="button"
+          aria-pressed={ativo}
+          aria-label={rotuloFiltrarPeloBloco(item.nome, item.semValor ? null : item.valor)}
+          disabled={item.semValor}
+          onClick={aoFiltrar}
+          className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1 rounded-md p-3 text-left select-none [-webkit-touch-callout:none] disabled:cursor-not-allowed"
+        >
+          {corpo}
+        </button>
+      ) : (
+        <div className="flex min-w-0 flex-1 flex-col gap-1 p-3">{corpo}</div>
+      )}
+      <span className="absolute right-3 bottom-3 flex shrink-0 items-center gap-1.5">
+        {reordenando ? (
+          <>
+            <button
+              type="button"
+              aria-label={rotuloMoverBloco(item.nome, "antes")}
+              disabled={posicao === 0}
+              onClick={() => aoMover(-1)}
+              className={BOTAO_ICONE}
+            >
+              <span aria-hidden>‹</span>
+            </button>
+            <button
+              type="button"
+              aria-label={rotuloMoverBloco(item.nome, "depois")}
+              disabled={posicao === total - 1}
+              onClick={() => aoMover(1)}
+              className={BOTAO_ICONE}
+            >
+              <span aria-hidden>›</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <MenuAcoes
+              rotulo={rotuloAcoesDoBloco(item.nome)}
+              aberto={menuAberto}
+              aoMudarAberto={setMenuAberto}
+              itens={[
+                { rotulo: T.editar_formula, aoEscolher: aoEditar },
+                { rotulo: T.ver_calculo, aoEscolher: aoVerCalculo },
+                { rotulo: T.reordenar, aoEscolher: aoReordenar },
+                { rotulo: T.excluir_bloco, aoEscolher: aoExcluir, destrutivo: true },
+              ]}
+            />
+            {/* A mensagem do Bloco é das Histórias 4.6 e 4.7: o botão já existe, desativado. */}
+            <button
+              type="button"
+              disabled
+              aria-label={rotuloMensagemDoBloco(item.nome)}
+              title={T.mensagem_em_breve}
+              className={BOTAO_ICONE}
+            >
+              <span aria-hidden>💬</span>
+            </button>
+          </>
+        )}
+      </span>
     </li>
   );
 }
@@ -197,6 +237,8 @@ export function CartaoBlocos({
   carregando,
   erro,
   reordenando,
+  ativoId = null,
+  aoFiltrar,
   aoNovo,
   aoTentarDeNovo,
   aoAlternarReordenar,
@@ -296,6 +338,8 @@ export function CartaoBlocos({
               key={item.id}
               item={item}
               reordenando={reordenando}
+              ativo={ativoId === item.id}
+              aoFiltrar={aoFiltrar ? () => aoFiltrar(item.id) : undefined}
               posicao={i}
               total={mostrados.length}
               registrar={registrar}

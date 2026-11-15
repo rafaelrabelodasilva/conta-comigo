@@ -212,3 +212,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-blocos-no-painel.md`
   summary: No passo "Blocos" do Primeiro uso, os valores aparecem zerados enquanto não há Lançamentos do Mês atual, e a janela do Montador cobre o passo (sem rascunho a avisar).
   evidence: Low. Rafael novo ainda não importou nada, então o resultado ao vivo mostra R$ 0,00; o texto do passo avisa. Se incomodar, o passo pode esperar a primeira Fatura (volta como passo opcional do Painel vazio).
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-filtrar-a-grade-pelo-bloco.md`
+  summary: Conferir no iPad o cartão que filtra: o toque filtrando, o toque longo abrindo o ⋯ sem filtrar, o espaço da Fórmula ao lado dos botões ⋯ e 💬 em 3 colunas a 834 pt, a borda mais o contorno de 1 px nos dois modos, o anel de foco por teclado, a pílula "Bloco: Nome ✕" na barra em pé e deitado, e o VoiceOver lendo "Filtrar a grade pelo Bloco {nome}, {valor}" com o estado.
+  evidence: Low, não verificado. O jsdom só confere o DOM, os nomes e as classes; o detector do toque longo foi simulado com temporizador falso; layout e VoiceOver não foram vistos num aparelho.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-filtrar-a-grade-pelo-bloco.md`
+  summary: Com o Bloco filtrando e o painel lateral aberto num Ajuste que não entra no Bloco (Responsável ou Tipo diferente da mãe, só possível por edição fora do app), o Ajuste não aparece na grade; hoje só a mãe fica (opção A da 2.7 vale para a linha, não para o Ajuste recuado).
+  evidence: Low. Decisão da 4.3: o total do rodapé tem de ser o valor do Bloco, e mostrar o Ajuste fora do filtro o somaria. Reabrir se esse dado aparecer de verdade.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-filtrar-a-grade-pelo-bloco.md`
+  summary: Num Bloco sem valor (a Fórmula não calcula) o botão de filtro fica desativado e, em alguns navegadores, o toque longo no corpo do cartão não abre o ⋯ (só o botão ⋯).
+  evidence: Low. Um botão desativado não recebe eventos de ponteiro; hoje só acontece com Fórmula que estoura os números seguros, que o Montador já recusa na maioria dos casos.

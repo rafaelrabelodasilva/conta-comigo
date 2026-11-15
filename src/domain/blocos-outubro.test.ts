@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { separarAjustes } from "./ajustes";
 import { ESPACO } from "./dinheiro";
+import { unidadesDoMes } from "./divisao";
+import { FILTROS_VAZIOS, aplicarFiltros, resolverBloco, restringirAoBloco } from "./filtros-grade";
 import {
   avaliar,
   descreverCalculo,
@@ -9,6 +12,7 @@ import {
   type Formula,
   type NomesDaFormula,
 } from "./formula";
+import { linhasDoMes, somarValores } from "./painel";
 import { projetarPainel, type LancamentoParaProjetar } from "./projecoes";
 
 // Testes de aceite da História 4.1 (AD, "Testes"): os totais de outubro/2026 do
@@ -16,6 +20,10 @@ import { projetarPainel, type LancamentoParaProjetar } from "./projecoes";
 // compra dividida (Monjaro), um Ajuste de centavos, um estorno, um excluído e
 // um lançamento de outro Mês. Casal R$ 5.639,35, Mãe R$ 1.350,14 (7 itens),
 // Lucas R$ 215,16 e Total R$ 9.280,23.
+//
+// História 4.3: o mesmo Mês, agora pela grade. Filtrar pelo Bloco deixa na
+// grade só os Lançamentos que `avaliar` soma, então o total do rodapé de um Bloco
+// de soma simples é o valor dele (Mãe = R$ 1.350,14, 7 itens).
 
 const e = (texto: string) => texto.replaceAll("R$ ", `R$${ESPACO}`).replaceAll("- R$ ", `-${ESPACO}R$ `);
 
@@ -148,5 +156,95 @@ describe("Painel de outubro/2026 (aceite da 4.1)", () => {
     const a = avaliarPainel(formula(r("mae")));
     const somaDosQueEntram = painel.filter((x) => a.entram.includes(x.id)).reduce((s, x) => s + x.valor_centavos, 0);
     expect(somaDosQueEntram).toBe(a.valorCentavos);
+  });
+});
+
+// ----------------------------------------------- grade filtrada pelo Bloco (4.3)
+
+/** Uma linha da grade a partir de um Lançamento do fixture (só o que a grade e os filtros leem). */
+function naGrade(l: LancamentoParaProjetar) {
+  return {
+    ...l,
+    nome: l.id.toUpperCase(),
+    apelido: null,
+    status_id: null,
+    lancado_por: "fatura" as const,
+    parcela_n: null,
+    parcela_total: null,
+    final_cartao: "5061",
+    fatura_id: "f10",
+    ordem_fatura: null as number | null,
+  };
+}
+
+/** O que a grade mostra e o total do rodapé (as mães filtradas e os Ajustes delas), como o Painel monta. */
+function gradeDoBloco(f: Formula, lancadas: readonly LancamentoParaProjetar[] = lancamentos) {
+  const projecao = projetarPainel(lancadas, MES);
+  const bloco = resolverBloco({ bloco: "b" }, [{ id: "b", nome: "Bloco", formula: f }], projecao);
+  const unidades = unidadesDoMes(linhasDoMes(lancadas, MES)).map(naGrade);
+  const { maes, ajustesPorMae } = separarAjustes(restringirAoBloco(unidades, bloco));
+  const linhas = aplicarFiltros(maes, FILTROS_VAZIOS, null);
+  const visiveis = linhas.flatMap((x) => [x, ...(ajustesPorMae.get(x.id) ?? [])]);
+  const valor = avaliar(f, projecao);
+  if (!valor.ok) throw new Error(valor.erro.codigo);
+  return { linhas, ajustesPorMae, visiveis, total: somarValores(visiveis), valorDoBloco: valor.valor.valorCentavos };
+}
+
+describe("grade filtrada pelo Bloco (aceite da 4.3)", () => {
+  it("Mãe: sete linhas e o total do rodapé é o valor do Bloco, R$ 1.350,14", () => {
+    const g = gradeDoBloco(formula(r("mae")));
+    expect(g.linhas.map((x) => x.id)).toEqual(["m1", "m2", "m3", "m4", "m5", "m6", "m7"]);
+    expect(g.valorDoBloco).toBe(135014);
+    expect(g.total).toBe(135014);
+  });
+
+  it("soma simples de cada pessoa e Todos: total da grade = valor do Bloco", () => {
+    for (const f of [formula(r("casal")), formula(r("lucas")), formula(r("rafael")), formula({ tipo: "todos" })]) {
+      const g = gradeDoBloco(f);
+      expect(g.total).toBe(g.valorDoBloco);
+    }
+    expect(gradeDoBloco(formula({ tipo: "todos" })).total).toBe(928023);
+  });
+
+  it("Casal: o Ajuste fica sob a mãe dele e as filhas da Divisão entram sem a mãe dividida", () => {
+    const g = gradeDoBloco(formula(r("casal")));
+    expect(g.valorDoBloco).toBe(563935);
+    expect(g.total).toBe(563935);
+    const ids = g.linhas.map((x) => x.id);
+    expect(ids).toEqual(expect.arrayContaining(["c4", "monjaro-1", "monjaro-2"]));
+    expect(ids).not.toContain("monjaro");
+    expect(ids).not.toContain("c4-ajuste");
+    expect(g.ajustesPorMae.get("c4")?.map((x) => x.id)).toEqual(["c4-ajuste"]);
+  });
+
+  it("Ajuste com Responsável diferente da mãe: só entra o que o Bloco soma (vira linha comum no Bloco dele)", () => {
+    const divergente = lancamentos.map((x) => (x.id === "c4-ajuste" ? { ...x, responsavel_id: "mae" } : x));
+    const casal = gradeDoBloco(formula(r("casal")), divergente);
+    expect(casal.valorDoBloco).toBe(563943);
+    expect(casal.total).toBe(563943);
+    expect(casal.ajustesPorMae.get("c4")).toBeUndefined();
+    const mae = gradeDoBloco(formula(r("mae")), divergente);
+    expect(mae.total).toBe(mae.valorDoBloco);
+    // Sem a mãe no Bloco, o Ajuste não fica recuado: é uma linha própria da grade.
+    expect(mae.linhas.map((x) => x.id)).toContain("c4-ajuste");
+    expect(mae.ajustesPorMae.size).toBe(0);
+  });
+
+  it("mãe dividida cujas filhas entram só em parte: aparecem só as filhas que entram", () => {
+    const parcial = lancamentos.map((x) => (x.id === "monjaro-2" ? { ...x, responsavel_id: "lucas" } : x));
+    const casal = gradeDoBloco(formula(r("casal")), parcial);
+    expect(casal.linhas.map((x) => x.id)).toContain("monjaro-1");
+    expect(casal.linhas.map((x) => x.id)).not.toContain("monjaro-2");
+    expect(casal.total).toBe(casal.valorDoBloco);
+    const lucas = gradeDoBloco(formula(r("lucas")), parcial);
+    expect(lucas.linhas.map((x) => x.id)).toEqual(expect.arrayContaining(["l1", "l2", "monjaro-2"]));
+    expect(lucas.total).toBe(lucas.valorDoBloco);
+  });
+
+  it("Bloco de duas pessoas: a grade tem o Casal inteiro (a metade é só na conta, não na lista)", () => {
+    const f = formula(r("rangel"), MAIS, { tipo: "abre" }, r("casal"), DIV, dois, { tipo: "fecha" });
+    const g = gradeDoBloco(f);
+    expect(g.valorDoBloco).toBe(281968);
+    expect(g.total).toBe(563935);
   });
 });

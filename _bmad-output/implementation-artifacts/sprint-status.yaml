@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 11-01-2026 19:39
-last_updated: 15-11-2026 18:00
+last_updated: 15-11-2026 13:40
 project: conta-comigo
 project_key: NOKEY
 tracking_system: file-system
@@ -77,7 +77,7 @@ development_status:
   epic-4: in-progress
   4-1-montar-um-bloco-com-fichas: done
   4-2-blocos-no-painel: done
-  4-3-filtrar-a-grade-pelo-bloco: backlog
+  4-3-filtrar-a-grade-pelo-bloco: review
   4-4-selecionar-e-ver-o-total: backlog
   4-5-configurar-o-modelo-da-mensagem: backlog
   4-6-gerar-a-mensagem-a-partir-da-seleção: backlog
