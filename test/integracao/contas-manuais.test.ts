@@ -415,7 +415,7 @@ describe.skipIf(!ligado)("Contas manuais no Supabase local", () => {
         },
       );
       expect(inserida).toMatchObject({ valor_centavos: 31_800 });
-      expect(inserida.nome).toMatch(/^Lista d+$/);
+      expect(inserida.nome).toMatch(/^Lista [0-9]+$/);
 
       const alvo = inserida.id;
       const alterada = await esperarEvento<{ id: string; encerrada_em_mes: string | null; observacao: string | null }>(
