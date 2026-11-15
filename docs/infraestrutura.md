@@ -32,7 +32,15 @@ Nenhum segredo fica neste arquivo. As chaves ficam só nas variáveis de ambient
 - **Pendente antes do primeiro uso real:** trocar a senha do usuário do Rafael no Supabase Auth (apareceu numa conversa com o agente na 1.2), pelo próprio "Esqueci a senha" do app, por uma senha forte.
 - **Pendente antes do primeiro uso real:** trocar a senha do banco (apareceu numa conversa com o agente na 1.10). No Supabase, Project Settings → Database → Reset database password → Generate a password; depois atualizar o segredo do GitHub `SUPABASE_DB_URL` (passo 2 de "Preparar" em `docs/backup.md`) e disparar o workflow Backup para conferir.
 - **Pendente antes do primeiro uso real:** trocar a `SUPABASE_SECRET_KEY` (a chave atual apareceu numa conversa com o agente). No Supabase, criar uma chave secreta nova, atualizar a variável na Vercel e apagar a antiga.
-- Nas histórias seguintes: `GEMINI_API_KEY`, `GEMINI_MODEL` (2.1), `CRON_SECRET` (5.3), chaves VAPID (7.5)
+- Nas histórias seguintes: `GEMINI_API_KEY`, `GEMINI_MODEL` (2.1), `CRON_SECRET` (5.3, ver "Cron diário"), chaves VAPID (7.5)
+
+## Cron diário (História 5.3)
+- `vercel.json`: um Cron `0 12 * * *` (12:00 UTC = 09:00 em Brasília; o Brasil não tem horário de verão desde 2019, e se voltasse seria 10:00, no mesmo dia) chama `GET /api/cron/diario`. No plano Hobby o Cron roda uma vez por dia e a hora não é exata (qualquer instante dentro da hora, 09:00 a 09:59 em Brasília); o app não depende do minuto.
+- A Vercel só roda Crons no deploy de **Production**, e manda `Authorization: Bearer <CRON_SECRET>` sozinha quando a variável `CRON_SECRET` existe no projeto. A rota responde 401 a quem não mandar exatamente isso (e a todos, se `CRON_SECRET` não existir).
+- **Pendente antes de o Cron funcionar (Rafael, na Vercel, só Production):** criar a variável `CRON_SECRET` (tipo sensitive) com um texto aleatório de 16 caracteres ou mais, por exemplo gerado com `openssl rand -hex 32`. Sem ela a rota responde 401 e nada é materializado. Nunca com o prefixo `NEXT_PUBLIC_`.
+- Usa também `SUPABASE_SECRET_KEY` (já existe) e a RPC `materializar_contas_manuais_do_dono`, que só vem na migração `20261125120000_materializar_do_dono.sql` (aplicar com `supabase db push` **antes** do primeiro Cron, senão a rota responde 500).
+- O que ela faz: lê `contas_manuais` (essa leitura também mantém o projeto Supabase Free ativo), pede ao banco as parcelas que faltam até o Mês atual + 12 e responde `{ "ok": true, "quantidade": N }`. Os logs da Vercel mostram `cron.diario` com status, duração e quantidade; nunca nomes nem valores.
+- Conferir depois do deploy: Vercel → projeto → Settings → Cron Jobs (a tarefa aparece e tem "Run" manual) e Logs filtrando por `/api/cron/diario`.
 
 ## Auth (História 1.2)
 - Supabase Auth com e-mail e senha via `@supabase/ssr`. Telas: `/entrar` (com "Esqueci a senha" em `/entrar?modo=esqueci`), `/auth/confirmar` (troca o `code` do link do e-mail) e `/redefinir-senha`. "Sair" encerra só a sessão deste aparelho.

@@ -101,17 +101,10 @@ export function horizonteDasContas(mesAtual: string): string {
  * é melhor nenhuma linha do que uma errada.
  */
 export function parcelasDaConta(conta: ContaParaParcelas, ateMes: string): ParcelaDaConta[] {
-  if (!ehMes(conta.mes_inicial) || !ehMes(ateMes)) return [];
-  if (!Number.isSafeInteger(conta.valor_centavos) || conta.valor_centavos <= 0) return [];
-  const parcelada = conta.repeticao === "parcelas";
-  const total = parcelada ? conta.parcela_total : null;
-  if (parcelada && (total === null || total < PARCELAS_MIN)) return [];
-  if (!parcelada && conta.parcela_total !== null) return [];
-
-  const divisao = conta.divisao === null || conta.divisao === undefined ? null : lerDivisao(conta.divisao);
-  if (conta.divisao !== null && conta.divisao !== undefined && divisao === null) return [];
-  const partes = divisao === null ? null : partesDaImportacao(conta.valor_centavos, copiarDivisao(divisao));
-  if (divisao !== null && partes === null) return [];
+  if (!ehMes(ateMes)) return [];
+  const preparada = prepararConta(conta);
+  if (preparada === null) return [];
+  const { total, partes } = preparada;
 
   const parcelas: ParcelaDaConta[] = [];
   for (let n = 1; n <= (total ?? 9999); n++) {
@@ -128,6 +121,34 @@ export function parcelasDaConta(conta: ContaParaParcelas, ateMes: string): Parce
     });
   }
   return parcelas;
+}
+
+/** O que a Conta tem de "legível" para gerar parcelas (o total e a Divisão em valores). */
+type ContaPreparada = { total: number | null; partes: ParteParaGravar[] | null };
+
+/**
+ * Confere a Conta e prepara o que toda parcela repete (o total e os valores
+ * das filhas). `null` = Conta mal formada (Mês, Valor, repetição ou Divisão
+ * ilegíveis): não gera nada, e o cron conta como ilegível (5.3).
+ */
+function prepararConta(conta: ContaParaParcelas): ContaPreparada | null {
+  if (!ehMes(conta.mes_inicial)) return null;
+  if (!Number.isSafeInteger(conta.valor_centavos) || conta.valor_centavos <= 0) return null;
+  const parcelada = conta.repeticao === "parcelas";
+  const total = parcelada ? conta.parcela_total : null;
+  if (parcelada && (total === null || total < PARCELAS_MIN)) return null;
+  if (!parcelada && conta.parcela_total !== null) return null;
+
+  const divisao = conta.divisao === null || conta.divisao === undefined ? null : lerDivisao(conta.divisao);
+  if (conta.divisao !== null && conta.divisao !== undefined && divisao === null) return null;
+  const partes = divisao === null ? null : partesDaImportacao(conta.valor_centavos, copiarDivisao(divisao));
+  if (divisao !== null && partes === null) return null;
+  return { total, partes };
+}
+
+/** A Conta está bem formada o bastante para `parcelasDaConta` gerar parcelas? */
+export function contaLegivel(conta: ContaParaParcelas): boolean {
+  return prepararConta(conta) !== null;
 }
 
 // ------------------------------------------------------------- descrição
@@ -432,4 +453,18 @@ export function pedidoMaterializar(contas: readonly ContaParaParcelas[], ateMes:
     p_ate_mes: ateMes,
     p_parcelas: contas.flatMap((c) => parcelasDaConta(c, ateMes).map(parcelaParaRpc)),
   };
+}
+
+/**
+ * Os argumentos de `materializar_contas_manuais_do_dono` (5.3): o mesmo pedido,
+ * mais o dono. Só o cron chama, com a chave secreta (não há `auth.uid()`).
+ */
+export type PedidoMaterializarDoDono = PedidoMaterializar & { p_owner_id: string };
+
+export function pedidoMaterializarDoDono(
+  ownerId: string,
+  contas: readonly ContaParaParcelas[],
+  ateMes: string,
+): PedidoMaterializarDoDono {
+  return { p_owner_id: ownerId, ...pedidoMaterializar(contas, ateMes) };
 }
