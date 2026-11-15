@@ -2,7 +2,7 @@
 title: 'História 4.7: Gerar a mensagem a partir de um Bloco'
 type: 'feature'
 created: '2026-11-15'
-status: 'review'
+status: 'done'
 baseline_commit: '2560250'
 route: 'dispatch'
 review_loop_iteration: 0
