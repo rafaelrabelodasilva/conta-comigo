@@ -24,6 +24,8 @@ describe("referências", () => {
       { cadastro: "status", tabela: "lancamentos", coluna: "status_id", contaUso: true },
       { cadastro: "responsavel", tabela: "regras", coluna: "responsavel_id", contaUso: false },
       { cadastro: "tipo", tabela: "regras", coluna: "tipo_id", contaUso: false },
+      { cadastro: "responsavel", tabela: "contas_manuais", coluna: "responsavel_id", contaUso: true },
+      { cadastro: "tipo", tabela: "contas_manuais", coluna: "tipo_id", contaUso: true },
     ]);
     expect(REFERENCIAS_JSONB).toEqual([
       { cadastro: "responsavel", tabela: "regras", coluna: "contagem", contaUso: false },
@@ -33,6 +35,7 @@ describe("referências", () => {
       { cadastro: "responsavel", tabela: "regras", coluna: "divisao", contaUso: false },
       { cadastro: "responsavel", tabela: "blocos", coluna: "formula", contaUso: true },
       { cadastro: "tipo", tabela: "blocos", coluna: "formula", contaUso: true },
+      { cadastro: "responsavel", tabela: "contas_manuais", coluna: "divisao", contaUso: true },
     ]);
   });
 

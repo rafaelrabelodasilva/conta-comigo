@@ -79,6 +79,22 @@ export const MENSAGENS = {
   "ciclo.sem_configuracao": "Informe o dia de fechamento e o de vencimento do cartão.",
   "ciclo.vigente_no_passado": "A mudança do Ciclo não pode valer para um mês que já passou.",
   "dinheiro.invalido": "Valor inválido. Use, por exemplo, 1,50.",
+  // História 5.1: cadastrar uma Conta manual.
+  "conta.nome_vazio": "Digite o nome da conta.",
+  "conta.nome_longo": "O nome da conta pode ter até 100 caracteres.",
+  "conta.valor_invalido": "Digite um valor, como 318,00.",
+  "conta.valor_zero": "O valor precisa ser maior que R$ 0,00.",
+  "conta.valor_grande": "O valor é grande demais (até R$ 900.000,00).",
+  "conta.parcelas_invalidas": "Digite de 2 a 120 parcelas.",
+  "conta.mes_invalido": "Escolha o mês em que a conta começa.",
+  "conta.mes_fora_do_limite": "Escolha um mês entre cinco anos atrás e cinco anos à frente.",
+  "conta.sem_tipo": "Escolha o Tipo.",
+  "conta.tipo_arquivado": "Esse Tipo foi arquivado. Escolha outro.",
+  "conta.sem_responsavel": "Escolha o Responsável.",
+  "conta.responsavel_arquivado": "Esse Responsável foi arquivado. Escolha outro.",
+  "conta.observacao_longa": "A observação pode ter até 200 caracteres.",
+  "conta.serie_ocupada": "Outra conta igual foi salva agora. Tente de novo.",
+  "conta.nao_encontrada": "Esta conta não existe mais. Nada foi gravado.",
   "divisao.fracoes_invalidas": "As frações da divisão precisam somar 100%.",
   "divisao.fracao_invalida": "Use uma fração como 2/3 ou uma porcentagem como 33,33%.",
   "divisao.valor_zero": "Um lançamento de R$ 0,00 não pode ser dividido.",
@@ -1249,6 +1265,73 @@ export function rotuloCicloAtual(mes: string, fechamento: number, vencimento: nu
 /** A mudança já salva: "A partir de Jan/27: fechamento dia 5, vencimento dia 15". */
 export function rotuloProximoCiclo(mes: string, fechamento: number, vencimento: number): string {
   return `A partir de ${mes}: fechamento dia ${fechamento}, vencimento dia ${vencimento}`;
+}
+
+/** Textos das Contas manuais (História 5.1, UX-DR24, mockup `contas-manuais.html`). */
+export const TEXTOS_CONTAS = {
+  botao_nova: "Nova conta",
+  rotulo_nova: "Nova conta manual",
+  titulo_nova: "Nova conta manual",
+  descricao_nova: "Contas que não passam pelo cartão. Elas entram sozinhas nos meses certos.",
+  nome: "Nome",
+  valor: "Valor por mês",
+  valor_parcela: "Valor por parcela",
+  repeticao: "Repetição",
+  mensal: "Mensal",
+  mensal_ate_encerrar: "Mensal até encerrar",
+  n_parcelas: "N parcelas",
+  parcelas: "Parcelas",
+  comeca_em: "Começa em",
+  tipo: "Tipo",
+  escolha_tipo: "Escolha…",
+  escolha_responsavel: "Escolha…",
+  observacao: "Observação",
+  divisao: "Divisão",
+  responsavel: "Responsável",
+  valor_da_parte: "Valor da parte",
+  mais_parte: "Parte",
+  rotulo_mais_parte: "Adicionar parte",
+  remover_parte: "Remover parte",
+  desde: "desde",
+  cancelar: "Cancelar",
+  salvar: "Salvar",
+  salvando: "Salvando…",
+  salvas_agora: "Salvas agora",
+  sem_internet: "Sem conexão. Você pode consultar, mas não alterar.",
+  nota_passado: "Os meses anteriores também recebem a conta.",
+  explicacao_vazio: "As contas que você cadastrar aparecem nos meses certos do Painel.",
+} as const;
+
+/** "6 parcelas" ("1 parcela" não existe: o mínimo é 2). */
+export function rotuloParcelasDaConta(n: number): string {
+  return `${n} parcelas`;
+}
+
+/** "Por mês: R$ 318,00 · Total da conta: R$ 1.908,00". */
+export function rotuloTotaisDaConta(porMesCentavos: number, totalCentavos: number | null): string {
+  const porMes = `Por mês: ${formatarDinheiro(porMesCentavos)}`;
+  return totalCentavos === null ? porMes : `${porMes} · Total da conta: ${formatarDinheiro(totalCentavos)}`;
+}
+
+/** Nome acessível de uma parte da Divisão: "Valor da parte 2". */
+export function rotuloValorDaParte(posicao: number): string {
+  return `Valor da parte ${posicao}`;
+}
+
+/** Nome acessível do Responsável de uma parte: "Responsável da parte 2". */
+export function rotuloResponsavelDaParte(posicao: number): string {
+  return `Responsável da parte ${posicao}`;
+}
+
+/** "Remover parte 2". */
+export function rotuloRemoverParte(posicao: number): string {
+  return `Remover parte ${posicao}`;
+}
+
+/** O toast depois de salvar: "Conta salva: 6 lançamentos criados" (ou "… já estava salva"). */
+export function rotuloContaSalva(criados: number): string {
+  if (criados === 0) return "Conta salva: nenhum lançamento novo nos próximos 12 meses";
+  return criados === 1 ? "Conta salva: 1 lançamento criado" : `Conta salva: ${criados} lançamentos criados`;
 }
 
 export type CodigoMensagem = keyof typeof MENSAGENS;

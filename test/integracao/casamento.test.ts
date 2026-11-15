@@ -115,7 +115,7 @@ describe.skipIf(!ligado)("Casamento dos previstos no Supabase local", () => {
         // Como `lerPrevistosDoMes`: a chave da Série evita a Série já ocupada.
         serie: {
           nome_normalizado: dasSeries.get(l.serie_id!)!.nome_normalizado,
-          parcela_total: dasSeries.get(l.serie_id!)!.parcela_total,
+          parcela_total: dasSeries.get(l.serie_id!)!.parcela_total!,
           valor_parcela_centavos: dasSeries.get(l.serie_id!)!.valor_parcela_centavos,
           mes_primeira_parcela: dasSeries.get(l.serie_id!)!.mes_primeira_parcela,
           ocorrencia: dasSeries.get(l.serie_id!)!.ocorrencia,

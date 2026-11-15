@@ -8,17 +8,19 @@ export type OpcaoSeletor = { valor: string; rotulo: string };
 
 export type PropsSeletor = Omit<ComponentProps<"select">, "children"> & {
   rotulo: string;
+  /** O rótulo só para leitor de tela (linhas de uma lista, onde o contexto já diz o que é). */
+  rotuloOculto?: boolean;
   opcoes: readonly OpcaoSeletor[];
 };
 
-export function Seletor({ rotulo, opcoes, id, className, ...props }: PropsSeletor) {
+export function Seletor({ rotulo, rotuloOculto = false, opcoes, id, className, ...props }: PropsSeletor) {
   const gerado = useId();
   const idCampo = id ?? gerado;
 
   return (
     <div className="flex flex-col gap-1">
       {rotulo ? (
-        <label htmlFor={idCampo} className="texto-label text-text">
+        <label htmlFor={idCampo} className={cn("texto-label text-text", rotuloOculto && "sr-only")}>
           {rotulo}
         </label>
       ) : null}

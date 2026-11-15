@@ -19,7 +19,7 @@ import {
   temOperando,
 } from "./formula";
 import { compararPelaFatura, linhasDoMes } from "./painel";
-import { ehPrevisto } from "./previstos";
+import { ehPrevistoNoMes } from "./previstos";
 import { rotuloItensDeFora } from "./mensagens";
 import type { Resultado } from "./resultado";
 
@@ -39,6 +39,8 @@ export type LancamentoParaProjetar = {
   ajuste_de_id?: string | null;
   /** `sistema` = previsto (3.5). Sem a coluna, a linha não é previsto. */
   lancado_por?: string;
+  /** A Conta manual que gerou a linha (5.1): previsto enquanto o Mês não tem Fatura. */
+  conta_manual_id?: string | null;
 };
 
 /**
@@ -58,13 +60,18 @@ export function projetarPainel(linhas: readonly LancamentoParaProjetar[], mes: s
 }
 
 /**
- * Os previstos que a projeção do Painel traz (`lancado_por = 'sistema'`): é o
- * que os Blocos somam num Mês sem Fatura e mostram como "inclui previstos".
+ * Os previstos que a projeção do Painel traz (`lancado_por = 'sistema'` e, num
+ * Mês sem Fatura, as Contas manuais): é o que os Blocos somam num Mês sem
+ * Fatura e mostram como "inclui previstos". `mesTemFatura` padrão: tem.
  */
-export function idsDosPrevistos(linhas: readonly LancamentoParaProjetar[], mes: string): Set<string> {
+export function idsDosPrevistos(
+  linhas: readonly LancamentoParaProjetar[],
+  mes: string,
+  mesTemFatura = true,
+): Set<string> {
   return new Set(
     unidadesDoMes(linhasDoMes(linhas, mes))
-      .filter((l) => l.lancado_por !== undefined && ehPrevisto({ lancado_por: l.lancado_por }))
+      .filter((l) => l.lancado_por !== undefined && ehPrevistoNoMes({ lancado_por: l.lancado_por, conta_manual_id: l.conta_manual_id }, mesTemFatura))
       .map((l) => l.id),
   );
 }
@@ -189,7 +196,7 @@ export function projetarMensagem(
   const porMotivo: Record<MotivoDeFora, number> = { pago: 0, zero: 0, previsto: 0 };
   for (const l of marcadas) {
     const motivo: MotivoDeFora | null =
-      ehPrevisto(l) && !incluirPrevistos
+      ehPrevistoNoMes(l, opcoes.temFatura) && !incluirPrevistos
         ? "previsto"
         : l.status_id !== null && opcoes.statusPagos.has(l.status_id)
           ? "pago"

@@ -41,6 +41,9 @@ export const REFERENCIAS_COLUNAS: readonly Referencia[] = [
   // Regras (História 3.1): não contam uso; excluir sem substituto anula a coluna.
   { cadastro: "responsavel", tabela: "regras", coluna: "responsavel_id", contaUso: false },
   { cadastro: "tipo", tabela: "regras", coluna: "tipo_id", contaUso: false },
+  // História 5.1: a Conta manual cita Tipo (não nulo) e Responsável. Conta uso: sem substituto, a Conta ficaria sem eles.
+  { cadastro: "responsavel", tabela: "contas_manuais", coluna: "responsavel_id", contaUso: true },
+  { cadastro: "tipo", tabela: "contas_manuais", coluna: "tipo_id", contaUso: true },
 ];
 
 /**
@@ -60,6 +63,8 @@ export const REFERENCIAS_JSONB: readonly Referencia[] = [
   // História 4.1: a Fórmula do Bloco cita Responsáveis e Tipos (só como valores). Conta uso: sem substituto, a Fórmula quebraria.
   { cadastro: "responsavel", tabela: "blocos", coluna: "formula", contaUso: true },
   { cadastro: "tipo", tabela: "blocos", coluna: "formula", contaUso: true },
+  // História 5.1: as partes da Divisão da Conta manual (só como valores). Conta uso: a Conta continua gerando Lançamentos com elas.
+  { cadastro: "responsavel", tabela: "contas_manuais", coluna: "divisao", contaUso: true },
 ];
 
 /**

@@ -152,6 +152,72 @@ export type Database = {
           },
         ]
       }
+      contas_manuais: {
+        Row: {
+          created_at: string
+          divisao: Json | null
+          encerrada_em_mes: string | null
+          id: string
+          mes_inicial: string
+          nome: string
+          observacao: string | null
+          owner_id: string
+          parcela_total: number | null
+          repeticao: string
+          responsavel_id: string | null
+          tipo_id: string
+          updated_at: string
+          valor_centavos: number
+        }
+        Insert: {
+          created_at?: string
+          divisao?: Json | null
+          encerrada_em_mes?: string | null
+          id?: string
+          mes_inicial: string
+          nome: string
+          observacao?: string | null
+          owner_id?: string
+          parcela_total?: number | null
+          repeticao: string
+          responsavel_id?: string | null
+          tipo_id: string
+          updated_at?: string
+          valor_centavos: number
+        }
+        Update: {
+          created_at?: string
+          divisao?: Json | null
+          encerrada_em_mes?: string | null
+          id?: string
+          mes_inicial?: string
+          nome?: string
+          observacao?: string | null
+          owner_id?: string
+          parcela_total?: number | null
+          repeticao?: string
+          responsavel_id?: string | null
+          tipo_id?: string
+          updated_at?: string
+          valor_centavos?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contas_manuais_responsavel_fkey"
+            columns: ["owner_id", "responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "responsaveis"
+            referencedColumns: ["owner_id", "id"]
+          },
+          {
+            foreignKeyName: "contas_manuais_tipo_fkey"
+            columns: ["owner_id", "tipo_id"]
+            isOneToOne: false
+            referencedRelation: "tipos"
+            referencedColumns: ["owner_id", "id"]
+          },
+        ]
+      }
       fatura_cartoes: {
         Row: {
           created_at: string
@@ -243,6 +309,7 @@ export type Database = {
           ajuste_de_id: string | null
           apelido: string | null
           casado_em: string | null
+          conta_manual_id: string | null
           created_at: string
           data: string | null
           dividido_de_id: string | null
@@ -277,6 +344,7 @@ export type Database = {
           ajuste_de_id?: string | null
           apelido?: string | null
           casado_em?: string | null
+          conta_manual_id?: string | null
           created_at?: string
           data?: string | null
           dividido_de_id?: string | null
@@ -311,6 +379,7 @@ export type Database = {
           ajuste_de_id?: string | null
           apelido?: string | null
           casado_em?: string | null
+          conta_manual_id?: string | null
           created_at?: string
           data?: string | null
           dividido_de_id?: string | null
@@ -347,6 +416,13 @@ export type Database = {
             columns: ["owner_id", "ajuste_de_id"]
             isOneToOne: false
             referencedRelation: "lancamentos"
+            referencedColumns: ["owner_id", "id"]
+          },
+          {
+            foreignKeyName: "lancamentos_conta_manual_fkey"
+            columns: ["owner_id", "conta_manual_id"]
+            isOneToOne: false
+            referencedRelation: "contas_manuais"
             referencedColumns: ["owner_id", "id"]
           },
           {
@@ -492,39 +568,50 @@ export type Database = {
       }
       series: {
         Row: {
+          conta_manual_id: string | null
           created_at: string
           id: string
           mes_primeira_parcela: string
           nome_normalizado: string
           ocorrencia: number
           owner_id: string
-          parcela_total: number
+          parcela_total: number | null
           updated_at: string
           valor_parcela_centavos: number
         }
         Insert: {
+          conta_manual_id?: string | null
           created_at?: string
           id?: string
           mes_primeira_parcela: string
           nome_normalizado: string
           ocorrencia: number
           owner_id?: string
-          parcela_total: number
+          parcela_total?: number | null
           updated_at?: string
           valor_parcela_centavos: number
         }
         Update: {
+          conta_manual_id?: string | null
           created_at?: string
           id?: string
           mes_primeira_parcela?: string
           nome_normalizado?: string
           ocorrencia?: number
           owner_id?: string
-          parcela_total?: number
+          parcela_total?: number | null
           updated_at?: string
           valor_parcela_centavos?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "series_conta_manual_fkey"
+            columns: ["owner_id", "conta_manual_id"]
+            isOneToOne: false
+            referencedRelation: "contas_manuais"
+            referencedColumns: ["owner_id", "id"]
+          },
+        ]
       }
       status: {
         Row: {
@@ -616,6 +703,7 @@ export type Database = {
         }
         Returns: Json
       }
+      materializar_contas_manuais: { Args: { p_ate_mes: string; p_parcelas: Json }; Returns: Json }
       recriar_filhas: { Args: { p_mae_id: string; p_partes: Json }; Returns: string[] }
       referencias_cadastro: {
         Args: never
@@ -699,6 +787,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      salvar_conta_manual: {
+        Args: { p_ate_mes: string; p_conta: Json; p_parcelas: Json }
+        Returns: Json
       }
       substituir_cadastro: {
         Args: { cadastro: string; de_id: string; para_id?: string }

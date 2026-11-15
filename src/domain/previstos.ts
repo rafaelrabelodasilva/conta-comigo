@@ -42,6 +42,29 @@ export function ehPrevisto(l: { lancado_por: string }): boolean {
   return l.lancado_por === "sistema";
 }
 
+/**
+ * O Lançamento de uma Conta manual (História 5.1) é "previsto" enquanto o Mês
+ * dele não tem Fatura: a Fatura ainda não chegou, então a conta é uma
+ * expectativa (EXPERIENCE.md, "Mês sem Fatura"). É derivado, nunca gravado: o
+ * `lancado_por` fica `manual`, e quando a Fatura do Mês é importada a linha
+ * deixa de ser previsto sozinha. Só vale para linhas ligadas a uma Conta
+ * (`conta_manual_id`): um Lançamento feito à mão no app nunca é previsto.
+ */
+export function ehPrevistoDeConta(
+  l: { lancado_por: string; conta_manual_id?: string | null },
+  mesTemFatura: boolean,
+): boolean {
+  return l.lancado_por === "manual" && (l.conta_manual_id ?? null) !== null && !mesTemFatura;
+}
+
+/** Previsto de qualquer origem: parcela prevista (`sistema`) ou Conta manual num Mês sem Fatura. */
+export function ehPrevistoNoMes(
+  l: { lancado_por: string; conta_manual_id?: string | null },
+  mesTemFatura: boolean,
+): boolean {
+  return ehPrevisto(l) || ehPrevistoDeConta(l, mesTemFatura);
+}
+
 /** A chave de uma Série (colunas de `series`, sem o dono). */
 export type ChaveDaSerie = {
   nome_normalizado: string;

@@ -37,6 +37,7 @@ type Montador = { modo: "novo" } | { modo: "editar" | "ver"; id: string };
 export function BlocosDoMes({
   linhas,
   mes,
+  temFatura = true,
   ativoId,
   aoFiltrar,
   aoExcluindo,
@@ -45,6 +46,8 @@ export function BlocosDoMes({
   /** Os Lançamentos do Mês aberto (a memória do Painel). */
   linhas: readonly LancamentoParaProjetar[];
   mes: string;
+  /** O Mês tem Fatura? Sem ela, as Contas manuais são previstos e entram como "inclui previstos" (5.1). */
+  temFatura?: boolean;
   /** O Bloco que filtra a grade (borda em destaque). */
   ativoId?: string | null;
   /** Tocar no cartão: liga, desliga ou troca o filtro por Bloco. */
@@ -75,7 +78,7 @@ export function BlocosDoMes({
 
   // A mesma projeção do Painel para o cartão e para "Ver cálculo".
   const projecao = useMemo(() => projetarPainel(linhas, mes), [linhas, mes]);
-  const previstos = useMemo(() => idsDosPrevistos(linhas, mes), [linhas, mes]);
+  const previstos = useMemo(() => idsDosPrevistos(linhas, mes, temFatura), [linhas, mes, temFatura]);
   const itens = useMemo(
     () =>
       blocos.map((b) => {
