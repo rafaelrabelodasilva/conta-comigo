@@ -236,9 +236,18 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-5-configurar-o-modelo-da-mensagem.md`
   summary: Conferir no iPad e no PC a seção Modelo da mensagem e o passo "Mensagem" do Primeiro uso: formulário e prévia lado a lado (e empilhados em pé), as três caixas de 44 pt, o foco visível, o rodapé em várias linhas, o aviso "mudou em outro aparelho" com dois aparelhos, e o VoiceOver lendo o grupo "Campos da linha de detalhe", a legenda e a região "Prévia" (sem anúncio a cada tecla).
   evidence: Low, não verificado. O jsdom só confere o DOM, os nomes e as classes; layout, toque e leitor de tela só se provam num aparelho. Junta-se à pendência do VoiceOver da 2.4.
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-5-configurar-o-modelo-da-mensagem.md`
-  summary: A prévia usa `amostraDoMes` (não pagos, sem R$ 0,00, previstos e Ajustes), que repete em pequeno a regra de inclusão da mensagem; quando a 4.6 criar `projetarMensagem`, trocar a amostra por ela (ou por um recorte dela) para a prévia e a mensagem nunca divergirem, e passar a mostrar o "Pago parcialmente" só pelo que falta.
-  evidence: Low. `amostraDoMes` e `ITENS_DE_EXEMPLO` ficam em `src/domain/modelo-mensagem.ts`; `renderizarModelo`, `linhaDeDetalhe` e `itemDaMensagem` são o contrato que a 4.6 e a 4.7 reaproveitam sem mudar.
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-5-configurar-o-modelo-da-mensagem.md`
-  summary: Um modelo vazio (ou sem nenhuma caixa) ainda não tem tratamento no "Gerar mensagem": a 4.6 precisa decidir o que mostrar (aviso e "Editar modelo", provavelmente) e o botão continua desativado até lá.
-  evidence: Low. A 4.5 só guarda o modelo; `renderizarModelo` com modelo vazio devolve só "Detalhes:/linhas/Total:" sem cabeçalho.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-6-gerar-a-mensagem-a-partir-da-selecao.md`
+  summary: "Pago parcialmente" ainda é só um Status: a mensagem inclui o item com o valor cheio. Quando o Épico 6 criar Pagamentos, `projetarMensagem` deve usar só o que falta (e a 4.7 e a forma 3 junto), e a prévia de Configurações também, por ser um recorte dela.
+  evidence: Low. O EXPERIENCE.md diz "só o valor que falta"; hoje não há Pagamento nem Saldo pendente. O teste "“Pago parcialmente” é só um Status" em `gerar-mensagem.test.ts` documenta o comportamento atual e deve mudar junto.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-6-gerar-a-mensagem-a-partir-da-selecao.md`
+  summary: "Dívida programada ainda não vencida" é regra de exclusão da mensagem (EXPERIENCE.md) mas ainda não existe no app; quando o Épico 6 criar a Dívida programada, acrescentar o motivo de fora (e a frase do aviso) em `projetarMensagem`.
+  evidence: Low. `MOTIVOS_DE_FORA` hoje tem pago, zero e previsto; o aviso e o tipo são fáceis de estender.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-6-gerar-a-mensagem-a-partir-da-selecao.md`
+  summary: "Editar modelo" sai do Painel e a Seleção (estado local do Painel) se perde; se Rafael sentir falta, guardar a Seleção entre telas ou abrir o modelo numa janela sem sair do Painel.
+  evidence: Low. A AC da história pede só que leve a Configurações → Modelo da mensagem.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-6-gerar-a-mensagem-a-partir-da-selecao.md`
+  summary: O valor na mensagem leva o espaço inseparável (U+00A0) entre "R$" e o número, porque `formatarDinheiro` o usa para não quebrar linha na tela; conferir se o WhatsApp mostra e busca isso como esperado e, se incomodar, trocar por espaço comum só na mensagem (um `replaceAll` no núcleo, sem mexer em `formatarDinheiro`).
+  evidence: Low, não verificado. Colar no WhatsApp do iPad e do Android é o único teste que vale.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-6-gerar-a-mensagem-a-partir-da-selecao.md`
+  summary: Conferir no iPad e no PC a janela "Gerar mensagem": o quadro e os três botões a 375 e 834 pt, as áreas de 44 pt, o Toast "Copiado" acima da barra, `navigator.clipboard` no Safari e no PWA (permissão e contexto seguro), o foco abrindo no quadro, e o VoiceOver lendo o título, o aviso dos itens de fora e o quadro e anunciando "A mensagem mudou…" com dois aparelhos.
+  evidence: Low, não verificado. O jsdom usa o stub da área de transferência do user-event e só confere o DOM, os nomes e o foco. Junta-se à pendência do VoiceOver da 2.4.

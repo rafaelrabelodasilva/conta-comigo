@@ -151,7 +151,6 @@ export function ordenarLancamentos<L extends LancamentoGrade>(
   nomes: NomesCadastros,
 ): L[] {
   const sinal = ordem.sentido === "crescente" ? 1 : -1;
-  const ordemFatura = (l: L) => l.ordem_fatura ?? Number.MAX_SAFE_INTEGER;
   return [...linhas].sort((a, b) => {
     const ca = chave(a, ordem.coluna, nomes);
     const cb = chave(b, ordem.coluna, nomes);
@@ -161,8 +160,17 @@ export function ordenarLancamentos<L extends LancamentoGrade>(
       const c = compararChaves(ca, cb) * sinal;
       if (c !== 0) return c;
     }
-    return ordemFatura(a) - ordemFatura(b) || ordemDeCriacao(a, b);
+    return compararPelaFatura(a, b);
   });
+}
+
+/** A ordem da fatura (a padrão da grade): `ordem_fatura` (vazio no fim) e, no empate, a de criação. A mensagem usa a mesma. */
+export function compararPelaFatura(
+  a: Pick<LancamentoGrade, "ordem_fatura" | "created_at">,
+  b: Pick<LancamentoGrade, "ordem_fatura" | "created_at">,
+): number {
+  const ordem = (l: Pick<LancamentoGrade, "ordem_fatura">) => l.ordem_fatura ?? Number.MAX_SAFE_INTEGER;
+  return ordem(a) - ordem(b) || ordemDeCriacao(a, b);
 }
 
 /** Sem `ordem_fatura` nas duas (histórico da planilha), vale a ordem de criação; sem `created_at`, empata. */

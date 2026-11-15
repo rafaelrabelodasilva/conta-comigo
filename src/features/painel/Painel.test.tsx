@@ -2062,15 +2062,84 @@ describe("Selecionar e ver o total (História 4.4, FR-48)", () => {
     expect(caixaDe("MERCADO").checked).toBe(false);
   });
 
-  it("'Limpar' desmarca tudo; 'Gerar mensagem' existe e fica desativado (a 4.6 o liga)", async () => {
+  it("'Limpar' desmarca tudo; 'Gerar mensagem' está ligado (4.6)", async () => {
     novembroComSelecao();
     renderizar();
     const u = userEvent.setup();
     await u.click(caixaDe("MERCADO"));
-    expect((within(barra()!).getByRole("button", { name: "Gerar mensagem" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(barra()!).getByRole("button", { name: "Gerar mensagem" }) as HTMLButtonElement).disabled).toBe(false);
     await u.click(within(barra()!).getByRole("button", { name: "Limpar" }));
     expect(barra()).toBeNull();
     expect(caixaDe("MERCADO").checked).toBe(false);
+  });
+
+  describe("Gerar mensagem (História 4.6, FR-24)", () => {
+    const modelo = { saudacao: "Oi", frase_total: "Esse mês deu {total}", chave_pix: "pix@exemplo.com", rodape: "", campos: { nome: true, parcela: true, valor: true } };
+    const comModelo = (m: unknown = modelo) => {
+      falso.banco.configuracoes = [{ id: "cfg", status_padrao_id: null, modelo_mensagem: m, updated_at: "2026-11-03T12:00:00+00:00" }];
+      falso.versao++;
+    };
+    const abrirMensagem = async (u: ReturnType<typeof userEvent.setup>) => {
+      await u.click(within(barra()!).getByRole("button", { name: "Gerar mensagem" }));
+      return screen.findByRole("dialog", { name: "Gerar mensagem" });
+    };
+
+    it("abre a janela com a mensagem da Seleção, na ordem da fatura, e o total é o da barra", async () => {
+      novembroComSelecao();
+      comModelo();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("FARMACIA"));
+      await u.click(caixaDe("MERCADO"));
+      const janela = await abrirMensagem(u);
+      const quadro = within(janela).getByRole("textbox", { name: "Mensagem" }) as HTMLTextAreaElement;
+      expect(sem(quadro.value)).toBe(
+        ["Oi", "Esse mês deu R$ 150,00", "Pix pix@exemplo.com", "", "Detalhes:", "MERCADO | R$ 100,00", "FARMACIA | R$ 50,00", "Total: R$ 150,00"].join("\n"),
+      );
+      expect(textoDaBarra()).toBe("2 selecionados · R$ 150,00");
+      // O foco abre no quadro: o leitor de tela lê a mensagem.
+      expect(document.activeElement).toBe(quadro);
+      expect(within(janela).queryByRole("switch")).toBeNull();
+    });
+
+    it("modelo vazio: explica e manda para Editar modelo, que leva a Configurações → Modelo da mensagem", async () => {
+      novembroComSelecao();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      const janela = await abrirMensagem(u);
+      expect(within(janela).getByText(/O modelo da mensagem está vazio/)).toBeTruthy();
+      expect((within(janela).getByRole("button", { name: "Copiar" }) as HTMLButtonElement).disabled).toBe(true);
+      await u.click(within(janela).getByRole("button", { name: "Editar modelo" }));
+      expect(roteador.push).toHaveBeenCalledWith("/configuracoes?secao=mensagem");
+    });
+
+    it("a Seleção esvaziada em outro aparelho fecha a janela, e ela não reabre na próxima marcação", async () => {
+      novembroComSelecao();
+      comModelo();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await abrirMensagem(u);
+      mudarBanco("lancamentos", (ls) =>
+        ls.map((l) => ((l as { id: string }).id === "c1" ? { ...(l as object), excluido_em: "2026-11-08T00:00:00Z" } : l)),
+      );
+      expect(screen.queryByRole("dialog", { name: "Gerar mensagem" })).toBeNull();
+      await u.click(caixaDe("FARMACIA"));
+      expect(screen.queryByRole("dialog", { name: "Gerar mensagem" })).toBeNull();
+    });
+
+    it("Fechar fecha a janela e a Seleção continua", async () => {
+      novembroComSelecao();
+      comModelo();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      const janela = await abrirMensagem(u);
+      await u.click(within(janela).getAllByRole("button", { name: "Fechar" }).at(-1)!);
+      expect(screen.queryByRole("dialog", { name: "Gerar mensagem" })).toBeNull();
+      expect(textoDaBarra()).toBe("1 selecionado · R$ 100,00");
+    });
   });
 
   it("com o painel lateral aberto, a barra deixa a coluna dele livre", async () => {

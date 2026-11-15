@@ -806,7 +806,7 @@ export const TEXTOS_SELECAO = {
   mais: "Mais",
   classificar_em_lote: "Classificar em lote",
   excluir: "Excluir",
-  /** Só existe, desativado, até a História 4.6. */
+  /** Abre a janela "Gerar mensagem" (História 4.6). */
   gerar_mensagem: "Gerar mensagem",
   /** O aviso de trocar de Mês com Seleção (só quando havia Seleção). */
   limpa_ao_trocar_de_mes: "Seleção limpa ao trocar de mês",
@@ -1502,4 +1502,48 @@ export function rotuloPrevia(origem: "mes" | "exemplo", quantidade: number, mes:
   }
   const itens = quantidade === 1 ? "1 lançamento" : `${quantidade} lançamentos`;
   return `Prévia com ${itens} de ${mes}. O total é o desses itens.`;
+}
+
+/**
+ * A janela "Gerar mensagem" (História 4.6, FR-24, UX-DR17) e as linhas da
+ * mensagem que não são do modelo.
+ */
+export const TEXTOS_GERAR = {
+  titulo: "Gerar mensagem",
+  /** Nome do quadro `message` (a caixa de texto só de leitura). */
+  quadro: "Mensagem",
+  /** Texto de apoio lido com o título quando nada ficou de fora. */
+  ajuda: "Confira o texto e copie para colar no WhatsApp.",
+  copiar: "Copiar",
+  editar_modelo: "Editar modelo",
+  /** O toast depois de copiar. */
+  copiado: "Copiado",
+  falha_ao_copiar: "Não foi possível copiar. Selecione o texto e copie manualmente",
+  nada_a_cobrar: "Nada a cobrar nesta seleção",
+  incluir_previstos: "Incluir previstos",
+  /** O modelo ainda não foi preenchido (nada escrito, nenhuma caixa). */
+  modelo_vazio: "O modelo da mensagem está vazio. Preencha em Configurações para gerar a mensagem.",
+  /** O modelo tem texto mas nenhuma caixa da linha de detalhe (não deveria ocorrer: a gravação recusa). */
+  modelo_sem_campos: "O modelo não tem campos na linha de detalhe. Marque ao menos um em Configurações.",
+  /** A mensagem mudou com a janela aberta (outro aparelho mexeu nos lançamentos ou no modelo). */
+  mudou: "A mensagem mudou desde que você abriu a janela. Confira o texto antes de copiar.",
+  /** O início da linha do Ajuste, logo abaixo da parcela. */
+  ajuste: "↳ Ajuste",
+} as const;
+
+/**
+ * O aviso dos itens que não entram: "2 itens não entram: 1 já pago, 1 de R$ 0,00".
+ * Vazio se nada ficou de fora. Fica na janela, nunca na mensagem.
+ */
+export function rotuloItensDeFora(
+  quantidade: number,
+  porMotivo: Readonly<{ pago: number; zero: number; previsto: number }>,
+): string {
+  if (quantidade <= 0) return "";
+  const partes: string[] = [];
+  if (porMotivo.pago > 0) partes.push(porMotivo.pago === 1 ? "1 já pago" : `${porMotivo.pago} já pagos`);
+  if (porMotivo.zero > 0) partes.push(`${porMotivo.zero} de ${formatarDinheiro(0)}`);
+  if (porMotivo.previsto > 0) partes.push(porMotivo.previsto === 1 ? "1 previsto" : `${porMotivo.previsto} previstos`);
+  const quem = quantidade === 1 ? "1 item não entra" : `${quantidade} itens não entram`;
+  return `${quem}: ${partes.join(", ")}`;
 }

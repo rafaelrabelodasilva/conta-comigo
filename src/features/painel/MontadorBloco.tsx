@@ -23,6 +23,7 @@ import { ativos as tiposAtivos, type Tipo } from "@/domain/tipos";
 import { Botao } from "@/ui/Botao";
 import { cn } from "@/ui/cn";
 import { classesPessoa } from "@/ui/cores-pessoa";
+import { Interruptor } from "@/ui/Interruptor";
 import { Janela } from "@/ui/Janela";
 import { Seletor } from "@/ui/Seletor";
 
@@ -77,41 +78,6 @@ function textoDaFicha(f: Ficha, nomes: NomesDaFormula): string {
     default:
       return nomeDoOperando(f, nomes);
   }
-}
-
-function Interruptor({
-  rotulo,
-  ligado,
-  aoMudar,
-}: {
-  rotulo: string;
-  ligado: boolean;
-  aoMudar: (ligado: boolean) => void;
-}) {
-  return (
-    <label className="flex min-h-toque cursor-pointer items-center gap-2 texto-body text-text">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={ligado}
-        aria-label={rotulo}
-        onClick={() => aoMudar(!ligado)}
-        className={cn(
-          "area-toque relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors",
-          ligado ? "border-accent bg-accent" : "border-border bg-background",
-        )}
-      >
-        <span
-          aria-hidden
-          className={cn(
-            "inline-block size-4 rounded-full transition-transform",
-            ligado ? "translate-x-5 bg-accent-foreground" : "translate-x-1 bg-text-muted",
-          )}
-        />
-      </button>
-      <span aria-hidden>{rotulo}</span>
-    </label>
-  );
 }
 
 export function MontadorBloco({

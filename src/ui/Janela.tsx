@@ -18,6 +18,8 @@ export type PropsJanela = {
   /** Botões de ação, alinhados à direita no rodapé. */
   rodape?: ReactNode;
   className?: string;
+  /** Quem recebe o foco ao abrir (padrão do Radix: o primeiro foco da janela, o ✕). Chame `preventDefault` e foque o que quiser. */
+  aoAbrirFoco?: (evento: Event) => void;
 };
 
 export function Janela({
@@ -28,12 +30,14 @@ export function Janela({
   children,
   rodape,
   className,
+  aoAbrirFoco,
 }: PropsJanela) {
   return (
     <Dialog.Root open={aberta} onOpenChange={aoMudar}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-scrim" />
         <Dialog.Content
+          onOpenAutoFocus={aoAbrirFoco}
           // Sem descrição, avisa o Radix que não há (evita o alerta no console).
           {...(descricao ? {} : { "aria-describedby": undefined })}
           className={cn(
@@ -56,7 +60,7 @@ export function Janela({
             </Dialog.Description>
           ) : null}
           {children}
-          {rodape ? <div className="flex justify-end gap-2">{rodape}</div> : null}
+          {rodape ? <div className="flex flex-wrap justify-end gap-2">{rodape}</div> : null}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
