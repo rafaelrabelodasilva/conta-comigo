@@ -10,6 +10,9 @@ import {
   rotuloLancamentosPagos,
   rotuloStatusAplicado,
   rotuloTotalAReceber,
+  rotuloFalta,
+  rotuloPagamentoParcial,
+  TEXTOS_PAGAMENTO,
   rotuloForaDoPagamento,
   mensagemDoPagamento,
   rotuloSelecionarGrupo,
@@ -877,10 +880,23 @@ describe("textos do Pagamento (História 6.1, UX-DR18)", () => {
     expect(mensagemDoPagamento({ codigo: "pagamento.valor_acima", detalhe: "281968" })).toBe(
       "O valor recebido não pode passar de R$ 2.819,68",
     );
-    expect(mensagemDoPagamento({ codigo: "pagamento.valor_menor", detalhe: "21516" })).toContain("R$ 215,16");
+    // Menor que o total não é erro (6.2): a janela pergunta o que fazer com a diferença.
+    expect(mensagemDoPagamento({ codigo: "pagamento.diferenca_sem_escolha", detalhe: "11516" })).toBe("Escolha o que fazer com a diferença.");
     // Sem o valor, cai no texto do mapa.
     expect(mensagemDoPagamento({ codigo: "pagamento.valor_acima" })).toBe(mensagem("pagamento.valor_acima"));
     expect(mensagemDoPagamento({ codigo: "pagamento.desfazer_antes" })).toContain("Desfaça o pagamento antes");
+  });
+
+  it("os textos da pergunta da diferença e do selo (6.2)", () => {
+    expect(TEXTOS_PAGAMENTO.fica_pendente).toBe("Fica pendente");
+    expect(TEXTOS_PAGAMENTO.minha_parte).toBe("Não é dívida, é a minha parte");
+    expect(TEXTOS_PAGAMENTO.fica_pendente_ajuda).toBe("Quita dos mais antigos para os mais novos. O que faltar continua em aberto.");
+    expect(`${TEXTOS_PAGAMENTO.diferenca_antes}R$ 50,00${TEXTOS_PAGAMENTO.diferenca_depois}`).toBe("O que fazer com a diferença de R$ 50,00?");
+    expect(TEXTOS_PAGAMENTO.pago_parcialmente).toBe("Pago parcialmente");
+    expect(rotuloFalta(11516)).toBe(`falta R$${ESPACO}115,16`);
+    expect(rotuloPagamentoParcial(10000, 0)).toBe(`Pagamento parcial registrado: R$${ESPACO}100,00`);
+    expect(rotuloPagamentoParcial(12000, 1)).toBe(`Pagamento parcial registrado: R$${ESPACO}120,00 · 1 lançamento marcado como pago`);
+    expect(rotuloPagamentoParcial(12000, 3)).toBe(`Pagamento parcial registrado: R$${ESPACO}120,00 · 3 lançamentos marcados como pagos`);
   });
 
   it("os itens que ficam de fora, com o motivo", () => {

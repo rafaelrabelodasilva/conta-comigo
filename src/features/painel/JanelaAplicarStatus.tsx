@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import {
   ROTULOS,
   TEXTOS_PAGAMENTO as T,
@@ -9,10 +9,14 @@ import {
   rotuloForaDoPagamento,
   rotuloTotalAReceber,
 } from "@/domain/mensagens";
+import { formatarDinheiro } from "@/domain/dinheiro";
 import {
   campoDoErroDoPagamento,
+  diferencaDoPagamento,
+  lerValorRecebido,
   planejarPagamento,
   textoDoValorRecebido,
+  type EscolhaDaDiferenca,
   type PedidoDePagamento,
   type ProjecaoDoPagamento,
 } from "@/domain/pagamento";
@@ -27,7 +31,11 @@ import { Janela } from "@/ui/Janela";
 // a Seleção quita); o núcleo (`planejarPagamento`) valida e monta o pedido da RPC, e a
 // janela só mostra o erro no campo dele. Se não conta como pago, data e valor somem e só o
 // Status muda (sem Pagamento). O Valor recebido maior que o total não é aceito ("O valor
-// recebido não pode passar de R$ X"); o menor é da História 6.2.
+// recebido não pode passar de R$ X"). Menor que o total (História 6.2) aparece a pergunta "O
+// que fazer com a diferença de R$ X?" com dois cartões de opção ("Fica pendente" e "Não é
+// dívida, é a minha parte"), nenhum marcado de início: Aplicar espera a escolha. A escolha
+// vale para aquela diferença; se o valor muda e a diferença com ele, a escolha volta a
+// vazia (Rafael não aplica sem ver o que está escolhendo). Valor igual ao total não pergunta.
 //
 // Quem abre a janela grava (`aoAplicar`) e a fecha quando dá certo; se falha, ela fica com
 // o texto do erro e a Seleção também. O `id` do Pagamento nasce uma vez por abertura da
@@ -35,12 +43,54 @@ import { Janela } from "@/ui/Janela";
 // Sem conexão a ação fica desativada e nada é tentado (AD-3). A janela serve às barras de
 // Seleção do Painel e, na História 6.5, à de Recebimentos: ela só recebe a projeção.
 
+/**
+ * Um cartão da pergunta da diferença (UX-DR18): rádio de 18 px, título e ajuda; os dois cartões
+ * têm a mesma altura (a grade os estica) e o valor em dinheiro não quebra de linha.
+ */
+function CartaoDeOpcao({
+  nome,
+  valor,
+  marcado,
+  aoMarcar,
+  titulo,
+  ajuda,
+}: {
+  nome: string;
+  valor: string;
+  marcado: boolean;
+  aoMarcar: () => void;
+  titulo: string;
+  ajuda: ReactNode;
+}) {
+  return (
+    <label
+      className={cn(
+        "grid min-h-toque cursor-pointer grid-cols-[1.125rem_1fr] items-start gap-3 rounded-md border p-3",
+        marcado ? "border-accent bg-selection" : "border-border",
+      )}
+    >
+      <input
+        type="radio"
+        name={nome}
+        value={valor}
+        checked={marcado}
+        onChange={aoMarcar}
+        className="mt-0.5 size-4.5 shrink-0 cursor-pointer accent-accent"
+      />
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="texto-label text-text">{titulo}</span>
+        <span className="texto-caption text-text-muted">{ajuda}</span>
+      </span>
+    </label>
+  );
+}
+
 /** Um Status da lista. */
 export type OpcaoDeStatus = { id: string; nome: string; contaComoPago: boolean };
 
 /** O que a janela pede a quem grava. */
 export type EscolhaAplicada =
-  | { tipo: "pagamento"; pedido: PedidoDePagamento; quantidade: number }
+  | { tipo: "pagamento"; pedido: PedidoDePagamento; quantidade: number; quitados: number }
   | { tipo: "status"; statusId: string };
 
 export type ResultadoAplicar = { ok: true } | { ok: false; texto: string };
@@ -71,12 +121,16 @@ export function JanelaAplicarStatus({
   aoAplicar,
 }: PropsJanelaAplicarStatus) {
   const idGrupo = useId();
+  const idPergunta = useId();
+  const idDiferenca = useId();
   // Uma vez por abertura: a janela só existe enquanto está aberta (quem a monta a desmonta ao fechar).
   const [idDoPagamento] = useState(() => crypto.randomUUID());
   const [statusId, setStatusId] = useState("");
   const [data, setData] = useState(hoje);
   // `null`: Rafael ainda não mexeu, vale o total (que acompanha o Realtime).
   const [valorTexto, setValorTexto] = useState<string | null>(null);
+  // A escolha guarda a diferença a que pertence: mudou a diferença, a escolha não vale mais.
+  const [escolhaDaDiferenca, setEscolhaDaDiferenca] = useState<{ diferenca: number; opcao: EscolhaDaDiferenca } | null>(null);
   const [aplicando, setAplicando] = useState(false);
   const [falha, setFalha] = useState<string | null>(null);
 
@@ -84,6 +138,10 @@ export function JanelaAplicarStatus({
   const pago = escolhido?.contaComoPago === true;
   const total = projecao?.totalCentavos ?? 0;
   const valor = valorTexto ?? textoDoValorRecebido(total);
+  const recebido = lerValorRecebido(valor);
+  const diferenca = pago && projecao !== null && recebido.ok ? diferencaDoPagamento(total, recebido.valor) : null;
+  const opcaoEscolhida =
+    escolhaDaDiferenca !== null && diferenca !== null && escolhaDaDiferenca.diferenca === diferenca ? escolhaDaDiferenca.opcao : null;
   const plano =
     pago && projecao !== null
       ? planejarPagamento({
@@ -94,6 +152,7 @@ export function JanelaAplicarStatus({
           valorTexto: valor,
           hoje,
           projecao,
+          diferenca: opcaoEscolhida,
         })
       : null;
   const erro = plano !== null && !plano.ok ? plano.erro : null;
@@ -109,7 +168,12 @@ export function JanelaAplicarStatus({
     setFalha(null);
     const r = await aoAplicar(
       pago && plano?.ok === true
-        ? { tipo: "pagamento", pedido: plano.valor.pedido, quantidade: plano.valor.quantidade }
+        ? {
+            tipo: "pagamento",
+            pedido: plano.valor.pedido,
+            quantidade: plano.valor.quantidade,
+            quitados: plano.valor.quitados,
+          }
         : { tipo: "status", statusId: escolhido.id },
     );
     setAplicando(false);
@@ -181,6 +245,39 @@ export function JanelaAplicarStatus({
                 erro={campoDoErro === "valor" && erro ? mensagemDoPagamento(erro) : null}
               />
             </div>
+            {diferenca !== null && recebido.ok ? (
+              <fieldset className="flex min-w-0 flex-col gap-2">
+                <legend id={idPergunta} className="mb-2 texto-label text-text">
+                  {T.diferenca_antes}
+                  <span className="whitespace-nowrap">{formatarDinheiro(diferenca)}</span>
+                  {T.diferenca_depois}
+                </legend>
+                <div role="radiogroup" aria-labelledby={idPergunta} className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2">
+                  <CartaoDeOpcao
+                    nome={idDiferenca}
+                    valor="pendente"
+                    marcado={opcaoEscolhida === "pendente"}
+                    aoMarcar={() => setEscolhaDaDiferenca({ diferenca, opcao: "pendente" })}
+                    titulo={T.fica_pendente}
+                    ajuda={T.fica_pendente_ajuda}
+                  />
+                  <CartaoDeOpcao
+                    nome={idDiferenca}
+                    valor="minha_parte"
+                    marcado={opcaoEscolhida === "minha_parte"}
+                    aoMarcar={() => setEscolhaDaDiferenca({ diferenca, opcao: "minha_parte" })}
+                    titulo={T.minha_parte}
+                    ajuda={
+                      <>
+                        {T.minha_parte_ajuda_antes}
+                        <span className="whitespace-nowrap">{formatarDinheiro(recebido.valor)}</span>
+                        {T.minha_parte_ajuda_depois}
+                      </>
+                    }
+                  />
+                </div>
+              </fieldset>
+            ) : null}
             {projecao !== null && !semNadaAReceber ? (
               <p className="texto-body text-text-muted">{rotuloTotalAReceber(total)}</p>
             ) : null}

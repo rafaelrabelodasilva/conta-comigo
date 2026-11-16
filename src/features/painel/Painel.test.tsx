@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatarDinheiro } from "@/domain/dinheiro";
@@ -2572,8 +2572,8 @@ describe("Selecionar e ver o total (História 4.4, FR-48)", () => {
       expect(pedido).toMatchObject({ status_id: "s-pago", data: "2026-11-08", valor_recebido_centavos: 15000, modo: "total" });
       expect(pedido.id).toMatch(/^[0-9a-f-]{36}$/);
       expect(pedido.itens).toEqual([
-        { lancamento_id: "c1", valor_centavos: 10000, atualizado_em: "2026-11-03T12:00:00+00:00" },
-        { lancamento_id: "c2", valor_centavos: 5000, atualizado_em: "2026-11-03T12:00:00+00:00" },
+        { lancamento_id: "c1", valor_centavos: 10000, atualizado_em: "2026-11-03T12:00:00+00:00", quita: true },
+        { lancamento_id: "c2", valor_centavos: 5000, atualizado_em: "2026-11-03T12:00:00+00:00", quita: true },
       ]);
       expect(screen.queryByRole("dialog", { name: "Aplicar status" })).toBeNull();
       expect(await screen.findByText("2 lançamentos marcados como pagos")).toBeTruthy();
@@ -2583,7 +2583,7 @@ describe("Selecionar e ver o total (História 4.4, FR-48)", () => {
       expect(repoP.desfazer).toHaveBeenCalledWith("pg-novo");
     });
 
-    it("o Valor recebido não passa do total, nem é menor, zero ou negativo: o erro aparece no campo e 'Aplicar' fica desativado", async () => {
+    it("o Valor recebido não passa do total, é maior que zero e menor pede a escolha: o erro aparece no campo e 'Aplicar' fica desativado", async () => {
       novembroComSelecao();
       renderizar();
       const u = userEvent.setup();
@@ -2599,13 +2599,223 @@ describe("Selecionar e ver o total (História 4.4, FR-48)", () => {
       };
       expect(await tentar("150,01")).toContain("O valor recebido não pode passar de R$ 150,00");
       expect(botaoAplicar(janela).disabled).toBe(true);
-      expect(await tentar("100,00")).toContain("O valor recebido precisa ser o total, R$ 150,00");
+      // Menor que o total não é erro: aparece a pergunta da diferença, e Aplicar espera a escolha.
+      const menor = await tentar("100,00");
+      expect(menor).toContain("O que fazer com a diferença de R$ 50,00?");
+      expect(menor).not.toContain("precisa ser o total");
+      expect(botaoAplicar(janela).disabled).toBe(true);
       expect(await tentar("0")).toContain("Digite um valor maior que zero");
       expect(await tentar("-5")).toContain("Digite um valor maior que zero");
       expect(await tentar("")).toContain("Digite o valor recebido");
       expect(await tentar("150,00")).not.toContain("O valor recebido");
       expect(botaoAplicar(janela).disabled).toBe(false);
       expect(repoP.aplicar).not.toHaveBeenCalled();
+    });
+
+    describe("valor menor que o total (História 6.2, FR-25, UX-DR18)", () => {
+      const abrirComDuas = async (u: ReturnType<typeof userEvent.setup>) => {
+        await u.click(caixaDe("MERCADO"));
+        await u.click(caixaDe("FARMACIA"));
+        const janela = await abrirAplicarStatus(u);
+        await u.click(within(janela).getByRole("radio", { name: "Pago" }));
+        return janela;
+      };
+      const digitar = async (u: ReturnType<typeof userEvent.setup>, janela: HTMLElement, texto: string) => {
+        const valor = within(janela).getByLabelText("Valor recebido");
+        await u.clear(valor);
+        await u.type(valor, texto);
+      };
+      const pergunta = (janela: HTMLElement) => within(janela).queryByRole("radiogroup", { name: /O que fazer com a diferença de/ });
+      type Pedido = { modo: string; valor_recebido_centavos: number; itens: { lancamento_id: string; valor_centavos: number; quita: boolean }[] };
+
+      it("a pergunta traz os dois cartões, de mesma altura, rádio de 18 px, valor sem quebra de linha, e nenhum vem marcado", async () => {
+        novembroComSelecao();
+        renderizar();
+        const u = userEvent.setup();
+        const janela = await abrirComDuas(u);
+        expect(pergunta(janela)).toBeNull();
+        await digitar(u, janela, "100,00");
+        const grupo = pergunta(janela)!;
+        expect(sem(grupo.textContent)).toContain("Fica pendente");
+        expect(sem(grupo.textContent)).toContain("Quita dos mais antigos para os mais novos. O que faltar continua em aberto.");
+        expect(sem(grupo.textContent)).toContain("Não é dívida, é a minha parte");
+        expect(sem(grupo.textContent)).toContain("Todos os lançamentos ficam pagos. O pagamento registra R$ 100,00.");
+        const radios = within(grupo).getAllByRole("radio") as HTMLInputElement[];
+        expect(radios).toHaveLength(2);
+        expect(radios.every((r) => !r.checked)).toBe(true);
+        // Mesma altura (a grade estica os cartões) e rádio de 18 px (size-4.5).
+        expect(grupo.className).toContain("items-stretch");
+        expect(radios.map((r) => r.closest("label")!.className.includes("min-h-toque"))).toEqual([true, true]);
+        expect(radios.every((r) => r.className.includes("size-4.5"))).toBe(true);
+        // O valor em R$ não quebra de linha: o da pergunta e o do cartão "minha parte".
+        const semQuebra = [...janela.querySelectorAll("span.whitespace-nowrap")].map((e) => sem(e.textContent));
+        expect(semQuebra).toContain("R$ 50,00");
+        expect(semQuebra).toContain("R$ 100,00");
+        expect(botaoAplicar(janela).disabled).toBe(true);
+      });
+
+      it("Fica pendente: o núcleo quita dos mais antigos aos mais novos e o último fica com item parcial (modo parcial)", async () => {
+        novembroComSelecao();
+        repoP.aplicar.mockResolvedValueOnce({ ok: true, pagamento: { id: "pg-novo" }, itens: [], linhas: [] });
+        repoP.desfazer.mockResolvedValueOnce({ ok: true });
+        renderizar();
+        const u = userEvent.setup();
+        const janela = await abrirComDuas(u);
+        await digitar(u, janela, "120,00");
+        expect(botaoAplicar(janela).disabled).toBe(true);
+        await u.click(within(janela).getByRole("radio", { name: /Fica pendente/ }));
+        expect(botaoAplicar(janela).disabled).toBe(false);
+        await u.click(botaoAplicar(janela));
+        const pedido = repoP.aplicar.mock.calls[0][0] as Pedido;
+        expect(pedido).toMatchObject({ modo: "parcial", valor_recebido_centavos: 12000 });
+        expect(pedido.itens.map((i) => [i.lancamento_id, i.valor_centavos, i.quita])).toEqual([
+          ["c1", 10000, true],
+          ["c2", 2000, false],
+        ]);
+        const aviso = await screen.findByText(/Pagamento parcial registrado/);
+        expect(sem(aviso.textContent)).toContain("Pagamento parcial registrado: R$ 120,00 · 1 lançamento marcado como pago");
+        expect(textoDaBarra()).toBe("2 selecionados · R$ 150,00");
+        await u.click(screen.getByRole("button", { name: "Desfazer" }));
+        expect(repoP.desfazer).toHaveBeenCalledWith("pg-novo");
+      });
+
+      it("Não é dívida, é a minha parte: todas ficam quitadas e o Pagamento registra o valor recebido (modo minha_parte)", async () => {
+        novembroComSelecao();
+        repoP.aplicar.mockResolvedValueOnce({ ok: true, pagamento: { id: "pg-novo" }, itens: [], linhas: [] });
+        renderizar();
+        const u = userEvent.setup();
+        const janela = await abrirComDuas(u);
+        await digitar(u, janela, "75,00");
+        await u.click(within(janela).getByRole("radio", { name: /Não é dívida, é a minha parte/ }));
+        await u.click(botaoAplicar(janela));
+        const pedido = repoP.aplicar.mock.calls[0][0] as Pedido;
+        expect(pedido).toMatchObject({ modo: "minha_parte", valor_recebido_centavos: 7500 });
+        expect(pedido.itens.map((i) => [i.lancamento_id, i.valor_centavos, i.quita])).toEqual([
+          ["c1", 10000, true],
+          ["c2", 5000, true],
+        ]);
+        expect(await screen.findByText("2 lançamentos marcados como pagos")).toBeTruthy();
+      });
+
+      it("mudar o valor muda a diferença e a escolha volta a vazia; o valor igual ao total tira a pergunta e vira total", async () => {
+        novembroComSelecao();
+        repoP.aplicar.mockResolvedValueOnce({ ok: true, pagamento: { id: "pg-novo" }, itens: [], linhas: [] });
+        renderizar();
+        const u = userEvent.setup();
+        const janela = await abrirComDuas(u);
+        await digitar(u, janela, "100,00");
+        await u.click(within(janela).getByRole("radio", { name: /Fica pendente/ }));
+        expect(botaoAplicar(janela).disabled).toBe(false);
+        await digitar(u, janela, "90,00");
+        expect(sem(janela.textContent)).toContain("O que fazer com a diferença de R$ 60,00?");
+        expect((within(janela).getAllByRole("radio", { name: /Fica pendente|Não é dívida/ }) as HTMLInputElement[]).every((r) => !r.checked)).toBe(true);
+        expect(botaoAplicar(janela).disabled).toBe(true);
+        await u.click(within(janela).getByRole("radio", { name: /Não é dívida/ }));
+        await digitar(u, janela, "150,00");
+        expect(pergunta(janela)).toBeNull();
+        expect(botaoAplicar(janela).disabled).toBe(false);
+        await u.click(botaoAplicar(janela));
+        expect((repoP.aplicar.mock.calls[0][0] as Pedido).modo).toBe("total");
+      });
+
+      it("valor maior que o total ou inválido não pergunta nada", async () => {
+        novembroComSelecao();
+        renderizar();
+        const u = userEvent.setup();
+        const janela = await abrirComDuas(u);
+        for (const texto of ["150,01", "0", "abc"]) {
+          await digitar(u, janela, texto);
+          expect(pergunta(janela)).toBeNull();
+        }
+      });
+    });
+
+    describe("Pago parcialmente (História 6.2)", () => {
+      const parcial = () => item("ip1", "c1", { valor_centavos: 4000, status_aplicado_id: null });
+
+      it("a grade mostra o selo 'Pago parcialmente' e o painel do Lançamento mostra 'falta R$ 60,00'", async () => {
+        novembroComSelecao();
+        falso.banco = { ...falso.banco, pagamento_itens: [parcial()] };
+        renderizar();
+        const u = userEvent.setup();
+        const linhaMercado = screen.getByRole("checkbox", { name: "Selecionar MERCADO" }).closest("tr")!;
+        expect(within(linhaMercado).getByText("Pago parcialmente")).toBeTruthy();
+        // As outras linhas seguem com o Status delas.
+        const linhaFarmacia = screen.getByRole("checkbox", { name: "Selecionar FARMACIA" }).closest("tr")!;
+        expect(within(linhaFarmacia).queryByText("Pago parcialmente")).toBeNull();
+        await u.click(within(linhaMercado).getByText("MERCADO"));
+        const painel = await screen.findByRole("complementary");
+        expect(sem(painel.textContent)).toContain("Pago parcialmente");
+        expect(sem(painel.textContent)).toContain("falta R$ 60,00");
+      });
+
+      it("o outro aparelho vê: um item novo chega pelo Realtime e o selo aparece; o item desfeito tira o selo", async () => {
+        novembroComSelecao();
+        renderizar();
+        const linhaMercado = () => screen.getByRole("checkbox", { name: "Selecionar MERCADO" }).closest("tr")!;
+        expect(within(linhaMercado()).queryByText("Pago parcialmente")).toBeNull();
+        mudarBanco("pagamento_itens", () => [parcial()]);
+        expect(await within(linhaMercado()).findByText("Pago parcialmente")).toBeTruthy();
+        mudarBanco("pagamento_itens", () => [{ ...parcial(), excluido_em: "2026-11-08T12:00:00+00:00" }]);
+        await waitFor(() => expect(within(linhaMercado()).queryByText("Pago parcialmente")).toBeNull());
+      });
+
+      it("uma segunda cobrança da linha parcial: o total a receber e o valor padrão são só o que falta", async () => {
+        novembroComSelecao();
+        falso.banco = { ...falso.banco, pagamento_itens: [parcial()] };
+        repoP.aplicar.mockResolvedValueOnce({ ok: true, pagamento: { id: "pg-novo" }, itens: [], linhas: [] });
+        renderizar();
+        const u = userEvent.setup();
+        await u.click(caixaDe("MERCADO"));
+        const janela = await abrirAplicarStatus(u);
+        await u.click(within(janela).getByRole("radio", { name: "Pago" }));
+        expect((within(janela).getByLabelText("Valor recebido") as HTMLInputElement).value).toBe("60,00");
+        expect(sem(janela.textContent)).toContain("Total a receber: R$ 60,00");
+        await u.click(botaoAplicar(janela));
+        const pedido = repoP.aplicar.mock.calls[0][0] as { modo: string; itens: { valor_centavos: number; quita: boolean }[] };
+        expect(pedido.modo).toBe("total");
+        expect(pedido.itens).toMatchObject([{ valor_centavos: 6000, quita: true }]);
+      });
+
+      it("a mensagem de cobrança inclui só o que falta (a da Seleção)", async () => {
+        novembroComSelecao();
+        falso.banco = {
+          ...falso.banco,
+          pagamento_itens: [parcial()],
+          configuracoes: [
+            { id: "cfg", status_padrao_id: null, updated_at: "2026-11-03T12:00:00+00:00", modelo_mensagem: { saudacao: "Oi", frase_total: "Esse mês deu {total}", chave_pix: "pix@exemplo.com", rodape: "", campos: { nome: true, parcela: true, valor: true } } },
+          ],
+        };
+        renderizar();
+        const u = userEvent.setup();
+        await u.click(caixaDe("MERCADO"));
+        await u.click(within(barra()!).getByRole("button", { name: "Gerar mensagem" }));
+        const janela = await screen.findByRole("dialog", { name: "Gerar mensagem" });
+        const quadro = (await within(janela).findByRole("textbox", { name: "Mensagem" })) as HTMLTextAreaElement;
+        expect(sem(quadro.value)).toContain("MERCADO | R$ 60,00");
+        expect(sem(quadro.value)).toContain("Esse mês deu R$ 60,00");
+        expect(sem(quadro.value)).not.toContain("R$ 100,00");
+      });
+
+      it("trocar à mão 'não pago' por outro 'não pago' numa linha parcial passa no lote; tirar o 'pago' de uma quitada não", async () => {
+        novembroComSelecao([lanc("2026-11", { id: "pg", nome: "JA PAGO", valor_centavos: 4000, status_id: "s-pago" })]);
+        falso.banco = { ...falso.banco, pagamento_itens: [parcial(), item("i9", "pg")] };
+        repoL.classificarEmLote.mockResolvedValue({ ok: true, linhas: [], gravadas: 1, antes: [] });
+        renderizar();
+        const u = userEvent.setup();
+        await u.click(caixaDe("MERCADO"));
+        let janela = await abrirAplicarStatus(u);
+        await u.click(within(janela).getByRole("radio", { name: "Não pago" }));
+        await u.click(botaoAplicar(janela));
+        expect(repoL.classificarEmLote).toHaveBeenCalledTimes(1);
+        await u.click(caixaDe("MERCADO"));
+        await u.click(caixaDe("JA PAGO"));
+        janela = await abrirAplicarStatus(u);
+        await u.click(within(janela).getByRole("radio", { name: "Não pago" }));
+        await u.click(botaoAplicar(janela));
+        expect((await within(janela).findByRole("alert")).textContent).toBe(mensagem("pagamento.desfazer_antes"));
+        expect(repoL.classificarEmLote).toHaveBeenCalledTimes(1);
+      });
     });
 
     it("a Data não pode ser depois de hoje; no passado vale", async () => {

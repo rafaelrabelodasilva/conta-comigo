@@ -6,6 +6,7 @@ import type { NomesDaFormula } from "@/domain/formula";
 import { TEXTOS_GERAR as T } from "@/domain/mensagens";
 import { mensagemDoBloco } from "@/domain/mensagem-janela";
 import type { ModeloMensagem } from "@/domain/modelo-mensagem";
+import type { ItemLido } from "@/domain/pagamento";
 import type { LancamentoParaMensagem } from "@/domain/projecoes";
 import { useLinhas } from "@/data/realtime";
 import { useToast } from "@/ui/Toast";
@@ -28,6 +29,10 @@ export type PropsJanelaMensagemDoBloco = {
   temFatura: boolean;
   /** Os Status que contam como pago. */
   statusPagos: ReadonlySet<string>;
+  /** Os itens de Pagamento do Mês (6.2): um Pago parcialmente entra só com o que falta. */
+  itens: readonly ItemLido[];
+  /** Os itens já foram lidos? Antes disso a janela espera em vez de mostrar o valor cheio. */
+  itensProntos: boolean;
   modelo: ModeloMensagem;
   aoEditarModelo: () => void;
 };
@@ -39,6 +44,8 @@ export function JanelaMensagemDoBloco({
   mes,
   temFatura,
   statusPagos,
+  itens,
+  itensProntos,
   modelo,
   aoEditarModelo,
 }: PropsJanelaMensagemDoBloco) {
@@ -70,8 +77,9 @@ export function JanelaMensagemDoBloco({
       aoMudar={aoMudar}
       temFatura={temFatura}
       aoEditarModelo={aoEditarModelo}
+      aguardando={!itensProntos}
       montar={(incluirPrevistos) =>
-        mensagemDoBloco(modelo, bloco.formula, lancamentos, { mes, statusPagos, temFatura, incluirPrevistos }, nomes)
+        mensagemDoBloco(modelo, bloco.formula, lancamentos, { mes, statusPagos, temFatura, incluirPrevistos, itens }, nomes)
       }
     />
   );

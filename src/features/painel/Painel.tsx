@@ -43,6 +43,7 @@ import {
   rotuloLancamentosClassificados,
   rotuloLancamentosExcluidos,
   rotuloLancamentosPagos,
+  rotuloPagamentoParcial,
   rotuloStatusAplicado,
 } from "@/domain/mensagens";
 import {
@@ -59,7 +60,7 @@ import {
 } from "@/domain/painel";
 import { mensagemDaSelecao } from "@/domain/mensagem-janela";
 import { lerModelo } from "@/domain/modelo-mensagem";
-import { idsComPagamento, projetarPagamento, recusarStatusNaoPago } from "@/domain/pagamento";
+import { faltaDoParcial, idsQuitadosPorPagamento, projetarPagamento, recusarStatusNaoPago, somaDosItens } from "@/domain/pagamento";
 import { projetarPainel } from "@/domain/projecoes";
 import { ativos as responsaveisAtivos } from "@/domain/responsaveis";
 import {
@@ -298,7 +299,18 @@ export function Painel({ titulo }: { titulo: string }) {
   );
   // Para a mensagem (4.6): os Status que contam como pago e o modelo salvo.
   const statusPagos = useMemo(() => new Set(status.linhas.filter((s) => s.conta_como_pago).map((s) => s.id)), [status.linhas]);
-  const comPagamento = useMemo(() => idsComPagamento(itensDePagamento.linhas), [itensDePagamento.linhas]);
+  // Os que um Pagamento quitou (o "pago" que não se tira à mão) e o quanto cada linha já recebeu (Pago parcialmente, 6.2).
+  const quitadasPorPagamento = useMemo(() => idsQuitadosPorPagamento(itensDePagamento.linhas), [itensDePagamento.linhas]);
+  // "Pago parcialmente" e o que falta (derivados do núcleo, nunca gravados): a grade e o painel do Lançamento leem daqui.
+  const faltaPorLinha = useMemo(() => {
+    const recebido = somaDosItens(itensDePagamento.linhas);
+    const falta = new Map<string, number>();
+    for (const l of doMes) {
+      const f = faltaDoParcial(l, statusPagos, recebido.get(l.id) ?? 0);
+      if (f !== null) falta.set(l.id, f);
+    }
+    return falta;
+  }, [itensDePagamento.linhas, doMes, statusPagos]);
   // Os itens só valem lidos e do Mês aberto (até lá, "Aplicar status" com Pagamento espera).
   const itensProntos = itensDePagamento.status === "pronto" && itensDePagamento.mes === mesAberto;
   const modeloDaMensagem = useMemo(
@@ -461,7 +473,7 @@ export function Painel({ titulo }: { titulo: string }) {
     }
     if (campos.status_id !== undefined) {
       const afetadas = entradas.flatMap((e) => doMes.filter((l) => l.id === e.id));
-      const recusa = recusarStatusNaoPago(campos.status_id, statusPagos, afetadas, comPagamento);
+      const recusa = recusarStatusNaoPago(campos.status_id, statusPagos, afetadas, quitadasPorPagamento);
       if (!recusa.ok) return { ok: false, texto: mensagemDoPagamento(recusa.erro) };
     }
     setLotando(true);
@@ -506,7 +518,10 @@ export function Painel({ titulo }: { titulo: string }) {
     setLotando(false);
     if (!r.ok) return { ok: false, texto: mensagem(r.codigo) };
     toast.mostrar({
-      texto: rotuloLancamentosPagos(escolha.quantidade),
+      texto:
+        escolha.pedido.modo === "parcial"
+          ? rotuloPagamentoParcial(escolha.pedido.valor_recebido_centavos, escolha.quitados)
+          : rotuloLancamentosPagos(escolha.quantidade),
       aoDesfazer: () => {
         void repoPagamentos()
           .desfazer(r.pagamento.id)
@@ -662,7 +677,8 @@ export function Painel({ titulo }: { titulo: string }) {
           conferencia={conferencia}
           cadastros={cadastrosPainel}
           statusPagos={statusPagos}
-          comPagamento={comPagamento}
+          quitadasPorPagamento={quitadasPorPagamento}
+          faltaCentavos={faltaPorLinha.get(abertaNoMes.id) ?? null}
           aoFechar={() => setPainel(null)}
           aoExcluir={setExcluindo}
         />
@@ -723,6 +739,7 @@ export function Painel({ titulo }: { titulo: string }) {
         </p>
         <GradeLancamentos
           mesTemFatura={fatura !== null}
+          faltaPorLinha={faltaPorLinha}
           linhas={naGrade}
           ajustesPorMae={ajustesPorMae}
           maesDivididas={maesDivididas}
@@ -794,12 +811,14 @@ export function Painel({ titulo }: { titulo: string }) {
                 aoMudar={setGerandoMensagem}
                 temFatura={fatura !== null}
                 aoEditarModelo={() => router.push(`/configuracoes?secao=${SECAO_MODELO_DA_MENSAGEM}`)}
+                aguardando={!itensProntos}
                 montar={(incluirPrevistos) =>
                   mensagemDaSelecao(modeloDaMensagem, selecionados, lancamentos.linhas, {
                     mes: mesAberto,
                     statusPagos,
                     temFatura: fatura !== null,
                     incluirPrevistos,
+                    itens: itensDePagamento.linhas,
                   })
                 }
               />
@@ -816,6 +835,8 @@ export function Painel({ titulo }: { titulo: string }) {
             mes={mesAberto}
             temFatura={fatura !== null}
             statusPagos={statusPagos}
+            itens={itensDePagamento.linhas}
+            itensProntos={itensProntos}
             modelo={modeloDaMensagem}
             aoEditarModelo={() => router.push(`/configuracoes?secao=${SECAO_MODELO_DA_MENSAGEM}`)}
           />

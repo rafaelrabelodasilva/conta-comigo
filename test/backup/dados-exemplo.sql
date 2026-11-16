@@ -208,12 +208,15 @@ insert into public.lancamentos (
 
 -- Pagamentos (História 6.1): um Pagamento total com um item (o Status anterior e o
 -- aplicado) e um desfeito (excluído em lógico, com o item também), com Status nulo
--- de antes e um Status arquivado de depois.
+-- de antes e um Status arquivado de depois. Na História 6.2 entra um Pagamento parcial
+-- ("Fica pendente"): o item parcial não aplicou Status (`status_aplicado_id` nulo).
 insert into public.pagamentos (id, owner_id, valor_recebido_centavos, data, modo, excluido_em) values
   ('b0000000-0000-4000-8000-000000000c01', 'b0000000-0000-4000-8000-000000000001',
    114074, '2026-11-10', 'total', null),
   ('b0000000-0000-4000-8000-000000000c02', 'b0000000-0000-4000-8000-000000000001',
-   15000, '2026-11-12', 'total', '2026-11-13 12:00:00+00');
+   15000, '2026-11-12', 'total', '2026-11-13 12:00:00+00'),
+  ('b0000000-0000-4000-8000-000000000c03', 'b0000000-0000-4000-8000-000000000001',
+   10000, '2026-11-14', 'parcial', null);
 
 insert into public.pagamento_itens (
   id, owner_id, pagamento_id, lancamento_id, mes, valor_centavos, status_anterior_id, status_aplicado_id, excluido_em
@@ -223,6 +226,9 @@ insert into public.pagamento_itens (
    114074, 'b0000000-0000-4000-8000-000000000302', 'b0000000-0000-4000-8000-000000000301', null),
   ('b0000000-0000-4000-8000-000000000d02', 'b0000000-0000-4000-8000-000000000001',
    'b0000000-0000-4000-8000-000000000c02', 'b0000000-0000-4000-8000-000000000803', '2026-11',
-   15000, null, 'b0000000-0000-4000-8000-000000000303', '2026-11-13 12:00:00+00');
+   15000, null, 'b0000000-0000-4000-8000-000000000303', '2026-11-13 12:00:00+00'),
+  ('b0000000-0000-4000-8000-000000000d03', 'b0000000-0000-4000-8000-000000000001',
+   'b0000000-0000-4000-8000-000000000c03', 'b0000000-0000-4000-8000-000000000803', '2026-11',
+   10000, 'b0000000-0000-4000-8000-000000000302', null, null);
 
 commit;

@@ -184,7 +184,7 @@ export const MENSAGENS = {
   "pagamento.valor_vazio": "Digite o valor recebido.",
   "pagamento.valor_invalido": "Digite um valor maior que zero, como 215,16.",
   "pagamento.valor_acima": "O valor recebido não pode passar do total.",
-  "pagamento.valor_menor": "O valor recebido precisa ser o total. O pagamento parcial ainda não está disponível.",
+  "pagamento.diferenca_sem_escolha": "Escolha o que fazer com a diferença.",
   "pagamento.data_vazia": "Escolha a data do pagamento.",
   "pagamento.data_invalida": "Data inválida.",
   "pagamento.data_futura": "A data não pode ser depois de hoje.",
@@ -1523,7 +1523,29 @@ export const TEXTOS_PAGAMENTO = {
   nada_a_receber: "Nenhum dos selecionados pode receber pagamento: veja os que ficam de fora acima.",
   /** Os dados ainda não chegaram (o gerenciador dos itens de Pagamento está lendo). */
   carregando: "Conferindo os pagamentos já registrados…",
+  /** A pergunta da diferença (6.2, UX-DR18): o valor vai entre o início e o fim, sem quebra de linha. */
+  diferenca_antes: "O que fazer com a diferença de ",
+  diferenca_depois: "?",
+  fica_pendente: "Fica pendente",
+  fica_pendente_ajuda: "Quita dos mais antigos para os mais novos. O que faltar continua em aberto.",
+  minha_parte: "Não é dívida, é a minha parte",
+  /** "Todos os lançamentos ficam pagos. O pagamento registra R$ X." (o valor vai entre os dois textos). */
+  minha_parte_ajuda_antes: "Todos os lançamentos ficam pagos. O pagamento registra ",
+  minha_parte_ajuda_depois: ".",
+  /** O selo da grade e o painel do Lançamento (derivado, nunca gravado). */
+  pago_parcialmente: "Pago parcialmente",
 } as const;
+
+/** "falta R$ 115,16" no painel do Lançamento de um Pago parcialmente. */
+export function rotuloFalta(centavos: number): string {
+  return `falta ${formatarDinheiro(centavos)}`;
+}
+
+/** O aviso de um Pagamento `parcial`: "Pagamento parcial registrado: R$ 100,00 · 1 lançamento marcado como pago" (o "Desfazer" vem do aviso). */
+export function rotuloPagamentoParcial(valorRecebidoCentavos: number, quitados: number): string {
+  const base = `Pagamento parcial registrado: ${formatarDinheiro(valorRecebidoCentavos)}`;
+  return quitados > 0 ? `${base} · ${rotuloLancamentosPagos(quitados)}` : base;
+}
 
 /** "5 lançamentos marcados como pagos" (o "Desfazer" vem do aviso). */
 export function rotuloLancamentosPagos(n: number): string {
@@ -1555,17 +1577,14 @@ export function rotuloForaDoPagamento(
 }
 
 /**
- * O texto de um erro do Pagamento. "Maior que o total" e "menor que o total"
- * levam o valor (`detalhe`, em centavos): "O valor recebido não pode passar de
- * R$ X" (UX-DR18). Os outros vêm do mapa.
+ * O texto de um erro do Pagamento. "Maior que o total" leva o valor (`detalhe`,
+ * em centavos): "O valor recebido não pode passar de R$ X" (UX-DR18). Os outros
+ * vêm do mapa.
  */
 export function mensagemDoPagamento(erro: { codigo: string; detalhe?: string }): string {
   const centavos = erro.detalhe === undefined ? NaN : Number(erro.detalhe);
   if (erro.codigo === "pagamento.valor_acima" && Number.isInteger(centavos)) {
     return `O valor recebido não pode passar de ${formatarDinheiro(centavos)}`;
-  }
-  if (erro.codigo === "pagamento.valor_menor" && Number.isInteger(centavos)) {
-    return `O valor recebido precisa ser o total, ${formatarDinheiro(centavos)}. O pagamento parcial ainda não está disponível.`;
   }
   return mensagem(erro.codigo);
 }

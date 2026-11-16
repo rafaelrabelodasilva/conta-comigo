@@ -106,13 +106,15 @@ function Editar({
   conferencia = null,
   aoExcluir = () => {},
   statusPagos,
-  comPagamento,
+  quitadasPorPagamento,
+  faltaCentavos,
 }: {
   m: ReturnType<typeof montarRepo>;
   conferencia?: Conferencia | null;
   aoExcluir?: (id: string) => void;
   statusPagos?: ReadonlySet<string>;
-  comPagamento?: ReadonlySet<string>;
+  quitadasPorPagamento?: ReadonlySet<string>;
+  faltaCentavos?: number | null;
 }) {
   const [atual, setAtual] = useState(m.memoria.atual);
   useEffect(() => {
@@ -125,7 +127,8 @@ function Editar({
       conferencia={conferencia ?? (atual.fatura_id ? conferenciaCom(atual.valor_centavos) : null)}
       cadastros={cadastros}
       statusPagos={statusPagos}
-      comPagamento={comPagamento}
+      quitadasPorPagamento={quitadasPorPagamento}
+      faltaCentavos={faltaCentavos}
       aoFechar={() => {}}
       aoExcluir={aoExcluir}
       repo={m.repo}
@@ -821,13 +824,13 @@ describe("previstos (História 3.5)", () => {
 
 describe("painel do Lançamento: Status numa linha com Pagamento (História 6.1, AD-10)", () => {
   const pagos = new Set(["s-pago"]);
-  const comPagamento = new Set(["a"]);
+  const quitadasPorPagamento = new Set(["a"]);
   const paga = () => linha({ status_id: "s-pago" });
 
   it("aplicar à mão um Status 'não pago' (ou 'Sem status') numa linha com Pagamento é recusado: desfaça o pagamento antes", async () => {
     const m = montarRepo();
     m.memoria.atual = paga();
-    renderizar(<Editar m={m} statusPagos={pagos} comPagamento={comPagamento} />);
+    renderizar(<Editar m={m} statusPagos={pagos} quitadasPorPagamento={quitadasPorPagamento} />);
     const u = userEvent.setup();
     await u.selectOptions(screen.getByLabelText("Status"), "s-nao");
     expect(m.atualizar).not.toHaveBeenCalled();
@@ -841,7 +844,7 @@ describe("painel do Lançamento: Status numa linha com Pagamento (História 6.1,
   it("outro Status que conta como pago passa, e o aviso some", async () => {
     const m = montarRepo();
     m.memoria.atual = paga();
-    renderizar(<Editar m={m} statusPagos={new Set(["s-pago", "s-nao"])} comPagamento={comPagamento} />);
+    renderizar(<Editar m={m} statusPagos={new Set(["s-pago", "s-nao"])} quitadasPorPagamento={quitadasPorPagamento} />);
     const u = userEvent.setup();
     await u.selectOptions(screen.getByLabelText("Status"), "");
     expect(screen.getByRole("alert")).toBeTruthy();
@@ -850,10 +853,30 @@ describe("painel do Lançamento: Status numa linha com Pagamento (História 6.1,
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("uma linha parcialmente paga (não paga, item parcial) troca de 'não pago' para 'Em análise' sem recusa", async () => {
+    const m = montarRepo();
+    m.memoria.atual = linha({ status_id: "s-nao" });
+    // O item parcial não aplicou Status: a linha não está em `quitadasPorPagamento`.
+    renderizar(<Editar m={m} statusPagos={pagos} quitadasPorPagamento={new Set()} faltaCentavos={11516} />);
+    await userEvent.setup().selectOptions(screen.getByLabelText("Status"), "");
+    expect(m.atualizar).toHaveBeenCalledWith("a", { status_id: null });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("Pago parcialmente: o painel mostra o selo e 'falta R$ X' (derivado), e some quando não falta mais", () => {
+    const m = montarRepo();
+    m.memoria.atual = linha({ status_id: "s-nao" });
+    const { rerender } = renderizar(<Editar m={m} statusPagos={pagos} faltaCentavos={11516} />);
+    expect(screen.getByText("Pago parcialmente")).toBeTruthy();
+    expect(sem(document.body.textContent)).toContain("falta R$ 115,16");
+    rerender(<Editar m={m} statusPagos={pagos} faltaCentavos={null} />);
+    expect(screen.queryByText("Pago parcialmente")).toBeNull();
+  });
+
   it("sem Pagamento, o Status não pago se aplica normalmente", async () => {
     const m = montarRepo();
     m.memoria.atual = paga();
-    renderizar(<Editar m={m} statusPagos={pagos} comPagamento={new Set()} />);
+    renderizar(<Editar m={m} statusPagos={pagos} quitadasPorPagamento={new Set()} />);
     await userEvent.setup().selectOptions(screen.getByLabelText("Status"), "s-nao");
     expect(m.atualizar).toHaveBeenCalledWith("a", { status_id: "s-nao" });
   });

@@ -99,9 +99,19 @@ const pedido: PedidoDePagamento = {
   valor_recebido_centavos: 31516,
   modo: "total",
   itens: [
-    { lancamento_id: "l1", valor_centavos: 10000, atualizado_em: T },
-    { lancamento_id: "l2", valor_centavos: 21516, atualizado_em: T },
+    { lancamento_id: "l1", valor_centavos: 10000, atualizado_em: T, quita: true },
+    { lancamento_id: "l2", valor_centavos: 21516, atualizado_em: T, quita: true },
   ],
+};
+
+// "Fica pendente" (6.2): R$ 100,00 de uma linha de R$ 215,16: um item parcial, sem Status aplicado.
+const pedidoParcial: PedidoDePagamento = {
+  id: "pg1",
+  status_id: PAGO,
+  data: "2026-11-15",
+  valor_recebido_centavos: 10000,
+  modo: "parcial",
+  itens: [{ lancamento_id: "l1", valor_centavos: 10000, atualizado_em: T, quita: false }],
 };
 
 const pagamento = (extra: Partial<LinhaPagamento> = {}): LinhaPagamento => ({
@@ -151,6 +161,23 @@ describe("aplicar", () => {
     expect(m.memoriaLancamentos.linhas().map((l) => l.id).sort()).toEqual(["l1", "l2"]);
     expect(m.memoriaItens.linhas().map((i) => i.id).sort()).toEqual(["i1", "i2"]);
     expect(m.lidas).toEqual([]);
+  });
+
+  it("Fica pendente: o pedido parcial vai como está e o item parcial (sem Status aplicado) entra na memória", async () => {
+    const itens = [itemDb("i1", "l1", { valor_centavos: 10000, status_aplicado_id: null })];
+    const m = montar({ rpc: () => resposta(itens, [lancamentoDb("l1", { status_id: NAO_PAGO })], pagamento({ modo: "parcial", valor_recebido_centavos: 10000 })) });
+    const r = await m.repo.aplicar(pedidoParcial);
+    expect(r).toMatchObject({ ok: true, pagamento: { id: "pg1", modo: "parcial" } });
+    expect(m.chamadas).toEqual([{ nome: "aplicar_pagamento", args: { p_pedido: pedidoParcial } }]);
+    expect(m.memoriaItens.linha("i1")?.status_aplicado_id).toBeNull();
+    expect(m.memoriaLancamentos.linha("l1")?.status_id).toBe(NAO_PAGO);
+  });
+
+  it("Não é dívida, é a minha parte: o pedido leva o valor recebido e os itens inteiros", async () => {
+    const minhaParte: PedidoDePagamento = { ...pedido, valor_recebido_centavos: 5000, modo: "minha_parte" };
+    const m = montar({ rpc: () => resposta([itemDb("i1", "l1")], [lancamentoDb("l1")], pagamento({ modo: "minha_parte", valor_recebido_centavos: 5000 })) });
+    expect(await m.repo.aplicar(minhaParte)).toMatchObject({ ok: true, pagamento: { modo: "minha_parte" } });
+    expect(m.chamadas[0].args.p_pedido).toEqual(minhaParte);
   });
 
   it("os códigos da RPC chegam à tela; o resto vira salvar.falhou", async () => {
@@ -203,6 +230,13 @@ describe("desfazer", () => {
     });
     expect(new Set(m.lidas)).toEqual(new Set(["pagamento_itens", "lancamentos"]));
     expect(m.memoriaLancamentos.linha("l1")?.status_id).toBe(NAO_PAGO);
+  });
+
+  it("o item parcial não mudou o Status: não há o que devolver, e a RPC recebe `devolver` vazio", async () => {
+    const parciais = [{ lancamento_id: "l1", status_anterior_id: NAO_PAGO, status_aplicado_id: null, created_at: T, pagamento_id: "pg1", excluido_em: null }];
+    const m = montar({ lancamentos: [{ id: "l1", status_id: NAO_PAGO, updated_at: T }], itens: parciais, rpc: () => resposta([], [], pagamento({ excluido_em: T2 })) });
+    expect((await m.repo.desfazer("pg1")).ok).toBe(true);
+    expect(m.chamadas[0].args.p_pedido).toEqual({ pagamento_id: "pg1", devolver: [] });
   });
 
   it("lê as linhas em blocos de 100 (o endereço da requisição tem limite)", async () => {

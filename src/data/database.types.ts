@@ -489,7 +489,7 @@ export type Database = {
           owner_id: string
           pagamento_id: string
           status_anterior_id: string | null
-          status_aplicado_id: string
+          status_aplicado_id: string | null
           updated_at: string
           valor_centavos: number
         }
@@ -502,7 +502,7 @@ export type Database = {
           owner_id?: string
           pagamento_id: string
           status_anterior_id?: string | null
-          status_aplicado_id: string
+          status_aplicado_id?: string | null
           updated_at?: string
           valor_centavos: number
         }
@@ -515,7 +515,7 @@ export type Database = {
           owner_id?: string
           pagamento_id?: string
           status_anterior_id?: string | null
-          status_aplicado_id?: string
+          status_aplicado_id?: string | null
           updated_at?: string
           valor_centavos?: number
         }

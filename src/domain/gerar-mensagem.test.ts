@@ -231,10 +231,56 @@ describe("o que não entra, com o motivo", () => {
     expect(projetarMensagem(ids(mercado), [mercado], OPCOES).entram).toHaveLength(1);
   });
 
-  it("“Pago parcialmente” é só um Status: sem Pagamentos, entra com o valor cheio", () => {
+  it("sem itens de Pagamento, um Lançamento entra com o valor cheio (qualquer Status não pago)", () => {
     const parcial = l({ nome: "PARCIAL", valor_centavos: 20000, status_id: "parcial" });
     const p = projetarMensagem(ids(parcial), [parcial], OPCOES);
-    expect(p.entram[0]).toMatchObject({ valor_centavos: 20000, liquido_centavos: 20000 });
+    expect(p.entram[0]).toMatchObject({ valor_centavos: 20000, pago_centavos: 0, liquido_centavos: 20000 });
+  });
+
+  it("“Pago parcialmente” (0 < Σ itens < valor): entra só com o que falta (AD-10), e a mensagem diz o restante", () => {
+    const parcial = l({ nome: "PARCIAL", valor_centavos: 21516, status_id: null });
+    const itens = [{ lancamento_id: parcial.id, valor_centavos: 10000 }];
+    const p = projetarMensagem(ids(parcial), [parcial], { ...OPCOES, itens });
+    expect(p.entram[0]).toMatchObject({ valor_centavos: 11516, pago_centavos: 10000, liquido_centavos: 11516 });
+    expect(p.totalCentavos).toBe(11516);
+    expect(p.abatidos).toEqual([{ id: parcial.id, centavos: 10000 }]);
+    const texto = gerar(ids(parcial), [parcial], { itens });
+    expect(texto.estado === "pronta" && texto.texto).toContain(e("R$ 115,16"));
+    expect(texto.estado === "pronta" && texto.texto).not.toContain(e("R$ 215,16"));
+  });
+
+  it("os itens de um Pagamento desfeito não contam: a linha entra cheia", () => {
+    const parcial = l({ nome: "PARCIAL", valor_centavos: 21516 });
+    const itens = [{ lancamento_id: parcial.id, valor_centavos: 10000, excluido_em: "2026-11-10T00:00:00Z" }];
+    expect(projetarMensagem(ids(parcial), [parcial], { ...OPCOES, itens }).entram[0].valor_centavos).toBe(21516);
+  });
+
+  it("itens que já cobrem o valor todo com Status ainda não pago: já pago, não entra", () => {
+    const quitada = l({ nome: "QUITADA", valor_centavos: 5000 });
+    const itens = [{ lancamento_id: quitada.id, valor_centavos: 5000 }];
+    const p = projetarMensagem(ids(quitada), [quitada], { ...OPCOES, itens });
+    expect(p.entram).toHaveLength(0);
+    expect(p.fora.porMotivo).toEqual({ pago: 1, zero: 0, previsto: 0 });
+    expect(p.idsPagos).toEqual([quitada.id]);
+  });
+
+  it("o Ajuste da parcela parcialmente paga segue a parcela, e o restante do Ajuste também", () => {
+    const parcela = l({ id: "pp", nome: "PARCELA", valor_centavos: 10000 });
+    const ajuste = l({ nome: "AJUSTE", valor_centavos: 7, ajuste_de_id: "pp" });
+    const itens = [
+      { lancamento_id: parcela.id, valor_centavos: 4000 },
+      { lancamento_id: ajuste.id, valor_centavos: 3 },
+    ];
+    const p = projetarMensagem(ids(parcela), [parcela, ajuste], { ...OPCOES, itens });
+    expect(p.entram[0].ajustes).toEqual([{ id: ajuste.id, valor_centavos: 4 }]);
+    expect(p.entram[0].valor_centavos).toBe(6000);
+    expect(p.totalCentavos).toBe(6004);
+  });
+
+  it("um Pago parcialmente com Status pago por engano da linha (Status pago + itens): continua fora", () => {
+    const paga = l({ nome: "PAGA", valor_centavos: 20000, status_id: "pago" });
+    const itens = [{ lancamento_id: paga.id, valor_centavos: 5000 }];
+    expect(projetarMensagem(ids(paga), [paga], { ...OPCOES, itens }).fora.porMotivo.pago).toBe(1);
   });
 
   it("os textos do aviso, no singular e no plural", () => {

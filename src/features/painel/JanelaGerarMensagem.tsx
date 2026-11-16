@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import { TEXTOS_GERAR as T, ROTULOS } from "@/domain/mensagens";
+import { TEXTOS_GERAR as T, TEXTOS_PAGAMENTO as TP, ROTULOS } from "@/domain/mensagens";
 import type { MensagemDaJanela } from "@/domain/mensagem-janela";
 import { podeIncluirPrevistos } from "@/domain/projecoes";
 import { Botao } from "@/ui/Botao";
@@ -35,6 +35,11 @@ export type PropsJanelaGerarMensagem = {
   aoMudar: (aberta: boolean) => void;
   /** A mensagem pronta (do núcleo) com "Incluir previstos" ligado ou desligado. Chamada a cada render: é derivada do estado, sem foto. */
   montar: (incluirPrevistos: boolean) => MensagemDaJanela;
+  /**
+   * Os itens de Pagamento do Mês ainda não chegaram (6.2): sem eles um Pago parcialmente
+   * entraria com o valor cheio, então a janela espera e não deixa copiar.
+   */
+  aguardando?: boolean;
   /** O Mês tem Fatura? Só sem Fatura existe "Incluir previstos". */
   temFatura: boolean;
   /** Leva a Configurações → Modelo da mensagem. */
@@ -45,6 +50,7 @@ export function JanelaGerarMensagem({
   aberta,
   aoMudar,
   montar,
+  aguardando = false,
   temFatura,
   aoEditarModelo,
 }: PropsJanelaGerarMensagem) {
@@ -56,7 +62,7 @@ export function JanelaGerarMensagem({
   const [falhouAoCopiar, setFalhouAoCopiar] = useState(false);
 
   const { gerada, semTexto, avisos } = montar(incluirPrevistos);
-  const texto = gerada.estado === "pronta" ? gerada.texto : "";
+  const texto = gerada.estado === "pronta" && !aguardando ? gerada.texto : "";
   const aviso = avisos.join(". ");
 
   // O que Rafael viu ao abrir (ou ao mexer em "Incluir previstos"): se muda sem ele
@@ -99,7 +105,7 @@ export function JanelaGerarMensagem({
           <Botao ref={editar} variante={semModelo ? "primario" : "secundario"} onClick={aoEditarModelo}>
             {T.editar_modelo}
           </Botao>
-          <Botao variante="primario" disabled={gerada.estado !== "pronta"} onClick={() => void copiar()}>
+          <Botao variante="primario" disabled={gerada.estado !== "pronta" || aguardando} onClick={() => void copiar()}>
             {T.copiar}
           </Botao>
         </>
@@ -112,7 +118,7 @@ export function JanelaGerarMensagem({
         <p role="status" className="texto-label text-text">
           {mudou ? T.mudou : ""}
         </p>
-        {gerada.estado === "pronta" ? (
+        {gerada.estado === "pronta" && !aguardando ? (
           <div className="flex flex-col gap-1">
             <label htmlFor={idQuadro} className="texto-label text-text">
               {T.quadro}
@@ -128,7 +134,7 @@ export function JanelaGerarMensagem({
           </div>
         ) : (
           <p className="rounded-sm border border-border bg-background p-3 texto-body text-text-muted">
-            {semTexto}
+            {aguardando ? TP.carregando : semTexto}
           </p>
         )}
         {falhouAoCopiar ? (

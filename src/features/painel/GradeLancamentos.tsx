@@ -15,9 +15,11 @@ import {
   TEXTOS_DIVISAO,
   TEXTOS_FILTROS,
   TEXTOS_LANCAMENTO,
+  TEXTOS_PAGAMENTO,
   TEXTOS_PAINEL as T,
   rotuloAcoesDe,
   rotuloAjusteDe,
+  rotuloFalta,
   rotuloFiltrarPor,
   rotuloSelecionar,
   ROTULO_PREVISTO,
@@ -123,6 +125,8 @@ export type PropsGradeLancamentos = {
   semCaixaId?: string | null;
   /** O Mês aberto tem Fatura? Sem ela, as Contas manuais são previstos (5.1). Padrão: tem. */
   mesTemFatura?: boolean;
+  /** As linhas "Pago parcialmente" e o que falta delas (6.2, `faltaDoParcial` do núcleo). */
+  faltaPorLinha?: ReadonlyMap<string, number>;
 };
 
 /** Nomes por id, para o núcleo ordenar pelo que a grade mostra. */
@@ -263,6 +267,8 @@ type PropsLinha = {
   papel?: PapelNaGrade;
   aoDividir?: (id: string) => void;
   mesTemFatura: boolean;
+  /** "Pago parcialmente" (6.2): o que falta desta linha, derivado do núcleo; ausente nas outras. */
+  falta?: number;
 };
 
 /** Toque no corpo: abre o painel, menos na caixa, na `person-tag` e no ⋯ (e no menu, que fica num portal). */
@@ -289,6 +295,7 @@ function LinhaGrade({
   papel,
   aoDividir,
   mesTemFatura,
+  falta,
 }: PropsLinha) {
   const [menuAberto, setMenuAberto] = useState(false);
   const abrirMenu = useCallback(() => setMenuAberto(true), []);
@@ -307,7 +314,12 @@ function LinhaGrade({
     parcelaTotal: l.parcela_total,
     // O cabeçalho da Divisão não tem Responsável nem Status: são das partes.
     responsavel: papel === "cabecalho" ? "" : (responsavel?.nome ?? T.sem_responsavel),
-    status: papel === "cabecalho" ? null : (status?.nome ?? null),
+    status:
+      papel === "cabecalho"
+        ? null
+        : falta !== undefined
+          ? `${TEXTOS_PAGAMENTO.pago_parcialmente}, ${rotuloFalta(falta)}`
+          : (status?.nome ?? null),
     verificar,
     previsto,
     ajuste: mae ? { nomeMae: nomeExibido(mae), liquidoCentavos: liquidoCentavos(mae, ajustesDaMae) } : undefined,
@@ -409,7 +421,14 @@ function LinhaGrade({
         </span>
       </td>
       <td className={CELULA}>
-        {papel === "cabecalho" ? null : status ? (
+        {papel === "cabecalho" ? null : falta !== undefined ? (
+          <span
+            title={rotuloFalta(falta)}
+            className="rounded-full bg-status-partial-bg px-2 texto-caption text-status-partial-fg"
+          >
+            {TEXTOS_PAGAMENTO.pago_parcialmente}
+          </span>
+        ) : status ? (
           <span
             className={cn(
               "rounded-full px-2 texto-caption",
@@ -453,6 +472,7 @@ function LinhaGrade({
 const SEM_AJUSTES: ReadonlyMap<string, readonly LancamentoGrade[]> = new Map();
 
 const SEM_MAES: ReadonlyMap<string, LancamentoGrade> = new Map();
+const SEM_FALTA: ReadonlyMap<string, number> = new Map();
 
 export function GradeLancamentos({
   linhas,
@@ -477,6 +497,7 @@ export function GradeLancamentos({
   linhaFixa = null,
   semCaixaId = null,
   mesTemFatura = true,
+  faltaPorLinha = SEM_FALTA,
 }: PropsGradeLancamentos) {
   // A linha aberta que saiu do filtro continua na grade (opção A), fora do total.
   const comFixa = linhaFixa && !linhas.some((l) => l.id === linhaFixa.id) ? [...linhas, linhaFixa] : linhas;
@@ -527,6 +548,7 @@ export function GradeLancamentos({
               aoExcluir={aoExcluir}
               semCaixa={l.id === semCaixaId}
               mesTemFatura={mesTemFatura}
+              falta={faltaPorLinha.get(l.id)}
             />
           ))}
         </tbody>
