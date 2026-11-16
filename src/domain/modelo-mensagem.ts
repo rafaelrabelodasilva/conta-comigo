@@ -26,6 +26,7 @@ import { formatarMesExtenso } from "./datas";
 import { formatarParcela } from "./importacao-fatura";
 import { TEXTOS_GERAR, TEXTOS_MODELO } from "./mensagens";
 import { nomeExibido } from "./painel";
+import type { ItemLido } from "./pagamento";
 import { SIMBOLO_OPERACAO } from "./formula";
 import {
   projetarMensagem,
@@ -448,10 +449,13 @@ export function previaDoModelo(
   lancamentos: readonly LancamentoParaMensagem[],
   mes: string,
   statusPagos: ReadonlySet<string>,
+  /** Os itens de Pagamento do Mês (6.2): um Pago parcialmente mostra só o que falta, como na mensagem real. */
+  itensDePagamento: readonly ItemLido[] = [],
 ): Previa {
   const projecao = projetarMensagem(new Set(lancamentos.map((l) => l.id)), lancamentos, {
     mes,
     statusPagos,
+    itens: itensDePagamento,
     temFatura: true,
     incluirPrevistos: false,
   });

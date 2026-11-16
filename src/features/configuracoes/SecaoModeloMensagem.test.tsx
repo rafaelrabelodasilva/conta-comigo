@@ -53,13 +53,14 @@ const lancamento = (extra: Record<string, unknown>) => ({
   ...extra,
 });
 
-function carregar(opcoes: { modelo?: unknown; semLinha?: boolean; lancamentos?: unknown[] } = {}) {
+function carregar(opcoes: { modelo?: unknown; semLinha?: boolean; lancamentos?: unknown[]; itens?: unknown[] } = {}) {
   falso.tabelas = {
     configuracoes: {
       status: "pronto",
       linhas: opcoes.semLinha === false || opcoes.modelo !== undefined ? [{ id: "cfg", modelo_mensagem: opcoes.modelo }] : [],
     },
     lancamentos: { status: "pronto", mes: MES, linhas: opcoes.lancamentos ?? [] },
+    pagamento_itens: { status: "pronto", mes: MES, linhas: opcoes.itens ?? [] },
     status: { status: "pronto", linhas: [{ id: "pago", conta_como_pago: true }] },
   };
 }
@@ -157,6 +158,21 @@ describe("SecaoModeloMensagem", () => {
     expect(texto().startsWith("Oi!\n")).toBe(true);
     await usuario.click(caixa(TEXTOS_MODELO.campo_parcela));
     expect(texto()).toContain(`Celular da mãe | ${R(57750)}`);
+  });
+
+  it("Pago parcialmente (6.2): a prévia mostra só o que falta, como a mensagem real", async () => {
+    carregar({
+      lancamentos: [lancamento({ nome: "Celular", valor_centavos: 21516 })],
+      itens: [{ lancamento_id: "Celular", valor_centavos: 10000, status_aplicado_id: null, excluido_em: null }],
+    });
+    const usuario = userEvent.setup();
+    montar();
+    await montarOModeloDoRafael(usuario);
+    expect(falso.abrirMes).toHaveBeenCalledTimes(2);
+    const texto = previa().textContent ?? "";
+    expect(texto).toContain(`Celular | ${R(11516)}`);
+    expect(texto).toContain(`Esse mês deu ${R(11516)}`);
+    expect(texto).not.toContain(R(21516));
   });
 
   it("Mês sem lançamentos a cobrar: itens de exemplo, e a legenda diz isso", async () => {

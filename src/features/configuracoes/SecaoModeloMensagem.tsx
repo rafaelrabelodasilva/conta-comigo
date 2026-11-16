@@ -57,6 +57,8 @@ export function SecaoModeloMensagem({ aoMudarRascunho }: PropsSecao = {}) {
   const configuracoes = useLinhas("configuracoes");
   const lancamentos = useLinhas("lancamentos");
   const status = useLinhas("status");
+  // Os itens de Pagamento do Mês (6.2): um Pago parcialmente aparece na prévia só com o que falta.
+  const itens = useLinhas("pagamento_itens");
   const toast = useToast();
   const idAjudaFrase = useId();
   const idAjudaPix = useId();
@@ -72,6 +74,7 @@ export function SecaoModeloMensagem({ aoMudarRascunho }: PropsSecao = {}) {
   // A memória de `lancamentos` guarda só um Mês (AD-4): abre o atual para a prévia.
   useEffect(() => {
     gerenciador("lancamentos").abrirMes(mes);
+    gerenciador("pagamento_itens").abrirMes(mes);
   }, [mes]);
 
   const linha = configuracoesDoDono(configuracoes.linhas);
@@ -86,12 +89,13 @@ export function SecaoModeloMensagem({ aoMudarRascunho }: PropsSecao = {}) {
   const previaCarregando =
     lancamentos.status !== "erro" &&
     status.status !== "erro" &&
-    (lancamentos.mes !== mes || lancamentos.status !== "pronto" || status.status !== "pronto");
+    (lancamentos.mes !== mes || lancamentos.status !== "pronto" || status.status !== "pronto" || (itens.status !== "erro" && (itens.mes !== mes || itens.status !== "pronto")));
   const previa = useMemo(() => {
     const doMes = lancamentos.mes === mes && lancamentos.status === "pronto" ? lancamentos.linhas : [];
     const pagos = new Set(status.linhas.filter((s) => s.conta_como_pago).map((s) => s.id));
-    return previaDoModelo(valor, doMes, mes, pagos);
-  }, [valor, lancamentos.mes, lancamentos.status, lancamentos.linhas, status.linhas, mes]);
+    const doMesItens = itens.mes === mes && itens.status === "pronto" ? itens.linhas : [];
+    return previaDoModelo(valor, doMes, mes, pagos, doMesItens);
+  }, [valor, lancamentos.mes, lancamentos.status, lancamentos.linhas, status.linhas, itens.mes, itens.status, itens.linhas, mes]);
 
   function mudar(novo: ModeloMensagem, campo: CampoDoModelo) {
     setRascunho({ base: rascunho?.base ?? salvo, valor: novo });

@@ -234,9 +234,6 @@
   summary: Conferir no iPad e no PC a seção Modelo da mensagem e o passo "Mensagem" do Primeiro uso: formulário e prévia lado a lado (e empilhados em pé), as três caixas de 44 pt, o foco visível, o rodapé em várias linhas, o aviso "mudou em outro aparelho" com dois aparelhos, e o VoiceOver lendo o grupo "Campos da linha de detalhe", a legenda e a região "Prévia" (sem anúncio a cada tecla).
   evidence: Low, não verificado. O jsdom só confere o DOM, os nomes e as classes; layout, toque e leitor de tela só se provam num aparelho. Junta-se à pendência do VoiceOver da 2.4.
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-6-gerar-a-mensagem-a-partir-da-selecao.md`
-  summary: "Pago parcialmente" ainda é só um Status: a mensagem (a da Seleção, na 4.6, e a do Bloco, na 4.7) inclui o item com o valor cheio, e o aviso "R$ X já foram pagos e não entram" do Bloco só conta o que o Status marca como pago (`idsPagos` de `projetarMensagem`). A 6.1 criou `restante` (`src/domain/pagamento.ts`) mas não o ligou à mensagem: todo Pagamento da 6.1 é `total` e deixa o Status como pago, então o resultado é o mesmo. Quando a 6.2 criar o pagamento parcial, `projetarMensagem` deve usar só o que falta, `projetarMensagemDoBloco` (o total, os grupos e o aviso de pagos) e a forma 3 junto, e a prévia de Configurações também, por ser um recorte dela.
-  evidence: Low. O EXPERIENCE.md diz "só o valor que falta". Os testes "“Pago parcialmente” é só um Status" em `gerar-mensagem.test.ts` e `gerar-mensagem-bloco.test.ts` documentam o comportamento atual e devem mudar junto com a 6.2.
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-6-gerar-a-mensagem-a-partir-da-selecao.md`
   summary: "Dívida programada ainda não vencida" é regra de exclusão da mensagem (EXPERIENCE.md) mas ainda não existe no app; quando o Épico 6 criar a Dívida programada, acrescentar o motivo de fora (e a frase do aviso) em `projetarMensagem`.
   evidence: Low. `MOTIVOS_DE_FORA` hoje tem pago, zero e previsto; o aviso e o tipo são fáceis de estender.
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-6-gerar-a-mensagem-a-partir-da-selecao.md`
@@ -324,9 +321,6 @@
   summary: Conferir no iPad a janela "Aplicar status" (a lista de Status em linha, os 44 pt, a data nativa com o teclado, o foco, o VoiceOver lendo "Status a aplicar", o erro do campo e "Conferindo…") e o botão desativado sem conexão.
   evidence: Low, não verificado. O jsdom só confere o DOM, os nomes, os `role` e as classes; layout, toque e leitor de tela só um aparelho prova. Junta-se à pendência do VoiceOver da 2.4.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-1-marcar-como-pago.md`
-  summary: Um Valor recebido menor que o total é recusado até a 6.2 ("O pagamento parcial ainda não está disponível"), e só o modo `total` é gravado pela RPC (o `check` da tabela já aceita `parcial` e `minha_parte`).
-  evidence: Low. Decisão 13 da 6.1; a 6.2 troca a recusa pela pergunta "O que fazer com a diferença?" e estende `alocarPagamento` e a RPC.
-- source_spec: `_bmad-output/implementation-artifacts/spec-6-1-marcar-como-pago.md`
   summary: Desmarcar "conta como pago" num Status em uso deixa as linhas com Pagamento "não pagas" com `restante = valor − Σ itens` (0 nas pagas por inteiro) e o gatilho passa a recusar mudanças para esse Status; não há aviso nem tratamento.
   evidence: Low. Decisão 18 da 6.1. Se acontecer, o Pagamento se desfaz pelo histórico (6.3); um aviso em Configurações → Status ("N lançamentos pagos usam este Status") é uma melhoria barata.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-1-marcar-como-pago.md`
@@ -341,3 +335,24 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-1-marcar-como-pago.md`
   summary: Os gerenciadores de `pagamentos` não têm consumidor ainda (só `pagamento_itens`, por Mês, que o Painel lê); a 6.3 (histórico) e a 6.5 ("Recebido no mês") vão precisar de um escopo próprio, e os itens de TODOS os Meses (`projetarPendente`) não cabem no escopo por Mês.
   evidence: Low. Decisão 15 da 6.1; o PostgREST corta em 1000 linhas, então o histórico e o pendente leem por página ou por consulta própria, como a 5.2 anota para as Contas.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
+  summary: O que só o CI prova na 6.2: a migração `20261128120000_pagamento_parcial.sql` em Postgres de verdade (a coluna `status_aplicado_id` anulável, o gatilho novo, `aplicar_pagamento` com os três modos e `desfazer_pagamento`), `test/integracao/pagamentos.test.ts` (inclui o item parcial, o gatilho e o Realtime da linha parcial), a igualdade de `database.types.ts` com o gerado (só `status_aplicado_id` muda) e o backup com o item parcial em `test/backup/dados-exemplo.sql`.
+  evidence: Medium não verificado. Sem Docker: o SQL foi provado no pglite (todas as migrações em ordem, o núcleo real por `jiti`, 13 cenários e 16 recusas). Não provam RLS por papel, `grant` de verdade, Realtime nem PostgREST. A migração NÃO foi aplicada: depois do merge, `supabase db push` a pedido de Rafael.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
+  summary: Conferir no iPad e no PC a pergunta "O que fazer com a diferença de R$ X?": os dois cartões de mesma altura lado a lado e empilhados, o rádio de 18 px, o valor sem quebra de linha, o foco ao aparecer a pergunta (ela não rouba o foco do campo do valor), o VoiceOver lendo o grupo e as opções, e o selo "Pago parcialmente" e o "falta R$ X" na grade e no painel.
+  evidence: Low, não verificado. O jsdom só confere o DOM, os nomes, os `role` e as classes. Junta-se à pendência do VoiceOver da 2.4 e à da janela "Aplicar status" da 6.1.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
+  summary: Conferir em produção, depois do `db push`, com dados reais, "Fica pendente" e "Não é dívida, é a minha parte", o selo em dois aparelhos, a mensagem do Bloco com um Pago parcialmente e o "Desfazer" de cada modo. Entre o merge e o `db push` só o modo `total` grava (a RPC antiga recusa `parcial` e `minha_parte`).
+  evidence: Medium, não verificado em produção. Nenhum dado de produção foi lido nem alterado.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
+  summary: No modo `minha_parte` os itens guardam o restante inteiro de cada linha e o valor realmente recebido fica só em `pagamentos.valor_recebido_centavos`; Σ itens − valor recebido é "a minha parte". A 6.3 (histórico) e a 6.5 ("Recebido no mês") têm de somar o valor do Pagamento, não os itens, para saber o que entrou; os itens dizem o que cada linha quitou.
+  evidence: Low. Decisão 2 da 6.2: o AD-10 diz "soma dos itens = valor recebido", mas isso só vale para `total` e `parcial`; em `minha_parte` nenhum item pode ser zero (o `check` proíbe) e desfazer precisa de um item por linha para devolver o Status.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
+  summary: O valor do Bloco no cartão do Painel (e o `resumirBloco`) ainda soma o valor cheio de um Pago parcialmente; só a mensagem de cobrança usa o restante. O "Falta receber" do Bloco, `projetarPendente` e a barra de Recebimentos (6.5) são quem passa a usar `restante` nas telas de Recebimentos.
+  evidence: Low. Escopo da 6.2 (a mensagem, a forma 3 e a prévia); `pagosCentavos` do aviso do Bloco já soma a parte recebida.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
+  summary: Um Ajuste de centavos negativo (crédito de centavos) de uma parcela comum não é crédito na alocação: acompanha a parcela e, num "Fica pendente" cujo valor acaba na parcela, fica em aberto (restante negativo de poucos centavos) em vez de ser quitado antes.
+  evidence: Low. Decisão 4 da 6.2; o total do Pagamento (valor = total) continua quitando os dois. Se incomodar, o Ajuste negativo pode entrar sempre junto da parcela quando ela leva qualquer valor.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
+  summary: Um item parcial vivo numa linha que Rafael depois marcou como paga à mão (sem Pagamento que feche o valor) fica no banco: a linha é "paga" pelo Status e o item só some ao desfazer o Pagamento parcial (6.3). Tirar o "pago" dessa linha à mão é permitido (o item parcial não aplicou Status), e a linha volta a ser Pago parcialmente.
+  evidence: Low. Decisão 1 da 6.2 (o gatilho olha só o "pago" que veio de um Pagamento).

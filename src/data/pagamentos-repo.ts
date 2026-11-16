@@ -1,8 +1,9 @@
-// Repositório de Pagamentos (História 6.1, FR-25, AD-3, AD-4, AD-10, AD-16). Única
+// Repositório de Pagamentos (Histórias 6.1 e 6.2, FR-25, AD-3, AD-4, AD-10, AD-16). Única
 // porta de gravação de `pagamentos` e `pagamento_itens`: as RPCs gravam numa
 // transação só o que o núcleo calculou (`src/domain/pagamento.ts`).
 //
-// - `aplicar`: manda o pedido que `planejarPagamento` montou a `aplicar_pagamento`.
+// - `aplicar`: manda o pedido que `planejarPagamento` montou a `aplicar_pagamento`. O modo
+//   (`total`, `parcial`, `minha_parte`) e os itens (com `quita`) vêm prontos do núcleo (6.2).
 //   Sem otimismo (a RPC grava três tabelas e o Status das linhas): as linhas e os
 //   itens devolvidos vão para os gerenciadores (AD-4); o Realtime que chega depois
 //   não duplica nada (mesmo `id`, `updated_at` não mais novo). Repetir o pedido
@@ -10,7 +11,8 @@
 // - `desfazer`: lê do banco o que o núcleo precisa (os itens vivos do Pagamento, as
 //   linhas como estão agora e os itens de outros Pagamentos que as tocam), pede o
 //   plano a `planejarDesfazerPagamento` (AD-10: o Status anterior volta só onde o
-//   atual ainda é o aplicado e nenhum Pagamento posterior tocou) e grava por
+//   atual ainda é o aplicado e nenhum Pagamento posterior tocou; o item parcial não mudou
+//   o Status e não tem o que devolver) e grava por
 //   `desfazer_pagamento`. Se uma linha mudou entre a leitura e a gravação, a RPC
 //   recusa (`pagamento.mudou`) e nada muda.
 // - Sem conexão, nada começa (AD-3): `conexao.gravar_sem_conexao`.

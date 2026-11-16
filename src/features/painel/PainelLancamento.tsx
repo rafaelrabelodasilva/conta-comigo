@@ -28,6 +28,7 @@ import {
   ROTULO_PREVISTO,
   TEXTOS_AJUSTE,
   TEXTOS_LANCAMENTO as T,
+  TEXTOS_PAGAMENTO as TP,
   TEXTOS_PAINEL,
   mensagem,
   mensagemDoPagamento,
@@ -37,6 +38,7 @@ import {
   rotuloAlteradoEmOutroAparelho,
   rotuloCartaoFinal,
   rotuloDetalhesLancamento,
+  rotuloFalta,
   rotuloIncluidoEm,
   rotuloOrigemPrevisto,
   rotuloApelidoAplicado,
@@ -116,14 +118,27 @@ export type CadastrosPainel = {
   status: readonly Cadastro<"status">[];
 };
 
+/** "Pago parcialmente · falta R$ 115,16" (derivado, nunca gravado): o selo e o que falta, anunciado quando muda. */
+function FaltaDoParcial({ centavos }: { centavos: number }) {
+  return (
+    <p role="status" className="flex flex-wrap items-center gap-2 texto-caption text-text-muted">
+      <span className="rounded-full bg-status-partial-bg px-2 text-status-partial-fg">{TP.pago_parcialmente}</span>
+      <span className="whitespace-nowrap">{rotuloFalta(centavos)}</span>
+    </p>
+  );
+}
+
 type Comum = {
   cadastros: CadastrosPainel;
   /**
-   * Os Status que contam como pago e os Lançamentos com Pagamento (História 6.1, AD-10): aplicar
-   * à mão um Status "não pago" numa linha com Pagamento é recusado ("desfaça o pagamento antes").
+   * Os Status que contam como pago e os Lançamentos que um Pagamento quitou (História 6.1, AD-10):
+   * tirar à mão o "pago" de uma linha quitada por Pagamento é recusado ("desfaça o pagamento antes").
+   * Uma linha só parcialmente paga não entra: ela troca de "não pago" para outro à vontade (6.2).
    */
   statusPagos?: ReadonlySet<string>;
-  comPagamento?: ReadonlySet<string>;
+  quitadasPorPagamento?: ReadonlySet<string>;
+  /** "falta R$ X" de um Pago parcialmente (derivado do núcleo, 6.2); `null` nas demais linhas. */
+  faltaCentavos?: number | null;
   aoFechar: () => void;
   /** Para os testes; padrão, o repositório do navegador. */
   repo?: RepoLancamentos;
@@ -332,7 +347,8 @@ function EditarLancamento({
   conferencia,
   cadastros,
   statusPagos = SEM_IDS,
-  comPagamento = SEM_IDS,
+  quitadasPorPagamento = SEM_IDS,
+  faltaCentavos = null,
   aoFechar,
   aoExcluir,
   repo: repoDado,
@@ -551,7 +567,7 @@ function EditarLancamento({
     }
     // Aplicar à mão um Status "não pago" numa linha com Pagamento: recusado, o Pagamento se desfaz antes (AD-10).
     if (r.valor.coluna === "status_id") {
-      const recusa = recusarStatusNaoPago(r.valor.valor, statusPagos, [linhaRef.current], comPagamento);
+      const recusa = recusarStatusNaoPago(r.valor.valor, statusPagos, [linhaRef.current], quitadasPorPagamento);
       if (!recusa.ok) {
         definirErro(campo, mensagemDoPagamento(recusa.erro));
         definirRascunho(campo, undefined);
@@ -693,6 +709,7 @@ function EditarLancamento({
           value={texto("status")}
           onChange={(e) => escolher("status", e.target.value)}
         />
+        {faltaCentavos !== null ? <FaltaDoParcial centavos={faltaCentavos} /> : null}
         {erros.status ? (
           <p role="alert" className="texto-label font-normal text-danger-fg">
             {erros.status}
@@ -872,6 +889,7 @@ function EditarLancamento({
         value={texto("status")}
         onChange={(e) => escolher("status", e.target.value)}
       />
+      {faltaCentavos !== null ? <FaltaDoParcial centavos={faltaCentavos} /> : null}
       {erros.status ? (
         <p role="alert" className="texto-label font-normal text-danger-fg">
           {erros.status}

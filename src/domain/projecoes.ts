@@ -3,7 +3,8 @@
 // que lhe cabe, e o Painel, o passo a passo e a mensagem somam as mesmas
 // linhas. `projetarMensagem` (4.6, a regra de inclusão da mensagem) e
 // `projetarMensagemDoBloco` (4.7, a forma 2) estão no fim deste arquivo;
-// `projetarPendente` (Épico 6) virá aqui.
+// `projetarPendente` (Épico 6) virá aqui. Desde a 6.2 a mensagem cobra só o que falta
+// de um Lançamento "Pago parcialmente" (`restante`, AD-10).
 
 import { unidadesDoMes } from "./divisao";
 import {
@@ -21,6 +22,7 @@ import {
 import { compararPelaFatura, linhasDoMes } from "./painel";
 import { ehPrevistoNoMes } from "./previstos";
 import { rotuloItensDeFora } from "./mensagens";
+import { ehPago, somaDosItens, type ItemLido } from "./pagamento";
 import type { Resultado } from "./resultado";
 
 /** As colunas de `lancamentos` que a projeção do Painel lê. */
@@ -92,7 +94,11 @@ export type LancamentoParaMensagem = LancamentoParaProjetar & {
 };
 
 /** Um Ajuste de centavos que acompanha a parcela dele na mensagem. */
-export type AjusteDaMensagem = { id: string; valor_centavos: number };
+export type AjusteDaMensagem = {
+  id: string;
+  /** O que falta do Ajuste (o valor cheio, salvo se um Pagamento já quitou parte dele). */
+  valor_centavos: number;
+};
 
 /** Um item que entra na mensagem: a unidade da grade e os Ajustes dela. */
 export type ItemProjetado = {
@@ -101,8 +107,10 @@ export type ItemProjetado = {
   apelido: string | null;
   parcela_n: number | null;
   parcela_total: number | null;
-  /** O valor da própria linha (negativo é estorno), sem os Ajustes. */
+  /** O que falta da própria linha (negativo é estorno), sem os Ajustes: o valor cheio, ou só o restante de um Pago parcialmente. */
   valor_centavos: number;
+  /** O que um Pagamento já quitou da linha (0 se nada): é o que o aviso "já foram pagos" do Bloco soma. */
+  pago_centavos: number;
   /** Os Ajustes dela, na ordem da fatura: viram linhas "↳ Ajuste" logo abaixo. */
   ajustes: readonly AjusteDaMensagem[];
   /** O líquido: o valor mais os Ajustes. É o que soma no total. */
@@ -128,6 +136,11 @@ export type OpcoesDaMensagem = {
   temFatura: boolean;
   /** "Incluir previstos": só vale num Mês sem Fatura. */
   incluirPrevistos: boolean;
+  /**
+   * Os itens de Pagamento das linhas (6.2): com eles um Lançamento "Pago parcialmente"
+   * entra só com o que falta. Sem itens, tudo entra com o valor cheio (como antes).
+   */
+  itens?: readonly ItemLido[];
 };
 
 export type ProjecaoDaMensagem = {
@@ -137,6 +150,8 @@ export type ProjecaoDaMensagem = {
   /** A soma líquida dos itens que entram (estornos reduzem). */
   totalCentavos: number;
   fora: ForaDaMensagem;
+  /** Quanto cada linha que ENTRA já recebeu de Pagamento parcial (a parcela e os Ajustes dela, só os que têm algo). */
+  abatidos: readonly { id: string; centavos: number }[];
   /**
    * Os ids dos itens de fora por já estarem pagos, com os Ajustes deles: a 4.7 tira
    * só estes da conta para dizer quanto "já foi pago" (um previsto não é pago).
@@ -164,8 +179,9 @@ export function podeIncluirPrevistos(temFatura: boolean): boolean {
  *   num Mês sem Fatura), Status que conta como pago, valor R$ 0,00. Sem Status
  *   o Lançamento vale "não pago".
  * - Estorno (valor negativo) entra e reduz o total.
- * - "Pago parcialmente" ainda é só o Status: o app não tem Pagamentos, então o
- *   item entra com o valor cheio; o "só o que falta" vem com os Pagamentos (Épico 6).
+ * - "Pago parcialmente" (0 < Σ itens < valor, sem Status pago) entra só com o que
+ *   falta (`restante`, AD-10), e o Ajuste dele também. Se os itens já cobrem o valor
+ *   todo, o item sai como "já pago". Os itens valem de qualquer Mês: cada linha usa os dela.
  * - Dívida programada ainda não vencida: sem Dívidas programadas no app, não há o que tirar (Épico 6).
  */
 export function projetarMensagem(
@@ -191,14 +207,20 @@ export function projetarMensagem(
     .filter((l) => selecao.has(l.id) && !segueAParcela(l))
     .sort(compararPelaFatura);
 
+  const quitado = somaDosItens(opcoes.itens ?? []);
+  // O que falta de uma linha de Status não pago; um Ajuste pago por Status segue a parcela, valor cheio.
+  const abertoDe = (l: LancamentoParaMensagem) =>
+    ehPago(l, opcoes.statusPagos) ? l.valor_centavos : l.valor_centavos - (quitado.get(l.id) ?? 0);
+  const jaRecebido = (l: LancamentoParaMensagem) => (ehPago(l, opcoes.statusPagos) ? 0 : (quitado.get(l.id) ?? 0));
   const entram: ItemProjetado[] = [];
+  const abatidos: { id: string; centavos: number }[] = [];
   const idsPagos: string[] = [];
   const porMotivo: Record<MotivoDeFora, number> = { pago: 0, zero: 0, previsto: 0 };
   for (const l of marcadas) {
     const motivo: MotivoDeFora | null =
       ehPrevistoNoMes(l, opcoes.temFatura) && !incluirPrevistos
         ? "previsto"
-        : l.status_id !== null && opcoes.statusPagos.has(l.status_id)
+        : ehPago(l, opcoes.statusPagos) || (jaRecebido(l) !== 0 && abertoDe(l) === 0)
           ? "pago"
           : l.valor_centavos === 0
             ? "zero"
@@ -210,16 +232,20 @@ export function projetarMensagem(
     }
     const ajustes = (ajustesDe.get(l.id) ?? [])
       .sort(compararPelaFatura)
-      .map((a) => ({ id: a.id, valor_centavos: a.valor_centavos }));
+      .map((a) => ({ id: a.id, valor_centavos: abertoDe(a) }));
+    for (const x of [l, ...(ajustesDe.get(l.id) ?? [])]) {
+      if (jaRecebido(x) !== 0) abatidos.push({ id: x.id, centavos: jaRecebido(x) });
+    }
     entram.push({
       id: l.id,
       nome: l.nome,
       apelido: l.apelido,
       parcela_n: l.parcela_n,
       parcela_total: l.parcela_total,
-      valor_centavos: l.valor_centavos,
+      valor_centavos: abertoDe(l),
+      pago_centavos: jaRecebido(l),
       ajustes,
-      liquido_centavos: ajustes.reduce((soma, a) => soma + a.valor_centavos, l.valor_centavos),
+      liquido_centavos: ajustes.reduce((soma, a) => soma + a.valor_centavos, abertoDe(l)),
     });
   }
   return {
@@ -227,6 +253,7 @@ export function projetarMensagem(
     entram,
     totalCentavos: entram.reduce((soma, i) => soma + i.liquido_centavos, 0),
     fora: { quantidade: porMotivo.pago + porMotivo.zero + porMotivo.previsto, porMotivo },
+    abatidos,
     idsPagos,
   };
 }
@@ -263,7 +290,10 @@ export type ProjecaoDoBloco = {
   entram: readonly ItemProjetado[];
   /** A Fórmula aplicada só aos itens que entram: uma conta, um arredondamento (FR-54). */
   totalCentavos: number;
-  /** Quanto os itens já pagos tiram do valor do Bloco ("R$ X já foram pagos e não entram"); 0 se nada. */
+  /**
+   * Quanto o que já foi pago tira do valor do Bloco ("R$ X já foram pagos e não entram"); 0 se nada:
+   * os itens pagos por inteiro e a parte já recebida dos Pagos parcialmente (6.2).
+   */
   pagosCentavos: number;
   fora: ForaDaMensagem;
   /** Quantos itens aparecem em mais de um grupo (e contam em cada um, como no Painel). */
@@ -316,9 +346,12 @@ export function projetarMensagemDoBloco(
   if (!total.ok) return total;
 
   const pagos = new Set(projecao.idsPagos);
+  const abatido = new Map(projecao.abatidos.map((a) => [a.id, a.centavos]));
   const semPagos = avaliar(
     formula,
-    painel.filter((l) => !pagos.has(l.id)),
+    painel
+      .filter((l) => !pagos.has(l.id))
+      .map((l) => (abatido.has(l.id) ? { ...l, valor_centavos: l.valor_centavos - abatido.get(l.id)! } : l)),
   );
   if (!semPagos.ok) return semPagos;
 

@@ -354,11 +354,39 @@ describe("a parte já paga", () => {
     expect(m.avisos).toContain(e("R$ 2.819,68 já foram pagos e não entram"));
   });
 
-  it("“Pago parcialmente” é só um Status (decisão da 4.6): entra cheio e não conta como pago", () => {
+  it("sem itens de Pagamento, um Status chamado “Pago parcialmente” entra cheio e não conta como pago", () => {
     const parcial = l({ nome: "PARCIAL", valor_centavos: 20000, status_id: "pago_parcialmente" });
     const m = bloco(RANGEL, [...MES_TODO, parcial]);
     expect(texto(m)).toContain("PARCIAL");
     expect(m.avisos.join(" ")).not.toContain("já foram pagos");
+  });
+
+  it("Pago parcialmente (6.2): o Bloco cobra só o restante e o aviso soma a parte já recebida", () => {
+    // R$ 1.000,00 da REFORMA (R$ 2.313,44) já foram recebidos: o Casal cobra R$ 1.313,44 dela.
+    const itens = [{ lancamento_id: reforma.id, valor_centavos: 100000 }];
+    const p = projecao(RANGEL, MES_TODO, { itens });
+    expect(p.entram.find((i) => i.id === reforma.id)).toMatchObject({ valor_centavos: 131344, pago_centavos: 100000 });
+    // Rangel + Casal ÷ 2: o Casal é R$ 4.639,35, metade R$ 2.319,68 (um arredondamento só).
+    expect(p.totalCentavos).toBe(231968);
+    expect(p.pagosCentavos).toBe(50000);
+    const m = bloco(RANGEL, MES_TODO, { itens });
+    expect(m.avisos).toContain(e("R$ 500,00 já foram pagos e não entram"));
+    expect(texto(m)).toContain(e("R$ 1.313,44"));
+    expect(texto(m)).not.toContain(e("R$ 2.313,44"));
+  });
+
+  it("os grupos mostram o subtotal só com o restante", () => {
+    const itens = [{ lancamento_id: reforma.id, valor_centavos: 100000 }];
+    const casal = projecao(resp("casal"), MES_TODO, { itens });
+    expect(casal.grupos[0].subtotalCentavos).toBe(463935);
+    expect(casal.pagosCentavos).toBe(100000);
+  });
+
+  it("pago por inteiro e pago parcialmente juntos: o aviso soma os dois", () => {
+    const itens = [{ lancamento_id: reforma.id, valor_centavos: 100000 }];
+    const aluguelPago = { ...aluguel, status_id: "pago" };
+    const m = bloco(resp("casal"), [aluguelPago, ...MES_TODO.filter((x) => x.id !== "aluguel")], { itens });
+    expect(m.avisos).toContain(e("R$ 1.800,00 já foram pagos e não entram"));
   });
 });
 
