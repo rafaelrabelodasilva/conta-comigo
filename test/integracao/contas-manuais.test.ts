@@ -189,7 +189,8 @@ describe.skipIf(!ligado)("Contas manuais no Supabase local", () => {
 
   it("uma parcela excluída em lógico deixa o `n` livre, e a próxima materialização o preenche", async () => {
     // O índice único é parcial (só linhas não excluídas): a parcela excluída em lógico deixa o `n` livre
-    // e a próxima materialização a recria. A 5.4 decide como "Excluir" fica (aviso "Excluído · Desfazer").
+    // e a próxima materialização a recria. A 5.4 não muda isso (só a Conta excluída é ignorada pelo
+    // materializador; ver `contas-alterar.test.ts` e `deferred-work.md`).
     const conta = nova(bombinhas({ nome: "Bombinhas 3" }));
     expect((await salvar(a.cliente, conta)).error).toBeNull();
     const [primeira] = (await maes(conta.id)).data!;
@@ -439,7 +440,7 @@ describe.skipIf(!ligado)("Contas manuais no Supabase local", () => {
           const conta = mensal(`Apagar ${tentativa}`);
           await salvar(a.cliente, conta);
           apagadas.add(conta.id);
-          // A Série e os Lançamentos seguram a Conta (a exclusão de verdade é da 5.4).
+          // A Série e os Lançamentos seguram a Conta (o app nunca apaga a linha: a 5.4 exclui em lógico).
           await local.admin.from("lancamentos").delete().eq("conta_manual_id", conta.id);
           await local.admin.from("series").delete().eq("conta_manual_id", conta.id);
           return local.admin.from("contas_manuais").delete().eq("id", conta.id);

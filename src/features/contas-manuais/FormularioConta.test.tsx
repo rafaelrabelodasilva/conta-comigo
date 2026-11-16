@@ -274,3 +274,100 @@ describe("FormularioConta", () => {
     expect(aoSalvar).not.toHaveBeenCalled();
   });
 });
+
+describe("Editar (História 5.4)", () => {
+  // A Bombinhas salva: Tipo Viagem e três partes de R$ 106,00 (Mãe, Casal e o Responsável arquivado "Antigo").
+  const salva = {
+    id: "b1",
+    nome: "Bombinhas",
+    valor_centavos: 31_800,
+    tipo_id: "t-velho",
+    responsavel_id: null,
+    observacao: "pousada",
+    mes_inicial: "2026-07",
+    repeticao: "parcelas" as const,
+    parcela_total: 6,
+    divisao: {
+      modo: "valor",
+      partes: ["r-mae", "r-casal", "r-velho"].map((id) => ({ responsavel_id: id, numerador: 1, denominador: 3 })),
+    },
+    encerrada_em_mes: null,
+    updated_at: "2026-11-10T12:00:00+00:00",
+  };
+
+  it("abre com a Conta, o Tipo e o Responsável arquivados que ela usa nas opções, e o 'Começa em' travado", () => {
+    montar({ conta: salva });
+    expect(screen.getByRole("dialog", { name: T.titulo_editar })).toBeTruthy();
+    expect(nome().value).toBe("Bombinhas");
+    expect(valor().value).toBe("318,00");
+    expect((screen.getByRole("combobox", { name: T.tipo }) as HTMLSelectElement).value).toBe("t-velho");
+    expect(responsavel(3).value).toBe("r-velho");
+    expect(valorDaParte(3).value).toBe("106,00");
+    // O arquivado só aparece onde a Conta o usa: a parte 1 não oferece "Antigo".
+    expect(Array.from(responsavel(1).options).map((o) => o.textContent)).not.toContain("Antigo");
+    expect((screen.getByLabelText(T.comeca_em) as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText("Vale a partir de Nov/26. Os meses anteriores não mudam.")).toBeTruthy();
+  });
+
+  it("salva sem mudar nada: só fecha, sem chamar a gravação (os arquivados que a Conta usa não são erro)", async () => {
+    const { aoSalvar, aoMudar } = montar({ conta: salva });
+    fireEvent.click(salvar());
+    await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
+    expect(aoSalvar).not.toHaveBeenCalled();
+  });
+
+  it("muda o Nome: grava com o mesmo id e o mesmo 'Começa em'", async () => {
+    const { aoSalvar, aoMudar } = montar({ conta: salva });
+    fireEvent.change(nome(), { target: { value: "Bombinhas 2" } });
+    fireEvent.click(salvar());
+    await waitFor(() => expect(aoSalvar).toHaveBeenCalledOnce());
+    expect(aoSalvar.mock.calls[0][0]).toMatchObject({ id: "b1", nome: "Bombinhas 2", mes_inicial: "2026-07", tipo_id: "t-velho", parcela_total: 6 });
+    await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
+  });
+
+  it("trocar por outro Responsável arquivado continua recusado", () => {
+    montar({ conta: { ...salva, divisao: null, responsavel_id: "r-mae" } });
+    fireEvent.change(nome(), { target: { value: "Outra" } });
+    // Só dá para escolher o que a opção oferece; um arquivado fora da Conta nem aparece.
+    expect(Array.from(responsavel(1).options).map((o) => o.value)).not.toContain("r-velho");
+  });
+
+  it("mostra a leitura dos Lançamentos: 'Conferindo…' enquanto não chega e depois 'Ficam como estão'", () => {
+    const { rerender } = (() => {
+      const r = render(
+        <FormularioConta aberta aoMudar={vi.fn()} mesAtual="2026-11" responsaveis={responsaveis} tipos={tipos} online aoSalvar={vi.fn()} conta={salva} ficam={null} />,
+      );
+      return r;
+    })();
+    expect(screen.getByText(T.conferindo)).toBeTruthy();
+    rerender(
+      <FormularioConta
+        aberta
+        aoMudar={vi.fn()}
+        mesAtual="2026-11"
+        responsaveis={responsaveis}
+        tipos={tipos}
+        online
+        aoSalvar={vi.fn()}
+        conta={salva}
+        ficam={[
+          { mes: "2026-12", parcela_n: 6, motivo: "paga" },
+          { mes: "2027-01", parcela_n: 7, motivo: "editada" },
+        ]}
+      />,
+    );
+    expect(screen.queryByText(T.conferindo)).toBeNull();
+    expect(screen.getByText("Ficam como estão: Dez/26 (já paga), Jan/27 (editada à mão).")).toBeTruthy();
+  });
+
+  it("sem internet, 'Salvar' fica desativado como na Conta nova", () => {
+    montar({ conta: salva, online: false });
+    expect(salvar().disabled).toBe(true);
+  });
+
+  it("uma Conta nova continua com o 'Começa em' livre e sem o aviso de edição", () => {
+    montar();
+    expect((screen.getByLabelText(T.comeca_em) as HTMLInputElement).disabled).toBe(false);
+    expect(screen.queryByText(/Vale a partir de/)).toBeNull();
+  });
+});

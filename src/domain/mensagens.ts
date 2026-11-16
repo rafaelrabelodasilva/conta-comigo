@@ -95,6 +95,11 @@ export const MENSAGENS = {
   "conta.observacao_longa": "A observação pode ter até 200 caracteres.",
   "conta.serie_ocupada": "Outra conta igual foi salva agora. Tente de novo.",
   "conta.nao_encontrada": "Esta conta não existe mais. Nada foi gravado.",
+  "conta.mudou": "Esta conta mudou em outro aparelho. Feche e abra de novo para ver como ficou.",
+  "conta.ja_encerrada": "Esta conta já terminou. Não há o que encerrar.",
+  "conta.encerrar_no_passado": "Escolha o mês atual ou um mês seguinte: os meses anteriores não mudam.",
+  "conta.encerrar_antes_do_inicio": "A conta precisa valer por pelo menos um mês. Para anulá-la, use Excluir.",
+  "conta.encerrar_sem_efeito": "A conta já termina antes desse mês. Escolha um mês em que ela ainda vale.",
   "divisao.fracoes_invalidas": "As frações da divisão precisam somar 100%.",
   "divisao.fracao_invalida": "Use uma fração como 2/3 ou uma porcentagem como 33,33%.",
   "divisao.valor_zero": "Um lançamento de R$ 0,00 não pode ser dividido.",
@@ -1323,9 +1328,87 @@ export const TEXTOS_CONTAS = {
   editar: "Editar",
   encerrar: "Encerrar",
   excluir: "Excluir",
-  em_breve: "Em breve",
   sem_internet_acao: "Sem conexão",
+  // Alterar, encerrar e excluir (História 5.4, FR-18).
+  ja_encerrada: "Já encerrada",
+  titulo_editar: "Editar conta manual",
+  descricao_editar: "As mudanças valem a partir do mês atual.",
+  comeca_em_fixo: "O mês inicial não muda depois de salvo. Para outro mês, exclua esta conta e crie outra.",
+  conferindo: "Conferindo os lançamentos…",
+  titulo_encerrar: "Encerrar conta",
+  descricao_encerrar: "A conta deixa de valer a partir do mês escolhido. Os meses anteriores não mudam.",
+  encerrar_a_partir: "A partir de qual mês?",
+  nada_para_excluir: "Nenhum lançamento será excluído.",
+  descricao_excluir: "Os lançamentos dos meses anteriores não mudam.",
+  excluir_com_lancamentos: "Excluir também os lançamentos",
+  excluir_so_a_conta: "Excluir só a conta",
 } as const;
+
+const MOTIVOS_DE_FICAR = {
+  paga: "já paga",
+  com_pagamento: "com pagamento",
+  editada: "editada à mão",
+} as const;
+
+/** "Vale a partir de Nov/26. Os meses anteriores não mudam." (o aviso do formulário ao editar). */
+export function rotuloValeAPartirDe(mesFormatado: string): string {
+  return `Vale a partir de ${mesFormatado}. Os meses anteriores não mudam.`;
+}
+
+/** Os Lançamentos que ficam como estão: "Ficam como estão: Dez/26 (já paga), Jan/27 (editada à mão)." */
+export function rotuloFicamComoEstao(
+  itens: readonly { mesFormatado: string; motivo: keyof typeof MOTIVOS_DE_FICAR }[],
+): string {
+  return `Ficam como estão: ${itens.map((i) => `${i.mesFormatado} (${MOTIVOS_DE_FICAR[i.motivo]})`).join(", ")}.`;
+}
+
+/** O toast depois de alterar: "Conta alterada: 8 lançamentos recriados · 2 ficaram como estavam". */
+export function rotuloContaAlterada(criadas: number, mantidas: number): string {
+  const base = criadas === 1 ? "Conta alterada: 1 lançamento recriado" : `Conta alterada: ${criadas} lançamentos recriados`;
+  if (mantidas === 0) return base;
+  return `${base} · ${mantidas === 1 ? "1 ficou como estava" : `${mantidas} ficaram como estavam`}`;
+}
+
+/** O toast depois de encerrar: "Conta encerrada: 3 lançamentos excluídos". */
+export function rotuloContaEncerrada(excluidas: number, mantidas: number): string {
+  const base =
+    excluidas === 0
+      ? "Conta encerrada: nenhum lançamento excluído"
+      : excluidas === 1
+        ? "Conta encerrada: 1 lançamento excluído"
+        : `Conta encerrada: ${excluidas} lançamentos excluídos`;
+  if (mantidas === 0) return base;
+  return `${base} · ${mantidas === 1 ? "1 ficou como estava" : `${mantidas} ficaram como estavam`}`;
+}
+
+/** Na janela de Encerrar: "3 lançamentos de Jan/27 em diante serão excluídos." */
+export function rotuloEncerrarExclui(excluidas: number, mesFormatado: string): string {
+  if (excluidas === 0) return TEXTOS_CONTAS.nada_para_excluir;
+  return excluidas === 1
+    ? `1 lançamento de ${mesFormatado} em diante será excluído.`
+    : `${excluidas} lançamentos de ${mesFormatado} em diante serão excluídos.`;
+}
+
+/** O título da janela de Excluir: "Excluir a conta Bombinhas?" */
+export function rotuloPerguntaExcluir(nome: string): string {
+  return `Excluir a conta ${nome}?`;
+}
+
+/** Na janela de Excluir: "Há 4 lançamentos previstos de Nov/26 em diante que podem sair junto." */
+export function rotuloExcluirPergunta(n: number, mesFormatado: string): string {
+  if (n === 0) return "Não há lançamentos previstos dos meses seguintes para excluir junto.";
+  return n === 1
+    ? `Há 1 lançamento previsto de ${mesFormatado} em diante que pode sair junto.`
+    : `Há ${n} lançamentos previstos de ${mesFormatado} em diante que podem sair junto.`;
+}
+
+/** O nome acessível do "Desfazer" depois de excluir: o toast. */
+export function rotuloContaExcluida(nome: string, excluidas: number): string {
+  if (excluidas === 0) return `Conta ${nome} excluída`;
+  return excluidas === 1
+    ? `Conta ${nome} excluída, com 1 lançamento`
+    : `Conta ${nome} excluída, com ${excluidas} lançamentos`;
+}
 
 /** O nome de um cadastro arquivado na lista: "Cita Rangel (arquivado)" (4.2) vira "Rangel (arquivado)". */
 export function rotuloArquivado(nome: string): string {

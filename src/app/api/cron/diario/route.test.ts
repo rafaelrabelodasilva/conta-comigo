@@ -56,20 +56,35 @@ type Pedido = { p_owner_id: string; p_ate_mes: string; p_parcelas: { conta_id: s
  * `on conflict` de verdade é o job `supabase` do CI; aqui prova-se que a rota
  * pede sempre a mesma coisa e conta só o que o banco diz que criou.
  */
-function bancoFake(linhas: unknown[], opcoes: { falhaLeitura?: boolean; falhaNaConta?: string[]; lanca?: string[] } = {}) {
+function bancoFake(
+  linhas: unknown[],
+  opcoes: { falhaLeitura?: boolean; falhaNaConta?: string[]; lanca?: string[]; ignoraFiltro?: boolean } = {},
+) {
   const existentes = new Set<string>();
   const select = vi.fn();
+  const filtros: [string, unknown][] = [];
   const order = vi.fn(async () =>
     opcoes.falhaLeitura
       ? { data: null, error: { message: "relation contas_manuais: Bombinhas R$ 318,00" } }
-      : { data: linhas, error: null },
+      : {
+          // Respeita `.is(coluna, valor)` como o PostgREST (o teste "filtro que escapa" a ignora).
+          data: opcoes.ignoraFiltro
+            ? linhas
+            : linhas.filter((l) => filtros.every(([c, v]) => ((l as Record<string, unknown>)[c] ?? null) === v)),
+          error: null,
+        },
   );
   const from = vi.fn((tabela: string) => {
     expect(tabela).toBe("contas_manuais");
     return {
       select: (colunas: string) => {
         select(colunas);
-        return { order };
+        return {
+          is: (coluna: string, valor: unknown) => {
+            filtros.push([coluna, valor]);
+            return { order };
+          },
+        };
       },
     };
   });
@@ -89,7 +104,7 @@ function bancoFake(linhas: unknown[], opcoes: { falhaLeitura?: boolean; falhaNaC
     }
     return { data: criadas, error: null };
   });
-  return { cliente: { from, rpc }, from, rpc, select, order };
+  return { cliente: { from, rpc }, from, rpc, select, order, filtros };
 }
 
 function chamar(cabecalho?: string) {
@@ -199,6 +214,24 @@ describe("GET /api/cron/diario: materialização", () => {
     const colunas = banco.select.mock.calls[0][0] as string;
     expect(colunas).not.toMatch(/nome|observacao/);
     expect(colunas).toContain("owner_id");
+  });
+
+  it("a Conta excluída (5.4) não é lida nem materializada: a leitura filtra `excluido_em` e o núcleo confere de novo", async () => {
+    const excluida = { ...bombinhas, excluido_em: "2026-11-14T12:00:00+00:00" };
+    // 1) O banco respeita o filtro: a Conta excluída nem chega.
+    const filtrado = bancoFake([excluida, silvia]);
+    mocks.criarClienteAdmin.mockReturnValue(filtrado.cliente);
+    await chamar(`Bearer ${SEGREDO}`);
+    expect(filtrado.filtros).toEqual([["excluido_em", null]]);
+    expect(filtrado.rpc.mock.calls.map((c) => (c[1] as Pedido).p_parcelas[0].conta_id)).toEqual([ID_SILVIA]);
+
+    // 2) O filtro escapa (um leitor novo que o esquecesse): o núcleo a pula do mesmo jeito.
+    const escapou = bancoFake([excluida, silvia], { ignoraFiltro: true });
+    mocks.criarClienteAdmin.mockReturnValue(escapou.cliente);
+    const resposta = await (await chamar(`Bearer ${SEGREDO}`)).json();
+    expect(resposta.ok).toBe(true);
+    expect(escapou.rpc.mock.calls.map((c) => (c[1] as Pedido).p_parcelas[0].conta_id)).toEqual([ID_SILVIA]);
+    expect(tudoNoLog()).not.toContain("Bombinhas");
   });
 
   it("duas execuções seguidas no mesmo dia: a segunda pede o mesmo e não cria nada novo", async () => {

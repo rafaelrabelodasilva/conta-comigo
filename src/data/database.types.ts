@@ -157,6 +157,7 @@ export type Database = {
           created_at: string
           divisao: Json | null
           encerrada_em_mes: string | null
+          excluido_em: string | null
           id: string
           mes_inicial: string
           nome: string
@@ -173,6 +174,7 @@ export type Database = {
           created_at?: string
           divisao?: Json | null
           encerrada_em_mes?: string | null
+          excluido_em?: string | null
           id?: string
           mes_inicial: string
           nome: string
@@ -189,6 +191,7 @@ export type Database = {
           created_at?: string
           divisao?: Json | null
           encerrada_em_mes?: string | null
+          excluido_em?: string | null
           id?: string
           mes_inicial?: string
           nome?: string
@@ -675,6 +678,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      alterar_conta_manual: { Args: { p_pedido: Json }; Returns: Json }
       anular_id_jsonb: { Args: { de: string; doc: Json }; Returns: Json }
       apagar_historico_do_mes: { Args: { p_mes: string }; Returns: Json }
       classificar_em_lote: { Args: { p_itens: Json }; Returns: Json }
@@ -686,6 +690,11 @@ export type Database = {
         }[]
       }
       dividir_lancamento: { Args: { p_itens: Json }; Returns: Json }
+      excluir_conta_manual: { Args: { p_pedido: Json }; Returns: Json }
+      excluir_linhas_da_conta: {
+        Args: { p_conta_id: string; p_itens: Json; p_mes_atual: string }
+        Returns: string[]
+      }
       importar_aba_planilha: {
         Args: { p_linhas: Json; p_mes: string; p_previstos?: Json }
         Returns: Json
@@ -765,6 +774,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      restaurar_conta_manual: { Args: { p_pedido: Json }; Returns: Json }
       salvar_bloco: {
         Args: {
           p_de_cobranca: boolean

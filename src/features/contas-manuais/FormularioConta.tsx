@@ -1,30 +1,35 @@
 "use client";
 
 import { useId, useMemo, useRef, useState, type FormEvent } from "react";
+import type { ContaSalva, ParcelaMantida } from "@/domain/alterar-conta";
 import {
   adicionarParte,
   avaliarFormularioConta,
+  contaMudou,
   lerNumeroDeParcelas,
   removerParte,
+  rascunhoDaConta,
   rascunhoInicialDaConta,
   totalDaConta,
   type NovaConta,
   type RascunhoDaConta,
   type RepeticaoConta,
 } from "@/domain/contas-manuais";
+import { formatarMes } from "@/domain/datas";
 import { opcoesDoCadastro } from "@/domain/lancamento";
 import {
   TEXTOS_CONTAS as T,
   mensagem,
+  rotuloFicamComoEstao,
   rotuloRemoverParte,
   rotuloResponsavelDaParte,
   rotuloSomaDasPartes,
   rotuloTotaisDaConta,
+  rotuloValeAPartirDe,
   rotuloValorDaParte,
 } from "@/domain/mensagens";
 import { ativos as responsaveisAtivos, ordenarParaConfiguracoes as ordenarResponsaveis } from "@/domain/responsaveis";
 import { ativos as tiposAtivos, ordenarParaConfiguracoes as ordenarTipos } from "@/domain/tipos";
-import type { ResultadoSalvarConta } from "@/data/contas-repo";
 import type { LinhaDe } from "@/data/realtime";
 import { AreaTexto } from "@/ui/AreaTexto";
 import { Botao } from "@/ui/Botao";
@@ -44,6 +49,15 @@ import { Seletor } from "@/ui/Seletor";
 // - O `id` da Conta nasce com o formulário: tocar duas vezes em "Salvar", ou
 //   repetir depois de uma resposta perdida, não cria uma Conta a mais.
 // - Sem conexão, "Salvar" fica desativado (AD-3: só consulta).
+// - Editar (História 5.4): com `conta`, o formulário abre preenchido, mostra
+//   "Vale a partir de Mmm/AA. Os meses anteriores não mudam" e, quando a leitura
+//   dos Lançamentos chega, "Ficam como estão: …". O "Começa em" fica travado (os
+//   Meses anteriores não mudam e `parcela_n` conta desde ele). Tipo e
+//   Responsáveis arquivados que a Conta já usa continuam nas opções (AD-16).
+//   Salvar sem mudar nada só fecha.
+
+/** O que o formulário precisa do resultado de gravar: deu certo, ou o código da recusa. */
+export type ResultadoDoFormulario = { ok: true } | { ok: false; codigo: string };
 
 export type PropsFormularioConta = {
   aberta: boolean;
@@ -55,9 +69,16 @@ export type PropsFormularioConta = {
   /** Há conexão? Sem ela, "Salvar" fica desativado. */
   online: boolean;
   /** Grava; devolve o resultado do repositório. A janela fecha quando dá certo (quem abre mostra o aviso). */
-  aoSalvar: (conta: NovaConta) => Promise<ResultadoSalvarConta>;
+  aoSalvar: (conta: NovaConta) => Promise<ResultadoDoFormulario>;
   /** Gera o `id` da Conta (padrão: `crypto.randomUUID`); os testes passam um fixo. */
   gerarId?: () => string;
+  /** Editando: a Conta como está salva. Sem ela, é "Nova conta". */
+  conta?: ContaSalva;
+  /**
+   * Editando: as parcelas que ficam como estão (a leitura dos Lançamentos da
+   * Conta); `null` enquanto a leitura não chegou, e ausente se ela falhou.
+   */
+  ficam?: readonly ParcelaMantida[] | null;
 };
 
 const OPCOES_REPETICAO = [
@@ -74,9 +95,14 @@ export function FormularioConta({
   online,
   aoSalvar,
   gerarId = () => crypto.randomUUID(),
+  conta,
+  ficam,
 }: PropsFormularioConta) {
-  const [id] = useState(gerarId);
-  const [rascunho, setRascunho] = useState<RascunhoDaConta>(() => rascunhoInicialDaConta(mesAtual));
+  const editando = conta !== undefined;
+  const [id] = useState(() => conta?.id ?? gerarId());
+  const [rascunho, setRascunho] = useState<RascunhoDaConta>(() =>
+    conta ? rascunhoDaConta(conta) : rascunhoInicialDaConta(mesAtual),
+  );
   const [tentou, setTentou] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [falha, setFalha] = useState<string | null>(null);
@@ -85,14 +111,21 @@ export function FormularioConta({
 
   const responsaveisOrdenados = useMemo(() => ordenarResponsaveis(responsaveisAtivos(responsaveis)), [responsaveis]);
   const tiposOrdenados = useMemo(() => ordenarTipos(tiposAtivos(tipos)), [tipos]);
+  // Editando, o que já é da Conta aparece mesmo arquivado (`opcoesDoCadastro` só mantém o atual).
+  const responsaveisParaOpcoes = useMemo(
+    () => (editando ? ordenarResponsaveis(responsaveis) : responsaveisOrdenados),
+    [editando, responsaveis, responsaveisOrdenados],
+  );
+  const tiposParaOpcoes = useMemo(() => (editando ? ordenarTipos(tipos) : tiposOrdenados), [editando, tipos, tiposOrdenados]);
   const avaliacao = useMemo(
     () =>
       avaliarFormularioConta(id, rascunho, {
         mesAtual,
         tiposAtivos: new Set(tiposOrdenados.map((t) => t.id)),
         responsaveisAtivos: new Set(responsaveisOrdenados.map((r) => r.id)),
+        ...(conta ? { original: conta } : {}),
       }),
-    [id, rascunho, mesAtual, tiposOrdenados, responsaveisOrdenados],
+    [id, rascunho, mesAtual, tiposOrdenados, responsaveisOrdenados, conta],
   );
 
   const erro = (campo: keyof typeof avaliacao.erros) => (tentou && avaliacao.erros[campo] ? mensagem(avaliacao.erros[campo]) : null);
@@ -105,10 +138,10 @@ export function FormularioConta({
 
   const parcelada = rascunho.repeticao === "parcelas";
   const varias = rascunho.partes.length > 1;
-  const opcoesResponsavel = (atual: string | null) => opcoesDoCadastro(responsaveisOrdenados, atual, T.escolha_responsavel);
+  const opcoesResponsavel = (atual: string | null) => opcoesDoCadastro(responsaveisParaOpcoes, atual, T.escolha_responsavel);
   const valor = avaliacao.valorCentavos;
   const total = totalDaConta(valor, parcelada ? lerNumeroDeParcelas(rascunho.parcelas) : null);
-  const noPassado = /^\d{4}-\d{2}$/.test(rascunho.comecaEm) && rascunho.comecaEm < mesAtual;
+  const noPassado = !editando && /^\d{4}-\d{2}$/.test(rascunho.comecaEm) && rascunho.comecaEm < mesAtual;
 
   async function enviar(e: FormEvent) {
     e.preventDefault();
@@ -117,6 +150,11 @@ export function FormularioConta({
     if (avaliacao.conta === null) {
       // O foco vai ao primeiro campo inválido (o React ainda não pintou os erros; espera o próximo quadro).
       requestAnimationFrame(() => formulario.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
+      return;
+    }
+    // Nada mudou: não há o que recriar (trocaria os ids à toa).
+    if (conta && !contaMudou(conta, avaliacao.conta)) {
+      aoMudar(false);
       return;
     }
     setSalvando(true);
@@ -137,8 +175,8 @@ export function FormularioConta({
       aoMudar={(a) => {
         if (!salvando) aoMudar(a);
       }}
-      titulo={T.titulo_nova}
-      descricao={T.descricao_nova}
+      titulo={editando ? T.titulo_editar : T.titulo_nova}
+      descricao={editando ? T.descricao_editar : T.descricao_nova}
       rodape={
         <>
           <Botao onClick={() => aoMudar(false)} disabled={salvando}>
@@ -191,14 +229,21 @@ export function FormularioConta({
             onChange={(e) => mudar({ comecaEm: e.target.value })}
             erro={erro("comecaEm")}
             placeholder="AAAA-MM"
+            disabled={editando}
+            {...(editando ? { "aria-describedby": `${idFormulario}-comeca-fixo` } : {})}
           />
         </div>
+        {editando ? (
+          <p id={`${idFormulario}-comeca-fixo`} className="texto-label font-normal text-text-muted">
+            {T.comeca_em_fixo}
+          </p>
+        ) : null}
         {noPassado ? <p className="texto-label font-normal text-text-muted">{T.nota_passado}</p> : null}
         <div className="flex flex-col gap-1">
           <Seletor
             rotulo={T.tipo}
             value={rascunho.tipo_id ?? ""}
-            opcoes={opcoesDoCadastro(tiposOrdenados, rascunho.tipo_id, T.escolha_tipo)}
+            opcoes={opcoesDoCadastro(tiposParaOpcoes, rascunho.tipo_id, T.escolha_tipo)}
             onChange={(e) => mudar({ tipo_id: e.target.value === "" ? null : e.target.value })}
             aria-invalid={erro("tipo") ? true : undefined}
             aria-describedby={erro("tipo") ? `${idFormulario}-tipo-erro` : undefined}
@@ -280,6 +325,18 @@ export function FormularioConta({
           ) : null}
           {valor !== null ? <p>{rotuloTotaisDaConta(valor, total)}</p> : null}
         </div>
+
+        {editando ? (
+          <div aria-live="polite" className="flex flex-col gap-1 texto-body text-text-muted">
+            <p>{rotuloValeAPartirDe(formatarMes(mesAtual))}</p>
+            {ficam === null ? <p>{T.conferindo}</p> : null}
+            {ficam && ficam.length > 0 ? (
+              <p>
+                {rotuloFicamComoEstao(ficam.map((p) => ({ mesFormatado: formatarMes(p.mes), motivo: p.motivo })))}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {falha ? (
           <p role="alert" className="texto-body text-danger-fg">

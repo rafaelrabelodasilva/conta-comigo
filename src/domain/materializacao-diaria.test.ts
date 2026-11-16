@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { avaliarFormularioConta, parcelasDaConta, type ContextoDoFormulario, type NovaConta, type RascunhoDaConta } from "./contas-manuais";
+import {
+  avaliarFormularioConta,
+  parcelasDaConta,
+  type ContaParaParcelas,
+  type ContextoDoFormulario,
+  type NovaConta,
+  type RascunhoDaConta,
+} from "./contas-manuais";
 import { hojeEmSaoPaulo } from "./datas";
 import { lerContaDoCron, planoDoCron } from "./materializacao-diaria";
 import { mesAtual } from "./painel";
+
+type Lida = { owner_id: string; conta: ContaParaParcelas };
 
 const DONO = "11111111-1111-4111-8111-111111111111";
 const OUTRO_DONO = "22222222-2222-4222-8222-222222222222";
@@ -122,7 +131,7 @@ describe("planoDoCron: o que o cron pede ao banco", () => {
 
   it("as parcelas do pedido são exatamente as de `parcelasDaConta` (a rota e o SQL não reimplementam)", () => {
     const plano = planoDoCron([silvia()], "2026-11");
-    const lida = lerContaDoCron(silvia())!.conta;
+    const lida = (lerContaDoCron(silvia()) as Lida).conta;
     const esperadas = parcelasDaConta(lida, "2027-11").map((p) => ({
       conta_id: p.conta_id,
       parcela_n: p.parcela_n,
@@ -134,7 +143,7 @@ describe("planoDoCron: o que o cron pede ao banco", () => {
   });
 
   it("sem Contas: nenhum pedido (a rota responde 200 com quantidade 0)", () => {
-    expect(planoDoCron([], "2026-11")).toEqual({ ate_mes: "2027-11", contas: 0, ilegiveis: 0, pedidos: [] });
+    expect(planoDoCron([], "2026-11")).toEqual({ ate_mes: "2027-11", contas: 0, ilegiveis: 0, excluidas: 0, pedidos: [] });
   });
 
   it("a Conta encerrada não gera parcelas do Mês do encerramento em diante", () => {
@@ -161,6 +170,25 @@ describe("planoDoCron: o que o cron pede ao banco", () => {
     const depois = planoDoCron([silvia()], "2026-11");
     expect(antes.pedidos.map((p) => p.conta_id)).toContain(ID_BOMBINHAS);
     expect(depois.pedidos.map((p) => p.conta_id)).toEqual([ID_SILVIA]);
+  });
+
+  it("a Conta excluída (`excluido_em`) não gera pedido, não é ilegível e as outras seguem (5.4)", () => {
+    const excluida = { ...bombinhas(), excluido_em: "2026-11-15T12:00:00+00:00" };
+    const plano = planoDoCron([excluida, silvia()], "2026-11");
+    expect(plano).toMatchObject({ contas: 2, ilegiveis: 0, excluidas: 1 });
+    expect(plano.pedidos.map((p) => p.conta_id)).toEqual([ID_SILVIA]);
+    // `excluido_em` nulo ou ausente é Conta viva; um valor que não é texto ou nulo é defeito de dado.
+    expect(planoDoCron([{ ...bombinhas(), excluido_em: null }], "2026-11").pedidos).toHaveLength(1);
+    expect(planoDoCron([{ ...bombinhas(), excluido_em: 123 }], "2026-11")).toMatchObject({ ilegiveis: 1, excluidas: 0, pedidos: [] });
+    expect(lerContaDoCron(excluida)).toBe("excluida");
+  });
+
+  it("cada parcela leva a versão da Conta (`updated_at`) de que saiu, para o banco ignorar a que mudou no meio (5.4)", () => {
+    const versao = "2026-11-15T12:00:00.123456+00:00";
+    const plano = planoDoCron([{ ...silvia(), updated_at: versao }], "2026-11");
+    expect(plano.pedidos[0].pedido.p_parcelas.every((p) => p.conta_atualizada_em === versao)).toBe(true);
+    // Sem a coluna (o teste das outras linhas), o pedido não leva a chave.
+    expect("conta_atualizada_em" in planoDoCron([silvia()], "2026-11").pedidos[0].pedido.p_parcelas[0]).toBe(false);
   });
 
   it("uma Conta ilegível é pulada e contada, sem derrubar as outras", () => {
@@ -226,9 +254,9 @@ describe("planoDoCron: o que o cron pede ao banco", () => {
 
 describe("lerContaDoCron", () => {
   it("aceita a linha do banco e devolve o dono e a Conta para `parcelasDaConta`", () => {
-    const lida = lerContaDoCron(bombinhas());
-    expect(lida?.owner_id).toBe(DONO);
-    expect(lida?.conta).toMatchObject({ id: ID_BOMBINHAS, valor_centavos: 31_800, repeticao: "parcelas", parcela_total: 6, encerrada_em_mes: null });
+    const lida = lerContaDoCron(bombinhas()) as Lida;
+    expect(lida.owner_id).toBe(DONO);
+    expect(lida.conta).toMatchObject({ id: ID_BOMBINHAS, valor_centavos: 31_800, repeticao: "parcelas", parcela_total: 6, encerrada_em_mes: null });
   });
 
   it("aceita UUID em maiúsculas (o Postgres devolve minúsculas, mas a regra não depende disso)", () => {
