@@ -1,5 +1,6 @@
-// Prova, contra o Supabase local (CI), Marcar como pago (História 6.1) e o Pagamento
-// parcial e "a minha parte" (História 6.2) (FR-25, AD-10, AD-16): as RPCs
+// Prova, contra o Supabase local (CI), Marcar como pago (História 6.1), o Pagamento
+// parcial e "a minha parte" (História 6.2) e o Histórico e desfazer (História 6.3)
+// (FR-25, FR-29, AD-10, AD-16): as RPCs
 // `aplicar_pagamento` (modos `total`, `parcial` e `minha_parte`) e `desfazer_pagamento`,
 // o gatilho que recusa tirar o "pago" de uma linha que um Pagamento quitou (gravação
 // simples e `classificar_em_lote`), a idempotência pelo `id` da tela, a trava pelo
@@ -490,6 +491,203 @@ describe.skipIf(!ligado)("Marcar como pago no Supabase local", () => {
       },
     );
     expect(item.excluido_em).not.toBeNull();
+    await outro.removeAllChannels();
+  }, 60_000);
+
+  // ------------------------------------------------------------------- História 6.3
+
+  /** Desfaz como o repositório: o núcleo lê o plano (itens vivos, linhas, itens de outros) e a RPC grava o que ele mandou. */
+  const desfazerPeloPlano = async (id: string) => {
+    const plano = await planoDeDesfazer(a.cliente, id);
+    const r = await desfazer(a.cliente, { pagamento_id: id, devolver: plano.devolver });
+    expect(r.error).toBeNull();
+    return plano;
+  };
+  const vivos = async (ids: string[]) =>
+    ((await local.admin.from("pagamento_itens").select("id").in("lancamento_id", ids).is("excluido_em", null)).data ?? []).length;
+  const permutacoes = <T>(lista: T[]): T[][] =>
+    lista.length <= 1 ? [lista] : lista.flatMap((x, i) => permutacoes([...lista.slice(0, i), ...lista.slice(i + 1)]).map((r) => [x, ...r]));
+
+  it("fora de ordem (AD-10): um parcial e depois o que fecha a linha, desfeitos nas duas ordens, voltam ao começo", async () => {
+    for (const ordem of permutacoes(["p1", "p2"])) {
+      const l = await nova(21516);
+      const outra = await nova(5000);
+      // P1: R$ 100,00 de R$ 215,16 (Fica pendente). P2: o que falta da linha e mais a outra.
+      const p1 = await pedido(a.cliente, [l], uuid(), pago, "100,00", "pendente");
+      expect((await aplicar(a.cliente, p1)).error).toBeNull();
+      const p2 = await pedido(a.cliente, [l, outra], uuid(), pago, "165,16");
+      expect((await aplicar(a.cliente, p2)).error).toBeNull();
+      expect([await statusDe(l), await statusDe(outra)]).toEqual([pago, pago]);
+      const ids: Record<string, string> = { p1: p1.id, p2: p2.id };
+      for (const p of ordem) await desfazerPeloPlano(ids[p]);
+      expect([await statusDe(l), await statusDe(outra)], ordem.join()).toEqual([naoPago, naoPago]);
+      expect(await vivos([l, outra])).toBe(0);
+    }
+  });
+
+  it("fora de ordem: dois parciais e o que fecha a linha, nas seis ordens de desfazer", async () => {
+    for (const ordem of permutacoes(["p1", "p2", "p3"])) {
+      const l = await nova(21516);
+      const p1 = await pedido(a.cliente, [l], uuid(), pago, "50,00", "pendente");
+      expect((await aplicar(a.cliente, p1)).error).toBeNull();
+      const p2 = await pedido(a.cliente, [l], uuid(), pago, "30,00", "pendente");
+      expect((await aplicar(a.cliente, p2)).error).toBeNull();
+      const p3 = await pedido(a.cliente, [l], uuid(), pago, "135,16");
+      expect((await aplicar(a.cliente, p3)).error).toBeNull();
+      expect(await statusDe(l)).toBe(pago);
+      const ids: Record<string, string> = { p1: p1.id, p2: p2.id, p3: p3.id };
+      for (const p of ordem) await desfazerPeloPlano(ids[p]);
+      expect(await statusDe(l), ordem.join()).toBe(naoPago);
+      expect(await vivos([l])).toBe(0);
+    }
+  });
+
+  it("fora de ordem: 'a minha parte' e um total em linhas diferentes, desfeitos nas duas ordens", async () => {
+    for (const ordem of permutacoes(["p1", "p2"])) {
+      const c1 = await nova(400000);
+      const c2 = await nova(163935);
+      const m = await nova(12000);
+      const p1 = await pedido(a.cliente, [c1, c2], uuid(), pago, "2.819,68", "minha_parte");
+      expect(p1.modo).toBe("minha_parte");
+      expect((await aplicar(a.cliente, p1)).error).toBeNull();
+      const p2 = await pedido(a.cliente, [m], uuid(), pago, "120,00");
+      expect((await aplicar(a.cliente, p2)).error).toBeNull();
+      const ids: Record<string, string> = { p1: p1.id, p2: p2.id };
+      for (const p of ordem) await desfazerPeloPlano(ids[p]);
+      expect([await statusDe(c1), await statusDe(c2), await statusDe(m)], ordem.join()).toEqual([naoPago, naoPago, naoPago]);
+      expect(await vivos([c1, c2, m])).toBe(0);
+    }
+  });
+
+  it("fora de ordem: o Status mudado à mão para outro 'pago' não é estragado ao desfazer, em qualquer ordem", async () => {
+    for (const ordem of permutacoes(["p1", "p2"])) {
+      const x = await nova(4000);
+      const y = await nova(6000);
+      const z = await nova(3000);
+      const p1 = await pedido(a.cliente, [x, y], uuid(), pago, "100,00");
+      expect((await aplicar(a.cliente, p1)).error).toBeNull();
+      const p2 = await pedido(a.cliente, [z], uuid(), pago, "30,00");
+      expect((await aplicar(a.cliente, p2)).error).toBeNull();
+      expect((await a.cliente.from("lancamentos").update({ status_id: pix }).eq("id", y)).error).toBeNull();
+      const ids: Record<string, string> = { p1: p1.id, p2: p2.id };
+      for (const p of ordem) {
+        const plano = await desfazerPeloPlano(ids[p]);
+        if (p === "p1") expect(plano.mantidas).toBe(1);
+      }
+      expect([await statusDe(x), await statusDe(y), await statusDe(z)], ordem.join()).toEqual([naoPago, pix, naoPago]);
+    }
+  });
+
+  /** Um Pagamento criado depois, que tocou a mesma linha com outro Status (o app não o cria; montado pelo admin). */
+  async function comPagamentoPosterior() {
+    const l = await nova(9000);
+    const p1 = await pedido(a.cliente, [l], uuid(), pago);
+    expect((await aplicar(a.cliente, p1)).error).toBeNull();
+    expect((await a.cliente.from("lancamentos").update({ status_id: pix }).eq("id", l)).error).toBeNull();
+    const p2 = uuid();
+    expect((await local.admin.from("pagamentos").insert({ id: p2, owner_id: a.id, valor_recebido_centavos: 9000, data: "2026-11-16", modo: "total" })).error).toBeNull();
+    const { error } = await local.admin.from("pagamento_itens").insert({
+      pagamento_id: p2,
+      lancamento_id: l,
+      owner_id: a.id,
+      mes: "2026-11",
+      valor_centavos: 9000,
+      status_anterior_id: pago,
+      status_aplicado_id: pix,
+      created_at: new Date(Date.now() + 60_000).toISOString(),
+    });
+    expect(error).toBeNull();
+    return { l, p1: p1.id, p2 };
+  }
+
+  it("fora de ordem: se um Pagamento posterior tocou a linha, desfazer o mais antigo a deixa como está", async () => {
+    const { l, p1, p2 } = await comPagamentoPosterior();
+    const plano = await desfazerPeloPlano(p1);
+    expect(plano).toMatchObject({ devolver: [], mantidas: 1 });
+    expect(await statusDe(l)).toBe(pix);
+    const { data } = await local.admin.from("pagamentos").select("excluido_em").eq("id", p1).single();
+    expect(data!.excluido_em).not.toBeNull();
+    // O mais novo devolve o que ele guardou (o "pago" de antes): o que o AD-10 manda.
+    await desfazerPeloPlano(p2);
+    expect(await statusDe(l)).toBe(pago);
+  });
+
+  it("fora de ordem: desfazendo o posterior primeiro, o mais antigo devolve 'não pago' no fim", async () => {
+    const { l, p1, p2 } = await comPagamentoPosterior();
+    await desfazerPeloPlano(p2);
+    expect(await statusDe(l)).toBe(pago);
+    const plano = await desfazerPeloPlano(p1);
+    expect(plano.devolver.map((d) => d.lancamento_id)).toEqual([l]);
+    expect(await statusDe(l)).toBe(naoPago);
+  });
+
+  it("o Histórico: lê os Pagamentos vivos por páginas (order id + range), sem repetir nem pular, e o desfeito sai", async () => {
+    const ids: string[] = [];
+    const linhas: string[] = [];
+    for (let n = 0; n < 3; n += 1) {
+      const l = await nova(1000 + n);
+      linhas.push(l);
+      const p = await pedido(a.cliente, [l]);
+      expect((await aplicar(a.cliente, p)).error).toBeNull();
+      ids.push(p.id);
+    }
+    const paginas = async () => {
+      const todas: string[] = [];
+      for (let de = 0; ; de += 2) {
+        const { data, error } = await a.cliente.from("pagamentos").select("*").is("excluido_em", null).order("id").range(de, de + 1);
+        expect(error).toBeNull();
+        expect((data ?? []).length).toBeLessThanOrEqual(2);
+        todas.push(...(data ?? []).map((p) => p.id));
+        if ((data ?? []).length < 2) break;
+      }
+      return todas;
+    };
+    const antes = await paginas();
+    expect(new Set(antes).size).toBe(antes.length);
+    for (const id of ids) expect(antes).toContain(id);
+    await desfazerPeloPlano(ids[1]);
+    const depois = await paginas();
+    expect(depois).not.toContain(ids[1]);
+    expect(depois).toContain(ids[0]);
+    // Os itens vivos de todos os Meses e as linhas deles (de quem são) se leem por `in`.
+    const { data: itens } = await a.cliente.from("pagamento_itens").select("*").is("excluido_em", null).in("pagamento_id", ids).order("id").range(0, 999);
+    expect((itens ?? []).map((i) => i.pagamento_id).sort()).toEqual([ids[0], ids[2]].sort());
+    const { data: ls, error } = await a.cliente.from("lancamentos").select("id, responsavel_id, ajuste_de_id").in("id", linhas);
+    expect(error).toBeNull();
+    expect((ls ?? []).map((l) => l.id).sort()).toEqual([...linhas].sort());
+  });
+
+  it("Realtime: o Pagamento novo chega (INSERT) e o desfeito chega como UPDATE com excluido_em (replica identity full)", async () => {
+    const outro = await local.entrar(a.email, a.senha);
+    let novoId = "";
+    const inserido = await esperarEvento<{ id: string; modo: string; excluido_em: string | null }>(
+      outro,
+      "pagamentos",
+      "INSERT",
+      (p) => p.id === novoId,
+      async () => {
+        const l = await nova(4321, "2026-09");
+        const p = await pedido(a.cliente, [l]);
+        novoId = p.id;
+        return aplicar(a.cliente, p);
+      },
+    );
+    expect(inserido).toMatchObject({ modo: "total", excluido_em: null });
+    const desfeito = await esperarEvento<{ id: string; excluido_em: string | null }>(
+      outro,
+      "pagamentos",
+      "UPDATE",
+      (p) => p.excluido_em !== null,
+      async () => {
+        const l = await nova(777, "2026-09");
+        const p = await pedido(a.cliente, [l]);
+        const r = await aplicar(a.cliente, p);
+        if (r.error) return r;
+        const plano = await planoDeDesfazer(a.cliente, p.id);
+        return desfazer(a.cliente, { pagamento_id: p.id, devolver: plano.devolver });
+      },
+    );
+    expect(desfeito.excluido_em).not.toBeNull();
     await outro.removeAllChannels();
   }, 60_000);
 });

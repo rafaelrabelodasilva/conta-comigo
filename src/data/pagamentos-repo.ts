@@ -15,13 +15,20 @@
 //   o Status e não tem o que devolver) e grava por
 //   `desfazer_pagamento`. Se uma linha mudou entre a leitura e a gravação, a RPC
 //   recusa (`pagamento.mudou`) e nada muda.
+// - `previaDoDesfazer` (6.3): a mesma leitura e a mesma classificação do `desfazer`, sem gravar: a janela
+//   de confirmação mostra quantas linhas voltam e quantas ficam. `desfazer` aceita o que a janela viu
+//   (`esperado`): se o plano de agora é outro, devolve `pagamento.mudou` sem gravar (a janela se refaz).
+//   Um Pagamento sem item vivo já foi desfeito: `pagamento.ja_desfeito` (o estado vai para a memória).
+// - `responsaveisDasLinhas` e `linhasDoPagamento` (6.3): as leituras do Histórico, em blocos de 100 ids.
 // - Sem conexão, nada começa (AD-3): `conexao.gravar_sem_conexao`.
 // - As leituras por `in (…)` vão em blocos (o endereço da requisição tem limite) e
 //   nenhuma passa de 1000 linhas (o corte do PostgREST).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { mesmoPlanoDeDesfazer } from "@/domain/historico-pagamentos";
 import {
-  planejarDesfazerPagamento,
+  classificarDesfazerPagamento,
+  type ItemAoDesfazer,
   type ItemParaDesfazer,
   type OutroItemDoLancamento,
   type PedidoDePagamento,
@@ -29,7 +36,7 @@ import {
 import { estaOnline } from "./conexao";
 import type { Database, Json } from "./database.types";
 import { FALHOU, semConexao, type CodigoFalhaGravacao, type Online } from "./gravacao";
-import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
+import { gerenciador, gerenciadorItensDoHistorico, type Gerenciador, type LinhaDe } from "./realtime";
 import { criarClienteNavegador } from "./supabase/navegador";
 
 export type LinhaPagamento = LinhaDe<"pagamentos">;
@@ -84,10 +91,14 @@ export function criarRepoPagamentos(deps: {
   obterCliente: () => SupabaseClient<Database> | null;
   memoriaLancamentos: Gerenciador<LinhaLancamento>;
   memoriaItens: Gerenciador<LinhaItemDePagamento>;
+  /** Os Pagamentos vivos de todos os Meses (o Histórico, 6.3): o desfeito sai da memória. */
+  memoriaPagamentos?: Gerenciador<LinhaPagamento>;
+  /** Os itens vivos de todos os Meses (o Histórico, 6.3). */
+  memoriaItensDoHistorico?: Gerenciador<LinhaItemDePagamento>;
   /** Há conexão? Padrão: o detector único (`conexao.ts`). */
   online?: Online;
 }) {
-  const { obterCliente, memoriaLancamentos, memoriaItens, online = estaOnline } = deps;
+  const { obterCliente, memoriaLancamentos, memoriaItens, memoriaPagamentos, memoriaItensDoHistorico, online = estaOnline } = deps;
 
   /** Chama a RPC e aplica a resposta nos gerenciadores (só o Mês aberto fica na memória). */
   async function chamar(
@@ -101,6 +112,8 @@ export function criarRepoPagamentos(deps: {
     if (!r || !r.pagamento || !Array.isArray(r.itens) || !Array.isArray(r.lancamentos)) return FALHOU;
     memoriaLancamentos.aplicarLote(r.lancamentos);
     memoriaItens.aplicarLote(r.itens);
+    memoriaPagamentos?.aplicarLote([r.pagamento]);
+    memoriaItensDoHistorico?.aplicarLote(r.itens);
     return { ok: true, pagamento: r.pagamento, itens: r.itens, linhas: r.lancamentos };
   }
 
@@ -153,6 +166,19 @@ export function criarRepoPagamentos(deps: {
     return saida;
   }
 
+  /** O que o desfazer e a prévia leem: os itens vivos, as linhas como estão e os itens de outros Pagamentos. */
+  async function lerParaDesfazer(
+    cliente: SupabaseClient<Database>,
+    pagamentoId: string,
+  ): Promise<{ itens: ItemParaDesfazer[]; classificados: ItemAoDesfazer[] } | null> {
+    const itens = await lerItensDoPagamento(cliente, pagamentoId);
+    if (!itens) return null;
+    const ids = itens.map((i) => i.lancamento_id);
+    const [linhas, outros] = await Promise.all([lerLinhas(cliente, ids), lerOutrosItens(cliente, ids, pagamentoId)]);
+    if (!linhas || !outros) return null;
+    return { itens, classificados: classificarDesfazerPagamento(itens, linhas, outros) };
+  }
+
   return {
     /**
      * Grava o Pagamento (o pedido de `planejarPagamento`): um Pagamento `total`, um
@@ -175,21 +201,88 @@ export function criarRepoPagamentos(deps: {
      * Desfaz o Pagamento: exclui em lógico e devolve o Status anterior só onde o
      * núcleo manda (AD-10). Desfazer de novo um Pagamento já desfeito não faz nada.
      */
-    async desfazer(pagamentoId: string): Promise<ResultadoPagamento> {
+    async desfazer(pagamentoId: string, esperado?: readonly ItemAoDesfazer[]): Promise<ResultadoPagamento> {
       const bloqueio = semConexao(online);
       if (bloqueio) return bloqueio;
       const cliente = obterCliente();
       if (!cliente) return FALHOU;
       try {
-        const itens = await lerItensDoPagamento(cliente, pagamentoId);
-        if (!itens) return FALHOU;
-        const ids = itens.map((i) => i.lancamento_id);
-        const [linhas, outros] = await Promise.all([lerLinhas(cliente, ids), lerOutrosItens(cliente, ids, pagamentoId)]);
-        if (!linhas || !outros) return FALHOU;
-        const plano = planejarDesfazerPagamento(itens, linhas, outros);
-        return await chamar(cliente, "desfazer_pagamento", { pagamento_id: pagamentoId, devolver: plano.devolver });
+        const lido = await lerParaDesfazer(cliente, pagamentoId);
+        if (!lido) return FALHOU;
+        // O que a janela mostrou já não vale (outro aparelho mexeu): nada é gravado.
+        if (esperado && lido.itens.length > 0 && !mesmoPlanoDeDesfazer(esperado, lido.classificados)) {
+          return { ok: false, codigo: "pagamento.mudou" };
+        }
+        const resposta = await chamar(cliente, "desfazer_pagamento", {
+          pagamento_id: pagamentoId,
+          devolver: lido.classificados.flatMap((c) => (c.devolver ? [c.devolver] : [])),
+        });
+        // Sem item vivo não havia o que desfazer: já tinha sido desfeito (a memória recebeu o estado).
+        if (resposta.ok && lido.itens.length === 0) return { ok: false, codigo: "pagamento.ja_desfeito" };
+        return resposta;
       } catch {
         return FALHOU;
+      }
+    },
+
+    /**
+     * O que desfazer o Pagamento faria agora, sem gravar: o destino de cada item (volta ao Status
+     * anterior, o Status mudou, outro Pagamento tocou depois ou é item parcial). `pagamento.ja_desfeito`
+     * se não há item vivo.
+     */
+    async previaDoDesfazer(
+      pagamentoId: string,
+    ): Promise<{ ok: true; itens: ItemAoDesfazer[] } | { ok: false; codigo: CodigoFalhaPagamento }> {
+      const bloqueio = semConexao(online);
+      if (bloqueio) return bloqueio;
+      const cliente = obterCliente();
+      if (!cliente) return FALHOU;
+      try {
+        const lido = await lerParaDesfazer(cliente, pagamentoId);
+        if (!lido) return FALHOU;
+        if (lido.itens.length === 0) return { ok: false, codigo: "pagamento.ja_desfeito" };
+        return { ok: true, itens: lido.classificados };
+      } catch {
+        return FALHOU;
+      }
+    },
+
+    /**
+     * De quem são as linhas e se são Ajuste de centavos (a lista do Histórico). Em blocos de 100 ids;
+     * `null` se alguma leitura falhou.
+     */
+    async responsaveisDasLinhas(
+      ids: readonly string[],
+    ): Promise<{ id: string; responsavel_id: string | null; ajuste_de_id: string | null }[] | null> {
+      const cliente = obterCliente();
+      if (!cliente) return null;
+      try {
+        const saida: { id: string; responsavel_id: string | null; ajuste_de_id: string | null }[] = [];
+        for (const bloco of blocos(ids)) {
+          const { data, error } = await cliente.from("lancamentos").select("id, responsavel_id, ajuste_de_id").in("id", bloco);
+          if (error || !data) return null;
+          saida.push(...data);
+        }
+        return saida;
+      } catch {
+        return null;
+      }
+    },
+
+    /** As linhas inteiras de um Pagamento (o detalhe), vivas ou excluídas depois. `null` se a leitura falhou. */
+    async linhasDoPagamento(ids: readonly string[]): Promise<LinhaLancamento[] | null> {
+      const cliente = obterCliente();
+      if (!cliente) return null;
+      try {
+        const saida: LinhaLancamento[] = [];
+        for (const bloco of blocos(ids)) {
+          const { data, error } = await cliente.from("lancamentos").select("*").in("id", bloco);
+          if (error || !data) return null;
+          saida.push(...data);
+        }
+        return saida;
+      } catch {
+        return null;
       }
     },
   };
@@ -205,6 +298,8 @@ export function repoPagamentos(): RepoPagamentos {
     obterCliente: () => criarClienteNavegador() as SupabaseClient<Database> | null,
     memoriaLancamentos: gerenciador("lancamentos"),
     memoriaItens: gerenciador("pagamento_itens"),
+    memoriaPagamentos: gerenciador("pagamentos"),
+    memoriaItensDoHistorico: gerenciadorItensDoHistorico(),
   });
   return repo;
 }

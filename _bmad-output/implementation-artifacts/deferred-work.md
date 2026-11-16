@@ -329,12 +329,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-1-marcar-como-pago.md`
   summary: Depois de aplicar um Pagamento a Seleção continua marcada (como em "Classificar em lote"), e as linhas já pagas aparecem como "já pagas" na janela se Rafael tentar de novo; não há "Limpar a Seleção ao terminar".
   evidence: Low. Decisão 20 da 6.1; basta tocar em "Limpar".
-- source_spec: `_bmad-output/implementation-artifacts/spec-6-1-marcar-como-pago.md`
-  summary: O "Desfazer" do aviso lê o Pagamento do banco antes de gravar (itens vivos, linhas e itens de outros Pagamentos); se o Pagamento já foi desfeito em outro aparelho, a RPC só devolve o estado. A tela de histórico e o teste de aceite com dois Pagamentos fora de ordem no banco são da 6.3.
-  evidence: Low. O núcleo já tem o caso "dois Pagamentos fora de ordem" em teste (`pagamento.test.ts`); a 6.1 só liga o repositório e a RPC.
-- source_spec: `_bmad-output/implementation-artifacts/spec-6-1-marcar-como-pago.md`
-  summary: Os gerenciadores de `pagamentos` não têm consumidor ainda (só `pagamento_itens`, por Mês, que o Painel lê); a 6.3 (histórico) e a 6.5 ("Recebido no mês") vão precisar de um escopo próprio, e os itens de TODOS os Meses (`projetarPendente`) não cabem no escopo por Mês.
-  evidence: Low. Decisão 15 da 6.1; o PostgREST corta em 1000 linhas, então o histórico e o pendente leem por página ou por consulta própria, como a 5.2 anota para as Contas.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
   summary: O que só o CI prova na 6.2: a migração `20261128120000_pagamento_parcial.sql` em Postgres de verdade (a coluna `status_aplicado_id` anulável, o gatilho novo, `aplicar_pagamento` com os três modos e `desfazer_pagamento`), `test/integracao/pagamentos.test.ts` (inclui o item parcial, o gatilho e o Realtime da linha parcial), a igualdade de `database.types.ts` com o gerado (só `status_aplicado_id` muda) e o backup com o item parcial em `test/backup/dados-exemplo.sql`.
   evidence: Medium não verificado. Sem Docker: o SQL foi provado no pglite (todas as migrações em ordem, o núcleo real por `jiti`, 13 cenários e 16 recusas). Não provam RLS por papel, `grant` de verdade, Realtime nem PostgREST. A migração NÃO foi aplicada: depois do merge, `supabase db push` a pedido de Rafael.
@@ -345,7 +339,7 @@
   summary: Conferir em produção, depois do `db push`, com dados reais, "Fica pendente" e "Não é dívida, é a minha parte", o selo em dois aparelhos, a mensagem do Bloco com um Pago parcialmente e o "Desfazer" de cada modo. Entre o merge e o `db push` só o modo `total` grava (a RPC antiga recusa `parcial` e `minha_parte`).
   evidence: Medium, não verificado em produção. Nenhum dado de produção foi lido nem alterado.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
-  summary: No modo `minha_parte` os itens guardam o restante inteiro de cada linha e o valor realmente recebido fica só em `pagamentos.valor_recebido_centavos`; Σ itens − valor recebido é "a minha parte". A 6.3 (histórico) e a 6.5 ("Recebido no mês") têm de somar o valor do Pagamento, não os itens, para saber o que entrou; os itens dizem o que cada linha quitou.
+  summary: No modo `minha_parte` os itens guardam o restante inteiro de cada linha e o valor realmente recebido fica só em `pagamentos.valor_recebido_centavos`; Σ itens − valor recebido é "a minha parte". O Histórico (6.3) já mostra o valor recebido na lista e "A minha parte" no detalhe; a 6.5 ("Recebido no mês") tem de somar o valor do Pagamento, não os itens, para saber o que entrou.
   evidence: Low. Decisão 2 da 6.2: o AD-10 diz "soma dos itens = valor recebido", mas isso só vale para `total` e `parcial`; em `minha_parte` nenhum item pode ser zero (o `check` proíbe) e desfazer precisa de um item por linha para devolver o Status.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
   summary: O valor do Bloco no cartão do Painel (e o `resumirBloco`) ainda soma o valor cheio de um Pago parcialmente; só a mensagem de cobrança usa o restante. O "Falta receber" do Bloco, `projetarPendente` e a barra de Recebimentos (6.5) são quem passa a usar `restante` nas telas de Recebimentos.
@@ -354,5 +348,29 @@
   summary: Um Ajuste de centavos negativo (crédito de centavos) de uma parcela comum não é crédito na alocação: acompanha a parcela e, num "Fica pendente" cujo valor acaba na parcela, fica em aberto (restante negativo de poucos centavos) em vez de ser quitado antes.
   evidence: Low. Decisão 4 da 6.2; o total do Pagamento (valor = total) continua quitando os dois. Se incomodar, o Ajuste negativo pode entrar sempre junto da parcela quando ela leva qualquer valor.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
-  summary: Um item parcial vivo numa linha que Rafael depois marcou como paga à mão (sem Pagamento que feche o valor) fica no banco: a linha é "paga" pelo Status e o item só some ao desfazer o Pagamento parcial (6.3). Tirar o "pago" dessa linha à mão é permitido (o item parcial não aplicou Status), e a linha volta a ser Pago parcialmente.
+  summary: Um item parcial vivo numa linha que Rafael depois marcou como paga à mão (sem Pagamento que feche o valor) fica no banco: a linha é "paga" pelo Status e o item só some ao desfazer o Pagamento parcial, o que agora se faz pelo Histórico (6.3; a confirmação diz "só recebeu parte do valor: o status não muda"). Tirar o "pago" dessa linha à mão é permitido (o item parcial não aplicou Status), e a linha volta a ser Pago parcialmente.
   evidence: Low. Decisão 1 da 6.2 (o gatilho olha só o "pago" que veio de um Pagamento).
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-historico-e-desfazer-pagamentos.md`
+  summary: O Responsável de um Pagamento é derivado das linhas dos itens ("Casal e Rangel · minha parte"), não "quem pagou" como no Flow 3 do EXPERIENCE ("Rangel · R$ 2.819,68 · minha parte"). Gravar quem pagou (o Responsável ou o Bloco de cobrança) pede a janela "Aplicar status" perguntar, `aplicar_pagamento` receber e conferir o campo e uma migração; os Pagamentos já gravados ficariam sem o dado.
+  evidence: Low. Decisão 1 da 6.3. A 6.5 (cartões por Bloco) é quem melhor sabe de que Bloco veio o dinheiro: pode gravar o Bloco no Pagamento e o Histórico passar a mostrá-lo.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-historico-e-desfazer-pagamentos.md`
+  summary: O Histórico lê de quem são as linhas dos itens (`responsavel_id`) uma vez por linha: se o Responsável de uma linha paga mudar em outro aparelho, a lista só mostra o novo ao reabrir a tela. O detalhe sem conexão não carrega os nomes (as linhas são lidas ao abrir).
+  evidence: Low. Decisões 2 e 8 da 6.3. Resolve-se com um gerenciador (ou escopo) de `lancamentos` pelos ids dos itens, ou guardando o Responsável no item no momento do Pagamento.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-historico-e-desfazer-pagamentos.md`
+  summary: O Pagamento desfeito não aparece na tela (continua no banco, AD-16): não há "Mostrar desfeitos" nem trilha de quem desfez e quando.
+  evidence: Low. Decisão 3 da 6.3. Seria um filtro sobre o mesmo gerenciador sem o escopo de vivos (e os itens com `excluido_em`), se Rafael quiser auditar.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-historico-e-desfazer-pagamentos.md`
+  summary: A lista do Histórico desenha todos os Pagamentos de uma vez (a leitura é paginada, a tela não): com algumas centenas de linhas, virtualizar ou agrupar por Mês é a saída.
+  evidence: Low. Decisão 7 da 6.3. Um Pagamento por semana são ~50 por ano; as linhas são botões leves.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-historico-e-desfazer-pagamentos.md`
+  summary: Um UPDATE antigo (fora de ordem) de um Pagamento que o gerenciador de vivos já tirou da memória o traz de volta até a tela ser recarregada: o escopo por predicado não guarda o que saiu. Vale também para as Contas manuais e a fila do Revisar.
+  evidence: Low. `src/data/realtime-historico.test.ts` não cobre o caso de propósito (o Realtime entrega em ordem de commit). O `desfazer` de um Pagamento assim responde "já foi desfeito" e a memória se corrige.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-historico-e-desfazer-pagamentos.md`
+  summary: Desfazer o Pagamento mais antigo antes do mais novo, quando o mais novo tocou a mesma linha com outro Status, deixa a linha como está; depois, desfazer o mais novo devolve o Status que ele guardou (o "pago" de antes), que já não tem Pagamento por trás. É o que o AD-10 manda; a confirmação avisa "desfaça esse pagamento primeiro se quiser voltar o status".
+  evidence: Low. Decisão 6 da 6.3. O app não cria esse caso hoje (a projeção e a RPC recusam linha já paga); só um Status que deixa de contar como pago (pendência da 6.1) ou a 6.9 poderiam criá-lo.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-historico-e-desfazer-pagamentos.md`
+  summary: O que só o CI prova na 6.3: `test/integracao/pagamentos.test.ts` (os cenários "fora de ordem" no banco de verdade, a leitura `order id` + `range` pelo PostgREST, o `in` de `lancamentos` com `id, responsavel_id, ajuste_de_id` e o Realtime de `pagamentos`). Sem migração nesta história.
+  evidence: Medium não verificado. Sem Docker: os mesmos cenários rodaram no pglite com todas as migrações e o núcleo real (E1 a E6); isso não prova RLS por papel, PostgREST nem Realtime.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-historico-e-desfazer-pagamentos.md`
+  summary: Conferir no iPad o Histórico: as linhas de 44 pt, o filtro por Responsável, o detalhe e a confirmação empilhados, o foco (abre em "Cancelar" e, depois de desfazer, vai para o título da seção), o VoiceOver lendo a linha ("12/10/26, Casal e Rangel, minha parte · 3 lançamentos…") e o botão desativado sem conexão.
+  evidence: Low, não verificado. O jsdom só confere o DOM, os nomes, os `role` e as classes; layout, toque e leitor de tela só um aparelho prova. Junta-se às pendências do VoiceOver da 2.4, da 6.1 e da 6.2.

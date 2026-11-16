@@ -26,6 +26,10 @@
 // gerenciador). Evento ou gravação que tira uma linha do predicado a remove
 // da memória (se for mais novo que a versão guardada); linha de fora nunca
 // entra.
+//
+// Leitura paginada (`paginar`, História 6.3): o PostgREST corta a resposta em 1000 linhas, então
+// uma tabela que pode passar disso (o histórico de Pagamentos e os itens deles, de todos os
+// Meses) é lida por páginas (`order id` + `range`) até uma página vir incompleta.
 
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { useSyncExternalStore } from "react";
@@ -83,6 +87,9 @@ export type Gerenciador<L extends LinhaBase> = {
   mesAberto(): string | null;
 };
 
+/** O corte do PostgREST: uma página lida por vez. */
+const TAMANHO_DA_PAGINA = 1000;
+
 const RETRATO_SERVIDOR: Retrato<never> = { status: "carregando", linhas: [] };
 
 /** O `mes` de uma linha de tabela com escopo por Mês. */
@@ -104,8 +111,18 @@ export function criarGerenciador<L extends LinhaBase>(opcoes: {
   filtrarLeitura?: (consulta: ConsultaLeitura) => ConsultaLeitura;
   /** Nome do canal (padrão: `tabela:<tabela>`); dois gerenciadores da mesma tabela precisam de nomes diferentes. */
   canal?: string;
+  /** Lê a tabela por páginas de 1000 linhas (para o que pode passar do corte do PostgREST). */
+  paginar?: boolean;
 }): Gerenciador<L> {
-  const { tabela, obterCliente, porMes = false, pertence, filtrarLeitura, canal: nomeDoCanal = `tabela:${tabela}` } = opcoes;
+  const {
+    tabela,
+    obterCliente,
+    porMes = false,
+    pertence,
+    filtrarLeitura,
+    canal: nomeDoCanal = `tabela:${tabela}`,
+    paginar = false,
+  } = opcoes;
   let estado: EstadoTabela<L> = estadoInicial<L>();
   let mes: string | null = null;
   const comMes = (r: Omit<Retrato<L>, "mes">): Retrato<L> => (porMes ? { ...r, mes } : r);
@@ -152,9 +169,35 @@ export function criarGerenciador<L extends LinhaBase>(opcoes: {
       if (estado.status !== "pronto") mudar(marcarStatus(estado, "erro"));
     };
     try {
-      let consulta: ConsultaLeitura = cliente.from(tabela).select("*");
-      if (filtrarLeitura) consulta = filtrarLeitura(consulta);
-      const { data, error } = await (porMes && lido !== null ? consulta.eq("mes", lido) : consulta);
+      const novaConsulta = (): ConsultaLeitura => {
+        let consulta: ConsultaLeitura = cliente.from(tabela).select("*");
+        if (filtrarLeitura) consulta = filtrarLeitura(consulta);
+        return porMes && lido !== null ? consulta.eq("mes", lido) : consulta;
+      };
+      let data: unknown[] | null;
+      let error: unknown;
+      if (paginar) {
+        // Uma consulta nova por página (o construtor do PostgREST não se reaproveita) e uma ordem
+        // estável (`id`) para as páginas não repetirem nem pularem linhas.
+        data = [];
+        for (let de = 0; ; de += TAMANHO_DA_PAGINA) {
+          const pagina = await novaConsulta()
+            .order("id")
+            .range(de, de + TAMANHO_DA_PAGINA - 1);
+          if (minha !== leitura) return;
+          if (pagina.error || !pagina.data) {
+            data = null;
+            error = pagina.error ?? true;
+            break;
+          }
+          data.push(...pagina.data);
+          if (pagina.data.length < TAMANHO_DA_PAGINA) break;
+        }
+      } else {
+        const resposta = await novaConsulta();
+        data = resposta.data as unknown[] | null;
+        error = resposta.error;
+      }
       if (minha !== leitura) return;
       if (error || !data) {
         falhou();
@@ -341,6 +384,18 @@ export const ESCOPO_DAS_CONTAS = {
   filtrarLeitura: (consulta: ConsultaLeitura) => consulta.is("excluido_em", null),
 } as const;
 
+/**
+ * O Histórico de Pagamentos (História 6.3, AD-16) lê só os Pagamentos vivos: o desfeito sai da
+ * memória (por evento ou por gravação) e continua no banco. Os itens do histórico são os itens
+ * vivos de TODOS os Meses. As duas leituras são paginadas (passam de 1000 linhas com o tempo).
+ */
+const vivo = (linha: LinhaBase) => ((linha as { excluido_em?: string | null }).excluido_em ?? null) === null;
+export const ESCOPO_DO_HISTORICO = {
+  pertence: vivo,
+  filtrarLeitura: (consulta: ConsultaLeitura) => consulta.is("excluido_em", null),
+  paginar: true,
+} as const;
+
 /** O gerenciador único da tabela (criado na primeira chamada). */
 export function gerenciador<T extends TabelaRealtime>(tabela: T): Gerenciador<LinhaDe<T>> {
   let g = gerenciadores.get(tabela);
@@ -352,6 +407,7 @@ export function gerenciador<T extends TabelaRealtime>(tabela: T): Gerenciador<Li
       obterCliente: criarClienteNavegador,
       porMes: tabela === "lancamentos" || tabela === "pagamento_itens",
       ...(tabela === "contas_manuais" ? ESCOPO_DAS_CONTAS : {}),
+      ...(tabela === "pagamentos" ? ESCOPO_DO_HISTORICO : {}),
     });
     gerenciadores.set(tabela, g);
   }
@@ -389,6 +445,36 @@ export function gerenciadorFila(): Gerenciador<LinhaDe<"lancamentos">> {
     gerenciadores.set(CHAVE_FILA, g);
   }
   return g as unknown as Gerenciador<LinhaDe<"lancamentos">>;
+}
+
+/** A chave do gerenciador dos itens vivos de Pagamento de todos os Meses. */
+const CHAVE_ITENS_DO_HISTORICO = "pagamento_itens:historico";
+
+/**
+ * Os itens vivos de Pagamento de TODOS os Meses (História 6.3): a lista do Histórico precisa de
+ * quantos Lançamentos cada Pagamento tocou e de quais. O gerenciador de `pagamento_itens` guarda só
+ * o Mês aberto (AD-4); este tem canal próprio, lê por páginas e entra em `recarregarTodos`. O item
+ * de um Pagamento desfeito (UPDATE com `excluido_em`) sai da memória.
+ */
+export function gerenciadorItensDoHistorico(): Gerenciador<LinhaDe<"pagamento_itens">> {
+  let g = gerenciadores.get(CHAVE_ITENS_DO_HISTORICO);
+  if (!g) {
+    ligarAoDetector();
+    g = criarGerenciador<LinhaDe<"pagamento_itens">>({
+      tabela: "pagamento_itens",
+      obterCliente: criarClienteNavegador,
+      canal: "tabela:pagamento_itens:historico",
+      ...ESCOPO_DO_HISTORICO,
+    }) as unknown as Gerenciador<LinhaBase>;
+    gerenciadores.set(CHAVE_ITENS_DO_HISTORICO, g);
+  }
+  return g as unknown as Gerenciador<LinhaDe<"pagamento_itens">>;
+}
+
+/** Itens vivos de Pagamento de todos os Meses em memória, em tempo real (o Histórico). */
+export function useItensDoHistorico(): Retrato<LinhaDe<"pagamento_itens">> {
+  const g = gerenciadorItensDoHistorico();
+  return useSyncExternalStore(g.assinar, g.retrato, () => RETRATO_SERVIDOR);
 }
 
 /** Linhas da fila do Revisar em memória (todos os Meses), em tempo real. */
