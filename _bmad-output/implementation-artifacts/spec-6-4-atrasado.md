@@ -2,7 +2,7 @@
 title: 'História 6.4: Atrasado'
 type: 'feature'
 created: '2026-11-16'
-status: 'review'
+status: 'done'
 baseline_commit: '982095c'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -93,8 +93,8 @@ Vencimento 06/11/26 (Mês 2026-11), tolerância 10, linha de R$ 100,00 "Não pag
 - [x] Interface: `SeloStatus` e `useHoje`; selo na grade e no painel do Lançamento; filtro de Status com "Atrasado"; só calcula com os dados lidos.
 - [x] Provas: núcleo (limite, tolerância 0 e 60, virada de mês e de ano, bissexto, meia-noite UTC, `vencimento_combinado` com e sem, o que nunca atrasa), jsdom (grade, Painel, `useHoje`, `SeloStatus`).
 - [x] Docs: `sprint-status.yaml` (6.4 em `review`), `deferred-work.md`, `docs/infraestrutura.md` (sem migração).
-- [ ] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
-- [ ] `done` no sprint-status só depois do merge, em PR separada.
+- [x] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
+- [x] `done` no sprint-status só depois do merge, em PR separada.
 
 ## Verification
 
