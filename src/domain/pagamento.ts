@@ -5,7 +5,7 @@
 // - `ehPago(l) = status.conta_como_pago` e `restante(l) = ehPago ? 0 : valor −
 //   Σ itens não excluídos` (AD-10). "Pago parcialmente" (`pagoParcialmente`,
 //   0 < Σ itens < valor, sem Status pago) é calculado e nunca gravado (6.2);
-//   "Atrasado" vem com a 6.4.
+//   "Atrasado" também (`estaAtrasado`, em `atraso.ts`, 6.4).
 // - `projetarPagamento`: da Seleção às linhas que o Pagamento quita. A Seleção
 //   guarda unidades da grade (a linha comum e as partes de uma Divisão; a mãe
 //   dividida nunca soma, AD-8) e o Ajuste de centavos entra junto com a parcela

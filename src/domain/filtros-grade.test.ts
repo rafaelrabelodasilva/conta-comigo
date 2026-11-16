@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { conferir } from "./conferencia";
 import {
+  FILTRO_ATRASADO,
   FILTROS_VAZIOS,
   alternarResponsavelUnico,
   alternarBloco,
@@ -166,6 +167,7 @@ describe("valoresDaColuna", () => {
     expect(valoresDaColuna("status", linhas, FILTROS_VAZIOS, null, cadastros).map((o) => o.rotulo)).toEqual([
       "Não pago",
       "Pago",
+      "Atrasado",
       "Sem status",
     ]);
     expect(valoresDaColuna("status", linhas, FILTROS_VAZIOS, null, cadastros).at(-1)).toMatchObject({
@@ -450,5 +452,78 @@ describe("filtro por Bloco (FR-20)", () => {
     // Enquanto a lista de Blocos carrega, "ausente" não apaga o filtro.
     expect(motivoParaDesfazerBloco({ estado: "ausente" }, false)).toBeNull();
     expect(motivoParaDesfazerBloco({ estado: "sem_valor", nome: "X" }, false)).toBe("filtro_desfeito_sem_valor");
+  });
+});
+
+describe("Atrasado, um valor calculado da coluna Status (6.4)", () => {
+  const linhas = [
+    lanc("1", { status_id: "s-nao" }), // atrasada
+    lanc("2", { status_id: "s-nao" }), // não pago, em dia
+    lanc("3", { status_id: "s-pago" }),
+    lanc("4", { status_id: null }), // sem Status e atrasada
+  ];
+  const atrasadas = new Set(["1", "4"]);
+
+  it("o Lançamento atrasado tem o Status gravado e também o valor Atrasado", () => {
+    expect(valoresDoLancamento(linhas[0], "status", atrasadas)).toEqual(["s-nao", FILTRO_ATRASADO]);
+    expect(valoresDoLancamento(linhas[1], "status", atrasadas)).toEqual(["s-nao"]);
+    expect(valoresDoLancamento(linhas[3], "status", atrasadas)).toEqual([null, FILTRO_ATRASADO]);
+  });
+
+  it("sem o conjunto, ninguém tem o valor Atrasado (quem chama como antes não muda)", () => {
+    expect(valoresDoLancamento(linhas[0], "status")).toEqual(["s-nao"]);
+    expect(ids(aplicarFiltros(linhas, definirColuna(FILTROS_VAZIOS, "status", [FILTRO_ATRASADO]), null))).toEqual([]);
+  });
+
+  it("filtrar só por Atrasado mostra só os atrasados", () => {
+    const f = definirColuna(FILTROS_VAZIOS, "status", [FILTRO_ATRASADO]);
+    expect(ids(aplicarFiltros(linhas, f, null, undefined, atrasadas))).toEqual(["1", "4"]);
+  });
+
+  it("soma-se (OU) aos Status cadastrados: Não pago inclui os atrasados, que seguem Não pago", () => {
+    const naoPago = definirColuna(FILTROS_VAZIOS, "status", ["s-nao"]);
+    expect(ids(aplicarFiltros(linhas, naoPago, null, undefined, atrasadas))).toEqual(["1", "2"]);
+    const dois = definirColuna(FILTROS_VAZIOS, "status", ["s-pago", FILTRO_ATRASADO]);
+    expect(ids(aplicarFiltros(linhas, dois, null, undefined, atrasadas))).toEqual(["1", "3", "4"]);
+  });
+
+  it("soma-se (E) às outras colunas", () => {
+    const l = [
+      lanc("1", { status_id: "s-nao", responsavel_id: "r-rafael" }),
+      lanc("2", { status_id: "s-nao", responsavel_id: "r-casal" }),
+    ];
+    let f = definirColuna(FILTROS_VAZIOS, "status", [FILTRO_ATRASADO]);
+    f = definirColuna(f, "responsavel", ["r-casal"]);
+    expect(ids(aplicarFiltros(l, f, null, undefined, new Set(["1", "2"])))).toEqual(["2"]);
+  });
+
+  it("a lista de valores tem Atrasado entre os Status e Sem status, com a contagem", () => {
+    const lista = valoresDaColuna("status", linhas, FILTROS_VAZIOS, null, cadastros, [], atrasadas);
+    expect(lista.map((o) => [o.rotulo, o.contagem])).toEqual([
+      ["Não pago", 2],
+      ["Pago", 1],
+      ["Atrasado", 2],
+      ["Sem status", 1],
+    ]);
+    expect(lista.find((o) => o.rotulo === "Atrasado")).toMatchObject({ valor: FILTRO_ATRASADO, curto: "Atrasado" });
+  });
+
+  it("Atrasado fica na lista com contagem 0 mesmo sem ninguém atrasado", () => {
+    const lista = valoresDaColuna("status", linhas, FILTROS_VAZIOS, null, cadastros);
+    expect(lista.find((o) => o.valor === FILTRO_ATRASADO)?.contagem).toBe(0);
+  });
+
+  it("a contagem de Atrasado respeita as outras colunas e a de Não pago não muda por ele", () => {
+    const f = definirColuna(FILTROS_VAZIOS, "status", [FILTRO_ATRASADO]);
+    const lista = valoresDaColuna("status", linhas, f, null, cadastros, [], atrasadas);
+    // A própria coluna não entra na contagem: os valores seguem contando sobre todas as linhas.
+    expect(lista.find((o) => o.rotulo === "Não pago")?.contagem).toBe(2);
+  });
+
+  it("o escolhido Atrasado não vira um 'id que sumiu' na lista, e a pílula diz Status: Atrasado", () => {
+    const f = definirColuna(FILTROS_VAZIOS, "status", [FILTRO_ATRASADO]);
+    const lista = valoresDaColuna("status", linhas, f, null, cadastros, [], atrasadas);
+    expect(lista.map((o) => o.rotulo)).toEqual(["Não pago", "Pago", "Atrasado", "Sem status"]);
+    expect(rotuloDaPilula("status", f, lista)).toBe("Status: Atrasado");
   });
 });

@@ -11,6 +11,7 @@ import {
   instanteEmMicros,
   lerMes,
   partesMes,
+  somarDias,
 } from "./datas";
 
 describe("lerMes, partesMes e dois", () => {
@@ -116,5 +117,32 @@ describe("formatarDiaMes (História 3.4)", () => {
     expect(formatarDiaMes("2026-10-01")).toBe("01/10");
     expect(formatarDiaMes("2026-11-30")).toBe("30/11");
     expect(() => formatarDiaMes("01/10")).toThrow();
+  });
+});
+
+describe("somarDias", () => {
+  it("soma dias corridos, atravessando mês e ano", () => {
+    expect(somarDias("2026-11-06", 10)).toBe("2026-11-16");
+    expect(somarDias("2026-11-16", 1)).toBe("2026-11-17");
+    expect(somarDias("2026-11-30", 1)).toBe("2026-12-01");
+    expect(somarDias("2026-12-31", 1)).toBe("2027-01-01");
+    expect(somarDias("2026-11-06", 61)).toBe("2027-01-06");
+    expect(somarDias("2026-11-06", 0)).toBe("2026-11-06");
+  });
+
+  it("sabe fevereiro, inclusive de ano bissexto", () => {
+    expect(somarDias("2027-02-28", 1)).toBe("2027-03-01");
+    expect(somarDias("2028-02-28", 1)).toBe("2028-02-29");
+    expect(somarDias("2028-02-29", 1)).toBe("2028-03-01");
+  });
+
+  it("aceita dias negativos", () => {
+    expect(somarDias("2027-01-01", -1)).toBe("2026-12-31");
+  });
+
+  it("recusa data que não existe, em vez de rolar para o mês seguinte", () => {
+    expect(() => somarDias("2026-02-31", 1)).toThrow();
+    expect(() => somarDias("2027-02-29", 1)).toThrow();
+    expect(() => somarDias("17/11/26", 1)).toThrow();
   });
 });

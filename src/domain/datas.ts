@@ -71,6 +71,23 @@ export function formatarData(data: string): string {
   return `${data.slice(8, 10)}/${data.slice(5, 7)}/${data.slice(2, 4)}`;
 }
 
+/**
+ * `data` (`AAAA-MM-DD`) mais `n` dias corridos (n pode ser negativo), no calendário, sem
+ * fuso nem relógio: 16/11 + 1 = 17/11, 30/12 + 3 = 02/01 do ano seguinte. Lança se `data`
+ * não existir no calendário (como `formatarData`).
+ */
+export function somarDias(data: string, n: number): string {
+  if (!DATA.test(data)) throw new Error(`Data inválida: ${data}`);
+  const ano = Number(data.slice(0, 4));
+  const mes = Number(data.slice(5, 7));
+  const dia = Number(data.slice(8, 10));
+  const base = new Date(Date.UTC(ano, mes - 1, dia));
+  // Um dia que não existe (31/02) rolaria para o mês seguinte: recusa em vez de somar errado.
+  if (base.getUTCMonth() !== mes - 1 || base.getUTCDate() !== dia) throw new Error(`Data inválida: ${data}`);
+  const t = new Date(base.getTime() + n * 86_400_000);
+  return `${t.getUTCFullYear()}-${dois(t.getUTCMonth() + 1)}-${dois(t.getUTCDate())}`;
+}
+
 /** `AAAA-MM-DD` → "06/11". Lança se não estiver nesse formato. */
 export function formatarDiaMes(data: string): string {
   if (!DATA.test(data)) throw new Error(`Data inválida: ${data}`);

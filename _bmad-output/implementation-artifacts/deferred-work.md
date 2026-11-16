@@ -374,3 +374,24 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-3-historico-e-desfazer-pagamentos.md`
   summary: Conferir no iPad o Histórico: as linhas de 44 pt, o filtro por Responsável, o detalhe e a confirmação empilhados, o foco (abre em "Cancelar" e, depois de desfazer, vai para o título da seção), o VoiceOver lendo a linha ("12/10/26, Casal e Rangel, minha parte · 3 lançamentos…") e o botão desativado sem conexão.
   evidence: Low, não verificado. O jsdom só confere o DOM, os nomes, os `role` e as classes; layout, toque e leitor de tela só um aparelho prova. Junta-se às pendências do VoiceOver da 2.4, da 6.1 e da 6.2.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-4-atrasado.md`
+  summary: O EXPERIENCE.md ("O Lucas tem R$ 115,16 em atraso desde 16/11/26", faixa e aviso de lembrete) e a História 7.4 dizem que o atraso começa em 16/11/26 para vencimento 06/11 e tolerância 10; a regra decidida na 6.4 (e a UJ-2 do PRD) é 17/11/26: vencimento + tolerância ainda está em dia, vencimento + tolerância + 1 já é atraso. Alinhar os dois textos quando o lembrete (Épico 7) for feito, e usar `primeiroDiaDeAtraso` do núcleo na data do aviso.
+  evidence: Low. Decisão 1 da 6.4 (fecha o ponto 2 do `implementation-readiness.md`). Só texto: o código já segue a regra.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-4-atrasado.md`
+  summary: `vencimentoDoMes` (`ciclo.ts`) só conhece o Ciclo, embora o AD-9 o defina como "o vencimento da Fatura ou, se ela não existe, o do Ciclo". A 6.4 não o mudou: `vencimentoDoLancamento` (`atraso.ts`) aplica a ordem vencimento combinado → `faturas.vencimento` → Ciclo. Se outra história precisar do vencimento de um Mês, usar `vencimentoDoLancamento`, ou mover a Fatura para dentro de `vencimentoDoMes`.
+  evidence: Low. Decisão 3 da 6.4.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-4-atrasado.md`
+  summary: Ao ligar o campo `vencimento_combinado` (6.6), passá-lo nas linhas que chegam a `atrasosDasLinhas` (a função já o lê, com testes com e sem o campo) e tirar da mensagem as Dívidas programadas ainda não vencidas. A 6.5 (cartões por Bloco, de todos os Meses) usa `atrasosDasLinhas` com `vencimentosDasFaturas` de todos os Meses e os itens de Pagamento de todos os Meses (`gerenciadorItensDoHistorico`), não só os do Mês aberto.
+  evidence: Low. Decisões 11 e 13 da 6.4; a tela de hoje só calcula o Mês aberto.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-4-atrasado.md`
+  summary: Os Meses importados da planilha (3.10) entram na regra: uma linha `historico` sem Status que conta como pago, de um Mês que já passou, aparece como Atrasado (a importação só marca como pago o nome "Pago"). Pode haver muitas linhas em vermelho no primeiro uso real; conferir com os Meses importados e, se incomodar, marcar o histórico como pago na importação ou excluí-lo do atraso.
+  evidence: Medium, não verificado com dados reais (nenhum dado de produção foi lido). Decisão 14 da 6.4.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-4-atrasado.md`
+  summary: Crédito, estorno e valor zero nunca ficam Atrasado (não há o que cobrar), decisão da 6.4 além da lista do pedido; a ordenação da coluna Status segue o nome do Status gravado (não o selo "Atrasado"); e um Status cadastrado chamado "Atrasado" aparece como duas linhas de mesmo nome no popover do filtro.
+  evidence: Low. Decisões 5 e 8 da 6.4. Se Rafael quiser créditos em atraso, ou ordenar por atraso, é uma mudança pequena no núcleo (`podeAtrasar`) e em `ordenarGrade`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-4-atrasado.md`
+  summary: O "hoje" da tela (`useHoje`) relê o relógio a cada minuto e ao voltar o foco; a virada do dia só aparece em até 1 minuto, e o Mês que abre (`mesAtual`, `useState` do Painel) não acompanha a virada do mês com a tela aberta. O Pagamento usa o próprio "hoje" de quando a janela abre.
+  evidence: Low. Decisão 6 da 6.4.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-4-atrasado.md`
+  summary: Conferir no iPad o selo "Atrasado" na grade (cor `status-late` no claro e no escuro, o selo duplo "Pago parcialmente" + "Atrasado" na coluna Status, a largura da coluna), o VoiceOver lendo "atrasado desde 17/11/26" na linha, o filtro de Status com "Atrasado" e a virada da meia-noite com o app aberto.
+  evidence: Low, não verificado. O jsdom só confere o DOM, os nomes, os `role` e as classes. Junta-se às pendências do VoiceOver da 2.4, da 6.1, da 6.2 e da 6.3.

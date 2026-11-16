@@ -461,6 +461,23 @@ export const COLUNAS_GRADE = {
 export const ROTULO_PREVISTO = "Previsto";
 
 /**
+ * O selo "Atrasado" (História 6.4, FR-49): calculado, nunca gravado. Substitui o "Não pago" na
+ * grade e é também o valor "Atrasado" do filtro de Status. Vive aqui para a grade, o filtro, o
+ * painel do Lançamento e os cartões de Recebimentos (6.5) dizerem a mesma palavra.
+ */
+export const ROTULO_ATRASADO = "Atrasado";
+
+/** "atrasado desde 17/11/26": o primeiro dia de atraso, no nome acessível do selo e na dica dele. */
+export function rotuloAtrasadoDesde(data: string): string {
+  return `atrasado desde ${formatarData(data)}`;
+}
+
+/** O painel do Lançamento: "Atrasado desde 17/11/26" (o selo e, ao lado, a data). */
+export function rotuloDesdeDoAtraso(data: string): string {
+  return `desde ${formatarData(data)}`;
+}
+
+/**
  * A origem do previsto no painel (História 3.5): "criado a partir da parcela
  * 05/10 de MAGALU na Fatura de 06/10/26". Sem a linha de origem (a Fatura foi
  * importada de novo), a frase genérica.
@@ -560,6 +577,8 @@ export const TEXTOS_FILTROS = {
   sem_resultado: "Nenhum lançamento com esses filtros",
   sem_tipo: "Sem tipo",
   sem_status: "Sem status",
+  /** O valor calculado "Atrasado" da coluna Status (6.4): ao lado dos Status cadastrados, antes de "Sem status". */
+  atrasado: ROTULO_ATRASADO,
   sem_cartao: "Sem cartão",
   a_vista: "À vista",
   parcelado: "Parcelado",

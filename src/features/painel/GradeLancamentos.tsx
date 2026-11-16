@@ -17,8 +17,10 @@ import {
   TEXTOS_LANCAMENTO,
   TEXTOS_PAGAMENTO,
   TEXTOS_PAINEL as T,
+  ROTULO_ATRASADO,
   rotuloAcoesDe,
   rotuloAjusteDe,
+  rotuloAtrasadoDesde,
   rotuloFalta,
   rotuloFiltrarPor,
   rotuloSelecionar,
@@ -39,6 +41,7 @@ import { Botao } from "@/ui/Botao";
 import { cn } from "@/ui/cn";
 import { classesPessoa } from "@/ui/cores-pessoa";
 import { MenuAcoes, useToqueLongo } from "@/ui/MenuAcoes";
+import { SeloStatus, varianteDoStatus } from "@/ui/SeloStatus";
 
 // Grade de Lançamentos do Mês (UX-DR10). Colunas: caixa, Nome (Apelido em
 // negrito + Nome em cinza), Parcela, Valor, Tipo, Responsável
@@ -73,6 +76,12 @@ import { MenuAcoes, useToqueLongo } from "@/ui/MenuAcoes";
 // contam (caixa, filtro, rodapé); a mãe aparece só como cabeçalho antes da
 // primeira filha visível, sem caixa, com o Valor apagado e "Dividido" no
 // lugar do Responsável. As filhas vêm logo abaixo, recuadas 16 px, com "↳".
+//
+// Atrasado (História 6.4, FR-49): `atrasoPorLinha` (id → primeiro dia de atraso, de `atraso.ts`)
+// troca o selo do Status pelo selo "Atrasado" (`status-late`) e o anuncia no nome da linha
+// ("atrasado desde 17/11/26"). Um "Pago parcialmente" atrasado mantém o selo dele e ganha o
+// "Atrasado" ao lado (o que falta é o que está vencido). O Ajuste de centavos mostra o selo da
+// mãe dele. Nada é gravado.
 
 export type CadastroResponsavel = { nome: string; cor: number };
 export type CadastroStatus = { nome: string; conta_como_pago: boolean };
@@ -127,6 +136,8 @@ export type PropsGradeLancamentos = {
   mesTemFatura?: boolean;
   /** As linhas "Pago parcialmente" e o que falta delas (6.2, `faltaDoParcial` do núcleo). */
   faltaPorLinha?: ReadonlyMap<string, number>;
+  /** As linhas atrasadas e o primeiro dia de atraso de cada uma (6.4, `atrasosDasLinhas` do núcleo). */
+  atrasoPorLinha?: ReadonlyMap<string, string>;
 };
 
 /** Nomes por id, para o núcleo ordenar pelo que a grade mostra. */
@@ -269,6 +280,8 @@ type PropsLinha = {
   mesTemFatura: boolean;
   /** "Pago parcialmente" (6.2): o que falta desta linha, derivado do núcleo; ausente nas outras. */
   falta?: number;
+  /** Atrasado (6.4): o primeiro dia de atraso desta linha (a do Ajuste vem da mãe); ausente nas outras. */
+  atrasadoDesde?: string;
 };
 
 /** Toque no corpo: abre o painel, menos na caixa, na `person-tag` e no ⋯ (e no menu, que fica num portal). */
@@ -296,6 +309,7 @@ function LinhaGrade({
   aoDividir,
   mesTemFatura,
   falta,
+  atrasadoDesde,
 }: PropsLinha) {
   const [menuAberto, setMenuAberto] = useState(false);
   const abrirMenu = useCallback(() => setMenuAberto(true), []);
@@ -305,6 +319,7 @@ function LinhaGrade({
   const status = l.status_id === null ? undefined : cadastros.status.get(l.status_id);
   const nome = nomeExibido(l);
   const previsto = ehPrevistoNoMes(l, mesTemFatura);
+  const textoAtraso = atrasadoDesde === undefined ? null : rotuloAtrasadoDesde(atrasadoDesde);
   // Com Apelido, o Nome original vai ao lado, em cinza.
   const temApelido = nome !== l.nome;
   const rotulo = rotuloLinhaAcessivel({
@@ -318,8 +333,8 @@ function LinhaGrade({
       papel === "cabecalho"
         ? null
         : falta !== undefined
-          ? `${TEXTOS_PAGAMENTO.pago_parcialmente}, ${rotuloFalta(falta)}`
-          : (status?.nome ?? null),
+          ? [`${TEXTOS_PAGAMENTO.pago_parcialmente}, ${rotuloFalta(falta)}`, textoAtraso].filter((t) => t !== null).join(", ")
+          : (textoAtraso ?? status?.nome ?? null),
     verificar,
     previsto,
     ajuste: mae ? { nomeMae: nomeExibido(mae), liquidoCentavos: liquidoCentavos(mae, ajustesDaMae) } : undefined,
@@ -421,24 +436,21 @@ function LinhaGrade({
         </span>
       </td>
       <td className={CELULA}>
-        {papel === "cabecalho" ? null : falta !== undefined ? (
-          <span
-            title={rotuloFalta(falta)}
-            className="rounded-full bg-status-partial-bg px-2 texto-caption text-status-partial-fg"
-          >
-            {TEXTOS_PAGAMENTO.pago_parcialmente}
+        {papel === "cabecalho" ? null : falta !== undefined || atrasadoDesde !== undefined ? (
+          <span className="inline-flex items-center gap-1">
+            {falta !== undefined ? (
+              <SeloStatus variante="parcial" title={rotuloFalta(falta)}>
+                {TEXTOS_PAGAMENTO.pago_parcialmente}
+              </SeloStatus>
+            ) : null}
+            {atrasadoDesde !== undefined ? (
+              <SeloStatus variante="atrasado" title={rotuloAtrasadoDesde(atrasadoDesde)}>
+                {ROTULO_ATRASADO}
+              </SeloStatus>
+            ) : null}
           </span>
         ) : status ? (
-          <span
-            className={cn(
-              "rounded-full px-2 texto-caption",
-              status.conta_como_pago
-                ? "bg-status-paid-bg text-status-paid-fg"
-                : "bg-status-unpaid-bg text-status-unpaid-fg",
-            )}
-          >
-            {status.nome}
-          </span>
+          <SeloStatus variante={varianteDoStatus(status.conta_como_pago)}>{status.nome}</SeloStatus>
         ) : (
           <Vazio />
         )}
@@ -473,6 +485,7 @@ const SEM_AJUSTES: ReadonlyMap<string, readonly LancamentoGrade[]> = new Map();
 
 const SEM_MAES: ReadonlyMap<string, LancamentoGrade> = new Map();
 const SEM_FALTA: ReadonlyMap<string, number> = new Map();
+const SEM_ATRASO: ReadonlyMap<string, string> = new Map();
 
 export function GradeLancamentos({
   linhas,
@@ -498,6 +511,7 @@ export function GradeLancamentos({
   semCaixaId = null,
   mesTemFatura = true,
   faltaPorLinha = SEM_FALTA,
+  atrasoPorLinha = SEM_ATRASO,
 }: PropsGradeLancamentos) {
   // A linha aberta que saiu do filtro continua na grade (opção A), fora do total.
   const comFixa = linhaFixa && !linhas.some((l) => l.id === linhaFixa.id) ? [...linhas, linhaFixa] : linhas;
@@ -549,6 +563,7 @@ export function GradeLancamentos({
               semCaixa={l.id === semCaixaId}
               mesTemFatura={mesTemFatura}
               falta={faltaPorLinha.get(l.id)}
+              atrasadoDesde={atrasoPorLinha.get(mae ? mae.id : l.id)}
             />
           ))}
         </tbody>

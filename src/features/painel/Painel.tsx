@@ -5,8 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { idsQueAcompanham, separarAjustes } from "@/domain/ajustes";
 import { lerBlocos } from "@/domain/blocos";
 import { conferir } from "@/domain/conferencia";
+import { TOLERANCIA_ATRASO_PADRAO_DIAS } from "@/domain/configuracoes";
 import { hojeEmSaoPaulo } from "@/domain/datas";
 import { ehMaeDividida, filhasPorMae, linhasDaFatura, unidadesDoMes } from "@/domain/divisao";
+import { atrasosDasLinhas } from "@/domain/atraso";
 import { alternarSelecao, alternarTodos, selecaoValida } from "@/domain/lancamento";
 import { parcelasDoLote, type CamposDoLote } from "@/domain/lote";
 import {
@@ -89,6 +91,7 @@ import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
 import { Esqueleto } from "@/ui/Esqueleto";
 import { Tela } from "@/ui/Tela";
 import { useToast } from "@/ui/Toast";
+import { useHoje } from "@/ui/use-hoje";
 import { AtalhoSelecionarTodos } from "./AtalhoSelecionarTodos";
 import { BarraFiltros } from "./BarraFiltros";
 import { BarraSelecaoPainel } from "./BarraSelecaoPainel";
@@ -183,8 +186,19 @@ import { SeletorMes } from "./SeletorMes";
 // recusado (AD-10): o lote e o painel do Lançamento conferem o núcleo antes de gravar. Os itens
 // de Pagamento do Mês aberto vêm do Realtime (`pagamento_itens`, que guarda o `mes`) e, como
 // `blocos`, não seguram o Painel: se a leitura falha, só "Aplicar status" com Pagamento espera.
+//
+// Atrasado (História 6.4, FR-49): `atrasosDasLinhas` (núcleo) diz quais Lançamentos do Mês aberto
+// passaram do vencimento + a tolerância (`configuracoes.tolerancia_atraso_dias`) sem estar pagos. O
+// "hoje" vem de um só ponto (`useHoje`, America/Sao_Paulo, atualizado quando o dia vira com a tela
+// aberta). A grade e o painel do Lançamento mostram o selo "Atrasado" e o filtro de Status ganha o
+// valor "Atrasado" (`FILTRO_ATRASADO`). Só calcula com o Ciclo, as configurações, as Faturas e os itens de
+// Pagamento do Mês lidos (antes, ninguém aparece atrasado, em vez de aparecer com a regra errada).
+// Nada é gravado.
 
 const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status", "blocos", "pagamento_itens"] as const;
+
+/** Sem ninguém atrasado: os dados do Atrasado (Ciclo, configurações, Faturas e itens de Pagamento) ainda não chegaram. */
+const SEM_ATRASO: ReadonlyMap<string, string> = new Map();
 
 type EstadoPainel = { modo: "editar"; id: string } | { modo: "novo" } | null;
 
@@ -265,6 +279,7 @@ export function Painel({ titulo }: { titulo: string }) {
   // Os itens de Pagamento do Mês aberto (6.1): quem tem Pagamento e quanto já foi quitado.
   const itensDePagamento = useLinhas("pagamento_itens");
   const online = useConexao();
+  const hoje = useHoje();
   const ciclo = useLinhas("config_ciclo");
   const configuracoes = useLinhas("configuracoes");
   // O Bloco que filtra a grade (História 4.3): quem entra vem de `avaliar` sobre a
@@ -313,6 +328,23 @@ export function Painel({ titulo }: { titulo: string }) {
   }, [itensDePagamento.linhas, doMes, statusPagos]);
   // Os itens só valem lidos e do Mês aberto (até lá, "Aplicar status" com Pagamento espera).
   const itensProntos = itensDePagamento.status === "pronto" && itensDePagamento.mes === mesAberto;
+  // Atrasado (6.4): o vencimento vem da Fatura do Mês (ou do Ciclo, sem Fatura); a tolerância, de Configurações.
+  const vencimentosDasFaturas = useMemo(() => new Map(faturas.linhas.map((f) => [f.mes, f.vencimento] as const)), [faturas.linhas]);
+  const toleranciaDeAtraso = configuracoesDoDono(configuracoes.linhas)?.tolerancia_atraso_dias ?? TOLERANCIA_ATRASO_PADRAO_DIAS;
+  const atrasoPronto = ciclo.status === "pronto" && configuracoes.status === "pronto" && faturas.status === "pronto" && itensProntos;
+  const atrasoPorLinha = useMemo(
+    () =>
+      atrasoPronto
+        ? atrasosDasLinhas(doMes, hoje, toleranciaDeAtraso, {
+            statusPagos,
+            configsCiclo: ciclo.linhas,
+            vencimentosDasFaturas,
+            recebidoCentavos: somaDosItens(itensDePagamento.linhas),
+          })
+        : SEM_ATRASO,
+    [atrasoPronto, doMes, hoje, toleranciaDeAtraso, statusPagos, ciclo.linhas, vencimentosDasFaturas, itensDePagamento.linhas],
+  );
+  const atrasadas = useMemo(() => new Set(atrasoPorLinha.keys()), [atrasoPorLinha]);
   const modeloDaMensagem = useMemo(
     () => lerModelo(configuracoesDoDono(configuracoes.linhas)?.modelo_mensagem),
     [configuracoes.linhas],
@@ -615,10 +647,10 @@ export function Painel({ titulo }: { titulo: string }) {
     // Sem Fatura não há o que verificar (nem a pílula): o filtro fica guardado.
     const verificando = filtros.verificar && conferencia !== null;
     const efetivos = { ...filtros, verificar: verificando };
-    const naGrade = aplicarFiltros(maes, filtros, conferencia);
+    const naGrade = aplicarFiltros(maes, filtros, conferencia, undefined, atrasadas);
     const cadastrosFiltro = { responsaveis: responsaveis.linhas, tipos: tipos.linhas, status: status.linhas };
     const listar = (c: ColunaFiltro, extras: readonly (string | null)[] = []) =>
-      valoresDaColuna(c, maes, filtros, conferencia, cadastrosFiltro, extras);
+      valoresDaColuna(c, maes, filtros, conferencia, cadastrosFiltro, extras, atrasadas);
     const opcoes = Object.fromEntries(COLUNAS_DA_BARRA.map((c) => [c, listar(c)])) as Record<ColunaFiltro, OpcaoFiltro[]>;
     const abertaNoMes = aberta && aberta.excluido_em === null ? aberta : null;
     // A mãe do Ajuste aberto (se ele é Ajuste de uma linha do Mês).
@@ -679,6 +711,7 @@ export function Painel({ titulo }: { titulo: string }) {
           statusPagos={statusPagos}
           quitadasPorPagamento={quitadasPorPagamento}
           faltaCentavos={faltaPorLinha.get(abertaNoMes.id) ?? null}
+          atrasadoDesde={atrasoPorLinha.get(abertaNoMes.id) ?? null}
           aoFechar={() => setPainel(null)}
           aoExcluir={setExcluindo}
         />
@@ -740,6 +773,7 @@ export function Painel({ titulo }: { titulo: string }) {
         <GradeLancamentos
           mesTemFatura={fatura !== null}
           faltaPorLinha={faltaPorLinha}
+          atrasoPorLinha={atrasoPorLinha}
           linhas={naGrade}
           ajustesPorMae={ajustesPorMae}
           maesDivididas={maesDivididas}

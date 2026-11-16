@@ -14,6 +14,12 @@
 //   "Verificar" (que só vale com a Conferência do Mês, isto é, com Fatura).
 // - Contagem de um valor: quantos Lançamentos do Mês teriam aquele valor com
 //   a busca, "Verificar" e as outras colunas aplicadas (a própria não entra).
+// - "Atrasado" (História 6.4, FR-49): um valor calculado da coluna Status, ao lado dos
+//   Status cadastrados (`FILTRO_ATRASADO`, que nunca é um id). Quem está atrasado vem de
+//   `atraso.ts`; a tela passa o conjunto de ids (`atrasadas`) e este arquivo só o usa.
+//   Atrasado soma-se (OU) aos demais valores da coluna: o Lançamento atrasado continua com o
+//   Status gravado dele (ex.: "Não pago"), então marcar "Não pago" também o inclui, e marcar só
+//   "Atrasado" mostra só os atrasados. Nada é gravado.
 
 import { resumirBloco, type Bloco } from "./blocos";
 import { precisaVerificar, type Conferencia } from "./conferencia";
@@ -45,6 +51,12 @@ export const COLUNAS_DA_BARRA: readonly ColunaFiltro[] = [
   "cartao",
 ];
 
+/** O valor "Atrasado" da coluna Status: calculado (`atraso.ts`), não é uma linha de `status`. */
+export const FILTRO_ATRASADO = "atrasado";
+
+/** Sem ninguém atrasado (o padrão: quem chama sem o conjunto não vê o valor "Atrasado" em nenhuma linha). */
+const SEM_ATRASADAS: ReadonlySet<string> = new Set();
+
 /** Os valores da coluna Parcela. */
 export type ValorParcela = "a_vista" | "parcelado" | "ultima_parcela";
 
@@ -74,6 +86,7 @@ export const FILTROS_VAZIOS: FiltrosGrade = {
 /** O que os filtros usam de um Lançamento. */
 export type LancamentoFiltro = Pick<
   LancamentoGrade,
+  | "id"
   | "nome"
   | "apelido"
   | "responsavel_id"
@@ -91,14 +104,19 @@ export type LancamentoFiltro = Pick<
  * Os valores de um Lançamento numa coluna. Na Parcela pode ser mais de um:
  * a última parcela de um parcelado é "Parcelado" e "Última parcela".
  */
-export function valoresDoLancamento(l: LancamentoFiltro, coluna: ColunaFiltro): ValorFiltro[] {
+export function valoresDoLancamento(
+  l: LancamentoFiltro,
+  coluna: ColunaFiltro,
+  atrasadas: ReadonlySet<string> = SEM_ATRASADAS,
+): ValorFiltro[] {
   switch (coluna) {
     case "responsavel":
       return [l.responsavel_id];
     case "tipo":
       return [l.tipo_id];
     case "status":
-      return [l.status_id];
+      // Atrasado é calculado: o Lançamento atrasado tem o Status gravado e também o valor "Atrasado".
+      return atrasadas.has(l.id) ? [l.status_id, FILTRO_ATRASADO] : [l.status_id];
     case "lancado_por":
       return [l.lancado_por];
     case "parcela": {
@@ -119,28 +137,35 @@ export function passaNaBusca(l: Pick<LancamentoFiltro, "nome" | "apelido">, busc
   return normalizarNome(l.nome).includes(termo) || (l.apelido !== null && normalizarNome(l.apelido).includes(termo));
 }
 
-function passaNaColuna(l: LancamentoFiltro, coluna: ColunaFiltro, escolhidos: readonly ValorFiltro[]): boolean {
+function passaNaColuna(
+  l: LancamentoFiltro,
+  coluna: ColunaFiltro,
+  escolhidos: readonly ValorFiltro[],
+  atrasadas: ReadonlySet<string>,
+): boolean {
   if (escolhidos.length === 0) return true;
-  return valoresDoLancamento(l, coluna).some((v) => escolhidos.includes(v));
+  return valoresDoLancamento(l, coluna, atrasadas).some((v) => escolhidos.includes(v));
 }
 
 /**
  * As linhas que passam pelos filtros, na ordem recebida. "Verificar" só vale
  * com a Conferência (sem Fatura, fica guardado e não filtra). `exceto` deixa
- * uma coluna de fora (a contagem do popover dela).
+ * uma coluna de fora (a contagem do popover dela). `atrasadas`: os ids atrasados de agora
+ * (`atraso.ts`), para o valor "Atrasado" da coluna Status.
  */
 export function aplicarFiltros<L extends LancamentoFiltro>(
   linhas: readonly L[],
   filtros: FiltrosGrade,
   conferencia: Conferencia | null,
   exceto?: ColunaFiltro,
+  atrasadas: ReadonlySet<string> = SEM_ATRASADAS,
 ): L[] {
   const verificando = filtros.verificar && conferencia !== null;
   return linhas.filter(
     (l) =>
       (!verificando || precisaVerificar(l, conferencia)) &&
       passaNaBusca(l, filtros.busca) &&
-      COLUNAS_DA_BARRA.every((c) => c === exceto || passaNaColuna(l, c, filtros.colunas[c])),
+      COLUNAS_DA_BARRA.every((c) => c === exceto || passaNaColuna(l, c, filtros.colunas[c], atrasadas)),
   );
 }
 
@@ -199,7 +224,8 @@ const VALORES_LANCADO_POR: readonly LancadoPor[] = ["fatura", "sistema", "manual
  * são os Lançamentos do Mês aberto (sem excluídos). `extras` são os valores
  * marcados no rascunho do popover aberto (História 2.7): como os já
  * escolhidos, continuam na lista mesmo que tenham sumido do Mês (uma
- * mudança em tempo real), com contagem 0.
+ * mudança em tempo real), com contagem 0. Na coluna Status, "Atrasado" (calculado, `atrasadas`)
+ * vem depois dos Status cadastrados e antes de "Sem status", sempre na lista.
  */
 export function valoresDaColuna(
   coluna: ColunaFiltro,
@@ -208,9 +234,10 @@ export function valoresDaColuna(
   conferencia: Conferencia | null,
   cadastros: CadastrosFiltro,
   extras: readonly ValorFiltro[] = [],
+  atrasadas: ReadonlySet<string> = SEM_ATRASADAS,
 ): OpcaoFiltro[] {
   const escolhidos = [...new Set([...filtros.colunas[coluna], ...extras])];
-  const usados = new Set(linhas.flatMap((l) => valoresDoLancamento(l, coluna)));
+  const usados = new Set(linhas.flatMap((l) => valoresDoLancamento(l, coluna, atrasadas)));
   let lista: { valor: ValorFiltro; rotulo: string; curto?: string }[];
   switch (coluna) {
     case "responsavel":
@@ -219,9 +246,17 @@ export function valoresDaColuna(
     case "tipo":
       lista = valoresDoCadastro(ordenarTipos(cadastros.tipos), usados, escolhidos, TEXTOS_FILTROS.sem_tipo);
       break;
-    case "status":
-      lista = valoresDoCadastro(ordenarStatus(cadastros.status), usados, escolhidos, TEXTOS_FILTROS.sem_status);
+    case "status": {
+      // "Atrasado" não é um cadastro: fica fora da lista de ids escolhidos que sumiram e entra à parte.
+      const doCadastro = valoresDoCadastro(
+        ordenarStatus(cadastros.status),
+        usados,
+        escolhidos.filter((v) => v !== FILTRO_ATRASADO),
+        TEXTOS_FILTROS.sem_status,
+      );
+      lista = [...doCadastro.slice(0, -1), { valor: FILTRO_ATRASADO, rotulo: TEXTOS_FILTROS.atrasado }, ...doCadastro.slice(-1)];
       break;
+    }
     case "lancado_por":
       lista = VALORES_LANCADO_POR.map((v) => ({ valor: v, rotulo: ROTULOS_LANCADO_POR[v] }));
       break;
@@ -237,12 +272,12 @@ export function valoresDaColuna(
       break;
     }
   }
-  const base = aplicarFiltros(linhas, filtros, conferencia, coluna);
+  const base = aplicarFiltros(linhas, filtros, conferencia, coluna, atrasadas);
   return lista.map((o) => ({
     valor: o.valor,
     rotulo: o.rotulo,
     curto: o.curto ?? o.rotulo,
-    contagem: base.filter((l) => valoresDoLancamento(l, coluna).includes(o.valor)).length,
+    contagem: base.filter((l) => valoresDoLancamento(l, coluna, atrasadas).includes(o.valor)).length,
   }));
 }
 

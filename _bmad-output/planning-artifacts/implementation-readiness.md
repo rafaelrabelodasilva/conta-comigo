@@ -35,6 +35,7 @@ skill: bmad-sprint-planning
 
    Também não está definido se o dia do limite ainda conta como em dia.
    *Resolver:* Rafael decide antes da História 6.4 se o primeiro dia de atraso é o vencimento + tolerância + 1. Depois, alinhar o texto com `bmad-correct-course` ou direto na história.
+   *Resolvido na História 6.4 (16/11/2026, decisão do Rafael):* o dia do vencimento e o da tolerância ainda estão em dia; o primeiro dia de atraso é vencimento + tolerância + 1 (17/11/26 no exemplo). Falta alinhar o texto do EXPERIENCE.md e da História 7.4 ("desde 16/11/26"), registrado no `deferred-work.md`.
 
 3. **Arredondamento (FR-54 × AD-2).** O PRD diz "meio para cima" e o AD-2 diz "meio para longe do zero". Os dois só dão resultados diferentes com valores negativos.
    *Resolver:* vale o AD-2, que é mais específico e já está na História 2.2. É só uma observação.

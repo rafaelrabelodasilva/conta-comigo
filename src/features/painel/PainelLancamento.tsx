@@ -25,6 +25,7 @@ import {
 import {
   ROTULOS,
   ROTULOS_LANCADO_POR,
+  ROTULO_ATRASADO,
   ROTULO_PREVISTO,
   TEXTOS_AJUSTE,
   TEXTOS_LANCAMENTO as T,
@@ -37,6 +38,7 @@ import {
   rotuloAjusteDaMae,
   rotuloAlteradoEmOutroAparelho,
   rotuloCartaoFinal,
+  rotuloDesdeDoAtraso,
   rotuloDetalhesLancamento,
   rotuloFalta,
   rotuloIncluidoEm,
@@ -67,6 +69,7 @@ import { cn } from "@/ui/cn";
 import { FaixaPergunta } from "@/ui/FaixaPergunta";
 import type { PlanoDoApelido } from "@/domain/apelido";
 import { Seletor, type OpcaoSeletor } from "@/ui/Seletor";
+import { SeloStatus } from "@/ui/SeloStatus";
 import { useToast } from "@/ui/Toast";
 
 // Painel do Lançamento (`side-panel`, História 2.7, UX-DR14, mockup
@@ -122,8 +125,18 @@ export type CadastrosPainel = {
 function FaltaDoParcial({ centavos }: { centavos: number }) {
   return (
     <p role="status" className="flex flex-wrap items-center gap-2 texto-caption text-text-muted">
-      <span className="rounded-full bg-status-partial-bg px-2 text-status-partial-fg">{TP.pago_parcialmente}</span>
+      <SeloStatus variante="parcial">{TP.pago_parcialmente}</SeloStatus>
       <span className="whitespace-nowrap">{rotuloFalta(centavos)}</span>
+    </p>
+  );
+}
+
+/** "Atrasado · desde 17/11/26" (6.4, derivado, nunca gravado): o selo e o primeiro dia de atraso. */
+function AtrasoDoLancamento({ desde }: { desde: string }) {
+  return (
+    <p role="status" className="flex flex-wrap items-center gap-2 texto-caption text-text-muted">
+      <SeloStatus variante="atrasado">{ROTULO_ATRASADO}</SeloStatus>
+      <span className="whitespace-nowrap">{rotuloDesdeDoAtraso(desde)}</span>
     </p>
   );
 }
@@ -139,6 +152,8 @@ type Comum = {
   quitadasPorPagamento?: ReadonlySet<string>;
   /** "falta R$ X" de um Pago parcialmente (derivado do núcleo, 6.2); `null` nas demais linhas. */
   faltaCentavos?: number | null;
+  /** Atrasado (6.4): o primeiro dia de atraso desta linha (`atrasosDasLinhas` do núcleo); `null` se não está atrasada. */
+  atrasadoDesde?: string | null;
   aoFechar: () => void;
   /** Para os testes; padrão, o repositório do navegador. */
   repo?: RepoLancamentos;
@@ -349,6 +364,7 @@ function EditarLancamento({
   statusPagos = SEM_IDS,
   quitadasPorPagamento = SEM_IDS,
   faltaCentavos = null,
+  atrasadoDesde = null,
   aoFechar,
   aoExcluir,
   repo: repoDado,
@@ -710,6 +726,7 @@ function EditarLancamento({
           onChange={(e) => escolher("status", e.target.value)}
         />
         {faltaCentavos !== null ? <FaltaDoParcial centavos={faltaCentavos} /> : null}
+      {atrasadoDesde !== null ? <AtrasoDoLancamento desde={atrasadoDesde} /> : null}
         {erros.status ? (
           <p role="alert" className="texto-label font-normal text-danger-fg">
             {erros.status}
@@ -890,6 +907,7 @@ function EditarLancamento({
         onChange={(e) => escolher("status", e.target.value)}
       />
       {faltaCentavos !== null ? <FaltaDoParcial centavos={faltaCentavos} /> : null}
+      {atrasadoDesde !== null ? <AtrasoDoLancamento desde={atrasadoDesde} /> : null}
       {erros.status ? (
         <p role="alert" className="texto-label font-normal text-danger-fg">
           {erros.status}
