@@ -2,7 +2,7 @@
 title: 'História 6.2: Pagamento parcial e "a minha parte"'
 type: 'feature'
 created: '2026-11-16'
-status: 'review'
+status: 'done'
 baseline_commit: 'c309651'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -90,7 +90,7 @@ context:
 - [x] Migração escrita (NÃO aplicada) e provada no pglite com o núcleo real; tipos no formato do gerado.
 - [x] Janela com a pergunta, selo na grade, "falta R$ X" no painel, aviso por modo, itens nas janelas de mensagem; testes jsdom.
 - [x] Teste de integração do CI e dado de exemplo do backup (item parcial).
-- [ ] CI verde na PR (`supabase`, "Backup gera e restaura", `verificar`).
+- [x] CI verde na PR (`supabase`, "Backup gera e restaura", `verificar`).
 - [ ] Depois do merge, e só quando Rafael pedir: `db push`.
 
 ## Implementation Notes
