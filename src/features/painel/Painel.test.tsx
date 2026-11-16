@@ -867,6 +867,7 @@ describe("Barra de filtros e busca (História 2.6)", () => {
     expect(within(screen.getByRole("dialog")).getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
       "Não pago, 0 lançamentos",
       "Pago, 0 lançamentos",
+      "Atrasado, 0 lançamentos",
       "Sem status, 49 lançamentos",
     ]);
   });
@@ -2997,5 +2998,178 @@ describe("Selecionar e ver o total (História 4.4, FR-48)", () => {
       expect(sem(janela.textContent)).toContain("Conferindo os pagamentos já registrados");
       expect(botaoAplicar(janela).disabled).toBe(true);
     });
+  });
+});
+
+describe("Atrasado (História 6.4, FR-49, UX-DR22)", () => {
+  /** Novembro/26 (vence 06/11/26): dois não pagos, um sem Status, um pago e um previsto. */
+  function novembroComPendencias() {
+    definir({
+      faturas: [novembro],
+      lancamentos: [
+        lanc("2026-11", { id: "a1", nome: "MERCADO", valor_centavos: 10_000 }),
+        lanc("2026-11", { id: "a2", nome: "FARMACIA", valor_centavos: 5000, status_id: "s-pago" }),
+        lanc("2026-11", { id: "a3", nome: "PADARIA", valor_centavos: 3000, status_id: null }),
+        lanc("2026-11", { id: "a4", nome: "NETFLIX", valor_centavos: 5000, lancado_por: "sistema" }),
+      ],
+    });
+  }
+  const linhaDe = (nome: string) => screen.getByRole("checkbox", { name: `Selecionar ${nome}` }).closest("tr")!;
+  const selo = (nome: string, texto: string) => within(linhaDe(nome)).queryByText(texto);
+  const em = (instante: string) => vi.setSystemTime(new Date(instante));
+  /** Acrescenta tabelas ao "banco" falso e avisa as telas (o gerenciador falso guarda o retrato por versão). */
+  const noBanco = (extra: Record<string, unknown[]>) => {
+    falso.banco = { ...falso.banco, ...extra };
+    falso.versao++;
+  };
+  const ciclo = [
+    { id: "c1", dia_fechamento: 28, dia_vencimento: 6, vigente_desde: "2026-01", created_at: "2026-01-01T00:00:00+00:00" },
+  ];
+
+  it("no último dia da tolerância (16/11/26) ninguém está atrasado; só os Status de sempre", () => {
+    novembroComPendencias();
+    em("2026-11-16T15:00:00Z");
+    renderizar();
+    expect(selo("MERCADO", "Atrasado")).toBeNull();
+    expect(selo("MERCADO", "Não pago")).toBeTruthy();
+    expect(linhaDe("MERCADO").getAttribute("aria-label")).not.toContain("atrasado");
+  });
+
+  it("no dia seguinte (17/11/26) o selo Atrasado substitui Não pago; Pago e o previsto não mudam", () => {
+    novembroComPendencias();
+    em("2026-11-17T15:00:00Z");
+    renderizar();
+    const mercado = selo("MERCADO", "Atrasado")!;
+    expect(mercado).toBeTruthy();
+    expect(mercado.getAttribute("data-selo")).toBe("atrasado");
+    expect(mercado.className).toContain("bg-status-late-bg");
+    expect(mercado.className).toContain("text-status-late-fg");
+    expect(mercado.getAttribute("title")).toBe("atrasado desde 17/11/26");
+    expect(selo("MERCADO", "Não pago")).toBeNull();
+    // Sem Status também vale não pago: atrasa.
+    expect(selo("PADARIA", "Atrasado")).toBeTruthy();
+    // O pago e o previsto ficam como estavam.
+    expect(selo("FARMACIA", "Pago")).toBeTruthy();
+    expect(selo("FARMACIA", "Atrasado")).toBeNull();
+    expect(selo("NETFLIX", "Atrasado")).toBeNull();
+    // O nome acessível da linha diz a data (a cor não é a única pista).
+    expect(linhaDe("MERCADO").getAttribute("aria-label")).toContain("atrasado desde 17/11/26");
+    expect(linhaDe("FARMACIA").getAttribute("aria-label")).not.toContain("atrasado");
+  });
+
+  it("o dia de São Paulo manda: 02:59 UTC do dia 17 ainda é dia 16", () => {
+    novembroComPendencias();
+    em("2026-11-17T02:59:00Z");
+    renderizar();
+    expect(selo("MERCADO", "Atrasado")).toBeNull();
+  });
+
+  it("o dia vira com a tela aberta: ao voltar o foco, o selo aparece sem recarregar", () => {
+    novembroComPendencias();
+    em("2026-11-17T02:50:00Z"); // 23:50 de 16/11 em São Paulo
+    renderizar();
+    expect(selo("MERCADO", "Atrasado")).toBeNull();
+    em("2026-11-17T03:05:00Z"); // 00:05 de 17/11
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(selo("MERCADO", "Atrasado")).toBeTruthy();
+  });
+
+  it("a tolerância vem de Configurações: com 0 dias, 08/11/26 já é atraso; sem a linha vale o padrão (10)", () => {
+    novembroComPendencias();
+    em("2026-11-08T15:00:00Z");
+    const { unmount } = renderizar();
+    expect(selo("MERCADO", "Atrasado")).toBeNull();
+    unmount();
+    noBanco({
+      configuracoes: [{ id: "cfg", tolerancia_atraso_dias: 0, status_padrao_id: null, updated_at: "2026-11-03T12:00:00+00:00" }],
+    });
+    renderizar();
+    expect(selo("MERCADO", "Atrasado")).toBeTruthy();
+  });
+
+  it("o vencimento da Fatura importada manda (07/11) sobre o Ciclo (06/11)", () => {
+    novembroComPendencias();
+    noBanco({ faturas: [{ ...novembro, vencimento: "2026-11-07" }], config_ciclo: ciclo });
+    em("2026-11-17T15:00:00Z");
+    renderizar();
+    expect(selo("MERCADO", "Atrasado")).toBeNull();
+  });
+
+  it("um Mês sem Fatura usa o vencimento do Ciclo; sem Ciclo, ninguém atrasa e nada quebra", () => {
+    const historico = [lanc("2026-11", { id: "h1", nome: "ALUGUEL", valor_centavos: 90_000, lancado_por: "historico", fatura_id: null })];
+    definir({ faturas: [], lancamentos: historico });
+    em("2026-11-17T15:00:00Z");
+    const { unmount } = renderizar();
+    expect(selo("ALUGUEL", "Atrasado")).toBeNull();
+    expect(selo("ALUGUEL", "Não pago")).toBeTruthy();
+    unmount();
+    noBanco({ config_ciclo: ciclo });
+    renderizar();
+    expect(selo("ALUGUEL", "Atrasado")).toBeTruthy();
+  });
+
+  it("'Pago parcialmente' mantém o selo e ganha o Atrasado ao lado (o que falta é o que venceu)", () => {
+    novembroComPendencias();
+    noBanco({
+      pagamento_itens: [
+        { id: "i1", pagamento_id: "pg", lancamento_id: "a1", mes: "2026-11", valor_centavos: 4000, status_aplicado_id: null, excluido_em: null },
+      ],
+    });
+    em("2026-11-17T15:00:00Z");
+    renderizar();
+    expect(selo("MERCADO", "Pago parcialmente")).toBeTruthy();
+    expect(selo("MERCADO", "Atrasado")).toBeTruthy();
+    expect(sem(linhaDe("MERCADO").getAttribute("aria-label"))).toContain("Pago parcialmente, falta R$ 60,00, atrasado desde 17/11/26");
+  });
+
+  it("os itens de Pagamento ainda carregando: ninguém aparece atrasado até eles chegarem", () => {
+    novembroComPendencias();
+    falso.statusTabelas = { pagamento_itens: "carregando" };
+    em("2026-11-17T15:00:00Z");
+    renderizar();
+    expect(selo("MERCADO", "Atrasado")).toBeNull();
+  });
+
+  it("filtro de Status: 'Atrasado' mostra só os atrasados e soma-se aos Status cadastrados", async () => {
+    novembroComPendencias();
+    em("2026-11-17T15:00:00Z");
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: "Status", expanded: false }));
+    const dialogo = screen.getByRole("dialog", { name: "Status (pode marcar vários)" });
+    expect(within(dialogo).getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
+      "Não pago, 2 lançamentos",
+      "Pago, 1 lançamento",
+      "Atrasado, 2 lançamentos",
+      "Sem status, 1 lançamento",
+    ]);
+    await u.click(within(dialogo).getByRole("checkbox", { name: "Atrasado, 2 lançamentos" }));
+    await u.click(within(dialogo).getByRole("button", { name: TEXTOS_FILTROS.aplicar }));
+    expect(linhasDaGrade().map(nomeVisivel)).toEqual(["MERCADO", "PADARIA"]);
+    expect(screen.getByRole("button", { name: "Status: Atrasado", expanded: false })).toBeTruthy();
+    expect(rodape()).toContain("R$ 130,00");
+  });
+
+  it("o painel do Lançamento mostra 'Atrasado' e 'desde 17/11/26'", async () => {
+    novembroComPendencias();
+    em("2026-11-17T15:00:00Z");
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(within(linhaDe("MERCADO")).getByText("MERCADO"));
+    const painel = await screen.findByRole("complementary");
+    expect(within(painel).getByText("Atrasado").getAttribute("data-selo")).toBe("atrasado");
+    expect(sem(painel.textContent)).toContain("desde 17/11/26");
+  });
+
+  it("pagar tira o atraso: o Status que conta como pago desfaz o selo na hora (Realtime)", () => {
+    novembroComPendencias();
+    em("2026-11-17T15:00:00Z");
+    renderizar();
+    expect(selo("MERCADO", "Atrasado")).toBeTruthy();
+    gravarNoBanco("a1", { status_id: "s-pago" });
+    expect(selo("MERCADO", "Atrasado")).toBeNull();
+    expect(selo("MERCADO", "Pago")).toBeTruthy();
   });
 });
