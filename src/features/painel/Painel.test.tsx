@@ -481,7 +481,7 @@ describe("Painel do Mês", () => {
     renderizar();
     expect(screen.getByText(mensagem("carregar.falhou"))).toBeTruthy();
     await userEvent.setup().click(screen.getByRole("button", { name: "Tentar de novo" }));
-    expect(falso.recarregar).toHaveBeenCalledTimes(8);
+    expect(falso.recarregar).toHaveBeenCalledTimes(9);
   });
 
   it("trocar de Mês mostra o esqueleto enquanto o Mês novo carrega", async () => {
@@ -1608,7 +1608,7 @@ describe("Blocos no Painel (História 4.2)", () => {
     definir({}, "erro");
     renderizar();
     await userEvent.setup().click(screen.getByRole("button", { name: "Tentar de novo" }));
-    expect(falso.recarregar).toHaveBeenCalledTimes(8);
+    expect(falso.recarregar).toHaveBeenCalledTimes(9);
   });
 });
 
@@ -3171,5 +3171,130 @@ describe("Atrasado (História 6.4, FR-49, UX-DR22)", () => {
     gravarNoBanco("a1", { status_id: "s-pago" });
     expect(selo("MERCADO", "Atrasado")).toBeNull();
     expect(selo("MERCADO", "Pago")).toBeTruthy();
+  });
+});
+
+describe("Recebimentos no hero (História 6.5, FR-26)", () => {
+  const deCobranca = (id: string, nome: string, formula: unknown, extra: Record<string, unknown> = {}) => ({
+    id,
+    owner_id: "dono",
+    nome,
+    formula,
+    ordem: 1,
+    de_cobranca: true,
+    meu_bloco: false,
+    updated_at: "2026-11-03T12:00:00+00:00",
+    ...extra,
+  });
+  const casal = deCobranca("b-casal", "Casal", { tipo: "responsavel", id: "r-casal" });
+  const rafael = deCobranca("b-rafael", "Rafael", { tipo: "responsavel", id: "r-rafael" }, { ordem: 2 });
+  const pagamento = (id: string, data: string, recebido: number) => ({
+    id,
+    data,
+    valor_recebido_centavos: recebido,
+    modo: "total",
+    excluido_em: null,
+    updated_at: "2026-11-03T12:00:00+00:00",
+  });
+  const item = (lancamento: string, valor: number) => ({
+    id: `i-${lancamento}`,
+    pagamento_id: "p-x",
+    lancamento_id: lancamento,
+    mes: "2026-11",
+    valor_centavos: valor,
+    status_anterior_id: "s-nao",
+    status_aplicado_id: null,
+    excluido_em: null,
+    updated_at: "2026-11-03T12:00:00+00:00",
+  });
+
+  function novembroDeCobranca(extras: LinhaLancamento[] = [], blocos: unknown[] = [casal, rafael]) {
+    definir({
+      faturas: [outubro, novembro],
+      lancamentos: [
+        lanc("2026-11", { id: "c1", nome: "MERCADO", valor_centavos: 10000, responsavel_id: "r-casal" }),
+        lanc("2026-11", { id: "c2", nome: "FARMACIA", valor_centavos: 5000, responsavel_id: "r-casal", status_id: "s-pago" }),
+        lanc("2026-11", { id: "r1", nome: "LIVRARIA", valor_centavos: 7000, responsavel_id: "r-rafael" }),
+        lanc("2026-11", { id: "s1", nome: "SEM DONO", valor_centavos: 900, responsavel_id: null }),
+        lanc("2026-10", { id: "o1", nome: "DE OUTUBRO", valor_centavos: 3000, responsavel_id: "r-casal" }),
+        ...extras,
+      ],
+      blocos,
+    });
+    falso.banco = { ...falso.banco, pagamentos: [], pagamento_itens: [] };
+    falso.versao++;
+  }
+
+  const hero = () => screen.getByRole("region", { name: /^FATURA DE NOVEMBRO/i });
+  const faltaReceber = (valor: string) =>
+    screen.getByRole("button", { name: (nome) => sem(nome) === `Falta receber ${valor}, abrir Recebimentos` });
+
+  it("'Falta receber' soma os Blocos de cobrança sobre o que está em aberto NO Mês (o pago e os outros Meses ficam de fora)", () => {
+    novembroDeCobranca();
+    renderizar();
+    // Casal R$ 100,00 + Rafael R$ 70,00; o pago, o 'sem dono' e o Lançamento de outubro não entram.
+    expect(sem(faltaReceber("R$ 170,00").textContent)).toBe("Falta receberR$ 170,00");
+  });
+
+  it("tocar em 'Falta receber' abre Recebimentos", async () => {
+    novembroDeCobranca();
+    renderizar();
+    await userEvent.setup().click(faltaReceber("R$ 170,00"));
+    expect(roteador.push).toHaveBeenCalledWith("/recebimentos");
+  });
+
+  it("'Recebido no mês' soma o valor RECEBIDO dos Pagamentos com data no Mês", () => {
+    novembroDeCobranca();
+    mudarBanco("pagamentos", () => [
+      pagamento("p1", "2026-11-03", 5000),
+      pagamento("p2", "2026-11-20", 1000),
+      pagamento("p3", "2026-10-30", 3000),
+    ]);
+    renderizar();
+    expect(sem(within(hero()).getByText("Recebido no mês").parentElement?.textContent)).toBe("Recebido no mêsR$ 60,00");
+  });
+
+  it("sem Pagamentos o 'Recebido no mês' é R$ 0,00", () => {
+    novembroDeCobranca();
+    renderizar();
+    expect(sem(within(hero()).getByText("Recebido no mês").parentElement?.textContent)).toBe("Recebido no mêsR$ 0,00");
+  });
+
+  it("um Pago parcialmente entra só com o que falta; um previsto não entra", () => {
+    novembroDeCobranca([lanc("2026-11", { id: "p1", nome: "PREVISTO", valor_centavos: 9000, responsavel_id: "r-casal", lancado_por: "sistema" })]);
+    mudarBanco("pagamento_itens", () => [item("c1", 4000)]);
+    renderizar();
+    expect(sem(faltaReceber("R$ 130,00").textContent)).toBe("Falta receberR$ 130,00");
+  });
+
+  it("sem Blocos de cobrança, 'Falta receber' mostra '—' (e Recebimentos explica o que fazer)", () => {
+    novembroDeCobranca([], [deCobranca("b-meu", "Meu", { tipo: "responsavel", id: "r-rafael" }, { de_cobranca: false, meu_bloco: true })]);
+    renderizar();
+    expect(sem(faltaReceber("—").textContent)).toBe("Falta receber—");
+  });
+
+  it("os itens de Pagamento ainda lendo: '—', nunca o valor cheio de um parcial", () => {
+    novembroDeCobranca();
+    falso.statusTabelas = { pagamento_itens: "carregando" };
+    renderizar();
+    expect(faltaReceber("—")).toBeTruthy();
+  });
+
+  it("trocar de Mês muda os dois cartões: outubro tem o Casal em aberto e nenhum recebimento de novembro", async () => {
+    novembroDeCobranca();
+    mudarBanco("pagamentos", () => [pagamento("p1", "2026-11-03", 5000), pagamento("p3", "2026-10-30", 3000)]);
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: "Mês anterior" }));
+    await waitFor(() => expect(faltaReceber("R$ 30,00")).toBeTruthy());
+    expect(sem(screen.getByText("Recebido no mês").parentElement?.textContent)).toBe("Recebido no mêsR$ 30,00");
+  });
+
+  it("pagar muda o 'Falta receber' na hora (o Status vira pago por Realtime)", () => {
+    novembroDeCobranca();
+    renderizar();
+    expect(faltaReceber("R$ 170,00")).toBeTruthy();
+    gravarNoBanco("c1", { status_id: "s-pago" });
+    expect(faltaReceber("R$ 70,00")).toBeTruthy();
   });
 });

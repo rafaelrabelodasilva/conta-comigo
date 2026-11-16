@@ -116,6 +116,30 @@ export function planejarSalvarBloco(
   };
 }
 
+// ------------------------------------- Blocos de cobrança em Configurações (6.5)
+
+/** As duas marcas de um Bloco que Configurações → Blocos de cobrança muda. */
+export type MarcasDoBloco = Pick<Bloco, "de_cobranca" | "meu_bloco">;
+
+/**
+ * O pedido da RPC `salvar_bloco` que muda só as marcas de um Bloco que já existe ("Usar em
+ * Recebimentos" e "É o meu Bloco", UX-DR25); o nome, a Fórmula e a ordem seguem como estão. Marcar
+ * "É o meu Bloco" tira a marca do outro na mesma gravação (a RPC); desmarcar não escolhe outro.
+ */
+export function planejarMarcasDoBloco(
+  bloco: Pick<Bloco, "id" | "nome" | "formula" | "ordem" | "de_cobranca" | "meu_bloco">,
+  mudanca: Partial<MarcasDoBloco>,
+): BlocoParaGravar {
+  return {
+    p_id: bloco.id,
+    p_nome: bloco.nome,
+    p_formula: bloco.formula,
+    p_ordem: bloco.ordem,
+    p_de_cobranca: mudanca.de_cobranca ?? bloco.de_cobranca,
+    p_meu_bloco: mudanca.meu_bloco ?? bloco.meu_bloco,
+  };
+}
+
 // ----------------------------------------------------- Blocos no Painel (4.2)
 
 /** O que o `block-card` mostra de um Bloco: tudo sai de `avaliar` sobre a projeção do Painel. */

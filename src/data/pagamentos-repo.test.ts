@@ -101,15 +101,18 @@ function montar(opcoes: {
     canal: "tabela:pagamento_itens:historico",
     ...ESCOPO_DO_HISTORICO,
   });
+  // Recebimentos (6.5): os Lançamentos de TODOS os Meses (sem escopo por Mês).
+  const memoriaTodos = criarGerenciador<Lancamento>({ tabela: "lancamentos", obterCliente: () => cliente, canal: "tabela:lancamentos:todos", paginar: true });
   const repo = criarRepoPagamentos({
     obterCliente: () => cliente,
     memoriaLancamentos,
     memoriaItens,
     memoriaPagamentos,
     memoriaItensDoHistorico,
+    memoriaTodosOsLancamentos: memoriaTodos,
     online: () => opcoes.online ?? true,
   });
-  return { repo, chamadas, lidas, pedidosIn, memoriaLancamentos, memoriaItens, memoriaPagamentos, memoriaItensDoHistorico };
+  return { repo, chamadas, lidas, pedidosIn, memoriaLancamentos, memoriaItens, memoriaPagamentos, memoriaItensDoHistorico, memoriaTodos };
 }
 
 const pedido: PedidoDePagamento = {
@@ -170,6 +173,15 @@ const resposta = (itens: LinhaItemDePagamento[], lancamentos: Lancamento[], p = 
 });
 
 describe("aplicar", () => {
+  it("as linhas pagas de QUALQUER Mês vão também para os Lançamentos de todos os Meses (Recebimentos, 6.5), sem esperar o Realtime", async () => {
+    const linhas = [lancamentoDb("l1"), lancamentoDb("l3", { mes: "2026-09" })];
+    const { repo, memoriaLancamentos, memoriaTodos } = montar({ rpc: () => resposta([itemDb("i1", "l1"), itemDb("i3", "l3", { mes: "2026-09" })], linhas) });
+    expect((await repo.aplicar(pedido)).ok).toBe(true);
+    expect(memoriaTodos.linhas().map((l) => l.id).sort()).toEqual(["l1", "l3"]);
+    // O gerenciador do Mês aberto segue guardando só o Mês aberto (AD-4).
+    expect(memoriaLancamentos.linhas().map((l) => l.id)).toEqual(["l1"]);
+  });
+
   it("manda o pedido do núcleo à RPC e aplica o Pagamento, os itens e as linhas nos gerenciadores", async () => {
     const itens = [itemDb("i1", "l1"), itemDb("i2", "l2"), itemDb("i3", "l3", { mes: "2026-09" })];
     const linhas = [lancamentoDb("l1"), lancamentoDb("l2"), lancamentoDb("l3", { mes: "2026-09" })];

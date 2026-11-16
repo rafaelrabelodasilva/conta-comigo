@@ -4,10 +4,12 @@ import type { Conferencia } from "@/domain/conferencia";
 import { formatarDinheiro } from "@/domain/dinheiro";
 import { comporTotalAPagar, type TotaisLidosDaFatura } from "@/domain/importacao-fatura";
 import {
+  TEXTOS_HERO,
   TEXTOS_IMPORTAR,
   TEXTOS_PAINEL as T,
   rotuloComposicaoTotal,
   rotuloConferenciaTotal,
+  rotuloFaltaReceber,
   rotuloFiltrarPor,
   rotuloLancamentos,
   rotuloBotaoDiferenca,
@@ -29,7 +31,10 @@ import { classesPessoa } from "@/ui/cores-pessoa";
 // Responsável da barra de filtros (História 2.6): se o filtro já é só ele,
 // limpa; senão, passa a ser só ele. Fica marcado quem está entre os
 // escolhidos; os outros segmentos se apagam. Mês sem Fatura: "Fatura
-// ainda não importada" com "Importar fatura". "Recebido no mês" e "Falta receber" chegam com os Recebimentos.
+// ainda não importada" com "Importar fatura". Embaixo (História 6.5, FR-26), dois mini-cartões: "Recebido no mês" (os
+// Pagamentos com data no Mês) e "Falta receber" (os Blocos de cobrança sobre o que está em aberto no Mês); tocar em
+// "Falta receber" abre Recebimentos. Os valores vêm prontos do núcleo (`recebidoNoMes`, `faltaReceberDoMes`); `null` é
+// "—" (ainda lendo, ou nenhum Bloco de cobrança). Num Mês sem Fatura e sem histórico não há mini-cartões.
 // Selo da Conferência (História 2.5) na linha da quantidade: "✓ Conferido
 // · 49 lançamentos" ou "⚠ Diferença de R$ X" (toque liga o filtro
 // "Verificar"); a conta do total e o "Bate" ficam embaixo, menores.
@@ -37,6 +42,9 @@ import { classesPessoa } from "@/ui/cores-pessoa";
 export type FaturaHero = TotaisLidosDaFatura & { mes: string; vencimento: string };
 
 export type ResponsavelHero = { nome: string; cor: number };
+
+/** Os dois mini-cartões do hero; `null` em um valor é "—". */
+export type RecebimentosDoHero = { recebidoCentavos: number | null; faltaCentavos: number | null };
 
 export type PropsFaturaDoMes = {
   mes: string;
@@ -58,6 +66,10 @@ export type PropsFaturaDoMes = {
    * mostra o total delas e a barra por Responsável, sem selo de Conferência.
    */
   historico?: { totalCentavos: number; quantidade: number } | null;
+  /** "Recebido no mês" e "Falta receber"; ausente, os mini-cartões não aparecem. */
+  recebimentos?: RecebimentosDoHero | null;
+  /** Toque em "Falta receber": abre Recebimentos. */
+  aoAbrirRecebimentos?: () => void;
 };
 
 type Fatia = { id: string | null; nome: string; centavos: number; fundo: string };
@@ -115,6 +127,32 @@ function BarraPorResponsavel({
   );
 }
 
+function MiniCartoes({ recebimentos, aoAbrir }: { recebimentos: RecebimentosDoHero; aoAbrir?: () => void }) {
+  const recebido = recebimentos.recebidoCentavos === null ? TEXTOS_HERO.sem_valor : formatarDinheiro(recebimentos.recebidoCentavos);
+  const falta = recebimentos.faltaCentavos === null ? TEXTOS_HERO.sem_valor : formatarDinheiro(recebimentos.faltaCentavos);
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <div className="flex min-h-toque flex-col justify-center rounded-md bg-background px-3 py-1.5">
+        <p className="texto-caption text-text-muted">{TEXTOS_HERO.recebido_no_mes}</p>
+        <p className="texto-body-strong tabular-nums text-accent">{recebido}</p>
+      </div>
+      <button
+        type="button"
+        aria-label={rotuloFaltaReceber(falta)}
+        onClick={aoAbrir}
+        className="flex min-h-toque cursor-pointer flex-col justify-center rounded-md bg-background px-3 py-1.5 text-left"
+      >
+        <span aria-hidden className="texto-caption text-text-muted">
+          {TEXTOS_HERO.falta_receber}
+        </span>
+        <span aria-hidden className="texto-body-strong tabular-nums">
+          {falta}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 function SeloConferencia({ conferencia, aoVerificar }: { conferencia: Conferencia; aoVerificar?: () => void }) {
   const texto = rotuloSeloConferencia(conferencia);
   if (conferencia.conferido) return <span className="texto-body-strong text-accent">{texto}</span>;
@@ -142,6 +180,8 @@ export function FaturaDoMes({
   conferencia = null,
   aoVerificar,
   historico = null,
+  recebimentos = null,
+  aoAbrirRecebimentos,
 }: PropsFaturaDoMes) {
   const fatias: Fatia[] = distribuicao.segmentos.map((s) => {
     const r = responsaveis.get(s.responsavelId);
@@ -172,6 +212,7 @@ export function FaturaDoMes({
           {rotuloLancamentos(historico.quantidade)} · {T.do_historico}
         </p>
         {barra}
+        {recebimentos ? <MiniCartoes recebimentos={recebimentos} aoAbrir={aoAbrirRecebimentos} /> : null}
       </section>
     );
   }
@@ -219,6 +260,7 @@ export function FaturaDoMes({
       <p className="texto-caption tabular-nums text-text-muted">{rotuloComposicaoTotal(c)}</p>
       {selo ? <p className={c.diferencaCentavos === 0 ? "texto-caption text-accent" : "texto-caption"}>{selo}</p> : null}
       {barra}
+      {recebimentos ? <MiniCartoes recebimentos={recebimentos} aoAbrir={aoAbrirRecebimentos} /> : null}
     </section>
   );
 }

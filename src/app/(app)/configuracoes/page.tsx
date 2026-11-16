@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ROTULOS } from "@/domain/mensagens";
 import { temSessao } from "@/data/supabase/servidor";
+import { SecaoBlocosDeCobranca } from "@/features/configuracoes/SecaoBlocosDeCobranca";
 import { SecaoAparencia } from "@/features/configuracoes/SecaoAparencia";
 import { SecaoCiclo } from "@/features/configuracoes/SecaoCiclo";
 import { SecaoConferencia } from "@/features/configuracoes/SecaoConferencia";
@@ -32,6 +33,7 @@ const CONTEUDO_SECAO: Record<ChaveSecao, { rotulo: string; Conteudo: (props: Pro
   ciclo: { rotulo: ROTULOS.ciclo, Conteudo: SecaoCiclo },
   conferencia: { rotulo: ROTULOS.conferencia, Conteudo: SecaoConferencia },
   regras: { rotulo: ROTULOS.regras_aprendidas, Conteudo: SecaoRegras },
+  cobranca: { rotulo: ROTULOS.blocos_de_cobranca, Conteudo: SecaoBlocosDeCobranca },
   mensagem: { rotulo: ROTULOS.modelo_mensagem, Conteudo: SecaoModeloMensagem },
   aparencia: { rotulo: ROTULOS.aparencia, Conteudo: SecaoAparencia },
   planilha: { rotulo: ROTULOS.importar_planilha, Conteudo: SecaoImportarPlanilha },

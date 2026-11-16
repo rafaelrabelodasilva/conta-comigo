@@ -36,7 +36,7 @@ import {
 import { estaOnline } from "./conexao";
 import type { Database, Json } from "./database.types";
 import { FALHOU, semConexao, type CodigoFalhaGravacao, type Online } from "./gravacao";
-import { gerenciador, gerenciadorItensDoHistorico, type Gerenciador, type LinhaDe } from "./realtime";
+import { gerenciador, gerenciadorItensDoHistorico, gerenciadorTodosOsLancamentos, type Gerenciador, type LinhaDe } from "./realtime";
 import { criarClienteNavegador } from "./supabase/navegador";
 
 export type LinhaPagamento = LinhaDe<"pagamentos">;
@@ -95,10 +95,20 @@ export function criarRepoPagamentos(deps: {
   memoriaPagamentos?: Gerenciador<LinhaPagamento>;
   /** Os itens vivos de todos os Meses (o Histórico, 6.3). */
   memoriaItensDoHistorico?: Gerenciador<LinhaItemDePagamento>;
+  /** Os Lançamentos de todos os Meses (Recebimentos, 6.5): a linha paga ou desfeita aparece lá sem esperar o Realtime. */
+  memoriaTodosOsLancamentos?: Gerenciador<LinhaLancamento>;
   /** Há conexão? Padrão: o detector único (`conexao.ts`). */
   online?: Online;
 }) {
-  const { obterCliente, memoriaLancamentos, memoriaItens, memoriaPagamentos, memoriaItensDoHistorico, online = estaOnline } = deps;
+  const {
+    obterCliente,
+    memoriaLancamentos,
+    memoriaItens,
+    memoriaPagamentos,
+    memoriaItensDoHistorico,
+    memoriaTodosOsLancamentos,
+    online = estaOnline,
+  } = deps;
 
   /** Chama a RPC e aplica a resposta nos gerenciadores (só o Mês aberto fica na memória). */
   async function chamar(
@@ -114,6 +124,7 @@ export function criarRepoPagamentos(deps: {
     memoriaItens.aplicarLote(r.itens);
     memoriaPagamentos?.aplicarLote([r.pagamento]);
     memoriaItensDoHistorico?.aplicarLote(r.itens);
+    memoriaTodosOsLancamentos?.aplicarLote(r.lancamentos);
     return { ok: true, pagamento: r.pagamento, itens: r.itens, linhas: r.lancamentos };
   }
 
@@ -292,7 +303,7 @@ export type RepoPagamentos = ReturnType<typeof criarRepoPagamentos>;
 
 let repo: RepoPagamentos | null = null;
 
-/** O repositório do navegador, ligado aos gerenciadores de Lançamentos e de itens de Pagamento. */
+/** O repositório do navegador, ligado aos gerenciadores de Lançamentos (do Mês e de todos os Meses) e de itens de Pagamento. */
 export function repoPagamentos(): RepoPagamentos {
   repo ??= criarRepoPagamentos({
     obterCliente: () => criarClienteNavegador() as SupabaseClient<Database> | null,
@@ -300,6 +311,7 @@ export function repoPagamentos(): RepoPagamentos {
     memoriaItens: gerenciador("pagamento_itens"),
     memoriaPagamentos: gerenciador("pagamentos"),
     memoriaItensDoHistorico: gerenciadorItensDoHistorico(),
+    memoriaTodosOsLancamentos: gerenciadorTodosOsLancamentos(),
   });
   return repo;
 }

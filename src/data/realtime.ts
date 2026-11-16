@@ -27,6 +27,11 @@
 // da memória (se for mais novo que a versão guardada); linha de fora nunca
 // entra.
 //
+// Lançamentos de todos os Meses (`gerenciadorTodosOsLancamentos`, História 6.5): Recebimentos soma o que
+// está em aberto em todos os Meses, então tem um gerenciador próprio (canal próprio, leitura paginada, sem
+// predicado: o "não pago" depende dos Status do usuário e o crédito de uma linha excluída precisa dela). O de
+// `lancamentos` segue guardando só o Mês aberto (AD-4).
+//
 // Leitura paginada (`paginar`, História 6.3): o PostgREST corta a resposta em 1000 linhas, então
 // uma tabela que pode passar disso (o histórico de Pagamentos e os itens deles, de todos os
 // Meses) é lida por páginas (`order id` + `range`) até uma página vir incompleta.
@@ -474,6 +479,37 @@ export function gerenciadorItensDoHistorico(): Gerenciador<LinhaDe<"pagamento_it
 /** Itens vivos de Pagamento de todos os Meses em memória, em tempo real (o Histórico). */
 export function useItensDoHistorico(): Retrato<LinhaDe<"pagamento_itens">> {
   const g = gerenciadorItensDoHistorico();
+  return useSyncExternalStore(g.assinar, g.retrato, () => RETRATO_SERVIDOR);
+}
+
+/** A chave do gerenciador dos Lançamentos de todos os Meses (Recebimentos, 6.5). */
+const CHAVE_TODOS_OS_LANCAMENTOS = "lancamentos:todos";
+
+/**
+ * Os Lançamentos de TODOS os Meses, vivos e excluídos (História 6.5): Recebimentos calcula o que falta
+ * receber em todos os Meses (`projetarPendente`). Tem canal próprio, lê por páginas de 1000 e entra em
+ * `recarregarTodos`. Sem predicado de propósito: "não pago" depende dos Status (cadastro do usuário) e a
+ * linha excluída depois de paga vira crédito. Custo: ~1 KB por linha, uns 100 a 150 Lançamentos por Mês
+ * (1,5 MB por ano de uso), na memória só enquanto a aba vive e só depois que Recebimentos é aberto.
+ */
+export function gerenciadorTodosOsLancamentos(): Gerenciador<LinhaDe<"lancamentos">> {
+  let g = gerenciadores.get(CHAVE_TODOS_OS_LANCAMENTOS);
+  if (!g) {
+    ligarAoDetector();
+    g = criarGerenciador<LinhaDe<"lancamentos">>({
+      tabela: "lancamentos",
+      obterCliente: criarClienteNavegador,
+      canal: "tabela:lancamentos:todos",
+      paginar: true,
+    }) as unknown as Gerenciador<LinhaBase>;
+    gerenciadores.set(CHAVE_TODOS_OS_LANCAMENTOS, g);
+  }
+  return g as unknown as Gerenciador<LinhaDe<"lancamentos">>;
+}
+
+/** Lançamentos de todos os Meses em memória, em tempo real (Recebimentos). */
+export function useTodosOsLancamentos(): Retrato<LinhaDe<"lancamentos">> {
+  const g = gerenciadorTodosOsLancamentos();
   return useSyncExternalStore(g.assinar, g.retrato, () => RETRATO_SERVIDOR);
 }
 

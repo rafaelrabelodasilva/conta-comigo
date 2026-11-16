@@ -202,3 +202,74 @@ describe("FaturaDoMes: Mês só com histórico da planilha (História 3.10)", ()
     expect(screen.getByText(TEXTOS_PAINEL.sem_fatura)).toBeTruthy();
   });
 });
+
+describe("FaturaDoMes: 'Recebido no mês' e 'Falta receber' (História 6.5, FR-26)", () => {
+  function hero(opcoes: {
+    fatura?: FaturaHero | null;
+    historico?: { totalCentavos: number; quantidade: number } | null;
+    recebimentos?: { recebidoCentavos: number | null; faltaCentavos: number | null } | null;
+  }) {
+    const aoAbrirRecebimentos = vi.fn();
+    render(
+      <FaturaDoMes
+        mes="2026-10"
+        fatura={opcoes.fatura === undefined ? outubro : opcoes.fatura}
+        valoresDaFaturaCentavos={[768777]}
+        distribuicao={distribuicaoPorResponsavel([], [])}
+        responsaveis={responsaveis}
+        escolhidos={[]}
+        aoFiltrar={vi.fn()}
+        aoImportar={vi.fn()}
+        historico={opcoes.historico}
+        recebimentos={opcoes.recebimentos}
+        aoAbrirRecebimentos={aoAbrirRecebimentos}
+      />,
+    );
+    return { aoAbrirRecebimentos, u: userEvent.setup() };
+  }
+  const falta = (valor: string) =>
+    screen.getByRole("button", { name: (n) => sem(n) === `Falta receber ${valor}, abrir Recebimentos` });
+
+  it("dois mini-cartões embaixo: 'Recebido no mês' em text-accent e 'Falta receber'", () => {
+    hero({ recebimentos: { recebidoCentavos: 281968, faltaCentavos: 63600 } });
+    const recebido = screen.getByText("Recebido no mês");
+    expect(sem(recebido.parentElement?.textContent)).toBe("Recebido no mêsR$ 2.819,68");
+    expect(recebido.nextElementSibling?.className).toContain("text-accent");
+    expect(sem(falta("R$ 636,00").textContent)).toBe("Falta receberR$ 636,00");
+  });
+
+  it("tocar em 'Falta receber' abre Recebimentos; 'Recebido no mês' não é botão", async () => {
+    const { aoAbrirRecebimentos, u } = hero({ recebimentos: { recebidoCentavos: 0, faltaCentavos: 100 } });
+    await u.click(screen.getByRole("button", { name: /^Falta receber/ }));
+    expect(aoAbrirRecebimentos).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /Recebido no mês/ })).toBeNull();
+  });
+
+  it("valor ainda não lido (ou sem Blocos de cobrança): '—'", () => {
+    hero({ recebimentos: { recebidoCentavos: null, faltaCentavos: null } });
+    expect(sem(screen.getByText("Recebido no mês").parentElement?.textContent)).toBe("Recebido no mês—");
+    expect(falta("—")).toBeTruthy();
+  });
+
+  it("alvo de toque de 44 pt", () => {
+    hero({ recebimentos: { recebidoCentavos: 0, faltaCentavos: 0 } });
+    expect(screen.getByRole("button", { name: /^Falta receber/ }).className).toContain("min-h-toque");
+  });
+
+  it("sem a prop, os mini-cartões não existem (o passo do Primeiro uso e os outros usos não mudam)", () => {
+    hero({});
+    expect(screen.queryByText("Recebido no mês")).toBeNull();
+    expect(screen.queryByText("Falta receber")).toBeNull();
+  });
+
+  it("Mês só com histórico da planilha: os mini-cartões aparecem (é onde está a dívida antiga)", () => {
+    hero({ fatura: null, historico: { totalCentavos: 928023, quantidade: 52 }, recebimentos: { recebidoCentavos: 0, faltaCentavos: 5000 } });
+    expect(screen.getByText("Recebido no mês")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Falta receber/ })).toBeTruthy();
+  });
+
+  it("Mês sem Fatura e sem histórico: sem mini-cartões", () => {
+    hero({ fatura: null, historico: null, recebimentos: { recebidoCentavos: 0, faltaCentavos: 0 } });
+    expect(screen.queryByText("Recebido no mês")).toBeNull();
+  });
+});

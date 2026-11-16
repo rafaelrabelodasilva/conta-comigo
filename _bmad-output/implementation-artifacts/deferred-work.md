@@ -339,12 +339,6 @@
   summary: Conferir em produção, depois do `db push`, com dados reais, "Fica pendente" e "Não é dívida, é a minha parte", o selo em dois aparelhos, a mensagem do Bloco com um Pago parcialmente e o "Desfazer" de cada modo. Entre o merge e o `db push` só o modo `total` grava (a RPC antiga recusa `parcial` e `minha_parte`).
   evidence: Medium, não verificado em produção. Nenhum dado de produção foi lido nem alterado.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
-  summary: No modo `minha_parte` os itens guardam o restante inteiro de cada linha e o valor realmente recebido fica só em `pagamentos.valor_recebido_centavos`; Σ itens − valor recebido é "a minha parte". O Histórico (6.3) já mostra o valor recebido na lista e "A minha parte" no detalhe; a 6.5 ("Recebido no mês") tem de somar o valor do Pagamento, não os itens, para saber o que entrou.
-  evidence: Low. Decisão 2 da 6.2: o AD-10 diz "soma dos itens = valor recebido", mas isso só vale para `total` e `parcial`; em `minha_parte` nenhum item pode ser zero (o `check` proíbe) e desfazer precisa de um item por linha para devolver o Status.
-- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
-  summary: O valor do Bloco no cartão do Painel (e o `resumirBloco`) ainda soma o valor cheio de um Pago parcialmente; só a mensagem de cobrança usa o restante. O "Falta receber" do Bloco, `projetarPendente` e a barra de Recebimentos (6.5) são quem passa a usar `restante` nas telas de Recebimentos.
-  evidence: Low. Escopo da 6.2 (a mensagem, a forma 3 e a prévia); `pagosCentavos` do aviso do Bloco já soma a parte recebida.
-- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
   summary: Um Ajuste de centavos negativo (crédito de centavos) de uma parcela comum não é crédito na alocação: acompanha a parcela e, num "Fica pendente" cujo valor acaba na parcela, fica em aberto (restante negativo de poucos centavos) em vez de ser quitado antes.
   evidence: Low. Decisão 4 da 6.2; o total do Pagamento (valor = total) continua quitando os dois. Se incomodar, o Ajuste negativo pode entrar sempre junto da parcela quando ela leva qualquer valor.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-2-pagamento-parcial-e-a-minha-parte.md`
@@ -352,10 +346,10 @@
   evidence: Low. Decisão 1 da 6.2 (o gatilho olha só o "pago" que veio de um Pagamento).
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-3-historico-e-desfazer-pagamentos.md`
   summary: O Responsável de um Pagamento é derivado das linhas dos itens ("Casal e Rangel · minha parte"), não "quem pagou" como no Flow 3 do EXPERIENCE ("Rangel · R$ 2.819,68 · minha parte"). Gravar quem pagou (o Responsável ou o Bloco de cobrança) pede a janela "Aplicar status" perguntar, `aplicar_pagamento` receber e conferir o campo e uma migração; os Pagamentos já gravados ficariam sem o dado.
-  evidence: Low. Decisão 1 da 6.3. A 6.5 (cartões por Bloco) é quem melhor sabe de que Bloco veio o dinheiro: pode gravar o Bloco no Pagamento e o Histórico passar a mostrá-lo.
+  evidence: Low. Decisão 1 da 6.3. A 6.5 (cartões por Bloco) decidiu NÃO gravar o Bloco no Pagamento (decisão 13): os cartões se calculam das linhas (quem deve), não de quem pagou, e gravar pede migração + mudar `aplicar_pagamento`. Segue pendente para quando o Histórico precisar mostrar quem pagou.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-3-historico-e-desfazer-pagamentos.md`
   summary: O Histórico lê de quem são as linhas dos itens (`responsavel_id`) uma vez por linha: se o Responsável de uma linha paga mudar em outro aparelho, a lista só mostra o novo ao reabrir a tela. O detalhe sem conexão não carrega os nomes (as linhas são lidas ao abrir).
-  evidence: Low. Decisões 2 e 8 da 6.3. Resolve-se com um gerenciador (ou escopo) de `lancamentos` pelos ids dos itens, ou guardando o Responsável no item no momento do Pagamento.
+  evidence: Low. Decisões 2 e 8 da 6.3. Desde a 6.5 existe o gerenciador de `lancamentos` de todos os Meses (`useTodosOsLancamentos`): o Histórico pode ler o Responsável dos itens da memória (sempre atual, também sem conexão) em vez de `responsaveisDasLinhas`/`linhasDoPagamento`. Não feito na 6.5 para não mexer no Histórico.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-3-historico-e-desfazer-pagamentos.md`
   summary: O Pagamento desfeito não aparece na tela (continua no banco, AD-16): não há "Mostrar desfeitos" nem trilha de quem desfez e quando.
   evidence: Low. Decisão 3 da 6.3. Seria um filtro sobre o mesmo gerenciador sem o escopo de vivos (e os itens com `excluido_em`), se Rafael quiser auditar.
@@ -381,11 +375,11 @@
   summary: `vencimentoDoMes` (`ciclo.ts`) só conhece o Ciclo, embora o AD-9 o defina como "o vencimento da Fatura ou, se ela não existe, o do Ciclo". A 6.4 não o mudou: `vencimentoDoLancamento` (`atraso.ts`) aplica a ordem vencimento combinado → `faturas.vencimento` → Ciclo. Se outra história precisar do vencimento de um Mês, usar `vencimentoDoLancamento`, ou mover a Fatura para dentro de `vencimentoDoMes`.
   evidence: Low. Decisão 3 da 6.4.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-4-atrasado.md`
-  summary: Ao ligar o campo `vencimento_combinado` (6.6), passá-lo nas linhas que chegam a `atrasosDasLinhas` (a função já o lê, com testes com e sem o campo) e tirar da mensagem as Dívidas programadas ainda não vencidas. A 6.5 (cartões por Bloco, de todos os Meses) usa `atrasosDasLinhas` com `vencimentosDasFaturas` de todos os Meses e os itens de Pagamento de todos os Meses (`gerenciadorItensDoHistorico`), não só os do Mês aberto.
-  evidence: Low. Decisões 11 e 13 da 6.4; a tela de hoje só calcula o Mês aberto.
+  summary: Ao ligar o campo `vencimento_combinado` (6.6), passá-lo nas linhas que chegam a `atrasosDasLinhas` (a função já o lê, com testes com e sem o campo) e tirar da mensagem as Dívidas programadas ainda não vencidas. Os cartões de Recebimentos (6.5) já usam `atrasosDasLinhas` sobre os Lançamentos de todos os Meses: ao ligar o campo, as linhas do gerenciador `lancamentos:todos` já o trazem.
+  evidence: Low. Decisões 11 e 13 da 6.4 e decisão 5 da 6.5; a parte de todos os Meses foi feita na 6.5.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-4-atrasado.md`
-  summary: Os Meses importados da planilha (3.10) entram na regra: uma linha `historico` sem Status que conta como pago, de um Mês que já passou, aparece como Atrasado (a importação só marca como pago o nome "Pago"). Pode haver muitas linhas em vermelho no primeiro uso real; conferir com os Meses importados e, se incomodar, marcar o histórico como pago na importação ou excluí-lo do atraso.
-  evidence: Medium, não verificado com dados reais (nenhum dado de produção foi lido). Decisão 14 da 6.4.
+  summary: Os Meses importados da planilha (3.10) entram na regra do atraso e, desde a 6.5, no Saldo pendente de Recebimentos: uma linha `historico` cujo Status não conta como pago (a importação só marca como pago o nome "Pago"), de um Mês que já passou, aparece como pendência, como "Atrasado" e nos Meses em aberto do cartão. Pode haver muita linha em vermelho no primeiro uso real; a saída é "Ver" → "Selecionar todos" → "Aplicar status" "Pago".
+  evidence: Medium, não verificado com dados reais (nenhum dado de produção foi lido). Decisão 14 da 6.4 e decisão 9 da 6.5 (entra, porque é o que o dado diz e FR-26 soma todos os Meses). Se incomodar, marcar o histórico como pago na importação ou excluí-lo do atraso e do pendente.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-4-atrasado.md`
   summary: Crédito, estorno e valor zero nunca ficam Atrasado (não há o que cobrar), decisão da 6.4 além da lista do pedido; a ordenação da coluna Status segue o nome do Status gravado (não o selo "Atrasado"); e um Status cadastrado chamado "Atrasado" aparece como duas linhas de mesmo nome no popover do filtro.
   evidence: Low. Decisões 5 e 8 da 6.4. Se Rafael quiser créditos em atraso, ou ordenar por atraso, é uma mudança pequena no núcleo (`podeAtrasar`) e em `ordenarGrade`.
@@ -395,3 +389,24 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-4-atrasado.md`
   summary: Conferir no iPad o selo "Atrasado" na grade (cor `status-late` no claro e no escuro, o selo duplo "Pago parcialmente" + "Atrasado" na coluna Status, a largura da coluna), o VoiceOver lendo "atrasado desde 17/11/26" na linha, o filtro de Status com "Atrasado" e a virada da meia-noite com o app aberto.
   evidence: Low, não verificado. O jsdom só confere o DOM, os nomes, os `role` e as classes. Junta-se às pendências do VoiceOver da 2.4, da 6.1, da 6.2 e da 6.3.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-5-recebimentos-por-bloco-de-cobranca.md`
+  summary: O gerenciador `lancamentos:todos` (Recebimentos) guarda TODOS os Lançamentos de todos os Meses, vivos e excluídos, sem predicado, e lê tudo a cada reconexão.
+  evidence: Low. Decisão 1 da 6.5: ~1 KB por linha e uns 100 a 150 Lançamentos por Mês (~1,5 MB por ano; 10 anos ≈ 15 MB, uma página de leitura por ano), só depois de abrir Recebimentos. Passados uns 5 anos, estreitar a leitura (`status_id` fora dos Status pagos e as excluídas com itens de Pagamento) com a lista de Status como parâmetro e reler quando um Status mudar `conta_como_pago`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-5-recebimentos-por-bloco-de-cobranca.md`
+  summary: O crédito de algo pago e depois excluído é `-Σ itens`: num Pagamento `minha_parte` os itens guardam o restante inteiro, mais que o valor recebido, então o crédito supera o que entrou.
+  evidence: Low. Decisão 4 da 6.5. A 6.9 (aviso ao excluir, reimportação) decide se o crédito de um `minha_parte` usa o valor recebido proporcional.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-5-recebimentos-por-bloco-de-cobranca.md`
+  summary: Dois Blocos de cobrança que citam a mesma linha (ex.: "Casal" e "Casal ÷ 2") somam duas vezes no "Falta receber" do hero ("soma dos Blocos", literal), e um Bloco de cobrança que não calcula fica de fora da soma sem aviso.
+  evidence: Low. Decisão 8 da 6.5. Se Rafael marcar Blocos que se sobrepõem, o hero pode mostrar mais que a soma dos cartões distintos.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-5-recebimentos-por-bloco-de-cobranca.md`
+  summary: O "Recebido no mês" do hero usa o mês de calendário da `data` do Pagamento (`AAAA-MM`), não o Ciclo do cartão, e num Mês sem Fatura e sem histórico o hero não mostra os dois mini-cartões.
+  evidence: Low. Decisão 8 da 6.5. Um Pagamento de 31/10 conta em outubro mesmo que o Mês da Fatura (vence 06/11) seja novembro; se Rafael estranhar, trocar o critério (um parâmetro do núcleo).
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-5-recebimentos-por-bloco-de-cobranca.md`
+  summary: Em Recebimentos a Seleção só tem "Limpar" e "Aplicar status" (só com Status que contam como pago): não há "Classificar em lote", "Excluir" nem "Gerar mensagem" na lista "Ver", e a Seleção é de uma lista só (some ao fechar ou trocar de Bloco). "Cobrar pendências" está desativado até a 6.7.
+  evidence: Low. Decisões 7 e 12 da 6.5. A mensagem (forma 3) é a 6.7; mudar para um Status que não conta como pago continua sendo no Painel.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-5-recebimentos-por-bloco-de-cobranca.md`
+  summary: Conferir no iPad e no PC os cartões de Recebimentos (a grade `auto-fill` de 14 rem a 834 pt em pé e deitado, os botões "Ver" e "Cobrar pendências" de 44 pt, o selo e o contraste nos dois modos), a lista "Ver" (a caixa de 44 pt, os Ajustes recuados, a folga do rodapé atrás da barra de Seleção), os mini-cartões do hero ("Falta receber" abrindo Recebimentos) e a seção Blocos de cobrança em Configurações (as duas chaves de 44 pt por Bloco), e o VoiceOver lendo o cartão, a linha ("Marcar NETFLIX, R$ 39,90") e "Usar em Recebimentos: Lucas".
+  evidence: Low, não verificado. O jsdom só confere o DOM, os nomes, os `role` e as classes. Junta-se às pendências do VoiceOver da 2.4, da 6.1, da 6.2, da 6.3 e da 6.4.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-5-recebimentos-por-bloco-de-cobranca.md`
+  summary: Rodar no CI a leitura paginada de `lancamentos` pelo PostgREST de verdade e o Realtime do canal `tabela:lancamentos:todos`, e conferir em produção, com dados reais, os cartões de Recebimentos, o "Falta receber" e "Recebido no mês" do hero e as duas chaves de Configurações.
+  evidence: Medium, não verificado em produção. A 6.5 não tem migração; nenhum dado de produção foi lido nem alterado. O gerenciador foi provado com um cliente falso (páginas, sem filtros, canal, eventos) e as telas com jsdom.

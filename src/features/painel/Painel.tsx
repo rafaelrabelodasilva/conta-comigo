@@ -63,7 +63,8 @@ import {
 import { mensagemDaSelecao } from "@/domain/mensagem-janela";
 import { lerModelo } from "@/domain/modelo-mensagem";
 import { faltaDoParcial, idsQuitadosPorPagamento, projetarPagamento, recusarStatusNaoPago, somaDosItens } from "@/domain/pagamento";
-import { projetarPainel } from "@/domain/projecoes";
+import { pendentesDosLancamentos, projetarPainel } from "@/domain/projecoes";
+import { faltaReceberDoMes, recebidoNoMes } from "@/domain/recebimentos";
 import { ativos as responsaveisAtivos } from "@/domain/responsaveis";
 import {
   aoTrocarDeMes,
@@ -194,8 +195,14 @@ import { SeletorMes } from "./SeletorMes";
 // valor "Atrasado" (`FILTRO_ATRASADO`). Só calcula com o Ciclo, as configurações, as Faturas e os itens de
 // Pagamento do Mês lidos (antes, ninguém aparece atrasado, em vez de aparecer com a regra errada).
 // Nada é gravado.
+//
+// Recebimentos no hero (História 6.5, FR-26): "Recebido no mês" soma o valor recebido dos Pagamentos com data no
+// Mês (`recebidoNoMes`, o gerenciador de `pagamentos` de todos os Meses) e "Falta receber" soma os Blocos de
+// cobrança sobre o que está em aberto no Mês aberto (`pendentesDosLancamentos` com `mes`, e `faltaReceberDoMes`:
+// `avaliar` do núcleo). Tocar em "Falta receber" abre Recebimentos. Sem os itens de Pagamento, os Blocos ou os
+// Pagamentos lidos, o valor é "—" (nunca um número com a regra errada).
 
-const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status", "blocos", "pagamento_itens"] as const;
+const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status", "blocos", "pagamento_itens", "pagamentos"] as const;
 
 /** Sem ninguém atrasado: os dados do Atrasado (Ciclo, configurações, Faturas e itens de Pagamento) ainda não chegaram. */
 const SEM_ATRASO: ReadonlyMap<string, string> = new Map();
@@ -278,6 +285,8 @@ export function Painel({ titulo }: { titulo: string }) {
   const status = useLinhas("status");
   // Os itens de Pagamento do Mês aberto (6.1): quem tem Pagamento e quanto já foi quitado.
   const itensDePagamento = useLinhas("pagamento_itens");
+  // Os Pagamentos vivos de todos os Meses (o "Recebido no mês" do hero, 6.5).
+  const pagamentos = useLinhas("pagamentos");
   const online = useConexao();
   const hoje = useHoje();
   const ciclo = useLinhas("config_ciclo");
@@ -345,6 +354,29 @@ export function Painel({ titulo }: { titulo: string }) {
     [atrasoPronto, doMes, hoje, toleranciaDeAtraso, statusPagos, ciclo.linhas, vencimentosDasFaturas, itensDePagamento.linhas],
   );
   const atrasadas = useMemo(() => new Set(atrasoPorLinha.keys()), [atrasoPorLinha]);
+  // O que está em aberto no Mês aberto (projetarPendente) e o que cada Bloco de cobrança soma dele (6.5).
+  const pendentesDoMes = useMemo(
+    () =>
+      itensProntos
+        ? pendentesDosLancamentos(lancamentos.linhas, {
+            mes: mesAberto,
+            statusPagos,
+            itens: itensDePagamento.linhas,
+            mesesComFatura: new Set(vencimentosDasFaturas.keys()),
+          })
+        : null,
+    [itensProntos, lancamentos.linhas, mesAberto, statusPagos, itensDePagamento.linhas, vencimentosDasFaturas],
+  );
+  const recebimentosDoHero = useMemo(() => {
+    const falta =
+      pendentesDoMes !== null && blocosLidos.status === "pronto" && status.status === "pronto"
+        ? faltaReceberDoMes(blocos, pendentesDoMes)
+        : null;
+    return {
+      recebidoCentavos: pagamentos.status === "pronto" ? recebidoNoMes(pagamentos.linhas, mesAberto) : null,
+      faltaCentavos: falta === null || falta.blocos === 0 ? null : falta.totalCentavos,
+    };
+  }, [pendentesDoMes, blocosLidos.status, status.status, blocos, pagamentos.status, pagamentos.linhas, mesAberto]);
   const modeloDaMensagem = useMemo(
     () => lerModelo(configuracoesDoDono(configuracoes.linhas)?.modelo_mensagem),
     [configuracoes.linhas],
@@ -736,6 +768,8 @@ export function Painel({ titulo }: { titulo: string }) {
               conferencia={conferencia}
               aoVerificar={ligarVerificar}
               historico={historico}
+              recebimentos={recebimentosDoHero}
+              aoAbrirRecebimentos={() => router.push("/recebimentos")}
             />
           </div>
           <div className="w-full lg:w-3/5">
