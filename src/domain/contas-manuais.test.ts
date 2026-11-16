@@ -5,6 +5,7 @@ import {
   avaliarFormularioConta,
   chaveDaSerieDaConta,
   contaLegivel,
+  contaMudou,
   descricaoDaRepeticao,
   horizonteDasContas,
   parcelasDaConta,
@@ -12,8 +13,10 @@ import {
   pedidoMaterializarDoDono,
   pedidoSalvarConta,
   proximaOcorrencia,
+  rascunhoDaConta,
   rascunhoInicialDaConta,
   removerParte,
+  responsaveisDaConta,
   totalDaConta,
   type ContaManual,
   type ContextoDoFormulario,
@@ -566,5 +569,128 @@ describe("o pedido do cron (5.3): o mesmo pedido, mais o dono", () => {
     // Encerrada ou além do horizonte não é ilegível: só não tem parcelas a pedir.
     expect(contaLegivel({ ...b, encerrada_em_mes: b.mes_inicial })).toBe(true);
     expect(parcelasDaConta({ ...b, encerrada_em_mes: b.mes_inicial }, "2027-11")).toEqual([]);
+  });
+});
+
+describe("editar uma Conta (História 5.4): o formulário abre preenchido", () => {
+  const salvaBombinhas = (): ContaManual => comoCadastro(conta(BOMBINHAS, "b1"));
+
+  it("rascunhoDaConta devolve o que a Conta tem hoje, com o valor de cada parte (AD-2)", () => {
+    const r = rascunhoDaConta(salvaBombinhas());
+    expect(r).toEqual({
+      nome: "Bombinhas",
+      valor: "318,00",
+      repeticao: "parcelas",
+      parcelas: "6",
+      comecaEm: "2026-07",
+      tipo_id: VIAGEM,
+      observacao: "",
+      partes: [
+        { responsavel_id: MAE, texto: "106,00" },
+        { responsavel_id: CASAL, texto: "106,00" },
+        { responsavel_id: LUCAS, texto: "106,00" },
+      ],
+    });
+  });
+
+  it("um Responsável só vira uma parte sem valor; a Observação nula vira vazia; mensal não tem Parcelas", () => {
+    const silvia = comoCadastro(
+      conta({ ...BOMBINHAS, nome: "Silvia", repeticao: "mensal", parcelas: "", observacao: "plano", partes: [{ responsavel_id: RAFAEL, texto: "" }] }, "s1"),
+    );
+    expect(rascunhoDaConta(silvia)).toMatchObject({ repeticao: "mensal", parcelas: "", observacao: "plano", partes: [{ responsavel_id: RAFAEL, texto: "" }] });
+    expect(rascunhoDaConta({ ...silvia, observacao: null }).observacao).toBe("");
+  });
+
+  it("uma Divisão ilegível abre com uma parte vazia (Rafael escolhe de novo)", () => {
+    const torta = { ...salvaBombinhas(), divisao: { modo: "valor", partes: "x" } };
+    expect(rascunhoDaConta(torta).partes).toEqual([{ responsavel_id: null, texto: "" }]);
+  });
+
+  it("o rascunho de uma Conta salva, sem mexer, passa na validação e dá a mesma Conta (nada mudou)", () => {
+    const salva = salvaBombinhas();
+    const a = avaliarFormularioConta("b1", rascunhoDaConta(salva), { ...CTX, original: salva });
+    expect(a.erros).toEqual({});
+    expect(contaMudou(salva, a.conta as NovaConta)).toBe(false);
+  });
+
+  it("contaMudou: Nome, Valor, Tipo, Responsável, Observação, repetição, total e Divisão", () => {
+    const salva = salvaBombinhas();
+    const muda = (extra: Partial<RascunhoDaConta>) => {
+      const a = avaliarFormularioConta("b1", { ...rascunhoDaConta(salva), ...extra }, { ...CTX, original: salva });
+      expect(a.erros).toEqual({});
+      return contaMudou(salva, a.conta as NovaConta);
+    };
+    expect(muda({ nome: "Bombinhas 2" })).toBe(true);
+    expect(muda({ tipo_id: SAUDE })).toBe(true);
+    expect(muda({ observacao: "pousada" })).toBe(true);
+    expect(muda({ parcelas: "7" })).toBe(true);
+    expect(muda({ repeticao: "mensal" })).toBe(true);
+    expect(muda({ valor: "330,00", partes: BOMBINHAS.partes.map((p) => ({ ...p, texto: "110,00" })) })).toBe(true);
+    // Outra Divisão com o mesmo Valor.
+    expect(muda({ partes: [{ responsavel_id: MAE, texto: "100,00" }, { responsavel_id: CASAL, texto: "118,00" }, { responsavel_id: LUCAS, texto: "100,00" }] })).toBe(true);
+    // Um Responsável só no lugar da Divisão.
+    expect(muda({ partes: [{ responsavel_id: MAE, texto: "" }] })).toBe(true);
+    // Espaços sobrando no Nome não são mudança (a validação os tira).
+    expect(muda({ nome: "  Bombinhas " })).toBe(false);
+  });
+
+  it("o 'Começa em' é o salvo: o formulário não o muda e a janela de 5 anos não vale (Conta antiga continua editável)", () => {
+    const antiga: ContaManual = {
+      ...comoCadastro(conta({ ...BOMBINHAS, repeticao: "mensal", parcelas: "", partes: [{ responsavel_id: RAFAEL, texto: "" }] }, "a1")),
+      mes_inicial: "2020-12",
+    };
+    const a = avaliarFormularioConta("a1", { ...rascunhoDaConta(antiga), comecaEm: "2030-01", nome: "Antiga 2" }, { ...CTX, original: antiga });
+    expect(a.erros).toEqual({});
+    expect(a.conta?.mes_inicial).toBe("2020-12");
+    // Para uma Conta nova a janela continua valendo.
+    expect(avaliarFormularioConta("n", { ...rascunhoDaConta(antiga) }, CTX).erros.comecaEm).toBe("conta.mes_fora_do_limite");
+  });
+
+  it("Tipo e Responsável arquivados que a Conta já usa continuam valendo; trocar por outro arquivado, não (AD-16)", () => {
+    const salva = salvaBombinhas();
+    // Tipo da Conta e Responsável Lucas arquivados depois de salvar.
+    const arquivados: ContextoDoFormulario = {
+      mesAtual: "2026-11",
+      tiposAtivos: new Set([SAUDE]),
+      responsaveisAtivos: new Set([MAE, CASAL, RAFAEL]),
+      original: salva,
+    };
+    const sem = avaliarFormularioConta("b1", { ...rascunhoDaConta(salva), nome: "Bombinhas 2" }, arquivados);
+    expect(sem.erros).toEqual({});
+    // Sem o `original` (Conta nova), os mesmos arquivados são recusados.
+    const nova = avaliarFormularioConta("b1", rascunhoDaConta(salva), { ...arquivados, original: undefined });
+    expect(nova.erros.tipo).toBe("conta.tipo_arquivado");
+    expect(nova.erros.divisao).toBe("conta.responsavel_arquivado");
+    // Trocar o Tipo por outro que está arquivado (e não é o da Conta) continua recusado.
+    const outro = avaliarFormularioConta("b1", { ...rascunhoDaConta(salva), tipo_id: "t-velho" }, arquivados);
+    expect(outro.erros.tipo).toBe("conta.tipo_arquivado");
+    // Um Responsável arquivado que NÃO é da Conta também.
+    const parte = avaliarFormularioConta(
+      "b1",
+      { ...rascunhoDaConta(salva), partes: [{ responsavel_id: MAE, texto: "106,00" }, { responsavel_id: CASAL, texto: "106,00" }, { responsavel_id: "r-velho", texto: "106,00" }] },
+      arquivados,
+    );
+    expect(parte.erros.divisao).toBe("conta.responsavel_arquivado");
+  });
+
+  it("responsaveisDaConta: o Responsável único ou o de cada parte", () => {
+    expect(responsaveisDaConta(salvaBombinhas())).toEqual([MAE, CASAL, LUCAS]);
+    expect(responsaveisDaConta({ responsavel_id: RAFAEL, divisao: null })).toEqual([RAFAEL]);
+    expect(responsaveisDaConta({ responsavel_id: null, divisao: { modo: "valor", partes: "x" } })).toEqual([]);
+  });
+});
+
+describe("pedidoMaterializar com a versão da Conta (História 5.4, corrida com o cron)", () => {
+  it("cada parcela leva `conta_atualizada_em` quando a Conta traz `atualizada_em`", () => {
+    const b = { ...comoCadastro(conta(BOMBINHAS, "b1")), atualizada_em: "2026-11-10T12:00:00.123456+00:00" };
+    const { p_parcelas } = pedidoMaterializar([b], "2027-11");
+    expect(p_parcelas).toHaveLength(6);
+    expect(p_parcelas.every((p) => p.conta_atualizada_em === "2026-11-10T12:00:00.123456+00:00")).toBe(true);
+  });
+
+  it("sem `atualizada_em` (salvar e os testes antigos) a chave nem existe no pedido", () => {
+    const { p_parcelas } = pedidoMaterializar([comoCadastro(conta(BOMBINHAS, "b1"))], "2027-11");
+    expect(p_parcelas.some((p) => "conta_atualizada_em" in p)).toBe(false);
+    expect(pedidoSalvarConta(conta(BOMBINHAS, "b1"), 1, "2027-11").p_parcelas.some((p) => "conta_atualizada_em" in p)).toBe(false);
   });
 });

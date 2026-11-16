@@ -328,6 +328,18 @@ function ligarAoDetector() {
   aoVoltar(() => void recarregarTodos());
 }
 
+/**
+ * A Conta manual excluída (`excluido_em`, História 5.4, AD-16) não é da lista:
+ * o gerenciador de `contas_manuais` guarda só as vivas. A releitura filtra no
+ * banco; um evento ou uma gravação que exclui uma Conta (aqui ou em outro
+ * aparelho) a tira da memória, e o "Desfazer" (que limpa o campo) a traz de volta.
+ */
+const contaViva = (linha: LinhaBase) => ((linha as { excluido_em?: string | null }).excluido_em ?? null) === null;
+export const ESCOPO_DAS_CONTAS = {
+  pertence: contaViva,
+  filtrarLeitura: (consulta: ConsultaLeitura) => consulta.is("excluido_em", null),
+} as const;
+
 /** O gerenciador único da tabela (criado na primeira chamada). */
 export function gerenciador<T extends TabelaRealtime>(tabela: T): Gerenciador<LinhaDe<T>> {
   let g = gerenciadores.get(tabela);
@@ -338,6 +350,7 @@ export function gerenciador<T extends TabelaRealtime>(tabela: T): Gerenciador<Li
       tabela,
       obterCliente: criarClienteNavegador,
       porMes: tabela === "lancamentos",
+      ...(tabela === "contas_manuais" ? ESCOPO_DAS_CONTAS : {}),
     });
     gerenciadores.set(tabela, g);
   }

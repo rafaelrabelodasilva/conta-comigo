@@ -820,3 +820,41 @@ describe("textos da planilha (História 3.10)", () => {
     }
   });
 });
+
+describe("textos de alterar, encerrar e excluir uma Conta (História 5.4)", () => {
+  it("o aviso do formulário e os que ficam como estão", async () => {
+    const m = await import("./mensagens");
+    expect(m.rotuloValeAPartirDe("Nov/26")).toBe("Vale a partir de Nov/26. Os meses anteriores não mudam.");
+    expect(
+      m.rotuloFicamComoEstao([
+        { mesFormatado: "Dez/26", motivo: "paga" },
+        { mesFormatado: "Jan/27", motivo: "editada" },
+        { mesFormatado: "Fev/27", motivo: "com_pagamento" },
+      ]),
+    ).toBe("Ficam como estão: Dez/26 (já paga), Jan/27 (editada à mão), Fev/27 (com pagamento).");
+  });
+
+  it("o aviso depois de alterar e de encerrar, no singular e no plural", async () => {
+    const m = await import("./mensagens");
+    expect(m.rotuloContaAlterada(8, 0)).toBe("Conta alterada: 8 lançamentos recriados");
+    expect(m.rotuloContaAlterada(1, 1)).toBe("Conta alterada: 1 lançamento recriado · 1 ficou como estava");
+    expect(m.rotuloContaAlterada(0, 2)).toBe("Conta alterada: 0 lançamentos recriados · 2 ficaram como estavam");
+    expect(m.rotuloContaEncerrada(3, 0)).toBe("Conta encerrada: 3 lançamentos excluídos");
+    expect(m.rotuloContaEncerrada(1, 2)).toBe("Conta encerrada: 1 lançamento excluído · 2 ficaram como estavam");
+    expect(m.rotuloContaEncerrada(0, 0)).toBe("Conta encerrada: nenhum lançamento excluído");
+  });
+
+  it("a janela de Encerrar e a de Excluir", async () => {
+    const m = await import("./mensagens");
+    expect(m.rotuloEncerrarExclui(0, "Jan/27")).toBe("Nenhum lançamento será excluído.");
+    expect(m.rotuloEncerrarExclui(1, "Jan/27")).toBe("1 lançamento de Jan/27 em diante será excluído.");
+    expect(m.rotuloEncerrarExclui(4, "Jan/27")).toBe("4 lançamentos de Jan/27 em diante serão excluídos.");
+    expect(m.rotuloPerguntaExcluir("Bombinhas")).toBe("Excluir a conta Bombinhas?");
+    expect(m.rotuloExcluirPergunta(0, "Nov/26")).toBe("Não há lançamentos previstos dos meses seguintes para excluir junto.");
+    expect(m.rotuloExcluirPergunta(1, "Nov/26")).toBe("Há 1 lançamento previsto de Nov/26 em diante que pode sair junto.");
+    expect(m.rotuloExcluirPergunta(7, "Nov/26")).toBe("Há 7 lançamentos previstos de Nov/26 em diante que podem sair junto.");
+    expect(m.rotuloContaExcluida("Bombinhas", 0)).toBe("Conta Bombinhas excluída");
+    expect(m.rotuloContaExcluida("Bombinhas", 1)).toBe("Conta Bombinhas excluída, com 1 lançamento");
+    expect(m.rotuloContaExcluida("Bombinhas", 4)).toBe("Conta Bombinhas excluída, com 4 lançamentos");
+  });
+});

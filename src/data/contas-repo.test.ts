@@ -52,6 +52,7 @@ const linhaConta = (extra: Partial<LinhaConta> = {}): LinhaConta => ({
   parcela_total: 6,
   divisao: null,
   encerrada_em_mes: null,
+  excluido_em: null,
   created_at: T,
   updated_at: T,
   ...extra,

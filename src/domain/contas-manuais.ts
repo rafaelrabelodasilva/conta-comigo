@@ -33,8 +33,10 @@ import {
   copiarDivisao,
   divisaoComResponsaveisAtivos,
   lerDivisao,
+  mesmaDivisao,
   partesDaImportacao,
   textoDeReais,
+  valoresDasPartes,
   type Divisao,
   type ParteParaGravar,
   type ParteRascunho,
@@ -70,11 +72,15 @@ export type ContaManual = {
   encerrada_em_mes: string | null;
 };
 
-/** O que `parcelasDaConta` lê da Conta. */
+/**
+ * O que `parcelasDaConta` lê da Conta. `atualizada_em` (o `updated_at` da Conta
+ * quando foi lida) é opcional: o cron o manda junto, e o materializador ignora o
+ * pedido calculado de uma Conta que mudou desde então (História 5.4, corrida).
+ */
 export type ContaParaParcelas = Pick<
   ContaManual,
   "id" | "valor_centavos" | "mes_inicial" | "repeticao" | "parcela_total" | "divisao" | "encerrada_em_mes"
->;
+> & { atualizada_em?: string | null };
 
 /** Uma parcela a gravar: a linha-mãe e, com Divisão, os valores das filhas. */
 export type ParcelaDaConta = {
@@ -215,11 +221,54 @@ export function rascunhoInicialDaConta(mesAtual: string): RascunhoDaConta {
   };
 }
 
+/** Os Responsáveis que a Conta cita: o Responsável único ou o de cada parte da Divisão. */
+export function responsaveisDaConta(c: Pick<ContaManual, "responsavel_id" | "divisao">): string[] {
+  if (c.divisao !== null && c.divisao !== undefined) {
+    const d = lerDivisao(c.divisao);
+    return d === null ? [] : d.partes.map((p) => p.responsavel_id);
+  }
+  return c.responsavel_id === null ? [] : [c.responsavel_id];
+}
+
+/**
+ * O formulário aberto para editar (História 5.4): os campos da Conta salva. Com
+ * Divisão, cada parte mostra o valor que ela tem hoje (AD-2); uma Divisão
+ * ilegível abre com uma parte vazia (Rafael escolhe de novo).
+ */
+export function rascunhoDaConta(c: ContaManual): RascunhoDaConta {
+  const d = c.divisao === null || c.divisao === undefined ? null : lerDivisao(c.divisao);
+  const valores = d === null ? null : valoresDasPartes(c.valor_centavos, d);
+  let partes: ParteDoFormulario[];
+  if (d !== null && valores !== null && valores.ok) {
+    partes = d.partes.map((p, i) => ({ responsavel_id: p.responsavel_id, texto: textoDeReais(valores.valor[i]) }));
+  } else {
+    partes = [{ responsavel_id: c.divisao === null || c.divisao === undefined ? c.responsavel_id : null, texto: "" }];
+  }
+  return {
+    nome: c.nome,
+    valor: textoDeReais(c.valor_centavos),
+    repeticao: c.repeticao,
+    parcelas: c.parcela_total === null ? "" : String(c.parcela_total),
+    comecaEm: c.mes_inicial,
+    tipo_id: c.tipo_id,
+    observacao: c.observacao ?? "",
+    partes,
+  };
+}
+
 export type ContextoDoFormulario = {
   mesAtual: string;
   /** Os Tipos e Responsáveis ativos (os arquivados não valem para Conta nova). */
   tiposAtivos: ReadonlySet<string>;
   responsaveisAtivos: ReadonlySet<string>;
+  /**
+   * Editando (História 5.4): a Conta como está salva. O "Começa em" não muda
+   * (os Lançamentos de antes do Mês atual não mudam, e `parcela_n` conta desde
+   * ele) e o Tipo e os Responsáveis arquivados que a Conta já usa continuam
+   * valendo (AD-16: arquivar não apaga das somas); trocar por outro arquivado,
+   * não.
+   */
+  original?: Pick<ContaManual, "mes_inicial" | "tipo_id" | "responsavel_id" | "divisao">;
 };
 
 /** A Conta pronta para gravar (colunas de `contas_manuais`, mais o Nome normalizado). */
@@ -236,6 +285,28 @@ export type NovaConta = {
   parcela_total: number | null;
   divisao: Divisao | null;
 };
+
+/**
+ * A Conta mudou no formulário? Compara o que se edita (Nome, Valor, Tipo,
+ * Responsável ou Divisão, Observação, repetição e total) com a Conta salva.
+ * Sem mudança, "Salvar" só fecha: recriar os Lançamentos por nada trocaria os
+ * ids à toa.
+ */
+export function contaMudou(salva: ContaManual, nova: NovaConta): boolean {
+  const divisaoSalva = salva.divisao === null || salva.divisao === undefined ? null : lerDivisao(salva.divisao);
+  // Uma Divisão salva que não se lê conta como mudança: o formulário a trocou por uma legível.
+  if (divisaoSalva === null && salva.divisao !== null && salva.divisao !== undefined) return true;
+  return (
+    salva.nome !== nova.nome ||
+    salva.valor_centavos !== nova.valor_centavos ||
+    salva.tipo_id !== nova.tipo_id ||
+    salva.responsavel_id !== nova.responsavel_id ||
+    (salva.observacao ?? null) !== nova.observacao ||
+    salva.repeticao !== nova.repeticao ||
+    salva.parcela_total !== nova.parcela_total ||
+    !mesmaDivisao(divisaoSalva, nova.divisao)
+  );
+}
 
 export type AvaliacaoDaConta = {
   /** O código de cada campo com erro (texto pelo mapa `mensagem`). */
@@ -282,16 +353,26 @@ export function avaliarFormularioConta(
     if (parcelaTotal === null) erros.parcelas = "conta.parcelas_invalidas";
   }
 
-  if (!ehMes(r.comecaEm)) erros.comecaEm = "conta.mes_invalido";
-  else if (
-    r.comecaEm < somarMeses(ctx.mesAtual, -JANELA_DE_MESES) ||
-    r.comecaEm > somarMeses(ctx.mesAtual, JANELA_DE_MESES)
-  ) {
-    erros.comecaEm = "conta.mes_fora_do_limite";
+  // Editando, o "Começa em" é o salvo (a janela de 5 anos só vale para Conta nova).
+  const comecaEm = ctx.original ? ctx.original.mes_inicial : r.comecaEm;
+  if (!ctx.original) {
+    if (!ehMes(r.comecaEm)) erros.comecaEm = "conta.mes_invalido";
+    else if (
+      r.comecaEm < somarMeses(ctx.mesAtual, -JANELA_DE_MESES) ||
+      r.comecaEm > somarMeses(ctx.mesAtual, JANELA_DE_MESES)
+    ) {
+      erros.comecaEm = "conta.mes_fora_do_limite";
+    }
   }
 
+  // Editando, o Responsável e o Tipo arquivados que a Conta já usa seguem valendo.
+  const responsaveisAtivos = ctx.original
+    ? new Set([...ctx.responsaveisAtivos, ...responsaveisDaConta(ctx.original)])
+    : ctx.responsaveisAtivos;
+  const tipoAtual = ctx.original?.tipo_id;
+
   if (r.tipo_id === null) erros.tipo = "conta.sem_tipo";
-  else if (!ctx.tiposAtivos.has(r.tipo_id)) erros.tipo = "conta.tipo_arquivado";
+  else if (!ctx.tiposAtivos.has(r.tipo_id) && r.tipo_id !== tipoAtual) erros.tipo = "conta.tipo_arquivado";
 
   const observacao = r.observacao.trim();
   if (observacao.length > OBSERVACAO_MAX) erros.observacao = "conta.observacao_longa";
@@ -306,7 +387,7 @@ export function avaliarFormularioConta(
   } else if (r.partes.length === 1) {
     const unica = r.partes[0].responsavel_id;
     if (unica === null) erros.divisao = "conta.sem_responsavel";
-    else if (!ctx.responsaveisAtivos.has(unica)) erros.divisao = "conta.responsavel_arquivado";
+    else if (!responsaveisAtivos.has(unica)) erros.divisao = "conta.responsavel_arquivado";
     else responsavelId = unica;
     valoresDasPartes = [valorCentavos];
     somaCentavos = valorCentavos;
@@ -320,7 +401,7 @@ export function avaliarFormularioConta(
     valoresDasPartes = a.valores;
     somaCentavos = a.somaCentavos;
     if (a.erro !== null || a.divisao === null) erros.divisao = a.erro ?? "salvar.falhou";
-    else if (!divisaoComResponsaveisAtivos(a.divisao, ctx.responsaveisAtivos)) erros.divisao = "conta.responsavel_arquivado";
+    else if (!divisaoComResponsaveisAtivos(a.divisao, responsaveisAtivos)) erros.divisao = "conta.responsavel_arquivado";
     else divisao = a.divisao;
   }
 
@@ -340,7 +421,7 @@ export function avaliarFormularioConta(
       tipo_id: r.tipo_id,
       responsavel_id: responsavelId,
       observacao: observacao === "" ? null : observacao,
-      mes_inicial: r.comecaEm,
+      mes_inicial: comecaEm,
       repeticao: r.repeticao,
       parcela_total: parcelaTotal,
       divisao,
@@ -416,16 +497,19 @@ export function chaveDaSerieDaConta(
 
 // ---------------------------------------------------------- pedidos às RPCs
 
-type ParcelaParaRpc = {
+export type ParcelaParaRpc = {
   conta_id: string;
   parcela_n: number;
   mes: string;
   valor_centavos: number;
   partes: ParteParaGravar[] | null;
+  /** O `updated_at` da Conta de que a parcela foi calculada; o banco a ignora se a Conta já mudou. */
+  conta_atualizada_em?: string;
 };
 
-function parcelaParaRpc(p: ParcelaDaConta): ParcelaParaRpc {
-  return { conta_id: p.conta_id, parcela_n: p.parcela_n, mes: p.mes, valor_centavos: p.valor_centavos, partes: p.partes };
+export function parcelaParaRpc(p: ParcelaDaConta, contaAtualizadaEm?: string | null): ParcelaParaRpc {
+  const base = { conta_id: p.conta_id, parcela_n: p.parcela_n, mes: p.mes, valor_centavos: p.valor_centavos, partes: p.partes };
+  return typeof contaAtualizadaEm === "string" ? { ...base, conta_atualizada_em: contaAtualizadaEm } : base;
 }
 
 /** Os argumentos de `salvar_conta_manual`: a Conta, a chave da Série e as parcelas até `ateMes`. */
@@ -440,7 +524,7 @@ export function pedidoSalvarConta(conta: NovaConta, ocorrencia: number, ateMes: 
   const paraParcelas: ContaParaParcelas = { ...conta, encerrada_em_mes: null };
   return {
     p_conta: { ...conta, serie: chaveDaSerieDaConta(conta, ocorrencia) },
-    p_parcelas: parcelasDaConta(paraParcelas, ateMes).map(parcelaParaRpc),
+    p_parcelas: parcelasDaConta(paraParcelas, ateMes).map((p) => parcelaParaRpc(p)),
     p_ate_mes: ateMes,
   };
 }
@@ -451,7 +535,7 @@ export type PedidoMaterializar = { p_ate_mes: string; p_parcelas: ParcelaParaRpc
 export function pedidoMaterializar(contas: readonly ContaParaParcelas[], ateMes: string): PedidoMaterializar {
   return {
     p_ate_mes: ateMes,
-    p_parcelas: contas.flatMap((c) => parcelasDaConta(c, ateMes).map(parcelaParaRpc)),
+    p_parcelas: contas.flatMap((c) => parcelasDaConta(c, ateMes).map((p) => parcelaParaRpc(p, c.atualizada_em))),
   };
 }
 

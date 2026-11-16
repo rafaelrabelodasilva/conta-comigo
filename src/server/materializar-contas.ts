@@ -38,7 +38,10 @@ export type ResultadoDoCron =
       falhas: number;
     };
 
-const COLUNAS = "id, owner_id, valor_centavos, mes_inicial, repeticao, parcela_total, divisao, encerrada_em_mes";
+// `excluido_em` e `updated_at` (História 5.4): a leitura já tira as Contas excluídas
+// e o núcleo as confere de novo; `updated_at` é a versão da Conta de que as
+// parcelas saem (o banco ignora o pedido de uma Conta que mudou no meio).
+const COLUNAS = "id, owner_id, valor_centavos, mes_inicial, repeticao, parcela_total, divisao, encerrada_em_mes, excluido_em, updated_at";
 
 /** Quantas linhas novas a RPC devolveu (`jsonb` array); qualquer outra forma conta 0. */
 function contarLinhas(resposta: unknown): number {
@@ -46,7 +49,7 @@ function contarLinhas(resposta: unknown): number {
 }
 
 export async function materializarContasDoDia(admin: ClienteDoCron, agora: Date): Promise<ResultadoDoCron> {
-  const lidas = await admin.from("contas_manuais").select(COLUNAS).order("id");
+  const lidas = await admin.from("contas_manuais").select(COLUNAS).is("excluido_em", null).order("id");
   if (lidas.error || !Array.isArray(lidas.data)) {
     return { ok: false, codigo: "cron.leitura_falhou", quantidade: 0, contas: 0, ilegiveis: 0, falhas: 0 };
   }

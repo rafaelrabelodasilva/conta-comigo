@@ -41,6 +41,7 @@ Nenhum segredo fica neste arquivo. As chaves ficam só nas variáveis de ambient
 - Usa também `SUPABASE_SECRET_KEY` (já existe) e a RPC `materializar_contas_manuais_do_dono`, que só vem na migração `20261125120000_materializar_do_dono.sql` (aplicar com `supabase db push` **antes** do primeiro Cron, senão a rota responde 500).
 - O que ela faz: lê `contas_manuais` (essa leitura também mantém o projeto Supabase Free ativo), pede ao banco as parcelas que faltam até o Mês atual + 12 e responde `{ "ok": true, "quantidade": N }`. Os logs da Vercel mostram `cron.diario` com status, duração e quantidade; nunca nomes nem valores.
 - Conferir depois do deploy: Vercel → projeto → Settings → Cron Jobs (a tarefa aparece e tem "Run" manual) e Logs filtrando por `/api/cron/diario`.
+- **Depois da História 5.4:** a rota lê só as Contas que não foram excluídas (`excluido_em is null`) e leva o `updated_at` da Conta em cada parcela (o banco ignora o pedido de uma Conta que mudou no meio). Isso vem na migração `20261126120000_alterar_encerrar_excluir_conta.sql`: aplicar com `supabase db push` **logo depois do merge**, senão o Cron responde 500 (a coluna não existe) e a tela Contas mostra "Não foi possível carregar" até a migração entrar.
 
 ## Auth (História 1.2)
 - Supabase Auth com e-mail e senha via `@supabase/ssr`. Telas: `/entrar` (com "Esqueci a senha" em `/entrar?modo=esqueci`), `/auth/confirmar` (troca o `code` do link do e-mail) e `/redefinir-senha`. "Sair" encerra só a sessão deste aparelho.
