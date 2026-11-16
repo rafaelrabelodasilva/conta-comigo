@@ -92,7 +92,7 @@ development_status:
   epic-5-retrospective: optional
 
   epic-6: in-progress
-  6-1-marcar-como-pago: review
+  6-1-marcar-como-pago: done
   6-2-pagamento-parcial-e-a-minha-parte: backlog
   6-3-histórico-e-desfazer-pagamentos: backlog
   6-4-atrasado: backlog
