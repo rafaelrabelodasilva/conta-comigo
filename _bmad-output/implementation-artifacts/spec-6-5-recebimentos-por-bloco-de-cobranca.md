@@ -2,7 +2,7 @@
 title: 'História 6.5: Recebimentos por Bloco de cobrança'
 type: 'feature'
 created: '2026-11-16'
-status: 'review'
+status: 'done'
 baseline_commit: '062a977'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -97,8 +97,8 @@ Hoje 15/10/26; tolerância 10; Faturas de set/26 (vence 06/09) e out/26 (vence 0
 - [x] Configurações → Blocos de cobrança: as duas chaves por Bloco.
 - [x] Provas: núcleo (casos da matriz), jsdom (Recebimentos, Configurações, hero, Painel), gerenciador paginado, repositório.
 - [x] Docs: `sprint-status.yaml` (6.5 em `review`), `deferred-work.md`, `docs/infraestrutura.md` (sem migração).
-- [ ] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
-- [ ] `done` no sprint-status só depois do merge, em PR separada.
+- [x] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
+- [x] `done` no sprint-status só depois do merge, em PR separada.
 
 ## Verification
 
