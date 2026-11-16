@@ -2,7 +2,7 @@
 title: 'História 5.4: Alterar, encerrar e excluir uma Conta manual'
 type: 'feature'
 created: '2026-11-15'
-status: 'review'
+status: 'done'
 baseline_commit: 'b8e0630'
 route: 'dispatch'
 review_loop_iteration: 0
