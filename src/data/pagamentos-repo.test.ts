@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { PedidoDePagamento } from "@/domain/pagamento";
 import type { Database } from "./database.types";
 import { criarRepoPagamentos, type LinhaItemDePagamento, type LinhaPagamento } from "./pagamentos-repo";
-import { criarGerenciador, type LinhaDe } from "./realtime";
+import { criarGerenciador, ESCOPO_DO_HISTORICO, type LinhaDe } from "./realtime";
 
 // Aplicar e desfazer no repositório (História 6.1): um Supabase de mentira com
 // tabelas em memória (`.eq/.neq/.in/.is/.limit`) e a RPC que o teste mandar. Quem
@@ -19,7 +19,7 @@ const MES = "2026-10";
 const PAGO = "s-pago";
 const NAO_PAGO = "s-nao-pago";
 
-function consulta(linhas: Linha[], pedidosIn: number[]) {
+function consulta(linhas: Linha[], pedidosIn: number[], falha = false) {
   const filtros: ((l: Linha) => boolean)[] = [];
   const c = {
     eq(coluna: string, valor: unknown) {
@@ -42,8 +42,10 @@ function consulta(linhas: Linha[], pedidosIn: number[]) {
     limit() {
       return c;
     },
-    then(ok: (r: { data: unknown; error: unknown }) => unknown, falha?: (e: unknown) => unknown) {
-      return Promise.resolve({ data: linhas.filter((l) => filtros.every((f) => f(l))), error: null }).then(ok, falha);
+    then(ok: (r: { data: unknown; error: unknown }) => unknown, rejeita?: (e: unknown) => unknown) {
+      return Promise.resolve(
+        falha ? { data: null, error: { message: "falhou" } } : { data: linhas.filter((l) => filtros.every((f) => f(l))), error: null },
+      ).then(ok, rejeita);
     },
   };
   return c;
@@ -57,6 +59,8 @@ function montar(opcoes: {
   rpc?: (n: number, nome: string) => RespostaRpc;
   online?: boolean;
   lanca?: boolean;
+  /** Toda leitura volta com erro. */
+  leituraFalha?: boolean;
 }) {
   const chamadas: { nome: string; args: Record<string, unknown> }[] = [];
   const lidas: string[] = [];
@@ -66,6 +70,7 @@ function montar(opcoes: {
     from: (tabela: string) => ({
       select: () => {
         lidas.push(tabela);
+        if (opcoes.leituraFalha) return consulta([], pedidosIn, true);
         return consulta(tabelas[tabela] ?? [], pedidosIn);
       },
     }),
@@ -88,8 +93,23 @@ function montar(opcoes: {
   memoriaLancamentos.abrirMes(MES);
   const memoriaItens = criarGerenciador<LinhaItemDePagamento>({ tabela: "pagamento_itens", obterCliente: () => cliente, porMes: true });
   memoriaItens.abrirMes(MES);
-  const repo = criarRepoPagamentos({ obterCliente: () => cliente, memoriaLancamentos, memoriaItens, online: () => opcoes.online ?? true });
-  return { repo, chamadas, lidas, pedidosIn, memoriaLancamentos, memoriaItens };
+  // O Histórico (6.3): os Pagamentos vivos e os itens vivos de todos os Meses.
+  const memoriaPagamentos = criarGerenciador<LinhaPagamento>({ tabela: "pagamentos", obterCliente: () => cliente, ...ESCOPO_DO_HISTORICO });
+  const memoriaItensDoHistorico = criarGerenciador<LinhaItemDePagamento>({
+    tabela: "pagamento_itens",
+    obterCliente: () => cliente,
+    canal: "tabela:pagamento_itens:historico",
+    ...ESCOPO_DO_HISTORICO,
+  });
+  const repo = criarRepoPagamentos({
+    obterCliente: () => cliente,
+    memoriaLancamentos,
+    memoriaItens,
+    memoriaPagamentos,
+    memoriaItensDoHistorico,
+    online: () => opcoes.online ?? true,
+  });
+  return { repo, chamadas, lidas, pedidosIn, memoriaLancamentos, memoriaItens, memoriaPagamentos, memoriaItensDoHistorico };
 }
 
 const pedido: PedidoDePagamento = {
@@ -254,11 +274,14 @@ describe("desfazer", () => {
     expect([...m.pedidosIn].sort((a, b) => a - b)).toEqual([50, 50, 100, 100, 100, 100]);
   });
 
-  it("um Pagamento já desfeito não tem itens vivos: a RPC recebe `devolver` vazio", async () => {
+  it("um Pagamento já desfeito (sem itens vivos): pagamento.ja_desfeito, e o estado que a RPC devolve vai para a memória", async () => {
     const m = montar({ itens: [], rpc: () => resposta([], [], pagamento({ excluido_em: T2 })) });
-    const r = await m.repo.desfazer("pg1");
-    expect(r.ok).toBe(true);
+    // Outro aparelho o desfez: aqui ele ainda aparece no Histórico.
+    m.memoriaPagamentos.aplicarLote([pagamento({ updated_at: T })]);
+    expect(m.memoriaPagamentos.linhas()).toHaveLength(1);
+    expect(await m.repo.desfazer("pg1")).toEqual({ ok: false, codigo: "pagamento.ja_desfeito" });
     expect(m.chamadas[0].args.p_pedido).toEqual({ pagamento_id: "pg1", devolver: [] });
+    expect(m.memoriaPagamentos.linhas()).toEqual([]);
   });
 
   it("os códigos da RPC chegam à tela (a linha mudou desde a leitura, o Pagamento não existe)", async () => {
@@ -273,5 +296,103 @@ describe("desfazer", () => {
     expect(await m.repo.desfazer("pg1")).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
     expect(m.lidas).toEqual([]);
     expect(m.chamadas).toHaveLength(0);
+  });
+});
+
+describe("desfazer com o que a janela viu (História 6.3)", () => {
+  const itens = [
+    { lancamento_id: "l1", status_anterior_id: NAO_PAGO, status_aplicado_id: PAGO, created_at: T, pagamento_id: "pg1", excluido_em: null },
+    { lancamento_id: "l2", status_anterior_id: NAO_PAGO, status_aplicado_id: PAGO, created_at: T, pagamento_id: "pg1", excluido_em: null },
+  ];
+  const lancamentos = [
+    { id: "l1", status_id: PAGO, updated_at: T },
+    { id: "l2", status_id: PAGO, updated_at: T },
+  ];
+  const visto = [
+    { lancamento_id: "l1", destino: "devolver" as const },
+    { lancamento_id: "l2", destino: "devolver" as const },
+  ];
+  const desfeito = () => resposta([itemDb("i1", "l1", { excluido_em: T2, updated_at: T2 })], [lancamentoDb("l1", { status_id: NAO_PAGO })], pagamento({ excluido_em: T2, updated_at: T2 }));
+
+  it("a prévia classifica cada item sem gravar nada (nem chamar a RPC)", async () => {
+    const m = montar({
+      lancamentos: [lancamentos[0], { id: "l2", status_id: "s-outro", updated_at: T }],
+      itens: [...itens, { lancamento_id: "l1", status_anterior_id: null, status_aplicado_id: null, created_at: T2, pagamento_id: "pg2", excluido_em: null }],
+    });
+    const r = await m.repo.previaDoDesfazer("pg1");
+    // l1 tem um Pagamento posterior; l2 teve o Status mudado.
+    expect(r).toMatchObject({
+      ok: true,
+      itens: [
+        { lancamento_id: "l1", destino: "pagamento_posterior" },
+        { lancamento_id: "l2", destino: "status_mudou" },
+      ],
+    });
+    expect(m.chamadas).toEqual([]);
+  });
+
+  it("a prévia de um Pagamento sem item vivo diz que já foi desfeito; sem internet nada é lido", async () => {
+    expect(await montar({ itens: [] }).repo.previaDoDesfazer("pg1")).toEqual({ ok: false, codigo: "pagamento.ja_desfeito" });
+    const off = montar({ online: false, lancamentos, itens });
+    expect(await off.repo.previaDoDesfazer("pg1")).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+    expect(off.lidas).toEqual([]);
+  });
+
+  it("desfaz quando o plano de agora é o que a janela viu", async () => {
+    const m = montar({ lancamentos, itens, rpc: desfeito });
+    expect((await m.repo.desfazer("pg1", visto)).ok).toBe(true);
+    expect(m.chamadas).toHaveLength(1);
+  });
+
+  it("outro aparelho mudou uma linha entre a janela e a confirmação: pagamento.mudou e nada é gravado", async () => {
+    // A janela viu l2 voltando; agora o Status de l2 já é outro.
+    const m = montar({ lancamentos: [lancamentos[0], { id: "l2", status_id: "s-outro", updated_at: T2 }], itens, rpc: desfeito });
+    expect(await m.repo.desfazer("pg1", visto)).toEqual({ ok: false, codigo: "pagamento.mudou" });
+    expect(m.chamadas).toEqual([]);
+  });
+
+  it("o Pagamento sai do Histórico e os itens saem da memória dos itens vivos", async () => {
+    const m = montar({ lancamentos, itens, rpc: desfeito });
+    m.memoriaPagamentos.aplicarLote([pagamento({ updated_at: T })]);
+    m.memoriaItensDoHistorico.aplicarLote([itemDb("i1", "l1"), itemDb("i2", "l2")]);
+    expect(m.memoriaItensDoHistorico.linhas()).toHaveLength(2);
+    await m.repo.desfazer("pg1");
+    expect(m.memoriaPagamentos.linhas()).toEqual([]);
+    // O item desfeito (i1) sai; i2 não veio na resposta e fica até o Realtime trazer o UPDATE dele.
+    expect(m.memoriaItensDoHistorico.linhas().map((i) => i.id)).toEqual(["i2"]);
+  });
+
+  it("aplicar põe o Pagamento e os itens no Histórico (todos os Meses)", async () => {
+    const itensDb = [itemDb("i1", "l1"), itemDb("i3", "l3", { mes: "2026-09" })];
+    const m = montar({ rpc: () => resposta(itensDb, [lancamentoDb("l1")]) });
+    await m.repo.aplicar(pedido);
+    expect(m.memoriaPagamentos.linhas().map((p) => p.id)).toEqual(["pg1"]);
+    expect(m.memoriaItensDoHistorico.linhas().map((i) => i.id).sort()).toEqual(["i1", "i3"]);
+  });
+});
+
+describe("as leituras do Histórico (História 6.3)", () => {
+  const muitas = Array.from({ length: 250 }, (_, i) => ({ id: `x${i}`, responsavel_id: "r1", ajuste_de_id: null }));
+
+  it("de quem são as linhas: em blocos de 100 ids", async () => {
+    const m = montar({ lancamentos: muitas });
+    const r = await m.repo.responsaveisDasLinhas(muitas.map((l) => l.id));
+    expect(r).toHaveLength(250);
+    expect(m.pedidosIn).toEqual([100, 100, 50]);
+  });
+
+  it("as linhas inteiras do detalhe também vão em blocos de 100", async () => {
+    const m = montar({ lancamentos: muitas });
+    expect(await m.repo.linhasDoPagamento(muitas.map((l) => l.id))).toHaveLength(250);
+    expect(m.pedidosIn).toEqual([100, 100, 50]);
+  });
+
+  it("sem ids não lê nada; leitura que falha ou rede caída devolve null", async () => {
+    const m = montar({ lancamentos: muitas });
+    expect(await m.repo.responsaveisDasLinhas([])).toEqual([]);
+    expect(m.lidas).toEqual([]);
+    const falha = montar({ lancamentos: muitas, leituraFalha: true });
+    expect(await falha.repo.responsaveisDasLinhas(["x1"])).toBeNull();
+    expect(await falha.repo.linhasDoPagamento(["x1"])).toBeNull();
   });
 });

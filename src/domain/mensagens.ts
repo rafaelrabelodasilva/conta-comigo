@@ -190,6 +190,7 @@ export const MENSAGENS = {
   "pagamento.data_futura": "A data não pode ser depois de hoje.",
   "pagamento.ja_desfeito": "Este pagamento já foi desfeito.",
   "pagamento.nao_encontrado": "Este pagamento não existe mais.",
+  "pagamento.mudou_desfazer": "Algum lançamento mudou em outro aparelho. Confira o que muda e confirme de novo.",
 } as const;
 
 /** Textos da janela "Importar fatura" (UX-DR20, mockup `importar.html`). */
@@ -1587,6 +1588,118 @@ export function mensagemDoPagamento(erro: { codigo: string; detalhe?: string }):
     return `O valor recebido não pode passar de ${formatarDinheiro(centavos)}`;
   }
   return mensagem(erro.codigo);
+}
+
+/** Textos do Histórico de Pagamentos e do "Desfazer pagamento" (História 6.3, FR-25, FR-29, UX-DR22). */
+export const TEXTOS_HISTORICO = {
+  titulo: "Histórico de Pagamentos",
+  carregando: "Carregando os pagamentos…",
+  vazio: "Nenhum pagamento registrado ainda.",
+  vazio_ajuda: "Quando você aplicar um status que conta como pago, o pagamento aparece aqui.",
+  vazio_do_responsavel: "Nenhum pagamento deste responsável.",
+  filtrar: "Filtrar por Responsável",
+  todos: "Todos",
+  sem_responsavel: "Sem responsável",
+  lista: "Pagamentos",
+  /** Os modos que ganham etiqueta (o `total` não leva). */
+  modo_parcial: "parcial",
+  modo_minha_parte: "minha parte",
+  // O detalhe.
+  detalhe_fechar: "Fechar",
+  detalhe_carregando: "Carregando os lançamentos do pagamento…",
+  detalhe_lancamentos: "Lançamentos que o pagamento quitou",
+  parcial_sem_mudar: "Pagamento parcial · o status não mudou",
+  excluido: "excluído",
+  sem_nome: "Lançamento",
+  desfazer: "Desfazer pagamento",
+  /** O botão fica desativado sem conexão (AD-3). */
+  sem_internet: "Sem conexão. Você pode consultar, mas não desfazer um pagamento.",
+  // A confirmação.
+  confirmar_titulo: "Desfazer este pagamento?",
+  confirmar_conferindo: "Conferindo os lançamentos…",
+  confirmar_botao: "Desfazer pagamento",
+  confirmar_nada_muda: "Nenhum lançamento volta ao status anterior.",
+} as const;
+
+/** "parcial · 2 lançamentos", "minha parte · 17 lançamentos" ou só "7 lançamentos" (o `total` não leva etiqueta). */
+export function rotuloDoModoELancamentos(modo: "total" | "parcial" | "minha_parte", quantidade: number): string {
+  const n = quantidade === 1 ? "1 lançamento" : `${quantidade} lançamentos`;
+  if (modo === "parcial") return `${TEXTOS_HISTORICO.modo_parcial} · ${n}`;
+  if (modo === "minha_parte") return `${TEXTOS_HISTORICO.modo_minha_parte} · ${n}`;
+  return n;
+}
+
+/** O nome acessível da linha da lista: "10/11/26, Casal e Rangel, minha parte · 18 lançamentos, R$ 2.819,68 recebidos". */
+export function rotuloDaLinhaDoHistorico(l: {
+  data: string;
+  responsaveis: readonly string[];
+  modo: "total" | "parcial" | "minha_parte";
+  quantidade: number;
+  valorRecebidoCentavos: number;
+}): string {
+  const quem = l.responsaveis.length === 0 ? [] : [juntarNomes(l.responsaveis)];
+  return [formatarData(l.data), ...quem, rotuloDoModoELancamentos(l.modo, l.quantidade), `${formatarDinheiro(l.valorRecebidoCentavos)} recebidos`].join(", ");
+}
+
+/** "Casal e Rangel", "A, B e C". */
+export function juntarNomes(nomes: readonly string[]): string {
+  if (nomes.length <= 1) return nomes[0] ?? "";
+  return `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
+}
+
+/** O resumo lido ao filtrar: "3 pagamentos". */
+export function rotuloResultadoDoHistorico(n: number): string {
+  return n === 1 ? "1 pagamento" : `${n} pagamentos`;
+}
+
+/** O título do detalhe: "Pagamento de 10/11/26". */
+export function tituloDoPagamento(data: string): string {
+  return `Pagamento de ${formatarData(data)}`;
+}
+
+/** As linhas de valor do detalhe. */
+export const rotuloRecebido = (centavos: number) => `Recebido: ${formatarDinheiro(centavos)}`;
+export const rotuloQuitou = (centavos: number) => `Quitou: ${formatarDinheiro(centavos)}`;
+export const rotuloMinhaParte = (centavos: number) => `A minha parte: ${formatarDinheiro(centavos)}`;
+
+/** "Não pago → Pago" (o Status de antes e o aplicado; sem Status antes vale "Não pago"). */
+export function rotuloMudancaDeStatus(anterior: string | null, aplicado: string): string {
+  return `${anterior ?? "Não pago"} → ${aplicado}`;
+}
+
+/** O aviso depois de desfazer: "Pagamento de R$ 2.819,68 desfeito" (não há "Desfazer" do desfazer). */
+export function rotuloPagamentoDesfeito(valorRecebidoCentavos: number): string {
+  return `Pagamento de ${formatarDinheiro(valorRecebidoCentavos)} desfeito`;
+}
+
+/** A confirmação: o valor recebido sai do histórico. */
+export function rotuloSaiDoHistorico(valorRecebidoCentavos: number, data: string): string {
+  return `O valor recebido, ${formatarDinheiro(valorRecebidoCentavos)} de ${formatarData(data)}, sai do histórico.`;
+}
+
+/** A confirmação: quantos lançamentos voltam ao status anterior. */
+export function rotuloVoltamAoStatusAnterior(n: number): string {
+  return n === 1 ? "1 lançamento volta ao status anterior." : `${n} lançamentos voltam ao status anterior.`;
+}
+
+/** A confirmação: quantos ficam como estão e por quê. */
+export function rotuloFicamPorStatusMudado(n: number): string {
+  return n === 1
+    ? "1 lançamento fica como está: o status foi mudado depois do pagamento."
+    : `${n} lançamentos ficam como estão: o status foi mudado depois do pagamento.`;
+}
+
+export function rotuloFicamPorPagamentoPosterior(n: number): string {
+  return n === 1
+    ? "1 lançamento fica como está: outro pagamento mexeu nele depois. Desfaça esse pagamento primeiro se quiser voltar o status."
+    : `${n} lançamentos ficam como estão: outro pagamento mexeu neles depois. Desfaça esse pagamento primeiro se quiser voltar o status.`;
+}
+
+/** A confirmação: lançamentos que só receberam parte do valor (o status nunca mudou). */
+export function rotuloSoParciais(n: number): string {
+  return n === 1
+    ? "1 lançamento só recebeu parte do valor: o status não muda, e o que esse pagamento cobriu volta a faltar."
+    : `${n} lançamentos só receberam parte do valor: o status não muda, e o que esse pagamento cobriu volta a faltar.`;
 }
 
 /** Texto para o usuário. Código desconhecido cai na mensagem genérica. */

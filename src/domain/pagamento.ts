@@ -27,6 +27,8 @@
 // - `planejarDesfazerPagamento`: o Status anterior volta só nas linhas em que o
 //   Status atual ainda é o aplicado e que nenhum Pagamento posterior tocou (AD-10);
 //   o item parcial nunca mudou o Status da linha, então não há o que devolver.
+//   `classificarDesfazerPagamento` diz o destino de cada item (a janela de confirmação
+//   da 6.3 mostra quantas linhas voltam e quantas ficam, e por quê).
 
 import { instanteEmMicros } from "./datas";
 import { ehData } from "./ciclo";
@@ -547,32 +549,65 @@ export type PlanoDeDesfazer = {
 };
 
 /**
- * O que desfazer um Pagamento faz nas linhas (AD-10): o `status_anterior_id`
- * volta só onde o Status atual ainda é o `status_aplicado_id` e nenhum
- * Pagamento posterior (item criado depois, de outro Pagamento não desfeito)
- * tocou a linha. As demais ficam como estão; o Pagamento é excluído em lógico
- * de qualquer jeito. O item parcial (`status_aplicado_id` nulo) nunca mudou o Status da
- * linha: o Pagamento sai e a linha fica como está. `linhas`: o estado atual lido do banco.
+ * O que desfazer faz com cada item do Pagamento (6.3): `devolver` (o Status anterior volta),
+ * `status_mudou` (o Status atual já não é o aplicado: mexido à mão ou noutro aparelho),
+ * `pagamento_posterior` (outro Pagamento não desfeito tocou a linha depois) e `parcial` (o item
+ * parcial nunca mudou o Status: só sai com o Pagamento).
+ */
+export type DestinoDoItemAoDesfazer = "devolver" | "status_mudou" | "pagamento_posterior" | "parcial";
+
+export type ItemAoDesfazer = {
+  lancamento_id: string;
+  destino: DestinoDoItemAoDesfazer;
+  /** Só em `devolver`: o Status que volta e a versão lida da linha. */
+  devolver?: { lancamento_id: string; status_id: string | null; atualizado_em: string };
+};
+
+/**
+ * Classifica cada item do Pagamento (AD-10): o `status_anterior_id` volta só onde o Status atual
+ * ainda é o `status_aplicado_id` e nenhum Pagamento posterior (item criado depois, de outro
+ * Pagamento não desfeito) tocou a linha. Se um Pagamento posterior tocou, vale esse motivo
+ * (mesmo que o Status também tenha mudado). `linhas`: o estado atual lido do banco; linha que não
+ * veio conta como `status_mudou`.
+ */
+export function classificarDesfazerPagamento(
+  itens: readonly ItemParaDesfazer[],
+  linhas: readonly { id: string; status_id: string | null; updated_at: string }[],
+  outros: readonly OutroItemDoLancamento[],
+): ItemAoDesfazer[] {
+  const porId = new Map(linhas.map((l) => [l.id, l]));
+  return itens.map((item): ItemAoDesfazer => {
+    if (item.status_aplicado_id === null) return { lancamento_id: item.lancamento_id, destino: "parcial" };
+    const linha = porId.get(item.lancamento_id);
+    const posterior = outros.some(
+      (o) => o.lancamento_id === item.lancamento_id && instanteEmMicros(o.created_at) > instanteEmMicros(item.created_at),
+    );
+    if (posterior) return { lancamento_id: item.lancamento_id, destino: "pagamento_posterior" };
+    if (!linha || linha.status_id !== item.status_aplicado_id) {
+      return { lancamento_id: item.lancamento_id, destino: "status_mudou" };
+    }
+    return {
+      lancamento_id: item.lancamento_id,
+      destino: "devolver",
+      devolver: { lancamento_id: item.lancamento_id, status_id: item.status_anterior_id, atualizado_em: linha.updated_at },
+    };
+  });
+}
+
+/**
+ * O que desfazer um Pagamento faz nas linhas (AD-10), pelo mesmo critério de
+ * `classificarDesfazerPagamento`. As demais linhas ficam como estão; o Pagamento é excluído em
+ * lógico de qualquer jeito. O item parcial (`status_aplicado_id` nulo) nunca mudou o Status da
+ * linha: o Pagamento sai e a linha fica como está.
  */
 export function planejarDesfazerPagamento(
   itens: readonly ItemParaDesfazer[],
   linhas: readonly { id: string; status_id: string | null; updated_at: string }[],
   outros: readonly OutroItemDoLancamento[],
 ): PlanoDeDesfazer {
-  const porId = new Map(linhas.map((l) => [l.id, l]));
-  const devolver: PlanoDeDesfazer["devolver"] = [];
-  let mantidas = 0;
-  for (const item of itens) {
-    if (item.status_aplicado_id === null) continue;
-    const linha = porId.get(item.lancamento_id);
-    const posterior = outros.some(
-      (o) => o.lancamento_id === item.lancamento_id && instanteEmMicros(o.created_at) > instanteEmMicros(item.created_at),
-    );
-    if (!linha || linha.status_id !== item.status_aplicado_id || posterior) {
-      mantidas += 1;
-      continue;
-    }
-    devolver.push({ lancamento_id: item.lancamento_id, status_id: item.status_anterior_id, atualizado_em: linha.updated_at });
-  }
-  return { devolver, mantidas };
+  const classificados = classificarDesfazerPagamento(itens, linhas, outros);
+  return {
+    devolver: classificados.flatMap((c) => (c.devolver ? [c.devolver] : [])),
+    mantidas: classificados.filter((c) => c.destino === "status_mudou" || c.destino === "pagamento_posterior").length,
+  };
 }

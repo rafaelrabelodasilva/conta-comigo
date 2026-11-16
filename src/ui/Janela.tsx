@@ -20,6 +20,8 @@ export type PropsJanela = {
   className?: string;
   /** Quem recebe o foco ao abrir (padrão do Radix: o primeiro foco da janela, o ✕). Chame `preventDefault` e foque o que quiser. */
   aoAbrirFoco?: (evento: Event) => void;
+  /** Quem recebe o foco ao fechar (padrão do Radix: quem tinha o foco antes). Chame `preventDefault` e foque o que quiser. */
+  aoFecharFoco?: (evento: Event) => void;
 };
 
 export function Janela({
@@ -31,6 +33,7 @@ export function Janela({
   rodape,
   className,
   aoAbrirFoco,
+  aoFecharFoco,
 }: PropsJanela) {
   return (
     <Dialog.Root open={aberta} onOpenChange={aoMudar}>
@@ -38,6 +41,7 @@ export function Janela({
         <Dialog.Overlay className="fixed inset-0 z-40 bg-scrim" />
         <Dialog.Content
           onOpenAutoFocus={aoAbrirFoco}
+          onCloseAutoFocus={aoFecharFoco}
           // Sem descrição, avisa o Radix que não há (evita o alerta no console).
           {...(descricao ? {} : { "aria-describedby": undefined })}
           className={cn(
