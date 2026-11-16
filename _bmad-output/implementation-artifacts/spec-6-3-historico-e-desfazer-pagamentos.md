@@ -2,7 +2,7 @@
 title: 'História 6.3: Histórico e desfazer Pagamentos'
 type: 'feature'
 created: '2026-11-16'
-status: 'review'
+status: 'done'
 baseline_commit: '84b3d98'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -87,8 +87,8 @@ context:
 - [x] Dados: gerenciador paginado e escopo de vivos; itens de todos os Meses; prévia do desfazer e `esperado`; `ja_desfeito` sem item vivo.
 - [x] Telas: seção do Histórico (lista, filtro, estados), detalhe e confirmação, ligada em Recebimentos; textos pelo mapa.
 - [x] Provas: jsdom (25 cenários), pglite com o núcleo real (E1 a E6), teste de integração do CI.
-- [ ] CI verde na PR (`supabase`, "Backup gera e restaura", `verificar`).
-- [ ] `done` no sprint-status só depois do merge, em PR separada.
+- [x] CI verde na PR (`supabase`, "Backup gera e restaura", `verificar`).
+- [x] `done` no sprint-status só depois do merge, em PR separada.
 
 ## Implementation Notes
 
