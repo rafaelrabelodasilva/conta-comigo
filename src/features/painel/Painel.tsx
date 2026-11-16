@@ -37,10 +37,13 @@ import {
   descricaoExcluirEmLote,
   descricaoExcluirLancamento,
   mensagem,
+  mensagemDoPagamento,
   rotuloIncluidoEm,
   rotuloLancamentos,
   rotuloLancamentosClassificados,
   rotuloLancamentosExcluidos,
+  rotuloLancamentosPagos,
+  rotuloStatusAplicado,
 } from "@/domain/mensagens";
 import {
   ORDEM_PADRAO,
@@ -56,6 +59,7 @@ import {
 } from "@/domain/painel";
 import { mensagemDaSelecao } from "@/domain/mensagem-janela";
 import { lerModelo } from "@/domain/modelo-mensagem";
+import { idsComPagamento, projetarPagamento, recusarStatusNaoPago } from "@/domain/pagamento";
 import { projetarPainel } from "@/domain/projecoes";
 import { ativos as responsaveisAtivos } from "@/domain/responsaveis";
 import {
@@ -68,9 +72,11 @@ import {
 } from "@/domain/selecao";
 import { ativos as statusAtivos } from "@/domain/status";
 import { ativos as tiposAtivos } from "@/domain/tipos";
+import { useConexao } from "@/data/conexao";
 import { configuracoesDoDono } from "@/data/configuracoes-repo";
 import { repoFaturas } from "@/data/faturas-repo";
 import { repoLancamentos, type LinhaLancamento } from "@/data/lancamentos-repo";
+import { repoPagamentos } from "@/data/pagamentos-repo";
 import { repoPlanilha } from "@/data/planilha-repo";
 import { gerenciador, useLinhas } from "@/data/realtime";
 import { SECAO_MODELO_DA_MENSAGEM } from "@/features/configuracoes/secoes";
@@ -89,6 +95,7 @@ import { BlocosDoMes } from "./BlocosDoMes";
 import { FaixaConferencia } from "./FaixaConferencia";
 import { FaturaDoMes } from "./FaturaDoMes";
 import { GradeLancamentos, type CadastrosGrade } from "./GradeLancamentos";
+import { JanelaAplicarStatus, type EscolhaAplicada, type ResultadoAplicar } from "./JanelaAplicarStatus";
 import { JanelaClassificarEmLote } from "./JanelaClassificarEmLote";
 import { JanelaGerarMensagem } from "./JanelaGerarMensagem";
 import { JanelaMensagemDoBloco } from "./JanelaMensagemDoBloco";
@@ -165,8 +172,18 @@ import { SeletorMes } from "./SeletorMes";
 // do Bloco (4.7) abre a mesma janela pela `JanelaMensagemDoBloco` (a forma 2). A região `role=status` que anuncia o total
 // fica no DOM, vazia, antes da primeira marcação. Trocar de Mês limpa a Seleção e avisa
 // só se havia Seleção (`aoTrocarDeMes`).
+//
+// Marcar como pago (História 6.1, FR-25, UX-DR18): "Aplicar status" na barra abre
+// `JanelaAplicarStatus`. Com um Status que conta como pago, o núcleo (`projetarPagamento`,
+// `planejarPagamento`) diz o que a Seleção quita e monta o pedido; `repoPagamentos().aplicar`
+// grava o Pagamento, os itens e o Status das linhas numa RPC, e aparece "N lançamentos marcados
+// como pagos · Desfazer". Com um Status que não conta como pago, só o Status muda (a função de
+// lote da 3.3, sem Pagamento). Aplicar à mão um Status "não pago" numa linha com Pagamento é
+// recusado (AD-10): o lote e o painel do Lançamento conferem o núcleo antes de gravar. Os itens
+// de Pagamento do Mês aberto vêm do Realtime (`pagamento_itens`, que guarda o `mes`) e, como
+// `blocos`, não seguram o Painel: se a leitura falha, só "Aplicar status" com Pagamento espera.
 
-const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status", "blocos"] as const;
+const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status", "blocos", "pagamento_itens"] as const;
 
 type EstadoPainel = { modo: "editar"; id: string } | { modo: "novo" } | null;
 
@@ -230,6 +247,8 @@ export function Painel({ titulo }: { titulo: string }) {
   const [classificandoLote, setClassificandoLote] = useState(false);
   const [excluindoLote, setExcluindoLote] = useState(false);
   const [gerandoMensagem, setGerandoMensagem] = useState(false);
+  // "Aplicar status" aberta: o "hoje" (America/Sao_Paulo) de quando abriu; `null` é fechada (6.1).
+  const [aplicandoStatus, setAplicandoStatus] = useState<string | null>(null);
   // O Bloco cuja janela "Gerar mensagem" (forma 2, 4.7) está aberta.
   const [blocoDaMensagem, setBlocoDaMensagem] = useState<string | null>(null);
   const [lotando, setLotando] = useState(false);
@@ -242,6 +261,9 @@ export function Painel({ titulo }: { titulo: string }) {
   const responsaveis = useLinhas("responsaveis");
   const tipos = useLinhas("tipos");
   const status = useLinhas("status");
+  // Os itens de Pagamento do Mês aberto (6.1): quem tem Pagamento e quanto já foi quitado.
+  const itensDePagamento = useLinhas("pagamento_itens");
+  const online = useConexao();
   const ciclo = useLinhas("config_ciclo");
   const configuracoes = useLinhas("configuracoes");
   // O Bloco que filtra a grade (História 4.3): quem entra vem de `avaliar` sobre a
@@ -260,9 +282,10 @@ export function Painel({ titulo }: { titulo: string }) {
   }, [lancamentos.linhas]);
   const lerLinha = useCallback((id: string) => linhasRef.current.find((l) => l.id === id), []);
 
-  // A memória de `lancamentos` acompanha o Mês aberto.
+  // A memória de `lancamentos` (e a dos itens de Pagamento deles) acompanha o Mês aberto.
   useEffect(() => {
     gerenciador("lancamentos").abrirMes(mesAberto);
+    gerenciador("pagamento_itens").abrirMes(mesAberto);
   }, [mesAberto]);
 
   const cadastros = useMemo<CadastrosGrade>(
@@ -275,6 +298,9 @@ export function Painel({ titulo }: { titulo: string }) {
   );
   // Para a mensagem (4.6): os Status que contam como pago e o modelo salvo.
   const statusPagos = useMemo(() => new Set(status.linhas.filter((s) => s.conta_como_pago).map((s) => s.id)), [status.linhas]);
+  const comPagamento = useMemo(() => idsComPagamento(itensDePagamento.linhas), [itensDePagamento.linhas]);
+  // Os itens só valem lidos e do Mês aberto (até lá, "Aplicar status" com Pagamento espera).
+  const itensProntos = itensDePagamento.status === "pronto" && itensDePagamento.mes === mesAberto;
   const modeloDaMensagem = useMemo(
     () => lerModelo(configuracoesDoDono(configuracoes.linhas)?.modelo_mensagem),
     [configuracoes.linhas],
@@ -344,6 +370,7 @@ export function Painel({ titulo }: { titulo: string }) {
     setPainel(null);
     setDividindo(null);
     setGerandoMensagem(false);
+    setAplicandoStatus(null);
     setBlocoDaMensagem(null);
   };
 
@@ -421,29 +448,35 @@ export function Painel({ titulo }: { titulo: string }) {
   const planoDaExclusao = planejarExclusaoEmLote(selecao, doMes);
   const partesMarcadas = contarPartes(selecao, doMes);
 
-  /** "Classificar em lote": a função da 3.3, tudo ou nada; falhou, nada mudou e a Seleção fica. */
-  async function classificarSelecao(campos: CamposDoLote): Promise<boolean> {
+  /**
+   * Grava `campos` em toda a Seleção: a função da 3.3, tudo ou nada; falhou, nada mudou e a
+   * Seleção fica. `rotulo` é o texto do aviso com "Desfazer". Um Status "não pago" numa linha
+   * com Pagamento é recusado antes de gravar (AD-10: desfaça o pagamento antes).
+   */
+  async function gravarCamposNaSelecao(campos: CamposDoLote, rotulo: (n: number) => string): Promise<ResultadoAplicar> {
     const entradas = planejarClassificacaoEmLote(selecao, doMes, campos);
     if (entradas.length === 0) {
       toast.mostrar({ texto: TEXTOS_SELECAO.nada_a_mudar });
-      return true;
+      return { ok: true };
+    }
+    if (campos.status_id !== undefined) {
+      const afetadas = entradas.flatMap((e) => doMes.filter((l) => l.id === e.id));
+      const recusa = recusarStatusNaoPago(campos.status_id, statusPagos, afetadas, comPagamento);
+      if (!recusa.ok) return { ok: false, texto: mensagemDoPagamento(recusa.erro) };
     }
     setLotando(true);
     const r = await repoLancamentos().classificarEmLote(entradas);
     setLotando(false);
-    if (!r.ok) {
-      toast.mostrar({ texto: mensagem(r.codigo) });
-      return false;
-    }
+    if (!r.ok) return { ok: false, texto: mensagem(r.codigo) };
     if (r.gravadas === 0) {
       toast.mostrar({ texto: TEXTOS_SELECAO.nada_a_mudar });
-      return true;
+      return { ok: true };
     }
     // Como no Revisar: a parcela classificada preenche os previstos vazios da Série (sem perguntar).
     const comSerie = parcelasDoLote(r);
     if (comSerie.length > 0) void repoLancamentos().propagarAosPrevistos(comSerie);
     toast.mostrar({
-      texto: rotuloLancamentosClassificados(r.gravadas),
+      texto: rotulo(r.gravadas),
       aoDesfazer: () => {
         void repoLancamentos()
           .desfazerLote(r.antes)
@@ -452,7 +485,37 @@ export function Painel({ titulo }: { titulo: string }) {
           });
       },
     });
-    return true;
+    return { ok: true };
+  }
+
+  /** "Classificar em lote": o erro vira aviso e a janela fica aberta. */
+  async function classificarSelecao(campos: CamposDoLote): Promise<boolean> {
+    const r = await gravarCamposNaSelecao(campos, rotuloLancamentosClassificados);
+    if (!r.ok) toast.mostrar({ texto: r.texto });
+    return r.ok;
+  }
+
+  /**
+   * "Aplicar status": com um Status que conta como pago, o Pagamento (um pedido, uma transação, com o
+   * "Desfazer" do aviso); senão só o Status muda. O erro volta à janela, que fica aberta.
+   */
+  async function aplicarStatus(escolha: EscolhaAplicada): Promise<ResultadoAplicar> {
+    if (escolha.tipo === "status") return gravarCamposNaSelecao({ status_id: escolha.statusId }, rotuloStatusAplicado);
+    setLotando(true);
+    const r = await repoPagamentos().aplicar(escolha.pedido);
+    setLotando(false);
+    if (!r.ok) return { ok: false, texto: mensagem(r.codigo) };
+    toast.mostrar({
+      texto: rotuloLancamentosPagos(escolha.quantidade),
+      aoDesfazer: () => {
+        void repoPagamentos()
+          .desfazer(r.pagamento.id)
+          .then((d) => {
+            if (!d.ok) toast.mostrar({ texto: mensagem(d.codigo) });
+          });
+      },
+    });
+    return { ok: true };
   }
 
   /** "Excluir": as marcadas e os Ajustes delas numa gravação só (`junto`), com "Desfazer". */
@@ -562,6 +625,7 @@ export function Painel({ titulo }: { titulo: string }) {
     const resumo = resumoDaSelecao(selecionados, visiveis);
     // Sem Seleção a janela da mensagem fecha (excluída em outro aparelho): o estado não pode reabri-la na próxima marcação.
     if (gerandoMensagem && selecionados.size === 0) setGerandoMensagem(false);
+    if (aplicandoStatus !== null && selecionados.size === 0) setAplicandoStatus(null);
     const cartoesDaFatura = fatura
       ? cartoes.linhas
           .filter((c) => c.fatura_id === fatura.id)
@@ -597,6 +661,8 @@ export function Painel({ titulo }: { titulo: string }) {
           lerLinha={lerLinha}
           conferencia={conferencia}
           cadastros={cadastrosPainel}
+          statusPagos={statusPagos}
+          comPagamento={comPagamento}
           aoFechar={() => setPainel(null)}
           aoExcluir={setExcluindo}
         />
@@ -701,11 +767,27 @@ export function Painel({ titulo }: { titulo: string }) {
               ocupado={lotando}
               comPainelLateral={painelLateral !== null}
               podeExcluir={planoDaExclusao.ids.length > 0}
+              online={online}
               aoLimpar={() => setSelecao(new Set())}
+              aoAplicarStatus={() => setAplicandoStatus(hojeEmSaoPaulo(new Date()))}
               aoClassificar={() => setClassificandoLote(true)}
               aoExcluir={() => setExcluindoLote(true)}
               aoGerarMensagem={() => setGerandoMensagem(true)}
             />
+            {aplicandoStatus !== null ? (
+              <JanelaAplicarStatus
+                aberta
+                aoMudar={(abrir) => {
+                  if (!abrir) setAplicandoStatus(null);
+                }}
+                descricao={resumo.texto}
+                status={statusAtivos(status.linhas).map((s) => ({ id: s.id, nome: s.nome, contaComoPago: statusPagos.has(s.id) }))}
+                projecao={itensProntos ? projetarPagamento(selecionados, doMes, { statusPagos, itens: itensDePagamento.linhas }) : null}
+                hoje={aplicandoStatus}
+                online={online}
+                aoAplicar={aplicarStatus}
+              />
+            ) : null}
             {gerandoMensagem ? (
               <JanelaGerarMensagem
                 aberta

@@ -421,7 +421,35 @@ describe("reimportar um Mês (História 3.12)", () => {
       ["faturas", "id", ["mes=2026-10"]],
       ["lancamentos", expect.any(String), ["mes=2026-10"]],
       ["configuracoes", "status_padrao_id", []],
+      ["pagamento_itens", "lancamento_id", ["lancamento_id in a,b,c,filha,m", "excluido_em is null", "limit 1000"]],
     ]);
+  });
+
+  it("lerReimportacao: as antigas com Pagamento (ela ou uma parte da Divisão) vão em `referenciadas`; item de Pagamento desfeito não conta", async () => {
+    const m = montar(
+      {
+        ...banco,
+        pagamento_itens: [
+          { lancamento_id: "a", excluido_em: null },
+          { lancamento_id: "filha-de-c", excluido_em: null },
+          { lancamento_id: "d", excluido_em: T1 },
+        ],
+        lancamentos: [
+          linhaDb("a", { ordem_fatura: 1 }),
+          linhaDb("c", { ordem_fatura: 3 }),
+          linhaDb("filha-de-c", { dividido_de_id: "c", ordem_fatura: 3 }),
+          linhaDb("d", { ordem_fatura: 4 }),
+        ],
+      },
+      () => ({ data: null, error: null }),
+    );
+    const r = await m.repo.lerReimportacao("2026-10");
+    expect(r.ok && r.valor?.referenciadas).toEqual(["a", "c"]);
+  });
+
+  it("lerReimportacao: falha ao ler os itens de Pagamento é carregar.falhou (nunca reimporta sem saber)", async () => {
+    const m = montar({ ...banco }, () => ({ data: null, error: null }), () => true, { errosDeTabela: { pagamento_itens: { code: "", message: "Failed to fetch" } } });
+    expect(await m.repo.lerReimportacao("2026-10")).toEqual({ ok: false, codigo: "carregar.falhou" });
   });
 
   it("lerReimportacao devolve o casado_em, o Ajuste, o Apelido, a edição e a Divisão de cada linha", async () => {

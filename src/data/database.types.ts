@@ -479,6 +479,110 @@ export type Database = {
           },
         ]
       }
+      pagamento_itens: {
+        Row: {
+          created_at: string
+          excluido_em: string | null
+          id: string
+          lancamento_id: string
+          mes: string
+          owner_id: string
+          pagamento_id: string
+          status_anterior_id: string | null
+          status_aplicado_id: string
+          updated_at: string
+          valor_centavos: number
+        }
+        Insert: {
+          created_at?: string
+          excluido_em?: string | null
+          id?: string
+          lancamento_id: string
+          mes: string
+          owner_id?: string
+          pagamento_id: string
+          status_anterior_id?: string | null
+          status_aplicado_id: string
+          updated_at?: string
+          valor_centavos: number
+        }
+        Update: {
+          created_at?: string
+          excluido_em?: string | null
+          id?: string
+          lancamento_id?: string
+          mes?: string
+          owner_id?: string
+          pagamento_id?: string
+          status_anterior_id?: string | null
+          status_aplicado_id?: string
+          updated_at?: string
+          valor_centavos?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pagamento_itens_lancamento_fkey"
+            columns: ["owner_id", "lancamento_id"]
+            isOneToOne: false
+            referencedRelation: "lancamentos"
+            referencedColumns: ["owner_id", "id"]
+          },
+          {
+            foreignKeyName: "pagamento_itens_pagamento_fkey"
+            columns: ["owner_id", "pagamento_id"]
+            isOneToOne: false
+            referencedRelation: "pagamentos"
+            referencedColumns: ["owner_id", "id"]
+          },
+          {
+            foreignKeyName: "pagamento_itens_status_anterior_fkey"
+            columns: ["owner_id", "status_anterior_id"]
+            isOneToOne: false
+            referencedRelation: "status"
+            referencedColumns: ["owner_id", "id"]
+          },
+          {
+            foreignKeyName: "pagamento_itens_status_aplicado_fkey"
+            columns: ["owner_id", "status_aplicado_id"]
+            isOneToOne: false
+            referencedRelation: "status"
+            referencedColumns: ["owner_id", "id"]
+          },
+        ]
+      }
+      pagamentos: {
+        Row: {
+          created_at: string
+          data: string
+          excluido_em: string | null
+          id: string
+          modo: string
+          owner_id: string
+          updated_at: string
+          valor_recebido_centavos: number
+        }
+        Insert: {
+          created_at?: string
+          data: string
+          excluido_em?: string | null
+          id?: string
+          modo: string
+          owner_id?: string
+          updated_at?: string
+          valor_recebido_centavos: number
+        }
+        Update: {
+          created_at?: string
+          data?: string
+          excluido_em?: string | null
+          id?: string
+          modo?: string
+          owner_id?: string
+          updated_at?: string
+          valor_recebido_centavos?: number
+        }
+        Relationships: []
+      }
       regras: {
         Row: {
           chave: string
@@ -681,6 +785,7 @@ export type Database = {
       alterar_conta_manual: { Args: { p_pedido: Json }; Returns: Json }
       anular_id_jsonb: { Args: { de: string; doc: Json }; Returns: Json }
       apagar_historico_do_mes: { Args: { p_mes: string }; Returns: Json }
+      aplicar_pagamento: { Args: { p_pedido: Json }; Returns: Json }
       classificar_em_lote: { Args: { p_itens: Json }; Returns: Json }
       contar_usos_cadastro: {
         Args: { cadastro: string }
@@ -689,6 +794,7 @@ export type Database = {
           usos: number
         }[]
       }
+      desfazer_pagamento: { Args: { p_pedido: Json }; Returns: Json }
       dividir_lancamento: { Args: { p_itens: Json }; Returns: Json }
       excluir_conta_manual: { Args: { p_pedido: Json }; Returns: Json }
       excluir_linhas_da_conta: {
@@ -717,6 +823,7 @@ export type Database = {
         Args: { p_ate_mes: string; p_owner_id: string; p_parcelas: Json }
         Returns: Json
       }
+      pagamento_completo: { Args: { p_id: string }; Returns: Json }
       recriar_filhas: { Args: { p_mae_id: string; p_partes: Json }; Returns: string[] }
       referencias_cadastro: {
         Args: never

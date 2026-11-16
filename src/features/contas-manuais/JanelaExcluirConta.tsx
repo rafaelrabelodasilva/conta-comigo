@@ -51,7 +51,7 @@ export function JanelaExcluirConta({
   const cancelar = useRef<HTMLButtonElement>(null);
 
   const partes = useMemo(
-    () => (leitura === null ? null : parcelasRecriaveis(leitura.existentes, leitura.statusQueContam, mesAtual)),
+    () => (leitura === null ? null : parcelasRecriaveis(leitura.existentes, leitura.statusQueContam, mesAtual, leitura.comPagamento)),
     [leitura, mesAtual],
   );
 

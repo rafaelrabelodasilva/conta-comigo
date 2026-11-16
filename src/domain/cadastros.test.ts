@@ -26,6 +26,8 @@ describe("referências", () => {
       { cadastro: "tipo", tabela: "regras", coluna: "tipo_id", contaUso: false },
       { cadastro: "responsavel", tabela: "contas_manuais", coluna: "responsavel_id", contaUso: true },
       { cadastro: "tipo", tabela: "contas_manuais", coluna: "tipo_id", contaUso: true },
+      { cadastro: "status", tabela: "pagamento_itens", coluna: "status_anterior_id", contaUso: false },
+      { cadastro: "status", tabela: "pagamento_itens", coluna: "status_aplicado_id", contaUso: true },
     ]);
     expect(REFERENCIAS_JSONB).toEqual([
       { cadastro: "responsavel", tabela: "regras", coluna: "contagem", contaUso: false },

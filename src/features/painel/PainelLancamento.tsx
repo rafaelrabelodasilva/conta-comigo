@@ -30,6 +30,7 @@ import {
   TEXTOS_LANCAMENTO as T,
   TEXTOS_PAINEL,
   mensagem,
+  mensagemDoPagamento,
   perguntaAplicarAosPrevistos,
   perguntaApelidoEmMassa,
   rotuloAjusteDaMae,
@@ -45,6 +46,7 @@ import {
   textoSugestao,
 } from "@/domain/mensagens";
 import { nomeExibido } from "@/domain/painel";
+import { recusarStatusNaoPago } from "@/domain/pagamento";
 import { TEXTOS_DIVISAO, rotuloParteDe, rotuloResumoDaDivisao } from "@/domain/mensagens";
 import { ehPrevisto, type MudancaDoPrevisto } from "@/domain/previstos";
 import { ordenarParaConfiguracoes as ordenarResponsaveis } from "@/domain/responsaveis";
@@ -116,6 +118,12 @@ export type CadastrosPainel = {
 
 type Comum = {
   cadastros: CadastrosPainel;
+  /**
+   * Os Status que contam como pago e os Lançamentos com Pagamento (História 6.1, AD-10): aplicar
+   * à mão um Status "não pago" numa linha com Pagamento é recusado ("desfaça o pagamento antes").
+   */
+  statusPagos?: ReadonlySet<string>;
+  comPagamento?: ReadonlySet<string>;
   aoFechar: () => void;
   /** Para os testes; padrão, o repositório do navegador. */
   repo?: RepoLancamentos;
@@ -311,6 +319,7 @@ const SEGUEM_A_MAE: readonly CampoLancamento[] = ["tipo", "responsavel"];
 const SEGUEM_AS_FILHAS: readonly CampoLancamento[] = ["tipo", "apelido", "observacao", "data"];
 
 const SEM_FILHAS: readonly LinhaLancamento[] = [];
+const SEM_IDS: ReadonlySet<string> = new Set();
 
 function EditarLancamento({
   linha,
@@ -322,6 +331,8 @@ function EditarLancamento({
   lerLinha,
   conferencia,
   cadastros,
+  statusPagos = SEM_IDS,
+  comPagamento = SEM_IDS,
   aoFechar,
   aoExcluir,
   repo: repoDado,
@@ -538,6 +549,15 @@ function EditarLancamento({
       definirRascunho(campo, undefined);
       return;
     }
+    // Aplicar à mão um Status "não pago" numa linha com Pagamento: recusado, o Pagamento se desfaz antes (AD-10).
+    if (r.valor.coluna === "status_id") {
+      const recusa = recusarStatusNaoPago(r.valor.valor, statusPagos, [linhaRef.current], comPagamento);
+      if (!recusa.ok) {
+        definirErro(campo, mensagemDoPagamento(recusa.erro));
+        definirRascunho(campo, undefined);
+        return;
+      }
+    }
     void tentar(campo, texto, r.valor, 0);
   }
 
@@ -673,6 +693,11 @@ function EditarLancamento({
           value={texto("status")}
           onChange={(e) => escolher("status", e.target.value)}
         />
+        {erros.status ? (
+          <p role="alert" className="texto-label font-normal text-danger-fg">
+            {erros.status}
+          </p>
+        ) : null}
       </Moldura>
     );
   }
@@ -847,6 +872,11 @@ function EditarLancamento({
         value={texto("status")}
         onChange={(e) => escolher("status", e.target.value)}
       />
+      {erros.status ? (
+        <p role="alert" className="texto-label font-normal text-danger-fg">
+          {erros.status}
+        </p>
+      ) : null}
       <Observacao
         valor={texto("observacao")}
         erro={erros.observacao}

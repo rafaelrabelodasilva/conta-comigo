@@ -129,7 +129,7 @@ export function ContasManuais({
   const lido = leitura !== null && leitura.ok ? leitura : null;
   const erroDaLeitura = leitura !== null && !leitura.ok ? mensagem(leitura.codigo) : null;
   const ficam = useMemo(
-    () => (lido === null ? null : parcelasRecriaveis(lido.existentes, lido.statusQueContam, mesAtual).mantidas),
+    () => (lido === null ? null : parcelasRecriaveis(lido.existentes, lido.statusQueContam, mesAtual, lido.comPagamento).mantidas),
     [lido, mesAtual],
   );
 

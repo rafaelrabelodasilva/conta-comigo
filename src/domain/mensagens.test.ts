@@ -7,6 +7,11 @@ import {
   rotuloClassificados,
   rotuloClassificadosSemSugestao,
   rotuloSelecionados,
+  rotuloLancamentosPagos,
+  rotuloStatusAplicado,
+  rotuloTotalAReceber,
+  rotuloForaDoPagamento,
+  mensagemDoPagamento,
   rotuloSelecionarGrupo,
   rotuloFaixaImportacao,
   rotuloFaltam,
@@ -856,5 +861,33 @@ describe("textos de alterar, encerrar e excluir uma Conta (História 5.4)", () =
     expect(m.rotuloContaExcluida("Bombinhas", 0)).toBe("Conta Bombinhas excluída");
     expect(m.rotuloContaExcluida("Bombinhas", 1)).toBe("Conta Bombinhas excluída, com 1 lançamento");
     expect(m.rotuloContaExcluida("Bombinhas", 4)).toBe("Conta Bombinhas excluída, com 4 lançamentos");
+  });
+});
+
+describe("textos do Pagamento (História 6.1, UX-DR18)", () => {
+  it("os avisos: 'N lançamentos marcados como pagos' e 'Status aplicado a N lançamentos'", () => {
+    expect(rotuloLancamentosPagos(1)).toBe("1 lançamento marcado como pago");
+    expect(rotuloLancamentosPagos(18)).toBe("18 lançamentos marcados como pagos");
+    expect(rotuloStatusAplicado(1)).toBe("Status aplicado a 1 lançamento");
+    expect(rotuloStatusAplicado(3)).toBe("Status aplicado a 3 lançamentos");
+    expect(rotuloTotalAReceber(563935)).toBe("Total a receber: R$ 5.639,35");
+  });
+
+  it("o valor acima do total diz quanto: 'O valor recebido não pode passar de R$ X'", () => {
+    expect(mensagemDoPagamento({ codigo: "pagamento.valor_acima", detalhe: "281968" })).toBe(
+      "O valor recebido não pode passar de R$ 2.819,68",
+    );
+    expect(mensagemDoPagamento({ codigo: "pagamento.valor_menor", detalhe: "21516" })).toContain("R$ 215,16");
+    // Sem o valor, cai no texto do mapa.
+    expect(mensagemDoPagamento({ codigo: "pagamento.valor_acima" })).toBe(mensagem("pagamento.valor_acima"));
+    expect(mensagemDoPagamento({ codigo: "pagamento.desfazer_antes" })).toContain("Desfaça o pagamento antes");
+  });
+
+  it("os itens que ficam de fora, com o motivo", () => {
+    expect(rotuloForaDoPagamento(0, { ja_pago: 0, zero: 0, previsto: 0 })).toBe("");
+    expect(rotuloForaDoPagamento(1, { ja_pago: 1, zero: 0, previsto: 0 })).toBe("1 item fica de fora: 1 já pago");
+    expect(rotuloForaDoPagamento(4, { ja_pago: 2, zero: 1, previsto: 1 })).toBe(
+      "4 itens ficam de fora: 2 já pagos, 1 de R$ 0,00, 1 previsto",
+    );
   });
 });

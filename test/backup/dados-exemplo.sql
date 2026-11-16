@@ -206,4 +206,23 @@ insert into public.lancamentos (
    'b0000000-0000-4000-8000-000000000a02', 'b0000000-0000-4000-8000-000000000b01',
    'b0000000-0000-4000-8000-000000000807');
 
+-- Pagamentos (História 6.1): um Pagamento total com um item (o Status anterior e o
+-- aplicado) e um desfeito (excluído em lógico, com o item também), com Status nulo
+-- de antes e um Status arquivado de depois.
+insert into public.pagamentos (id, owner_id, valor_recebido_centavos, data, modo, excluido_em) values
+  ('b0000000-0000-4000-8000-000000000c01', 'b0000000-0000-4000-8000-000000000001',
+   114074, '2026-11-10', 'total', null),
+  ('b0000000-0000-4000-8000-000000000c02', 'b0000000-0000-4000-8000-000000000001',
+   15000, '2026-11-12', 'total', '2026-11-13 12:00:00+00');
+
+insert into public.pagamento_itens (
+  id, owner_id, pagamento_id, lancamento_id, mes, valor_centavos, status_anterior_id, status_aplicado_id, excluido_em
+) values
+  ('b0000000-0000-4000-8000-000000000d01', 'b0000000-0000-4000-8000-000000000001',
+   'b0000000-0000-4000-8000-000000000c01', 'b0000000-0000-4000-8000-000000000801', '2026-10',
+   114074, 'b0000000-0000-4000-8000-000000000302', 'b0000000-0000-4000-8000-000000000301', null),
+  ('b0000000-0000-4000-8000-000000000d02', 'b0000000-0000-4000-8000-000000000001',
+   'b0000000-0000-4000-8000-000000000c02', 'b0000000-0000-4000-8000-000000000803', '2026-11',
+   15000, null, 'b0000000-0000-4000-8000-000000000303', '2026-11-13 12:00:00+00');
+
 commit;

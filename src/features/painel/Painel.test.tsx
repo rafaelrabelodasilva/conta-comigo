@@ -34,6 +34,8 @@ const falso = vi.hoisted(() => ({
   importarMes: null as ((mes: string) => void) | null,
   /** O gerenciador ainda não trocou de Mês (a memória é do Mês anterior). */
   congelarMes: false,
+  /** Há conexão? (`useConexao`). */
+  online: true,
 }));
 
 vi.mock("@/data/realtime", async () => {
@@ -58,7 +60,14 @@ vi.mock("@/data/realtime", async () => {
             linhas: linhas.filter((l) => (l as { mes: string }).mes === falso.mes),
             mes: falso.mes,
           }
-        : { status: falso.statusTabelas[tabela] ?? falso.status, linhas };
+        : tabela === "pagamento_itens"
+          ? {
+              // Como `lancamentos`, só o Mês aberto (os itens guardam o `mes`).
+              status: falso.mes === null ? "carregando" : (falso.statusTabelas[tabela] ?? falso.status),
+              linhas: linhas.filter((l) => (l as { mes: string }).mes === falso.mes),
+              mes: falso.mes,
+            }
+          : { status: falso.statusTabelas[tabela] ?? falso.status, linhas };
     cache.set(tabela, { versao: falso.versao, retrato: novo });
     return novo;
   };
@@ -110,6 +119,29 @@ const repoB = vi.hoisted(() => ({
   excluir: vi.fn<(id: string) => Promise<{ ok: boolean; codigo?: string }>>(async () => ({ ok: true })),
 }));
 vi.mock("@/data/blocos-repo", () => ({ repoBlocos: () => repoB }));
+// O repositório de Pagamentos é falso: "Aplicar" e o "Desfazer" do aviso só registram o pedido.
+const repoP = vi.hoisted(() => ({
+  aplicar: vi.fn<(pedido: Record<string, unknown>) => Promise<unknown>>(),
+  desfazer: vi.fn<(id: string) => Promise<unknown>>(),
+}));
+vi.mock("@/data/pagamentos-repo", () => ({ repoPagamentos: () => repoP }));
+// A conexão é do teste: `useConexao` lê `falso.online` e o Painel redesenha quando ele muda.
+vi.mock("@/data/conexao", async () => {
+  const { useSyncExternalStore } = await import("react");
+  return {
+    useConexao: () =>
+      useSyncExternalStore(
+        (o) => {
+          falso.ouvintes.add(o);
+          return () => falso.ouvintes.delete(o);
+        },
+        () => falso.online,
+        () => true,
+      ),
+    estaOnline: () => falso.online,
+    aoVoltar: () => () => {},
+  };
+});
 vi.mock("@/data/lancamentos-repo", () => ({
   repoLancamentos: () => repoL,
   mudancaDaColuna: (m: { coluna: string; valor: unknown }) => ({ [m.coluna]: m.valor }),
@@ -308,6 +340,7 @@ beforeEach(() => {
   falso.statusLancamentos = null;
   falso.statusTabelas = {};
   falso.congelarMes = false;
+  falso.online = true;
   falso.ouvintes.clear();
   definir({});
 });
@@ -448,7 +481,7 @@ describe("Painel do Mês", () => {
     renderizar();
     expect(screen.getByText(mensagem("carregar.falhou"))).toBeTruthy();
     await userEvent.setup().click(screen.getByRole("button", { name: "Tentar de novo" }));
-    expect(falso.recarregar).toHaveBeenCalledTimes(7);
+    expect(falso.recarregar).toHaveBeenCalledTimes(8);
   });
 
   it("trocar de Mês mostra o esqueleto enquanto o Mês novo carrega", async () => {
@@ -1574,7 +1607,7 @@ describe("Blocos no Painel (História 4.2)", () => {
     definir({}, "erro");
     renderizar();
     await userEvent.setup().click(screen.getByRole("button", { name: "Tentar de novo" }));
-    expect(falso.recarregar).toHaveBeenCalledTimes(7);
+    expect(falso.recarregar).toHaveBeenCalledTimes(8);
   });
 });
 
@@ -2460,6 +2493,299 @@ describe("Selecionar e ver o total (História 4.4, FR-48)", () => {
         { id: "c1", campos: { tipo_id: "t-casa", status_id: "s-pago" } },
         { id: "p1", campos: { status_id: "s-pago" } },
       ]);
+    });
+  });
+
+  describe("Aplicar status (História 6.1, FR-25, UX-DR18)", () => {
+    const abrirAplicarStatus = async (u: ReturnType<typeof userEvent.setup>) => {
+      await u.click(within(barra()!).getByRole("button", { name: "Aplicar status" }));
+      return screen.findByRole("dialog", { name: "Aplicar status" });
+    };
+    const botaoAplicar = (janela: HTMLElement) => within(janela).getByRole("button", { name: "Aplicar" }) as HTMLButtonElement;
+    const item = (id: string, lancamento: string, extra: Record<string, unknown> = {}) => ({
+      id,
+      pagamento_id: "pg-antigo",
+      lancamento_id: lancamento,
+      mes: "2026-11",
+      valor_centavos: 100,
+      status_anterior_id: "s-nao",
+      status_aplicado_id: "s-pago",
+      excluido_em: null,
+      updated_at: "2026-11-05T12:00:00+00:00",
+      ...extra,
+    });
+
+    it("a barra tem 'Aplicar status' entre 'Limpar' e 'Mais'; a janela lista os Status e nada vem escolhido", async () => {
+      novembroComSelecao();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await u.click(caixaDe("FARMACIA"));
+      expect(within(barra()!).getAllByRole("button").map((b) => b.textContent)).toEqual([
+        "Limpar",
+        "Aplicar status",
+        "⋯Mais",
+        "Gerar mensagem",
+      ]);
+      const janela = await abrirAplicarStatus(u);
+      expect(sem(janela.textContent)).toContain("2 selecionados · R$ 150,00");
+      const lista = within(janela).getByRole("radiogroup", { name: "Status a aplicar" });
+      expect(within(lista).getAllByRole("radio").map((r) => (r as HTMLInputElement).labels?.[0]?.textContent)).toEqual(["Não pago", "Pago"]);
+      expect(within(lista).getAllByRole("radio").every((r) => !(r as HTMLInputElement).checked)).toBe(true);
+      expect(botaoAplicar(janela).disabled).toBe(true);
+      expect(within(janela).queryByLabelText("Valor recebido")).toBeNull();
+    });
+
+    it("Status que conta como pago: aparecem a Data (hoje, em São Paulo) e o Valor recebido (o total); que não conta: somem", async () => {
+      novembroComSelecao();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await u.click(caixaDe("FARMACIA"));
+      const janela = await abrirAplicarStatus(u);
+      await u.click(within(janela).getByRole("radio", { name: "Pago" }));
+      const data = within(janela).getByLabelText("Data do pagamento") as HTMLInputElement;
+      expect(data.value).toBe("2026-11-08");
+      expect(data.max).toBe("2026-11-08");
+      expect((within(janela).getByLabelText("Valor recebido") as HTMLInputElement).value).toBe("150,00");
+      expect(sem(janela.textContent)).toContain("Total a receber: R$ 150,00");
+      expect(botaoAplicar(janela).disabled).toBe(false);
+      await u.click(within(janela).getByRole("radio", { name: "Não pago" }));
+      expect(within(janela).queryByLabelText("Valor recebido")).toBeNull();
+      expect(within(janela).queryByLabelText("Data do pagamento")).toBeNull();
+      expect(within(janela).getByText("Só o status muda. Nenhum pagamento é registrado.")).toBeTruthy();
+    });
+
+    it("valor igual ao total: manda o pedido do núcleo (modo total, um item por linha), avisa 'N lançamentos marcados como pagos' e o 'Desfazer' desfaz o Pagamento", async () => {
+      novembroComSelecao();
+      repoP.aplicar.mockResolvedValueOnce({ ok: true, pagamento: { id: "pg-novo" }, itens: [], linhas: [] });
+      repoP.desfazer.mockResolvedValueOnce({ ok: true });
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await u.click(caixaDe("FARMACIA"));
+      const janela = await abrirAplicarStatus(u);
+      await u.click(within(janela).getByRole("radio", { name: "Pago" }));
+      await u.click(botaoAplicar(janela));
+      expect(repoP.aplicar).toHaveBeenCalledTimes(1);
+      const pedido = repoP.aplicar.mock.calls[0][0] as Record<string, unknown> & { itens: { lancamento_id: string; valor_centavos: number; atualizado_em: string }[] };
+      expect(pedido).toMatchObject({ status_id: "s-pago", data: "2026-11-08", valor_recebido_centavos: 15000, modo: "total" });
+      expect(pedido.id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(pedido.itens).toEqual([
+        { lancamento_id: "c1", valor_centavos: 10000, atualizado_em: "2026-11-03T12:00:00+00:00" },
+        { lancamento_id: "c2", valor_centavos: 5000, atualizado_em: "2026-11-03T12:00:00+00:00" },
+      ]);
+      expect(screen.queryByRole("dialog", { name: "Aplicar status" })).toBeNull();
+      expect(await screen.findByText("2 lançamentos marcados como pagos")).toBeTruthy();
+      // A Seleção continua (como nas outras ações da barra).
+      expect(textoDaBarra()).toBe("2 selecionados · R$ 150,00");
+      await u.click(screen.getByRole("button", { name: "Desfazer" }));
+      expect(repoP.desfazer).toHaveBeenCalledWith("pg-novo");
+    });
+
+    it("o Valor recebido não passa do total, nem é menor, zero ou negativo: o erro aparece no campo e 'Aplicar' fica desativado", async () => {
+      novembroComSelecao();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await u.click(caixaDe("FARMACIA"));
+      const janela = await abrirAplicarStatus(u);
+      await u.click(within(janela).getByRole("radio", { name: "Pago" }));
+      const valor = within(janela).getByLabelText("Valor recebido");
+      const tentar = async (texto: string) => {
+        await u.clear(valor);
+        if (texto !== "") await u.type(valor, texto);
+        return sem(janela.textContent);
+      };
+      expect(await tentar("150,01")).toContain("O valor recebido não pode passar de R$ 150,00");
+      expect(botaoAplicar(janela).disabled).toBe(true);
+      expect(await tentar("100,00")).toContain("O valor recebido precisa ser o total, R$ 150,00");
+      expect(await tentar("0")).toContain("Digite um valor maior que zero");
+      expect(await tentar("-5")).toContain("Digite um valor maior que zero");
+      expect(await tentar("")).toContain("Digite o valor recebido");
+      expect(await tentar("150,00")).not.toContain("O valor recebido");
+      expect(botaoAplicar(janela).disabled).toBe(false);
+      expect(repoP.aplicar).not.toHaveBeenCalled();
+    });
+
+    it("a Data não pode ser depois de hoje; no passado vale", async () => {
+      novembroComSelecao();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      const janela = await abrirAplicarStatus(u);
+      await u.click(within(janela).getByRole("radio", { name: "Pago" }));
+      const data = within(janela).getByLabelText("Data do pagamento");
+      fireEvent.change(data, { target: { value: "2026-11-09" } });
+      expect(sem(janela.textContent)).toContain("A data não pode ser depois de hoje.");
+      expect(botaoAplicar(janela).disabled).toBe(true);
+      fireEvent.change(data, { target: { value: "2026-11-02" } });
+      expect(botaoAplicar(janela).disabled).toBe(false);
+    });
+
+    it("o que já está pago, é R$ 0,00 ou é previsto fica de fora: o total é só do que entra", async () => {
+      novembroComSelecao([
+        lanc("2026-11", { id: "pg", nome: "JA PAGO", valor_centavos: 4000, status_id: "s-pago" }),
+        lanc("2026-11", { id: "zr", nome: "ANUIDADE", valor_centavos: 0 }),
+        lanc("2026-11", { id: "pv", nome: "PREVISTA", valor_centavos: 2500, lancado_por: "sistema", fatura_id: null }),
+      ]);
+      renderizar();
+      const u = userEvent.setup();
+      for (const n of ["MERCADO", "JA PAGO", "ANUIDADE"]) await u.click(caixaDe(n));
+      await u.click(screen.getByRole("checkbox", { name: "Selecionar PREVISTA" }));
+      const janela = await abrirAplicarStatus(u);
+      await u.click(within(janela).getByRole("radio", { name: "Pago" }));
+      expect(sem(janela.textContent)).toContain("3 itens ficam de fora: 1 já pago, 1 de R$ 0,00, 1 previsto");
+      expect((within(janela).getByLabelText("Valor recebido") as HTMLInputElement).value).toBe("100,00");
+    });
+
+    it("sem nada a receber (só pagos), 'Aplicar' fica desativado e a janela diz por quê", async () => {
+      novembroComSelecao([lanc("2026-11", { id: "pg", nome: "JA PAGO", valor_centavos: 4000, status_id: "s-pago" })]);
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("JA PAGO"));
+      const janela = await abrirAplicarStatus(u);
+      await u.click(within(janela).getByRole("radio", { name: "Pago" }));
+      expect(sem(janela.textContent)).toContain("Nenhum dos selecionados pode receber pagamento");
+      expect(botaoAplicar(janela).disabled).toBe(true);
+    });
+
+    it("Pagamento sobre um Ajuste: entra junto com a parcela e o total é o líquido", async () => {
+      novembroComSelecao(comAjuste());
+      repoP.aplicar.mockResolvedValueOnce({ ok: true, pagamento: { id: "pg-novo" }, itens: [], linhas: [] });
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(screen.getByRole("checkbox", { name: "Selecionar MSC CRUZEIROS" }));
+      const janela = await abrirAplicarStatus(u);
+      await u.click(within(janela).getByRole("radio", { name: "Pago" }));
+      expect((within(janela).getByLabelText("Valor recebido") as HTMLInputElement).value).toBe("1.140,66");
+      await u.click(botaoAplicar(janela));
+      const pedido = repoP.aplicar.mock.calls[0][0] as { itens: { lancamento_id: string; valor_centavos: number }[] };
+      expect(pedido.itens.map((i) => [i.lancamento_id, i.valor_centavos]).sort()).toEqual([
+        ["aj", -8],
+        ["msc", 114074],
+      ]);
+      expect(await screen.findByText("1 lançamento marcado como pago")).toBeTruthy();
+    });
+
+    it("um Pagamento sobre partes de uma Divisão (a mãe nunca entra)", async () => {
+      novembroComSelecao(divisao());
+      repoP.aplicar.mockResolvedValueOnce({ ok: true, pagamento: { id: "pg-novo" }, itens: [], linhas: [] });
+      renderizar();
+      const u = userEvent.setup();
+      const partes = screen.getAllByRole("checkbox", { name: "Selecionar MONJARO" });
+      await u.click(partes[0]);
+      const janela = await abrirAplicarStatus(u);
+      await u.click(within(janela).getByRole("radio", { name: "Pago" }));
+      await u.click(botaoAplicar(janela));
+      const pedido = repoP.aplicar.mock.calls[0][0] as { itens: { lancamento_id: string }[] };
+      expect(pedido.itens).toHaveLength(1);
+      expect(["p1", "p2"]).toContain(pedido.itens[0].lancamento_id);
+    });
+
+    it("Pagamento recusado (uma linha mudou em outro aparelho): a janela e a Seleção ficam, com o motivo", async () => {
+      novembroComSelecao();
+      repoP.aplicar.mockResolvedValueOnce({ ok: false, codigo: "pagamento.mudou" });
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      const janela = await abrirAplicarStatus(u);
+      await u.click(within(janela).getByRole("radio", { name: "Pago" }));
+      await u.click(botaoAplicar(janela));
+      expect((await within(janela).findByRole("alert")).textContent).toBe(mensagem("pagamento.mudou"));
+      expect(screen.getByRole("dialog", { name: "Aplicar status" })).toBeTruthy();
+      expect(textoDaBarra()).toBe("1 selecionado · R$ 100,00");
+    });
+
+    it("Status que não conta como pago: só o Status muda, pela gravação em lote, sem Pagamento", async () => {
+      novembroComSelecao();
+      repoL.classificarEmLote.mockResolvedValueOnce({ ok: true, linhas: [], gravadas: 2, antes: [{ id: "c1", corpo: { status_id: "s-pago" } }] });
+      repoL.desfazerLote.mockResolvedValueOnce({ ok: true, linhas: [], gravadas: 1, antes: [] });
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await u.click(caixaDe("FARMACIA"));
+      const janela = await abrirAplicarStatus(u);
+      await u.click(within(janela).getByRole("radio", { name: "Não pago" }));
+      await u.click(botaoAplicar(janela));
+      expect(repoL.classificarEmLote).toHaveBeenCalledWith([
+        { id: "c1", campos: { status_id: "s-nao" } },
+        { id: "c2", campos: { status_id: "s-nao" } },
+      ]);
+      expect(repoP.aplicar).not.toHaveBeenCalled();
+      expect(await screen.findByText("Status aplicado a 2 lançamentos")).toBeTruthy();
+      await u.click(screen.getByRole("button", { name: "Desfazer" }));
+      expect(repoL.desfazerLote).toHaveBeenCalledWith([{ id: "c1", corpo: { status_id: "s-pago" } }]);
+    });
+
+    it("aplicar à mão um Status 'não pago' numa linha com Pagamento é recusado: desfaça o pagamento antes", async () => {
+      novembroComSelecao([lanc("2026-11", { id: "pg", nome: "JA PAGO", valor_centavos: 4000, status_id: "s-pago" })]);
+      falso.banco = { ...falso.banco, pagamento_itens: [item("i1", "pg")] };
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await u.click(caixaDe("JA PAGO"));
+      const janela = await abrirAplicarStatus(u);
+      await u.click(within(janela).getByRole("radio", { name: "Não pago" }));
+      await u.click(botaoAplicar(janela));
+      expect((await within(janela).findByRole("alert")).textContent).toBe(mensagem("pagamento.desfazer_antes"));
+      expect(repoL.classificarEmLote).not.toHaveBeenCalled();
+      expect(screen.getByRole("dialog", { name: "Aplicar status" })).toBeTruthy();
+    });
+
+    it("o mesmo vale para 'Classificar em lote' com Status 'Sem status'", async () => {
+      novembroComSelecao([lanc("2026-11", { id: "pg", nome: "JA PAGO", valor_centavos: 4000, status_id: "s-pago" })]);
+      falso.banco = { ...falso.banco, pagamento_itens: [item("i1", "pg")] };
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("JA PAGO"));
+      await u.click(within(barra()!).getByRole("button", { name: "Mais" }));
+      await u.click(screen.getByRole("menuitem", { name: "Classificar em lote" }));
+      const janela = await screen.findByRole("dialog", { name: "Classificar em lote" });
+      await u.selectOptions(within(janela).getByLabelText("Status"), "__sem_status__");
+      await u.click(within(janela).getByRole("button", { name: "Aplicar a 1" }));
+      expect(await screen.findByText(mensagem("pagamento.desfazer_antes"))).toBeTruthy();
+      expect(repoL.classificarEmLote).not.toHaveBeenCalled();
+    });
+
+    it("sem conexão 'Aplicar status' fica desativado e nada é tentado (AD-3)", async () => {
+      novembroComSelecao();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      act(() => {
+        falso.online = false;
+        falso.versao++;
+        for (const o of falso.ouvintes) o();
+      });
+      const botao = within(barra()!).getByRole("button", { name: "Aplicar status" }) as HTMLButtonElement;
+      expect(botao.disabled).toBe(true);
+      expect(botao.title).toBe(mensagem("conexao.sem_conexao"));
+      await u.click(botao);
+      expect(screen.queryByRole("dialog", { name: "Aplicar status" })).toBeNull();
+      expect(repoP.aplicar).not.toHaveBeenCalled();
+    });
+
+    it("sem Seleção a janela fecha (as linhas foram excluídas em outro aparelho)", async () => {
+      novembroComSelecao();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await abrirAplicarStatus(u);
+      mudarBanco("lancamentos", (ls) => ls.map((l) => ((l as { id: string }).id === "c1" ? { ...(l as object), excluido_em: "2026-11-08T00:00:00Z" } : l)));
+      expect(screen.queryByRole("dialog", { name: "Aplicar status" })).toBeNull();
+    });
+
+    it("os itens de Pagamento ainda carregando: a janela espera e 'Aplicar' fica desativado", async () => {
+      novembroComSelecao();
+      falso.statusTabelas = { pagamento_itens: "carregando" };
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      const janela = await abrirAplicarStatus(u);
+      await u.click(within(janela).getByRole("radio", { name: "Pago" }));
+      expect(sem(janela.textContent)).toContain("Conferindo os pagamentos já registrados");
+      expect(botaoAplicar(janela).disabled).toBe(true);
     });
   });
 });

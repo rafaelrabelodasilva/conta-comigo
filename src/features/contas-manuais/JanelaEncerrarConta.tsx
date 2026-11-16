@@ -57,6 +57,7 @@ export function JanelaEncerrarConta({
             mesAtual,
             statusQueContam: leitura.statusQueContam,
             existentes: leitura.existentes,
+            comPagamento: leitura.comPagamento,
           }),
     [conta, leitura, mes, mesAtual],
   );
