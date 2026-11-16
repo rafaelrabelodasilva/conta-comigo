@@ -2,7 +2,7 @@
 title: 'História 6.1: Marcar como pago'
 type: 'feature'
 created: '2026-11-15'
-status: 'review'
+status: 'done'
 baseline_commit: '6804511'
 route: 'dispatch'
 review_loop_iteration: 0
