@@ -19,7 +19,7 @@ const PAGO = "s-pago";
 
 type Linha = Record<string, unknown>;
 
-function consulta(linhas: Linha[], contagem: { paginas: number }) {
+function consulta(linhas: Linha[], contagem: { paginas: number }, pedidosIn: number[]) {
   const filtros: ((l: Linha) => boolean)[] = [];
   const ordem: string[] = [];
   let faixa: [number, number] | null = null;
@@ -34,6 +34,14 @@ function consulta(linhas: Linha[], contagem: { paginas: number }) {
     },
     gte(coluna: string, valor: string) {
       filtros.push((l) => (l[coluna] as string) >= valor);
+      return c;
+    },
+    in(coluna: string, valores: unknown[]) {
+      pedidosIn.push(valores.length);
+      filtros.push((l) => valores.includes(l[coluna]));
+      return c;
+    },
+    limit() {
       return c;
     },
     order(coluna: string) {
@@ -70,6 +78,8 @@ function montar(opcoes: {
   lancamentos?: Linha[];
   status?: Linha[];
   series?: Linha[];
+  /** Itens de Pagamento (`lancamento_id`, `excluido_em`). */
+  itens?: Linha[];
   rpc?: (n: number, nome: string) => RespostaRpc;
   online?: boolean;
   contas?: LinhaConta[];
@@ -77,16 +87,18 @@ function montar(opcoes: {
   const chamadas: { nome: string; args: Record<string, unknown> }[] = [];
   const lidas: string[] = [];
   const contagem = { paginas: 0 };
+  const pedidosIn: number[] = [];
   const tabelas: Record<string, Linha[]> = {
     lancamentos: opcoes.lancamentos ?? [],
     status: opcoes.status ?? [{ id: PAGO, conta_como_pago: true }],
     series: opcoes.series ?? [serieDe("c1")],
+    pagamento_itens: opcoes.itens ?? [],
   };
   const cliente = {
     from: (tabela: string) => ({
       select: () => {
         lidas.push(tabela);
-        return consulta(tabelas[tabela] ?? [], contagem);
+        return consulta(tabelas[tabela] ?? [], contagem, pedidosIn);
       },
     }),
     rpc: async (nome: string, args: Record<string, unknown>) => {
@@ -108,7 +120,7 @@ function montar(opcoes: {
   const memoriaContas = criarGerenciador<LinhaConta>({ tabela: "contas_manuais", obterCliente: () => cliente, ...(ESCOPO_DAS_CONTAS as object) });
   if (opcoes.contas) memoriaContas.aplicarLote(opcoes.contas);
   const repo = criarRepoContas({ obterCliente: () => cliente, memoriaLancamentos, memoriaContas, online: () => opcoes.online ?? true });
-  return { repo, chamadas, lidas, contagem, memoriaLancamentos, memoriaContas };
+  return { repo, chamadas, lidas, contagem, pedidosIn, memoriaLancamentos, memoriaContas };
 }
 
 const linhaConta = (extra: Partial<LinhaConta> = {}): LinhaConta => ({
@@ -206,7 +218,8 @@ describe("ler a Conta para o aviso", () => {
     expect(r.existentes.map((l) => l.id)).toEqual(["m-2026-11", "m-2026-12", "m-2027-01"]);
     expect([...r.statusQueContam]).toEqual([PAGO]);
     expect(r.serie.atual).toMatchObject({ nome_normalizado: "SILVIA", ocorrencia: 1, parcela_total: null });
-    expect(new Set(lidas)).toEqual(new Set(["lancamentos", "status", "series"]));
+    expect(new Set(lidas)).toEqual(new Set(["lancamentos", "status", "series", "pagamento_itens"]));
+    expect([...r.comPagamento]).toEqual([]);
     expect(chamadas).toHaveLength(0);
   });
 
@@ -220,6 +233,29 @@ describe("ler a Conta para o aviso", () => {
     expect(contagem.paginas).toBe(2);
   });
 
+  it("lê os ids com item de Pagamento não excluído (AD-15): o de um Pagamento desfeito não conta", async () => {
+    const { repo } = montar({
+      lancamentos: parcelasDeSetAJan,
+      itens: [
+        { lancamento_id: "m-2026-12", excluido_em: null },
+        { lancamento_id: "m-2027-01", excluido_em: T },
+        { lancamento_id: "fora-da-conta", excluido_em: null },
+      ],
+    });
+    const r = await repo.ler(salva(), MES_ATUAL);
+    expect(r.ok && [...r.comPagamento]).toEqual(["m-2026-12"]);
+  });
+
+  it("os ids vão ao banco em blocos de 100 (o endereço da requisição tem limite)", async () => {
+    const muitas: Linha[] = Array.from({ length: 250 }, (_, i) =>
+      parcela("2026-12", { id: `f${String(i).padStart(4, "0")}`, dividido_de_id: "m-2026-12", parcela_n: 4 }),
+    );
+    const { repo, pedidosIn } = montar({ lancamentos: muitas, itens: [{ lancamento_id: "f0249", excluido_em: null }] });
+    const r = await repo.ler(salva(), MES_ATUAL);
+    expect(pedidosIn).toEqual([100, 100, 50]);
+    expect(r.ok && [...r.comPagamento]).toEqual(["f0249"]);
+  });
+
   it("sem internet não lê nada (AD-3)", async () => {
     const { repo, lidas } = montar({ online: false });
     expect(await repo.ler(salva(), MES_ATUAL)).toEqual({ ok: false, codigo: "conexao.gravar_sem_conexao" });
@@ -229,6 +265,37 @@ describe("ler a Conta para o aviso", () => {
   it("Série que não é uma só: falha (nada é gravado em cima de um dado torto)", async () => {
     const { repo } = montar({ series: [] });
     expect(await repo.ler(salva(), MES_ATUAL)).toEqual({ ok: false, codigo: "salvar.falhou" });
+  });
+});
+
+describe("alterar, encerrar e excluir com Pagamento (AD-15)", () => {
+  const lancamentos = [...parcelasDeSetAJan.slice(0, 3), parcela("2026-12"), parcela("2027-01")];
+  const itens = [{ lancamento_id: "m-2026-12", excluido_em: null }];
+
+  it("Editar: a parcela com Pagamento não é excluída nem recriada e vai para o aviso (`com_pagamento`)", async () => {
+    const { repo, chamadas } = montar({ lancamentos, itens, rpc: () => respostaAlterar() });
+    const r = await repo.alterar(salva(), nova(), MES_ATUAL);
+    const pedido = chamadas[0].args.p_pedido as { excluir: { id: string }[] };
+    expect(pedido.excluir.map((e) => e.id)).toEqual(["m-2026-11", "m-2027-01"]);
+    expect(r.ok && r.resumo.mantidas).toEqual([{ mes: "2026-12", parcela_n: 4, motivo: "com_pagamento" }]);
+  });
+
+  it("Encerrar: a parcela com Pagamento fica", async () => {
+    const { repo, chamadas } = montar({ lancamentos, itens, rpc: () => respostaAlterar({ encerrada_em_mes: "2026-12" }) });
+    await repo.encerrar(salva(), "2026-12", MES_ATUAL);
+    const pedido = chamadas[0].args.p_pedido as { excluir: { id: string }[] };
+    expect(pedido.excluir.map((e) => e.id)).toEqual(["m-2027-01"]);
+  });
+
+  it("Excluir com os Lançamentos: a parcela com Pagamento fica", async () => {
+    const { repo, chamadas } = montar({
+      lancamentos,
+      itens,
+      rpc: () => ({ data: { conta: linhaConta({ excluido_em: T }), lancamentos: [] }, error: null }),
+    });
+    await repo.excluir(salva(), true, MES_ATUAL);
+    const pedido = chamadas[0].args.p_pedido as { excluir: { id: string }[] };
+    expect(pedido.excluir.map((e) => e.id)).toEqual(["m-2026-11", "m-2027-01"]);
   });
 });
 

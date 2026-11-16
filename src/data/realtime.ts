@@ -12,7 +12,8 @@
 // Quando a conexão volta (detector `conexao.ts`), todos os gerenciadores
 // já criados releem (`recarregarTodos`).
 //
-// Escopo por Mês (`porMes`, só `lancamentos`, História 2.4): a memória
+// Escopo por Mês (`porMes`, `lancamentos` e, desde a 6.1, `pagamento_itens`, que
+// guarda o `mes` do Lançamento, História 2.4): a memória
 // guarda só o Mês aberto (`abrirMes`). A releitura filtra `.eq("mes", …)`
 // (nunca a tabela inteira, que passaria do limite de 1000 linhas do
 // PostgREST); evento de outro Mês é ignorado, e linha que sai do Mês aberto
@@ -345,11 +346,11 @@ export function gerenciador<T extends TabelaRealtime>(tabela: T): Gerenciador<Li
   let g = gerenciadores.get(tabela);
   if (!g) {
     ligarAoDetector();
-    // Só `lancamentos` tem escopo por Mês; as outras tabelas são lidas inteiras.
+    // Só `lancamentos` e `pagamento_itens` (que copia o `mes` do Lançamento) têm escopo por Mês; as outras tabelas são lidas inteiras.
     g = criarGerenciador<LinhaBase>({
       tabela,
       obterCliente: criarClienteNavegador,
-      porMes: tabela === "lancamentos",
+      porMes: tabela === "lancamentos" || tabela === "pagamento_itens",
       ...(tabela === "contas_manuais" ? ESCOPO_DAS_CONTAS : {}),
     });
     gerenciadores.set(tabela, g);

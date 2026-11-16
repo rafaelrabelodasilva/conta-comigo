@@ -105,10 +105,14 @@ function Editar({
   m,
   conferencia = null,
   aoExcluir = () => {},
+  statusPagos,
+  comPagamento,
 }: {
   m: ReturnType<typeof montarRepo>;
   conferencia?: Conferencia | null;
   aoExcluir?: (id: string) => void;
+  statusPagos?: ReadonlySet<string>;
+  comPagamento?: ReadonlySet<string>;
 }) {
   const [atual, setAtual] = useState(m.memoria.atual);
   useEffect(() => {
@@ -120,6 +124,8 @@ function Editar({
       linha={atual}
       conferencia={conferencia ?? (atual.fatura_id ? conferenciaCom(atual.valor_centavos) : null)}
       cadastros={cadastros}
+      statusPagos={statusPagos}
+      comPagamento={comPagamento}
       aoFechar={() => {}}
       aoExcluir={aoExcluir}
       repo={m.repo}
@@ -810,6 +816,46 @@ describe("previstos (História 3.5)", () => {
     renderizar(<Editar m={m} />);
     await userEvent.setup().selectOptions(screen.getByLabelText("Status"), "s-pago");
     expect(propagar).not.toHaveBeenCalled();
+  });
+});
+
+describe("painel do Lançamento: Status numa linha com Pagamento (História 6.1, AD-10)", () => {
+  const pagos = new Set(["s-pago"]);
+  const comPagamento = new Set(["a"]);
+  const paga = () => linha({ status_id: "s-pago" });
+
+  it("aplicar à mão um Status 'não pago' (ou 'Sem status') numa linha com Pagamento é recusado: desfaça o pagamento antes", async () => {
+    const m = montarRepo();
+    m.memoria.atual = paga();
+    renderizar(<Editar m={m} statusPagos={pagos} comPagamento={comPagamento} />);
+    const u = userEvent.setup();
+    await u.selectOptions(screen.getByLabelText("Status"), "s-nao");
+    expect(m.atualizar).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toBe(mensagem("pagamento.desfazer_antes"));
+    // O seletor volta ao Status gravado.
+    expect((screen.getByLabelText("Status") as HTMLSelectElement).value).toBe("s-pago");
+    await u.selectOptions(screen.getByLabelText("Status"), "");
+    expect(m.atualizar).not.toHaveBeenCalled();
+  });
+
+  it("outro Status que conta como pago passa, e o aviso some", async () => {
+    const m = montarRepo();
+    m.memoria.atual = paga();
+    renderizar(<Editar m={m} statusPagos={new Set(["s-pago", "s-nao"])} comPagamento={comPagamento} />);
+    const u = userEvent.setup();
+    await u.selectOptions(screen.getByLabelText("Status"), "");
+    expect(screen.getByRole("alert")).toBeTruthy();
+    await u.selectOptions(screen.getByLabelText("Status"), "s-nao");
+    expect(m.atualizar).toHaveBeenCalledWith("a", { status_id: "s-nao" });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("sem Pagamento, o Status não pago se aplica normalmente", async () => {
+    const m = montarRepo();
+    m.memoria.atual = paga();
+    renderizar(<Editar m={m} statusPagos={pagos} comPagamento={new Set()} />);
+    await userEvent.setup().selectOptions(screen.getByLabelText("Status"), "s-nao");
+    expect(m.atualizar).toHaveBeenCalledWith("a", { status_id: "s-nao" });
   });
 });
 

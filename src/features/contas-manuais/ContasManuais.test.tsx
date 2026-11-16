@@ -143,6 +143,7 @@ const leitura = (existentes: LancamentoDaConta[] = [], pagos: string[] = []): Re
   ok: true,
   existentes,
   statusQueContam: new Set(pagos),
+  comPagamento: new Set(),
   serie: {
     atual: { nome_normalizado: "SILVIA", parcela_total: null, valor_parcela_centavos: 40_000, mes_primeira_parcela: "2026-01", ocorrencia: 1 },
     ocorrenciasDeOutras: [],

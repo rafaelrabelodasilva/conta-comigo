@@ -86,6 +86,8 @@ export type ResultadoRestaurarConta =
 export type LeituraDaConta = {
   existentes: LancamentoDaConta[];
   statusQueContam: ReadonlySet<string>;
+  /** Os ids dos Lançamentos lidos que têm item de Pagamento não excluído (AD-15, História 6.1): nunca são recriados. */
+  comPagamento: ReadonlySet<string>;
   serie: SerieParaAlterar;
 };
 
@@ -99,6 +101,8 @@ function codigoDoErro(erro: { message?: string } | null | undefined): CodigoFalh
 }
 
 const POR_PAGINA = 1000;
+/** Quantos ids vão numa requisição `in (…)`. */
+const POR_BLOCO_DE_IDS = 100;
 const COLUNAS_DO_LANCAMENTO = "id, dividido_de_id, mes, parcela_n, status_id, editado_em, excluido_em, updated_at";
 const COLUNAS_DA_SERIE = "nome_normalizado, parcela_total, valor_parcela_centavos, mes_primeira_parcela, ocorrencia";
 
@@ -199,6 +203,22 @@ export function criarRepoContas(deps: {
     }
   }
 
+  /** Dos ids dados, os que têm item de Pagamento não excluído (em blocos: o endereço da requisição tem limite). */
+  async function lerIdsComPagamento(cliente: SupabaseClient<Database>, ids: readonly string[]): Promise<Set<string> | null> {
+    const com = new Set<string>();
+    for (let de = 0; de < ids.length; de += POR_BLOCO_DE_IDS) {
+      const { data, error } = await cliente
+        .from("pagamento_itens")
+        .select("lancamento_id")
+        .in("lancamento_id", ids.slice(de, de + POR_BLOCO_DE_IDS))
+        .is("excluido_em", null)
+        .limit(POR_PAGINA);
+      if (error || !data) return null;
+      for (const i of data) com.add(i.lancamento_id);
+    }
+    return com;
+  }
+
   /** Os ids dos Status que contam como pago (arquivados também: arquivar não apaga das somas, AD-16). */
   async function lerStatusQueContam(cliente: SupabaseClient<Database>): Promise<Set<string> | null> {
     const { data, error } = await cliente.from("status").select("id").eq("conta_como_pago", true);
@@ -237,7 +257,9 @@ export function criarRepoContas(deps: {
       lerSerie(cliente, conta.id, nova),
     ]);
     if (!existentes || !statusQueContam || !serie) return FALHOU;
-    return { ok: true, existentes, statusQueContam, serie };
+    const comPagamento = await lerIdsComPagamento(cliente, existentes.map((l) => l.id));
+    if (!comPagamento) return FALHOU;
+    return { ok: true, existentes, statusQueContam, comPagamento, serie };
   }
 
   /** Chama a RPC de uma alteração e aplica a resposta nos gerenciadores. */
@@ -330,7 +352,13 @@ export function criarRepoContas(deps: {
       return alterarOuEncerrar(
         conta,
         mesAtual,
-        (l) => planoDeAlterarConta(conta, nova, l.serie, { mesAtual, statusQueContam: l.statusQueContam, existentes: l.existentes }),
+        (l) =>
+          planoDeAlterarConta(conta, nova, l.serie, {
+            mesAtual,
+            statusQueContam: l.statusQueContam,
+            existentes: l.existentes,
+            comPagamento: l.comPagamento,
+          }),
         nova,
       );
     },
@@ -343,7 +371,13 @@ export function criarRepoContas(deps: {
       return alterarOuEncerrar(
         conta,
         mesAtual,
-        (l) => planoDeEncerrarConta(conta, l.serie, mes, { mesAtual, statusQueContam: l.statusQueContam, existentes: l.existentes }),
+        (l) =>
+          planoDeEncerrarConta(conta, l.serie, mes, {
+            mesAtual,
+            statusQueContam: l.statusQueContam,
+            existentes: l.existentes,
+            comPagamento: l.comPagamento,
+          }),
         null,
       );
     },
@@ -361,13 +395,15 @@ export function criarRepoContas(deps: {
       try {
         let existentes: LancamentoDaConta[] = [];
         let statusQueContam: ReadonlySet<string> = new Set();
+        let comPagamento: ReadonlySet<string> = new Set();
         if (comLancamentos) {
           const lido = await ler(cliente, conta, mesAtual, null);
           if (!lido.ok) return lido;
           existentes = lido.existentes;
           statusQueContam = lido.statusQueContam;
+          comPagamento = lido.comPagamento;
         }
-        const plano = planoDeExcluirConta(conta, comLancamentos, { mesAtual, statusQueContam, existentes });
+        const plano = planoDeExcluirConta(conta, comLancamentos, { mesAtual, statusQueContam, existentes, comPagamento });
         const r = await gravar(cliente, "excluir_conta_manual", plano.pedido);
         if (!r.ok) return r;
         return {

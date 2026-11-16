@@ -13,10 +13,9 @@
 //   voltam juntas (AD-8);
 // - NÃO é recriável a parcela que alguma linha dela (mãe ou filha) foi editada à
 //   mão (`editado_em`), tem um Status que conta como pago (`conta_como_pago`) ou
-//   tem Pagamento. `pagamento_itens` só existe no Épico 6: `comPagamento` é o
-//   ponto de extensão (hoje sempre vazio); quando o Épico 6 criar a tabela, quem
-//   lê os Lançamentos passa o conjunto de ids com item de Pagamento, sem mexer
-//   aqui;
+//   tem Pagamento. `comPagamento` é o conjunto de ids de Lançamento com item
+//   de Pagamento não excluído (`pagamento_itens`, História 6.1): quem lê os
+//   Lançamentos (`contas-repo.ts`) o passa, e a regra daqui não muda;
 // - o que não é recriável fica como estava (valor, Nome, Tipo antigos) e entra
 //   no aviso ("Ficam como estão: …"); nunca é apagado nem reescrito.
 //
@@ -129,7 +128,7 @@ function motivoDaLinha(
  *
  * `statusQueContam`: os ids dos Status com `conta_como_pago` (arquivados
  * incluídos, AD-16). `comPagamento`: os ids de Lançamento com item de Pagamento
- * (Épico 6; vazio hoje).
+ * (História 6.1: `pagamento_itens` não excluídos).
  */
 export function parcelasRecriaveis(
   lancamentos: readonly LancamentoDaConta[],
@@ -246,7 +245,7 @@ export type EntradaDoPlano = {
   statusQueContam: ReadonlySet<string>;
   /** Os Lançamentos vivos da Conta com `mes ≥ mesAtual` (mães e filhas). */
   existentes: readonly LancamentoDaConta[];
-  /** Os ids de Lançamento com Pagamento (Épico 6; vazio hoje). */
+  /** Os ids de Lançamento com item de Pagamento não excluído (6.1; sem ele, nenhum tem). */
   comPagamento?: ReadonlySet<string>;
 };
 

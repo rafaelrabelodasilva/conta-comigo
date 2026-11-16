@@ -157,6 +157,8 @@ function ehGravados(dados: unknown): dados is Gravados {
   );
 }
 
+/** Quantos ids vão numa requisição `in (…)` (o endereço da requisição tem limite). */
+const POR_BLOCO_DE_IDS = 100;
 const COLUNAS_REIMPORTACAO =
   "id, fatura_id, lancado_por, nome_normalizado, valor_centavos, parcela_n, parcela_total, ordem_fatura, ajuste_de_id, excluido_em, responsavel_id, tipo_id, observacao, apelido, status_id, casado_em, editado_em, revisao_motivo, revisao_dados, serie_id, dividido_de_id, divisao, updated_at";
 
@@ -280,6 +282,22 @@ export function criarRepoFaturas(deps: {
             l.parcela_n !== null &&
             l.parcela_total !== null,
         );
+        // As antigas com Pagamento (ela ou uma parte dela): não são apagadas, saem da Fatura (AD-7, História 6.1).
+        const comItem = new Set<string>();
+        const idsDoMes = lidasLinhas.data.map((l) => l.id);
+        for (let de = 0; de < idsDoMes.length; de += POR_BLOCO_DE_IDS) {
+          const itens = await cliente
+            .from("pagamento_itens")
+            .select("lancamento_id")
+            .in("lancamento_id", idsDoMes.slice(de, de + POR_BLOCO_DE_IDS))
+            .is("excluido_em", null)
+            .limit(POR_BLOCO_DE_IDS * 10);
+          if (itens.error || !itens.data) return falhou(itens.error);
+          for (const i of itens.data) comItem.add(i.lancamento_id);
+        }
+        const referenciadas = daFatura
+          .filter((l) => comItem.has(l.id) || lidasLinhas.data.some((f) => f.dividido_de_id === l.id && comItem.has(f.id)))
+          .map((l) => l.id);
         // As Séries das linhas da Fatura e das outras que ocupam parcela (uma leitura só).
         const idsDasSeries = [...new Set([...daFatura, ...outras].flatMap((l) => (l.serie_id === null ? [] : [l.serie_id])))];
         const dasSeries = new Map<string, ChaveDaSerie>();
@@ -343,7 +361,7 @@ export function criarRepoFaturas(deps: {
         const historico = lidasLinhas.data.filter((l) => l.lancado_por === "historico" && l.excluido_em === null).length;
         return {
           ok: true,
-          valor: { faturaId, atualizadoEm, antigas, statusPadraoId, referenciadas: [], outrasDaSerie, historico },
+          valor: { faturaId, atualizadoEm, antigas, statusPadraoId, referenciadas, outrasDaSerie, historico },
         };
       } catch {
         return { ok: false, codigo: "carregar.falhou" };

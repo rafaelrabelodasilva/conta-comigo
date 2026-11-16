@@ -174,6 +174,22 @@ export const MENSAGENS = {
   "bloco.nome_longo": "Use até 30 caracteres.",
   "bloco.nome_repetido": "Já existe um Bloco com esse nome.",
   "bloco.ordem_invalida": "Os Blocos mudaram em outro aparelho. Tente de novo.",
+  // História 6.1: Marcar como pago (os que levam um valor, como "até R$ X", vêm de `mensagemDoPagamento`).
+  "pagamento.desfazer_antes": "Este lançamento tem pagamento registrado. Desfaça o pagamento antes de marcá-lo como não pago.",
+  "pagamento.mudou": "Algum lançamento mudou em outro aparelho. Confira a seleção e tente de novo.",
+  "pagamento.status_invalido": "Escolha um status que conta como pago.",
+  "pagamento.sem_status": "Escolha o status.",
+  "pagamento.sem_itens": "Nenhum dos selecionados pode receber pagamento.",
+  "pagamento.nada_a_receber": "O total dos selecionados não passa de R$ 0,00. Não há o que receber.",
+  "pagamento.valor_vazio": "Digite o valor recebido.",
+  "pagamento.valor_invalido": "Digite um valor maior que zero, como 215,16.",
+  "pagamento.valor_acima": "O valor recebido não pode passar do total.",
+  "pagamento.valor_menor": "O valor recebido precisa ser o total. O pagamento parcial ainda não está disponível.",
+  "pagamento.data_vazia": "Escolha a data do pagamento.",
+  "pagamento.data_invalida": "Data inválida.",
+  "pagamento.data_futura": "A data não pode ser depois de hoje.",
+  "pagamento.ja_desfeito": "Este pagamento já foi desfeito.",
+  "pagamento.nao_encontrado": "Este pagamento não existe mais.",
 } as const;
 
 /** Textos da janela "Importar fatura" (UX-DR20, mockup `importar.html`). */
@@ -1486,6 +1502,72 @@ export function ehCodigoConhecido(codigo: unknown): codigo is CodigoMensagem {
     typeof codigo === "string" &&
     Object.prototype.hasOwnProperty.call(MENSAGENS, codigo)
   );
+}
+
+/** Textos da janela "Aplicar status" e do Pagamento (História 6.1, FR-25, UX-DR18). */
+export const TEXTOS_PAGAMENTO = {
+  /** O botão da barra de Seleção. */
+  aplicar_status: "Aplicar status",
+  titulo: "Aplicar status",
+  status: "Status",
+  /** Nome acessível da lista de Status da janela. */
+  lista_de_status: "Status a aplicar",
+  data: "Data do pagamento",
+  valor: "Valor recebido",
+  aplicar: "Aplicar",
+  /** Status que não conta como pago: data e valor somem. */
+  so_o_status_muda: "Só o status muda. Nenhum pagamento é registrado.",
+  /** O Status ainda não foi escolhido. */
+  escolha_o_status: "Escolha um status para ver o que muda.",
+  /** O aviso quando a Seleção não tem nada a receber (tudo já pago, R$ 0,00 ou previsto). */
+  nada_a_receber: "Nenhum dos selecionados pode receber pagamento: veja os que ficam de fora acima.",
+  /** Os dados ainda não chegaram (o gerenciador dos itens de Pagamento está lendo). */
+  carregando: "Conferindo os pagamentos já registrados…",
+} as const;
+
+/** "5 lançamentos marcados como pagos" (o "Desfazer" vem do aviso). */
+export function rotuloLancamentosPagos(n: number): string {
+  return n === 1 ? "1 lançamento marcado como pago" : `${n} lançamentos marcados como pagos`;
+}
+
+/** O aviso de um Status que só muda o Status, sem Pagamento: "Status aplicado a 3 lançamentos" (o "Desfazer" vem do aviso). */
+export function rotuloStatusAplicado(n: number): string {
+  return n === 1 ? "Status aplicado a 1 lançamento" : `Status aplicado a ${n} lançamentos`;
+}
+
+/** "Total a receber: R$ 215,16" na janela. */
+export function rotuloTotalAReceber(centavos: number): string {
+  return `Total a receber: ${formatarDinheiro(centavos)}`;
+}
+
+/** "2 itens ficam de fora: 1 já pago, 1 de R$ 0,00" (a janela de Aplicar status). Vazio se nada ficou de fora. */
+export function rotuloForaDoPagamento(
+  quantidade: number,
+  porMotivo: Readonly<{ ja_pago: number; zero: number; previsto: number }>,
+): string {
+  if (quantidade <= 0) return "";
+  const partes: string[] = [];
+  if (porMotivo.ja_pago > 0) partes.push(porMotivo.ja_pago === 1 ? "1 já pago" : `${porMotivo.ja_pago} já pagos`);
+  if (porMotivo.zero > 0) partes.push(`${porMotivo.zero} de ${formatarDinheiro(0)}`);
+  if (porMotivo.previsto > 0) partes.push(porMotivo.previsto === 1 ? "1 previsto" : `${porMotivo.previsto} previstos`);
+  const quem = quantidade === 1 ? "1 item fica de fora" : `${quantidade} itens ficam de fora`;
+  return `${quem}: ${partes.join(", ")}`;
+}
+
+/**
+ * O texto de um erro do Pagamento. "Maior que o total" e "menor que o total"
+ * levam o valor (`detalhe`, em centavos): "O valor recebido não pode passar de
+ * R$ X" (UX-DR18). Os outros vêm do mapa.
+ */
+export function mensagemDoPagamento(erro: { codigo: string; detalhe?: string }): string {
+  const centavos = erro.detalhe === undefined ? NaN : Number(erro.detalhe);
+  if (erro.codigo === "pagamento.valor_acima" && Number.isInteger(centavos)) {
+    return `O valor recebido não pode passar de ${formatarDinheiro(centavos)}`;
+  }
+  if (erro.codigo === "pagamento.valor_menor" && Number.isInteger(centavos)) {
+    return `O valor recebido precisa ser o total, ${formatarDinheiro(centavos)}. O pagamento parcial ainda não está disponível.`;
+  }
+  return mensagem(erro.codigo);
 }
 
 /** Texto para o usuário. Código desconhecido cai na mensagem genérica. */

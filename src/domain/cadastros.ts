@@ -44,6 +44,9 @@ export const REFERENCIAS_COLUNAS: readonly Referencia[] = [
   // História 5.1: a Conta manual cita Tipo (não nulo) e Responsável. Conta uso: sem substituto, a Conta ficaria sem eles.
   { cadastro: "responsavel", tabela: "contas_manuais", coluna: "responsavel_id", contaUso: true },
   { cadastro: "tipo", tabela: "contas_manuais", coluna: "tipo_id", contaUso: true },
+  // História 6.1: os itens de Pagamento citam o Status de antes (nulo vale "não pago": sem substituto vira nulo) e o aplicado (conta uso: o histórico dele precisa de um Status).
+  { cadastro: "status", tabela: "pagamento_itens", coluna: "status_anterior_id", contaUso: false },
+  { cadastro: "status", tabela: "pagamento_itens", coluna: "status_aplicado_id", contaUso: true },
 ];
 
 /**

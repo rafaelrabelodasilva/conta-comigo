@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 11-01-2026 19:39
-last_updated: 16-11-2026 00:30
+last_updated: 16-11-2026 12:00
 project: conta-comigo
 project_key: NOKEY
 tracking_system: file-system
@@ -91,8 +91,8 @@ development_status:
   5-4-alterar-encerrar-e-excluir-uma-conta-manual: done
   epic-5-retrospective: optional
 
-  epic-6: backlog
-  6-1-marcar-como-pago: backlog
+  epic-6: in-progress
+  6-1-marcar-como-pago: review
   6-2-pagamento-parcial-e-a-minha-parte: backlog
   6-3-histórico-e-desfazer-pagamentos: backlog
   6-4-atrasado: backlog
