@@ -1,12 +1,12 @@
 // Projeções: as linhas que uma Fórmula (`avaliar`) recebe (AD-11). A Fórmula
 // nunca olha direto os Lançamentos: cada tela e cada regra pede a projeção
 // que lhe cabe, e o Painel, o passo a passo e a mensagem somam as mesmas
-// linhas. `projetarMensagem` (4.6, a regra de inclusão da mensagem) e
-// `projetarMensagemDoBloco` (4.7, a forma 2) estão no fim deste arquivo;
-// `projetarPendente` (Épico 6) virá aqui. Desde a 6.2 a mensagem cobra só o que falta
-// de um Lançamento "Pago parcialmente" (`restante`, AD-10).
+// linhas. `projetarMensagem` (4.6, a regra de inclusão da mensagem),
+// `projetarMensagemDoBloco` (4.7, a forma 2) e `projetarPendente` (6.5, o que falta
+// receber, em Recebimentos) estão neste arquivo. Desde a 6.2 a mensagem cobra só o que
+// falta de um Lançamento "Pago parcialmente" (`restante`, AD-10).
 
-import { unidadesDoMes } from "./divisao";
+import { ehMaeDividida, unidadesDoMes } from "./divisao";
 import {
   avaliar,
   nomeDoOperando,
@@ -22,7 +22,7 @@ import {
 import { compararPelaFatura, linhasDoMes } from "./painel";
 import { ehPrevistoNoMes } from "./previstos";
 import { rotuloItensDeFora } from "./mensagens";
-import { ehPago, somaDosItens, type ItemLido } from "./pagamento";
+import { ehPago, restante, somaDosItens, type ItemLido } from "./pagamento";
 import type { Resultado } from "./resultado";
 
 /** As colunas de `lancamentos` que a projeção do Painel lê. */
@@ -387,4 +387,123 @@ export function projetarMensagemDoBloco(
       itensEmVariosGrupos: [...aparicoes.values()].filter((n) => n > 1).length,
     },
   };
+}
+
+// ------------------------------------------------------ projetarPendente (6.5)
+
+/** As colunas de `lancamentos` que o pendente lê (`status_id` diz se está pago). */
+export type LancamentoParaPendente = LancamentoParaProjetar & {
+  status_id: string | null;
+};
+
+export type OpcoesDoPendente = {
+  /** Os Status que contam como pago (`conta_como_pago`), arquivados também. Sem Status vale "não pago" (AD-10). */
+  statusPagos: ReadonlySet<string>;
+  /** Os itens de Pagamento vivos das linhas (de todos os Meses, ou os do `mes`). */
+  itens: readonly ItemLido[];
+  /**
+   * Os Meses com Fatura importada: um Mês sem Fatura tem as Contas manuais como previstos (5.1).
+   * Ausente vale "todos os Meses têm Fatura" (como em `atraso.ts`).
+   */
+  mesesComFatura?: ReadonlySet<string>;
+  /** Só este Mês (o "Falta receber" do Painel). Ausente: todos os Meses (Recebimentos). */
+  mes?: string;
+};
+
+/** Uma linha do que está em aberto: o que falta receber dela e de quem é. */
+export type LinhaPendente = {
+  id: string;
+  mes: string;
+  responsavel_id: string | null;
+  tipo_id: string | null;
+  /** O que falta receber (AD-10): o valor cheio, ou só o que falta de um Pago parcialmente. Negativo é crédito. */
+  restanteCentavos: number;
+  /** O valor da linha (zero na linha de crédito de algo excluído). */
+  valorCentavos: number;
+  /** O que os Pagamentos já quitaram dela. */
+  recebidoCentavos: number;
+  /**
+   * A linha foi paga (em parte ou toda) e depois EXCLUÍDA (AD-11): vira um crédito de
+   * `-Σ itens`, porque o dinheiro já entrou e a conta que ele quitava saiu. Não é um lançamento.
+   */
+  credito: boolean;
+};
+
+/**
+ * O que está em aberto, linha a linha (AD-10, AD-11), de um Mês ou de todos:
+ *
+ * - **Não pago (`restante` ≠ 0):** a linha viva, não previsto e não mãe dividida, que o Status
+ *   não conta como paga. O `restante` é o valor menos o que os itens já quitaram. Uma Divisão
+ *   entra pelas partes (a mãe nunca soma, AD-8). Um Ajuste de centavos é uma linha como outra:
+ *   tem o restante dele, com a classificação da parcela.
+ * - **Crédito:** a linha EXCLUÍDA que tem itens de Pagamento vivos vira uma linha de `-Σ itens`
+ *   (AD-11). Só ela entra no Saldo; ela não é um lançamento a cobrar.
+ * - **Fora:** previstos (Série `sistema` e Conta manual de um Mês sem Fatura, como na mensagem,
+ *   porque ainda não são o que se cobra), pagos, zerados e a mãe dividida. As linhas excluídas
+ *   sem Pagamento nunca entram.
+ * - O histórico da planilha (3.10) não é previsto: entra se o Status dele não conta como pago.
+ */
+export function pendentesDosLancamentos(
+  lancamentos: readonly LancamentoParaPendente[],
+  opcoes: OpcoesDoPendente,
+): LinhaPendente[] {
+  const quitado = somaDosItens(opcoes.itens);
+  const saida: LinhaPendente[] = [];
+  for (const l of lancamentos) {
+    if (opcoes.mes !== undefined && l.mes !== opcoes.mes) continue;
+    const recebido = quitado.get(l.id) ?? 0;
+    if (l.excluido_em !== null) {
+      if (recebido === 0) continue;
+      saida.push({
+        id: l.id,
+        mes: l.mes,
+        responsavel_id: l.responsavel_id,
+        tipo_id: l.tipo_id,
+        restanteCentavos: -recebido,
+        valorCentavos: 0,
+        recebidoCentavos: recebido,
+        credito: true,
+      });
+      continue;
+    }
+    if (ehMaeDividida(l)) continue;
+    const temFatura = opcoes.mesesComFatura === undefined || opcoes.mesesComFatura.has(l.mes);
+    if (
+      l.lancado_por !== undefined &&
+      ehPrevistoNoMes({ lancado_por: l.lancado_por, conta_manual_id: l.conta_manual_id }, temFatura)
+    ) {
+      continue;
+    }
+    const restanteCentavos = restante(l, opcoes.statusPagos, recebido);
+    if (restanteCentavos === 0) continue;
+    saida.push({
+      id: l.id,
+      mes: l.mes,
+      responsavel_id: l.responsavel_id,
+      tipo_id: l.tipo_id,
+      restanteCentavos,
+      valorCentavos: l.valor_centavos,
+      recebidoCentavos: ehPago(l, opcoes.statusPagos) ? 0 : recebido,
+      credito: false,
+    });
+  }
+  return saida;
+}
+
+/** A linha que `avaliar` lê de uma linha em aberto: o valor é o `restante`. */
+export function linhaDaFormulaPendente(l: LinhaPendente): LinhaDaFormula {
+  return { id: l.id, valor_centavos: l.restanteCentavos, responsavel_id: l.responsavel_id, tipo_id: l.tipo_id };
+}
+
+/**
+ * A projeção do que falta receber (AD-11): as linhas que `avaliar` recebe em Recebimentos, de
+ * todos os Meses (ou de um, com `opcoes.mes`). O valor de cada linha é o `restante` (AD-10), e a
+ * linha de crédito de algo pago e depois excluído entra com valor negativo. Nenhuma tela filtra
+ * linhas antes de `avaliar`.
+ */
+export function projetarPendente(
+  lancamentos: readonly LancamentoParaPendente[],
+  opcoes: OpcoesDoPendente,
+): LinhaDaFormula[] {
+  return pendentesDosLancamentos(lancamentos, opcoes).map(linhaDaFormulaPendente);
 }

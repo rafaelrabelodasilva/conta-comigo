@@ -6,10 +6,13 @@ import { cn } from "./cn";
 
 export function Interruptor({
   rotulo,
+  nomeAcessivel,
   ligado,
   aoMudar,
 }: {
   rotulo: string;
+  /** O nome falado quando o rótulo sozinho não basta (uma lista de interruptores iguais: "Usar em Recebimentos: Lucas"). */
+  nomeAcessivel?: string;
   ligado: boolean;
   aoMudar: (ligado: boolean) => void;
 }) {
@@ -19,7 +22,7 @@ export function Interruptor({
         type="button"
         role="switch"
         aria-checked={ligado}
-        aria-label={rotulo}
+        aria-label={nomeAcessivel ?? rotulo}
         onClick={() => aoMudar(!ligado)}
         className={cn(
           "area-toque relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors",

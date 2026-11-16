@@ -1203,6 +1203,7 @@ export const ROTULOS = {
   regras_aprendidas: "Regras aprendidas",
   importar_planilha: "Importar planilha",
   blocos: "Blocos",
+  blocos_de_cobranca: "Blocos de cobrança",
   modelo_mensagem: "Modelo da mensagem",
 } as const;
 
@@ -2028,4 +2029,114 @@ export function rotuloItensDeFora(
   if (porMotivo.previsto > 0) partes.push(porMotivo.previsto === 1 ? "1 previsto" : `${porMotivo.previsto} previstos`);
   const quem = quantidade === 1 ? "1 item não entra" : `${quantidade} itens não entram`;
   return `${quem}: ${partes.join(", ")}`;
+}
+
+// ------------------------------------------------------- Recebimentos (6.5)
+
+/** Os textos dos cartões por Bloco de cobrança e da lista "Ver" (História 6.5, FR-26, UX-DR22). */
+export const TEXTOS_RECEBIMENTOS = {
+  titulo: "Blocos de cobrança",
+  carregando: "Carregando os recebimentos…",
+  /** Nenhum Bloco marcado "Usar em Recebimentos" (com o atalho para Configurações). */
+  sem_blocos: "Marque em Configurações quais Blocos aparecem aqui",
+  ir_para_configuracoes: "Abrir Configurações",
+  saldo_pendente: "Saldo pendente",
+  sem_valor: "—",
+  selo_em_dia: "Em dia",
+  selo_nao_pago: "Não pago",
+  ver: "Ver",
+  fechar_lista: "Fechar a lista",
+  cobrar: "Cobrar pendências",
+  /** A forma 3 (História 6.7) ainda não existe: o botão fica desativado, com esta dica. */
+  cobrar_em_breve: "Disponível em breve",
+  nada_em_aberto: "Nada em aberto",
+  lista_em_aberto: "Lançamentos em aberto",
+  /** Mais de um Mês junto: a lista agrupa por Mês, e a Seleção vale para todos. */
+  seleciona_varios_meses: "Você pode marcar lançamentos de vários meses de uma vez.",
+  linha_de_credito: "excluído depois de pago",
+  ajuste: "Ajuste",
+  sem_responsavel: "Sem responsável",
+  /** O Saldo do Bloco não é a soma da lista quando a Fórmula divide ou multiplica. */
+  nota_da_formula: "O saldo aplica a fórmula do Bloco aos valores da lista.",
+  /** Só os Status que contam como pago (a lista não muda o Status de outro jeito). */
+  sem_status_pago: "Nenhum Status conta como pago. Marque um em Configurações para registrar recebimentos.",
+} as const;
+
+/** Os Meses em aberto de um cartão: "Em aberto: Out/26", "Em aberto: Set/26 e Out/26", "Em aberto em 5 meses, desde Jun/26". */
+export function rotuloMesesEmAberto(meses: readonly string[]): string {
+  if (meses.length === 0) return TEXTOS_RECEBIMENTOS.nada_em_aberto;
+  const curtos = meses.map(formatarMes);
+  if (curtos.length === 1) return `Em aberto: ${curtos[0]}`;
+  if (curtos.length <= 3) return `Em aberto: ${curtos.slice(0, -1).join(", ")} e ${curtos[curtos.length - 1]}`;
+  return `Em aberto em ${curtos.length} meses, desde ${curtos[0]}`;
+}
+
+/** O nome acessível do botão "Ver" de um cartão. */
+export function rotuloVerEmAberto(nome: string): string {
+  return `Ver os lançamentos em aberto de ${nome}`;
+}
+
+/** O nome acessível do botão "Cobrar pendências" de um cartão. */
+export function rotuloCobrarPendencias(nome: string): string {
+  return `Cobrar pendências de ${nome}`;
+}
+
+/** O título da lista de um Bloco: "Em aberto · Lucas". */
+export function rotuloListaEmAberto(nome: string): string {
+  return `Em aberto · ${nome}`;
+}
+
+/** O cabeçalho de um Mês da lista: "Outubro/26 · 3 lançamentos" (o Mês com a inicial maiúscula). */
+export function rotuloMesDaLista(mes: string, quantidade: number): string {
+  const extenso = formatarMesExtenso(mes);
+  return `${extenso.charAt(0).toUpperCase()}${extenso.slice(1)} · ${rotuloLancamentos(quantidade)}`;
+}
+
+/** O nome acessível da caixa de uma linha da lista: "Marcar Netflix, R$ 39,90". */
+export function rotuloMarcarEmAberto(nome: string, restante: string): string {
+  return `Marcar ${nome}, ${restante}`;
+}
+
+/** O nome acessível do aviso de uma linha da lista: "falta R$ 60,00" (Pago parcialmente) ou o valor cheio. */
+export function rotuloRestanteDaLinha(restante: string, parcial: boolean): string {
+  return parcial ? `falta ${restante}` : restante;
+}
+
+/** O "Recebido no mês" e o "Falta receber" do `invoice-hero` (História 6.5, FR-26). */
+export const TEXTOS_HERO = {
+  recebido_no_mes: "Recebido no mês",
+  falta_receber: "Falta receber",
+  /** Ainda sem Blocos de cobrança ou com a leitura em curso. */
+  sem_valor: "—",
+  /** O nome acessível do botão "Falta receber": diz para onde ele leva. */
+  abrir_recebimentos: "abrir Recebimentos",
+} as const;
+
+/** "Falta receber R$ 636,00, abrir Recebimentos". */
+export function rotuloFaltaReceber(valor: string): string {
+  return `${TEXTOS_HERO.falta_receber} ${valor}, ${TEXTOS_HERO.abrir_recebimentos}`;
+}
+
+/** Configurações → Blocos de cobrança (História 6.5, UX-DR25). */
+export const TEXTOS_COBRANCA = {
+  titulo: "Blocos de cobrança",
+  ajuda:
+    "Os Blocos marcados com “Usar em Recebimentos” viram cartões em Recebimentos, com o saldo pendente de cada pessoa. “É o meu Bloco” vale para um só: é o do seu gasto por Tipo.",
+  carregando: "Carregando os Blocos…",
+  /** Sem nenhum Bloco criado ainda. */
+  sem_blocos: "Você ainda não tem Blocos. Crie o primeiro no Painel.",
+  criar_no_painel: "Abrir o Painel",
+  lista: "Blocos",
+  /** "Não foi possível salvar" vem do mapa de mensagens; este é o aviso de sucesso. */
+  salvo: "Bloco atualizado",
+} as const;
+
+/** O nome acessível da chave "Usar em Recebimentos" de um Bloco. */
+export function rotuloUsarEmRecebimentos(nome: string): string {
+  return `Usar em Recebimentos: ${nome}`;
+}
+
+/** O nome acessível da chave "É o meu Bloco" de um Bloco. */
+export function rotuloEMeuBloco(nome: string): string {
+  return `É o meu Bloco: ${nome}`;
 }

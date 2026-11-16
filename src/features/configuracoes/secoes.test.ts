@@ -26,12 +26,16 @@ describe("secaoEscolhida", () => {
     expect(secaoEscolhida("regras")).toBe("regras");
   });
 
+  it("escolhe Blocos de cobrança (História 6.5)", () => {
+    expect(secaoEscolhida("cobranca")).toBe("cobranca");
+  });
+
   it("escolhe Modelo da mensagem (História 4.5)", () => {
     expect(secaoEscolhida("mensagem")).toBe("mensagem");
   });
 
   it("a ordem é a do EXPERIENCE.md", () => {
-    expect(CHAVES_SECAO).toEqual(["responsaveis", "tipos", "status", "ciclo", "conferencia", "regras", "mensagem", "aparencia", "planilha"]);
+    expect(CHAVES_SECAO).toEqual(["responsaveis", "tipos", "status", "ciclo", "conferencia", "regras", "cobranca", "mensagem", "aparencia", "planilha"]);
   });
 
   it("com o parâmetro repetido, vale o primeiro", () => {
