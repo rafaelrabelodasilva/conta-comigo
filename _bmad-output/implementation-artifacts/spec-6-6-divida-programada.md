@@ -2,7 +2,7 @@
 title: 'História 6.6: Dívida programada'
 type: 'feature'
 created: '2026-11-16'
-status: 'review'
+status: 'done'
 baseline_commit: '649bcdc'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -95,8 +95,9 @@ Hoje 16/11/26; tolerância 10; Bombinhas (6 parcelas Jul a Dez/26, três partes 
 - [x] Interface: "Programar dívida" (Seleção, ⋯ da linha, painel do Lançamento), selo, "A receber", seletor da Conta manual, Painel aberto por link.
 - [x] Provas: núcleo, jsdom, repositório, integração (CI), backup.
 - [x] `sprint-status.yaml` (6.6 em `review`), `deferred-work.md`, `docs/infraestrutura.md`.
-- [ ] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
-- [ ] `done` no sprint-status só depois do merge, em PR separada; `supabase db push` só a pedido.
+- [x] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
+- [x] `done` no sprint-status só depois do merge, em PR separada.
+- [ ] `supabase db push` da migração `20261129120000_divida_programada.sql`: só quando o dono pedir.
 
 ## Verification
 
