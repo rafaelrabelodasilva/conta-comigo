@@ -2,7 +2,7 @@
 title: 'História 6.8: Meses anteriores da fatura'
 type: 'feature'
 created: '2026-11-18'
-status: 'review'
+status: 'done'
 baseline_commit: '65e039d'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -93,8 +93,8 @@ Hoje 15/10/26 (a tela não usa o relógio). Out/26: saldo anterior R$ 7.483,11, 
 - [x] Interface: `MesesAnterioresDaFatura`, fiação em `Recebimentos` (cartões lidos no "pronto" e no "Tentar de novo").
 - [x] Provas: núcleo (matriz), jsdom (a tabela, o selo, "—", o aviso de continuidade, vazio, carregando, erro, Realtime, 12 Meses).
 - [x] `sprint-status.yaml` (6.8 em `review`), `deferred-work.md`, `docs/infraestrutura.md` (sem migração).
-- [ ] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
-- [ ] `done` no sprint-status só depois do merge, em PR separada.
+- [x] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
+- [x] `done` no sprint-status só depois do merge, em PR separada.
 
 ## Verification
 
