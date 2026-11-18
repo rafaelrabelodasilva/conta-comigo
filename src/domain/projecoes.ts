@@ -7,6 +7,8 @@
 // falta de um Lançamento "Pago parcialmente" (`restante`, AD-10). Desde a 6.6, uma Dívida programada
 // ainda não vencida (o Mês do `vencimento_combinado` não chegou) fica fora da mensagem e do Saldo
 // pendente (`dividaAindaNaoVence`, de `divida.ts`): a mesma regra nos dois, com `hoje` como parâmetro.
+// Desde a 6.7, `separarPendentes` devolve também as Dívidas adiadas (para o aviso da forma 3, "Cobrar pendências")
+// e `termosDoBloco` é a conta dos termos da Fórmula que a forma 2 e a forma 3 compartilham.
 
 import { dividaAindaNaoVence } from "./divida";
 import { ehMaeDividida, unidadesDoMes } from "./divisao";
@@ -324,6 +326,39 @@ function nomeDaBase(base: No, nomes: NomesDaFormula): string {
   return nomeDoOperando(base, nomes);
 }
 
+/** Um termo da Fórmula (um grupo da forma 2) sem os itens: `ids` são os Lançamentos que a base dele soma. */
+export type TermoDoBloco = Omit<GrupoDoBloco, "itens"> & { ids: readonly string[] };
+
+/**
+ * Os termos da Fórmula avaliados sobre `linhas` (a forma 2 e a 6.7 usam a mesma conta): o subtotal
+ * da base, as operações × e ÷ por números e o que o termo contribui, arredondado no fim do termo.
+ * Erro só quando a Fórmula não calcula.
+ */
+export function termosDoBloco(
+  formula: Formula,
+  linhas: readonly LinhaDaFormula[],
+  nomes: NomesDaFormula,
+): Resultado<TermoDoBloco[]> {
+  const termos: TermoDoBloco[] = [];
+  for (const termo of termosDaFormula(formula)) {
+    const resultado = avaliar(termo.no, linhas);
+    if (!resultado.ok) return resultado;
+    const base = avaliar(termo.base, linhas);
+    if (!base.ok) return base;
+    const valorFixo = !temOperando(termo.base);
+    termos.push({
+      nome: valorFixo ? "" : nomeDaBase(termo.base, nomes),
+      subtraido: termo.subtraido,
+      valorFixo,
+      subtotalCentavos: valorFixo ? resultado.valor.valorCentavos : base.valor.valorCentavos,
+      fatores: termo.fatores,
+      resultadoCentavos: termo.subtraido ? -resultado.valor.valorCentavos : resultado.valor.valorCentavos,
+      ids: base.valor.entram,
+    });
+  }
+  return { ok: true, valor: termos };
+}
+
 /**
  * A mensagem da forma 2 (FR-53): a regra de inclusão da 4.6 sobre os Lançamentos
  * que a Fórmula usa, mais a Fórmula aplicada só aos itens que entram.
@@ -372,24 +407,12 @@ export function projetarMensagemDoBloco(
   );
   if (!semPagos.ok) return semPagos;
 
-  const grupos: GrupoDoBloco[] = [];
-  for (const termo of termosDaFormula(formula)) {
-    const resultado = avaliar(termo.no, filtrada);
-    if (!resultado.ok) return resultado;
-    const base = avaliar(termo.base, filtrada);
-    if (!base.ok) return base;
-    const valorFixo = !temOperando(termo.base);
-    const deste = new Set(base.valor.entram);
-    grupos.push({
-      nome: valorFixo ? "" : nomeDaBase(termo.base, nomes),
-      subtraido: termo.subtraido,
-      valorFixo,
-      subtotalCentavos: valorFixo ? resultado.valor.valorCentavos : base.valor.valorCentavos,
-      fatores: termo.fatores,
-      resultadoCentavos: termo.subtraido ? -resultado.valor.valorCentavos : resultado.valor.valorCentavos,
-      itens: projecao.entram.filter((i) => deste.has(i.id)),
-    });
-  }
+  const termos = termosDoBloco(formula, filtrada, nomes);
+  if (!termos.ok) return termos;
+  const grupos: GrupoDoBloco[] = termos.valor.map(({ ids, ...termo }) => {
+    const deste = new Set(ids);
+    return { ...termo, itens: projecao.entram.filter((i) => deste.has(i.id)) };
+  });
   const aparicoes = new Map<string, number>();
   for (const g of grupos) for (const i of g.itens) aparicoes.set(i.id, (aparicoes.get(i.id) ?? 0) + 1);
   return {
@@ -470,8 +493,22 @@ export function pendentesDosLancamentos(
   lancamentos: readonly LancamentoParaPendente[],
   opcoes: OpcoesDoPendente,
 ): LinhaPendente[] {
+  return separarPendentes(lancamentos, opcoes).pendentes;
+}
+
+/**
+ * O que `pendentesDosLancamentos` devolve e, à parte, o que ela deixou de fora SÓ por ser Dívida
+ * programada ainda não vencida (6.7): linhas com restante a cobrar que a data combinada adia. A
+ * forma 3 da mensagem avisa quantas são ("1 dívida programada ainda não vencida"); é a mesma
+ * decisão, tomada num lugar só (`dividaAindaNaoVence`), então o aviso nunca diverge do Saldo.
+ */
+export function separarPendentes(
+  lancamentos: readonly LancamentoParaPendente[],
+  opcoes: OpcoesDoPendente,
+): { pendentes: LinhaPendente[]; programadas: LinhaPendente[] } {
   const quitado = somaDosItens(opcoes.itens);
   const saida: LinhaPendente[] = [];
+  const programadas: LinhaPendente[] = [];
   for (const l of lancamentos) {
     if (opcoes.mes !== undefined && l.mes !== opcoes.mes) continue;
     const recebido = quitado.get(l.id) ?? 0;
@@ -497,10 +534,9 @@ export function pendentesDosLancamentos(
     ) {
       continue;
     }
-    if (dividaAindaNaoVence(l, opcoes.hoje)) continue;
     const restanteCentavos = restante(l, opcoes.statusPagos, recebido);
     if (restanteCentavos === 0) continue;
-    saida.push({
+    (dividaAindaNaoVence(l, opcoes.hoje) ? programadas : saida).push({
       id: l.id,
       mes: l.mes,
       responsavel_id: l.responsavel_id,
@@ -511,7 +547,7 @@ export function pendentesDosLancamentos(
       credito: false,
     });
   }
-  return saida;
+  return { pendentes: saida, programadas };
 }
 
 /** A linha que `avaliar` lê de uma linha em aberto: o valor é o `restante`. */

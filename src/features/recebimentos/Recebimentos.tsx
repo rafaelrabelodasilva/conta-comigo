@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { lerBlocos } from "@/domain/blocos";
 import { TOLERANCIA_ATRASO_PADRAO_DIAS } from "@/domain/configuracoes";
@@ -8,6 +9,7 @@ import { atrasosDasLinhas } from "@/domain/atraso";
 import { hojeEmSaoPaulo } from "@/domain/datas";
 import { aReceber } from "@/domain/divida";
 import { alternarSelecao, alternarTodos, selecaoValida } from "@/domain/lancamento";
+import { lerModelo } from "@/domain/modelo-mensagem";
 import {
   TEXTOS_RECEBIMENTOS as T,
   mensagem,
@@ -15,7 +17,7 @@ import {
   rotuloPagamentoParcial,
 } from "@/domain/mensagens";
 import { projetarPagamento, somaDosItens } from "@/domain/pagamento";
-import { pendentesDosLancamentos } from "@/domain/projecoes";
+import { pendentesDosLancamentos, type OpcoesDoPendente } from "@/domain/projecoes";
 import {
   blocosDeCobranca,
   idsSelecionaveis,
@@ -41,7 +43,7 @@ import {
   type EscolhaAplicada,
   type ResultadoAplicar,
 } from "@/features/painel/JanelaAplicarStatus";
-import { SECAO_COBRANCA } from "@/features/configuracoes/secoes";
+import { SECAO_COBRANCA, SECAO_MODELO_DA_MENSAGEM } from "@/features/configuracoes/secoes";
 import { Botao } from "@/ui/Botao";
 import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
 import { Esqueleto } from "@/ui/Esqueleto";
@@ -51,6 +53,7 @@ import { useHoje } from "@/ui/use-hoje";
 import { CartaoDeCobranca } from "./CartaoDeCobranca";
 import { HistoricoDePagamentos } from "./HistoricoDePagamentos";
 import { ListaAReceber } from "./ListaAReceber";
+import { JanelaMensagemDeCobranca } from "./JanelaMensagemDeCobranca";
 import { ListaEmAberto } from "./ListaEmAberto";
 
 // Recebimentos (Épico 6, FR-26, AD-11, UX-DR22). Três seções: os cartões por Bloco de cobrança (História 6.5, esta
@@ -69,7 +72,8 @@ import { ListaEmAberto } from "./ListaEmAberto";
 //   Meses (o Painel limpa a dele ao trocar de Mês porque a grade é de um Mês só); aqui ela é de UMA lista: fechar a
 //   lista ou abrir a de outro Bloco a limpa. Da barra, só "Aplicar status", com os Status que contam como pago
 //   (o Pagamento é o da 6.1/6.2, `projetarPagamento` + `planejarPagamento`, sem mudar o que quita nem a alocação).
-// - "Cobrar pendências" (6.7) é só a casca: o botão fica desativado.
+// - "Cobrar pendências" (6.7): abre a janela Gerar mensagem do Bloco (`JanelaMensagemDeCobranca`, a forma 3: o que o Bloco
+//   ainda deve, de todos os Meses), com as MESMAS linhas e opções do Saldo do cartão (`opcoesDoPendente`).
 // - Estados: sem Blocos de cobrança ("Marque em Configurações quais Blocos aparecem aqui", com atalho), carregando
 //   (esqueleto), erro com "Tentar de novo" e tudo pago ("Em dia" nos cartões e "Nada em aberto" na lista).
 
@@ -87,11 +91,14 @@ export function Recebimentos() {
   const online = useConexao();
   const hoje = useHoje();
   const toast = useToast();
+  const router = useRouter();
   const [verId, setVerId] = useState<string | null>(null);
   const [selecao, setSelecao] = useState<ReadonlySet<string>>(() => new Set());
   // "Aplicar status" aberta: o "hoje" (America/Sao_Paulo) de quando abriu; `null` é fechada.
   const [aplicandoStatus, setAplicandoStatus] = useState<string | null>(null);
   const [lotando, setLotando] = useState(false);
+  // "Cobrar pendências" aberta: o Bloco do cartão; `null` é fechada.
+  const [cobrandoId, setCobrandoId] = useState<string | null>(null);
 
   const retratos = [todos, itens, blocosLidos, responsaveis, status, faturas, ciclo, configuracoes];
   const erro = retratos.some((r) => r.status === "erro");
@@ -112,18 +119,19 @@ export function Recebimentos() {
     [responsaveis.linhas],
   );
 
+  // As opções do que falta receber: as do Saldo dos cartões e as da mensagem "Cobrar pendências" (a mesma regra, AD-11).
+  const opcoesDoPendente = useMemo<OpcoesDoPendente>(
+    () => ({ statusPagos, itens: itens.linhas, mesesComFatura: new Set(vencimentosDasFaturas.keys()), hoje }),
+    [statusPagos, itens.linhas, vencimentosDasFaturas, hoje],
+  );
+  const modeloDaMensagem = useMemo(
+    () => lerModelo(configuracoesDoDono(configuracoes.linhas)?.modelo_mensagem),
+    [configuracoes.linhas],
+  );
   // O que falta receber, linha a linha (projetarPendente) e quem está atrasado, de todos os Meses.
   const pendentes = useMemo(
-    () =>
-      pronto
-        ? pendentesDosLancamentos(todos.linhas, {
-            statusPagos,
-            itens: itens.linhas,
-            mesesComFatura: new Set(vencimentosDasFaturas.keys()),
-            hoje,
-          })
-        : [],
-    [pronto, todos.linhas, statusPagos, itens.linhas, vencimentosDasFaturas, hoje],
+    () => (pronto ? pendentesDosLancamentos(todos.linhas, opcoesDoPendente) : []),
+    [pronto, todos.linhas, opcoesDoPendente],
   );
   const atrasos = useMemo(
     () =>
@@ -248,6 +256,7 @@ export function Recebimentos() {
             corPessoa={c.responsavelId === null ? null : (cadastros.responsaveis.get(c.responsavelId)?.cor ?? null)}
             aberto={c.id === aberto?.id}
             aoVer={() => ver(c.id)}
+            aoCobrar={() => setCobrandoId(c.id)}
           />
         ))}
       </ul>
@@ -282,6 +291,18 @@ export function Recebimentos() {
           {resumo.texto}
         </p>
       </section>
+      {pronto && cobrandoId !== null ? (
+        <JanelaMensagemDeCobranca
+          blocoId={cobrandoId}
+          aoMudar={(abrir) => {
+            if (!abrir) setCobrandoId(null);
+          }}
+          lancamentos={todos.linhas}
+          opcoes={opcoesDoPendente}
+          modelo={modeloDaMensagem}
+          aoEditarModelo={() => router.push(`/configuracoes?secao=${SECAO_MODELO_DA_MENSAGEM}`)}
+        />
+      ) : null}
       {erro ? null : <ListaAReceber linhas={dividas} cadastros={cadastros} carregando={!pronto} />}
       <HistoricoDePagamentos />
       {selecionados.size > 0 ? (
