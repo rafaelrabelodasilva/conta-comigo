@@ -16,6 +16,7 @@ import {
   rotuloLancamentosPagos,
   rotuloPagamentoParcial,
 } from "@/domain/mensagens";
+import { montarMesesAnteriores } from "@/domain/meses-anteriores";
 import { projetarPagamento, somaDosItens } from "@/domain/pagamento";
 import { pendentesDosLancamentos, type OpcoesDoPendente } from "@/domain/projecoes";
 import {
@@ -53,12 +54,15 @@ import { useHoje } from "@/ui/use-hoje";
 import { CartaoDeCobranca } from "./CartaoDeCobranca";
 import { HistoricoDePagamentos } from "./HistoricoDePagamentos";
 import { ListaAReceber } from "./ListaAReceber";
+import { MesesAnterioresDaFatura } from "./MesesAnterioresDaFatura";
 import { JanelaMensagemDeCobranca } from "./JanelaMensagemDeCobranca";
 import { ListaEmAberto } from "./ListaEmAberto";
 
-// Recebimentos (Épico 6, FR-26, AD-11, UX-DR22). Três seções: os cartões por Bloco de cobrança (História 6.5, esta
+// Recebimentos (Épico 6, FR-26, AD-11, UX-DR22). Quatro seções: os cartões por Bloco de cobrança (História 6.5, esta
 // tela), "A receber" (6.6, as Dívidas programadas, `ListaAReceber`, calculadas aqui de `aReceber` sobre os mesmos
-// Lançamentos de todos os Meses) e o Histórico de Pagamentos (6.3, `HistoricoDePagamentos`, que lê os próprios dados).
+// Lançamentos de todos os Meses), o Histórico de Pagamentos (6.3, `HistoricoDePagamentos`, que lê os próprios dados) e os
+// Meses anteriores da Fatura (6.8, `MesesAnterioresDaFatura`, de `montarMesesAnteriores` sobre as Faturas, os cartões lidos
+// e os mesmos Lançamentos, com a Conferência do Épico 2).
 //
 // Cartões (6.5): um por Bloco marcado "Usar em Recebimentos". O Saldo pendente é a Fórmula do Bloco aplicada às
 // linhas de `projetarPendente` (o `restante` de tudo o que está em aberto, de TODOS os Meses, AD-10, AD-11); o selo
@@ -86,6 +90,7 @@ export function Recebimentos() {
   const responsaveis = useLinhas("responsaveis");
   const status = useLinhas("status");
   const faturas = useLinhas("faturas");
+  const cartoesLidos = useLinhas("fatura_cartoes");
   const ciclo = useLinhas("config_ciclo");
   const configuracoes = useLinhas("configuracoes");
   const online = useConexao();
@@ -100,7 +105,7 @@ export function Recebimentos() {
   // "Cobrar pendências" aberta: o Bloco do cartão; `null` é fechada.
   const [cobrandoId, setCobrandoId] = useState<string | null>(null);
 
-  const retratos = [todos, itens, blocosLidos, responsaveis, status, faturas, ciclo, configuracoes];
+  const retratos = [todos, itens, blocosLidos, responsaveis, status, faturas, cartoesLidos, ciclo, configuracoes];
   const erro = retratos.some((r) => r.status === "erro");
   const pronto = !erro && retratos.every((r) => r.status === "pronto");
 
@@ -150,6 +155,12 @@ export function Recebimentos() {
   const dividas = useMemo(
     () => (pronto ? aReceber(todos.linhas, { statusPagos, itens: itens.linhas, atrasos }) : []),
     [pronto, todos.linhas, statusPagos, itens.linhas, atrasos],
+  );
+
+  // "Meses anteriores da Fatura" (6.8): uma linha por Fatura, com a Conferência de cada uma (a do Épico 2).
+  const mesesAnteriores = useMemo(
+    () => (pronto ? montarMesesAnteriores(faturas.linhas, cartoesLidos.linhas, todos.linhas) : []),
+    [pronto, faturas.linhas, cartoesLidos.linhas, todos.linhas],
   );
 
   // A lista do Bloco aberto (some se o Bloco deixou de ser de cobrança ou foi excluído em outro aparelho).
@@ -218,7 +229,7 @@ export function Recebimentos() {
   function tentarDeNovo() {
     void gerenciadorTodosOsLancamentos().recarregar();
     void gerenciadorItensDoHistorico().recarregar();
-    for (const t of ["blocos", "responsaveis", "status", "faturas", "config_ciclo", "configuracoes"] as const) {
+    for (const t of ["blocos", "responsaveis", "status", "faturas", "fatura_cartoes", "config_ciclo", "configuracoes"] as const) {
       void gerenciador(t).recarregar();
     }
   }
@@ -305,6 +316,7 @@ export function Recebimentos() {
       ) : null}
       {erro ? null : <ListaAReceber linhas={dividas} cadastros={cadastros} carregando={!pronto} />}
       <HistoricoDePagamentos />
+      {erro ? null : <MesesAnterioresDaFatura linhas={mesesAnteriores} carregando={!pronto} />}
       {selecionados.size > 0 ? (
         <>
           {/* Folga para a barra não cobrir o fim da página. */}

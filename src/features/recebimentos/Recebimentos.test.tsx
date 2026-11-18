@@ -118,6 +118,7 @@ const lanc = (id: string, nome: string, responsavel: string, mes: string, valor:
   dividido_de_id: null,
   divisao: null,
   ajuste_de_id: null,
+  final_cartao: null,
   conta_manual_id: null,
   parcela_n: null,
   parcela_total: null,
@@ -126,6 +127,25 @@ const lanc = (id: string, nome: string, responsavel: string, mes: string, valor:
 
 function bloco(id: string, nome: string, formula: unknown, ordem: number, extra: Record<string, unknown> = {}) {
   return { id, nome, formula, ordem, de_cobranca: true, meu_bloco: false, created_at: T0, updated_at: T0, ...extra };
+}
+
+// Uma linha de `faturas` completa (as colunas que a Conferência e a tabela "Meses anteriores" leem).
+function fatura(id: string, mes: string, extra: Record<string, unknown> = {}) {
+  return {
+    id,
+    mes,
+    vencimento: `${mes}-06`,
+    fechamento: null,
+    total_despesas_centavos: 0,
+    total_creditos_centavos: 0,
+    saldo_anterior_centavos: null,
+    pagamentos_centavos: null,
+    total_a_pagar_centavos: null,
+    alerta_dispensado_em: null,
+    created_at: T0,
+    updated_at: T0,
+    ...extra,
+  };
 }
 
 function dadosBase() {
@@ -141,9 +161,17 @@ function dadosBase() {
       { id: PAGO, nome: "Pago", conta_como_pago: true, arquivado: false },
     ],
     faturas: [
-      { id: "f0", mes: "2026-09", vencimento: "2026-09-06" },
-      { id: "f1", mes: "2026-10", vencimento: "2026-10-06" },
+      // Setembro e outubro/26 do mockup: o resíduo de outubro é R$ 7.483,11 − R$ 7.457,21 = R$ 25,90. Os totais lidos
+      // de outubro (R$ 460,00) são a soma dos Lançamentos de "f1" abaixo (a Conferência bate).
+      fatura("f0", "2026-09", { saldo_anterior_centavos: 780_712, pagamentos_centavos: 780_712, total_a_pagar_centavos: 748_311 }),
+      fatura("f1", "2026-10", {
+        total_despesas_centavos: 46_000,
+        saldo_anterior_centavos: 748_311,
+        pagamentos_centavos: 745_721,
+        total_a_pagar_centavos: 771_367,
+      }),
     ],
+    fatura_cartoes: [],
     config_ciclo: [{ vigente_desde: "2026-01", created_at: T0, dia_fechamento: 1, dia_vencimento: 6 }],
     configuracoes: [{ tolerancia_atraso_dias: 10, status_padrao_id: NAO_PAGO, modelo_mensagem: MODELO }],
     blocos: [
@@ -824,5 +852,201 @@ describe("Cobrar pendências (História 6.7, FR-28): a forma 3 da mensagem", () 
       falso.status = { lancamentos: "carregando" };
     });
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+describe("Meses anteriores da Fatura (História 6.8, FR-30, UX-DR22)", () => {
+  const TMA = {
+    titulo: "Meses anteriores da Fatura",
+    vazio: "Nenhuma fatura importada ainda",
+    carregando: "Carregando os meses anteriores…",
+  };
+  const tabela = () => screen.getByRole("table", { name: TMA.titulo });
+  const linhaDo = (mes: string) => within(tabela()).getByRole("rowheader", { name: mes }).closest("tr") as HTMLElement;
+  const celulas = (mes: string) => within(linhaDo(mes)).getAllByRole("cell").map((c) => textoDe(c));
+  const meses = () => within(tabela()).getAllByRole("rowheader").map((c) => textoDe(c));
+
+  it("outubro/26 mostra saldo anterior, pagamento, resíduo de R$ 25,90 e o selo; setembro/26 R$ 0,00; do mais novo ao mais antigo", () => {
+    renderizar();
+    expect(screen.getByRole("heading", { level: 2, name: TMA.titulo })).toBeTruthy();
+    expect(within(tabela()).getAllByRole("columnheader").map((c) => textoDe(c))).toEqual([
+      "Mês",
+      "Saldo anterior",
+      "Pagamento da fatura",
+      "Resíduo",
+      "Conferência",
+    ]);
+    expect(meses()).toEqual(["Out/26", "Set/26"]);
+    expect(celulas("Out/26")).toEqual(["R$ 7.483,11", "R$ 7.457,21", "R$ 25,90", "✓ Conferido"]);
+    expect(celulas("Set/26")).toEqual(["R$ 7.807,12", "R$ 7.807,12", "R$ 0,00", "✓ Conferido"]);
+  });
+
+  it("a seção vem depois do Histórico de Pagamentos", () => {
+    renderizar();
+    const historico = screen.getByRole("heading", { name: "Histórico de Pagamentos" });
+    const secao = screen.getByRole("heading", { level: 2, name: TMA.titulo });
+    expect(historico.compareDocumentPosition(secao) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("o selo é o da Conferência: diferença em texto ('⚠ Diferença de R$ 0,08'), nunca só cor", () => {
+    mudar(() => {
+      falso.banco.faturas = [
+        fatura("f0", "2026-09"),
+        fatura("f1", "2026-10", { total_despesas_centavos: 46_008, saldo_anterior_centavos: 748_311, pagamentos_centavos: 745_721 }),
+      ];
+    });
+    renderizar();
+    expect(celulas("Out/26")[3]).toBe("⚠ Diferença de R$ 0,08");
+    expect(celulas("Set/26")[3]).toBe("✓ Conferido");
+  });
+
+  it("alerta dispensado: o selo segue dizendo a diferença e a linha avisa 'alerta dispensado'", () => {
+    mudar(() => {
+      falso.banco.faturas = [fatura("f1", "2026-10", { total_despesas_centavos: 46_008, alerta_dispensado_em: T0 })];
+    });
+    renderizar();
+    expect(celulas("Out/26")[3]).toBe("⚠ Diferença de R$ 0,08alerta dispensado");
+  });
+
+  it("saldo anterior ou pagamento que a Fatura não trouxe: '—' e resíduo '—'", () => {
+    mudar(() => {
+      falso.banco.faturas = [
+        fatura("f0", "2026-09", { saldo_anterior_centavos: 780_712 }),
+        fatura("f1", "2026-10", { total_despesas_centavos: 46_000, pagamentos_centavos: 745_721 }),
+      ];
+    });
+    renderizar();
+    expect(celulas("Out/26")).toEqual(["—", "R$ 7.457,21", "—", "✓ Conferido"]);
+    expect(celulas("Set/26")).toEqual(["R$ 7.807,12", "—", "—", "✓ Conferido"]);
+  });
+
+  it("nenhuma Fatura trouxe os totais: a tabela mostra '—' e explica", () => {
+    mudar(() => {
+      falso.banco.faturas = [fatura("f1", "2026-10", { total_despesas_centavos: 46_000 })];
+    });
+    renderizar();
+    expect(celulas("Out/26")).toEqual(["—", "—", "—", "✓ Conferido"]);
+    expect(screen.getByText("As faturas importadas não trouxeram saldo anterior nem pagamento.")).toBeTruthy();
+  });
+
+  it("pagou a mais: o resíduo negativo leva o sinal e 'pago a mais'", () => {
+    mudar(() => {
+      falso.banco.faturas = [
+        fatura("f1", "2026-10", { total_despesas_centavos: 46_000, saldo_anterior_centavos: 10_000, pagamentos_centavos: 12_000 }),
+      ];
+    });
+    renderizar();
+    expect(celulas("Out/26")[2]).toBe("- R$ 20,00pago a mais");
+  });
+
+  it("o saldo anterior que não é o total a pagar do Mês anterior ganha um aviso discreto sob o valor", () => {
+    mudar(() => {
+      (falso.banco.faturas as Array<Record<string, unknown>>)[1]!.saldo_anterior_centavos = 748_300;
+    });
+    renderizar();
+    expect(celulas("Out/26")[0]).toContain("O saldo anterior não é o total a pagar de Set/26 (R$ 7.483,11)");
+    expect(celulas("Set/26")[0]).not.toContain("O saldo anterior não é");
+  });
+
+  it("sem aviso quando bate (o saldo anterior de outubro é o total a pagar de setembro)", () => {
+    renderizar();
+    expect(screen.queryByText(/O saldo anterior não é o total a pagar/)).toBeNull();
+  });
+
+  it("nenhuma Fatura importada: 'Nenhuma fatura importada ainda'", () => {
+    mudar(() => {
+      falso.banco.faturas = [];
+    });
+    renderizar();
+    expect(screen.getByText(TMA.vazio)).toBeTruthy();
+    expect(screen.queryByRole("table", { name: TMA.titulo })).toBeNull();
+  });
+
+  it("carregando: esqueleto, nunca a mensagem de 'nenhuma fatura'", () => {
+    mudar(() => {
+      falso.status = { faturas: "carregando" };
+      falso.banco.faturas = [];
+    });
+    renderizar();
+    expect(screen.getByText(TMA.carregando)).toBeTruthy();
+    expect(screen.queryByText(TMA.vazio)).toBeNull();
+  });
+
+  it("os cartões lidos ainda lendo: espera (sem eles a Conferência diria diferença à toa)", () => {
+    mudar(() => {
+      falso.status = { fatura_cartoes: "carregando" };
+    });
+    renderizar();
+    expect(screen.getByText(TMA.carregando)).toBeTruthy();
+    expect(screen.queryByRole("table", { name: TMA.titulo })).toBeNull();
+  });
+
+  it("erro de leitura: só o 'Tentar de novo' da tela, sem tabela nem esqueleto", async () => {
+    mudar(() => {
+      falso.status = { faturas: "erro" };
+    });
+    renderizar();
+    expect(screen.queryByRole("table", { name: TMA.titulo })).toBeNull();
+    expect(screen.queryByText(TMA.carregando)).toBeNull();
+    await userEvent.setup().click(screen.getAllByRole("button", { name: "Tentar de novo" })[0]!);
+    expect(falso.recarregar).toHaveBeenCalled();
+  });
+
+  it("uma Fatura nova ou corrigida em outro aparelho muda a tabela sozinha (Realtime)", () => {
+    renderizar();
+    expect(celulas("Out/26")[2]).toBe("R$ 25,90");
+    mudar(() => {
+      falso.banco.faturas = [
+        ...(falso.banco.faturas as Array<Record<string, unknown>>).map((f) =>
+          f.id === "f1" ? { ...f, pagamentos_centavos: 748_311 } : f,
+        ),
+        fatura("f2", "2026-11", { saldo_anterior_centavos: 771_367 }),
+      ];
+    });
+    expect(celulas("Out/26")[2]).toBe("R$ 0,00");
+    expect(meses()).toEqual(["Nov/26", "Out/26", "Set/26"]);
+  });
+
+  it("a Conferência de cada Fatura usa os cartões lidos dela", () => {
+    mudar(() => {
+      falso.banco.fatura_cartoes = [{ id: "c1", fatura_id: "f0", final: "1234", total_centavos: 5_000 }];
+    });
+    renderizar();
+    expect(celulas("Set/26")[3]).toBe("⚠ Diferença de R$ 50,00");
+    expect(celulas("Out/26")[3]).toBe("✓ Conferido");
+  });
+
+  describe("quantos Meses mostrar", () => {
+    // 13 Meses de Faturas, de jan/26 a jan/27.
+    const treze = () =>
+      Array.from({ length: 13 }, (_, i) => {
+        const ano = 2026 + Math.floor(i / 12);
+        const mes = `${ano}-${String((i % 12) + 1).padStart(2, "0")}`;
+        return fatura(`g${i}`, mes, { saldo_anterior_centavos: 100, pagamentos_centavos: 100 });
+      });
+
+    it("os 12 mais novos; 'Ver o outro mês' mostra o mais antigo e 'Mostrar só os mais recentes' volta", async () => {
+      mudar(() => {
+        falso.banco.faturas = treze();
+        falso.banco.lancamentos = [];
+      });
+      renderizar();
+      expect(meses()).toHaveLength(12);
+      expect(meses()[0]).toBe("Jan/27");
+      expect(meses()).not.toContain("Jan/26");
+      const usuario = userEvent.setup();
+      const ver = screen.getByRole("button", { name: "Ver o outro mês" });
+      expect(ver.getAttribute("aria-expanded")).toBe("false");
+      await usuario.click(ver);
+      expect(meses()).toHaveLength(13);
+      expect(meses()[12]).toBe("Jan/26");
+      await usuario.click(screen.getByRole("button", { name: "Mostrar só os mais recentes" }));
+      expect(meses()).toHaveLength(12);
+    });
+
+    it("até 12 Meses: sem botão", () => {
+      renderizar();
+      expect(screen.queryByRole("button", { name: /Ver o outro|Ver os outros/ })).toBeNull();
+    });
   });
 });

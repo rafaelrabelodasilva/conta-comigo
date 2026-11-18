@@ -2199,6 +2199,40 @@ export function rotuloCobrarPendencias(nome: string): string {
   return `Cobrar pendências de ${nome}`;
 }
 
+// ------------------------------------------------- Meses anteriores da Fatura (6.8)
+
+/** Os textos da tabela "Meses anteriores da Fatura" de Recebimentos (História 6.8, FR-30, UX-DR22). */
+export const TEXTOS_MESES_ANTERIORES = {
+  titulo: "Meses anteriores da Fatura",
+  carregando: "Carregando os meses anteriores…",
+  /** Nenhuma Fatura importada: nada a mostrar. */
+  sem_faturas: "Nenhuma fatura importada ainda",
+  /** Há Faturas, mas nenhuma trouxe saldo anterior nem pagamento. */
+  sem_totais: "As faturas importadas não trouxeram saldo anterior nem pagamento.",
+  ajuda: "O resíduo é o saldo anterior menos o pagamento da fatura: o que ficou sem pagar e passou para o mês seguinte.",
+  coluna_mes: "Mês",
+  coluna_saldo_anterior: "Saldo anterior",
+  coluna_pagamento: "Pagamento da fatura",
+  coluna_residuo: "Resíduo",
+  coluna_conferencia: "Conferência",
+  /** Saldo anterior ou pagamento que a Fatura não trouxe. */
+  sem_valor: "—",
+  /** Resíduo negativo: Rafael pagou mais do que o saldo anterior. */
+  pago_a_mais: "pago a mais",
+  alerta_dispensado: "alerta dispensado",
+  mostrar_so_recentes: "Mostrar só os mais recentes",
+} as const;
+
+/** "O saldo anterior não é o total a pagar de Set/26 (R$ 7.713,67)": o aviso de continuidade de um Mês. */
+export function rotuloContinuidade(mesAnterior: string, totalAPagarCentavos: number): string {
+  return `O saldo anterior não é o total a pagar de ${formatarMes(mesAnterior)} (${formatarDinheiro(totalAPagarCentavos)})`;
+}
+
+/** O botão que mostra os Meses além do limite: "Ver os outros 3 meses" (um: "Ver o outro mês"). */
+export function rotuloVerOutrosMeses(quantidade: number): string {
+  return quantidade === 1 ? "Ver o outro mês" : `Ver os outros ${quantidade} meses`;
+}
+
 /** O título da lista de um Bloco: "Em aberto · Lucas". */
 export function rotuloListaEmAberto(nome: string): string {
   return `Em aberto · ${nome}`;
