@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 11-01-2026 19:39
-last_updated: 18-11-2026 09:30
+last_updated: 18-11-2026 10:30
 project: conta-comigo
 project_key: NOKEY
 tracking_system: file-system
@@ -97,7 +97,7 @@ development_status:
   6-3-histórico-e-desfazer-pagamentos: done
   6-4-atrasado: done
   6-5-recebimentos-por-bloco-de-cobrança: done
-  6-6-dívida-programada: review
+  6-6-dívida-programada: done
   6-7-cobrar-pendências: backlog
   6-8-meses-anteriores-da-fatura: backlog
   6-9-editar-excluir-e-reimportar-algo-já-pago: backlog
