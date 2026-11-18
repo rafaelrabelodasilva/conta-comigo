@@ -26,7 +26,7 @@ context:
 **Always:**
 - **Núcleo puro (AD-1):** toda regra em `src/domain` (só imports relativos, sem relógio: `hoje` e o instante da edição entram como parâmetro). A tela lê, chama o núcleo e desenha.
 - **Uma regra de "aberto" (AD-11):** nenhuma tela filtra linhas antes de `avaliar`; a regra da Dívida não vencida mora em `projetarPendente` e em `projetarMensagem`, ambas chamando `dividaAindaNaoVence`.
-- **Schema só por migração (AD-14):** `20261129120000_divida_programada.sql`, `database.types.ts` no formato do gerado. **Não aplicada em produção** (`supabase db push` só depois do merge e a pedido).
+- **Schema só por migração (AD-14):** `20261129120000_divida_programada.sql`, `database.types.ts` no formato do gerado. **Aplicada em produção em 18/11/2026**, com `supabase db push`, depois do merge da #97 e a pedido do Rafael.
 - **Dinheiro em centavos; nomes do Glossário; textos só por `mensagens.ts`; nenhuma cor literal; alvos de 44 pt; log só por `src/server/log.ts`.** Dados de Recebimentos pelo gerenciador `lancamentos:todos` (nenhuma leitura avulsa).
 
 **Never:** "Cobrar pendências" funcionando (6.7); Meses anteriores da Fatura (6.8); editar/excluir/reimportar algo já pago e o aviso de Saldo (6.9); lembretes e Web Push (Épico 7); Previsão; "Por proporção" no formulário da Conta. Mudar o que o Pagamento quita ou a alocação, a regra de `estaAtrasado` além de ligar a coluna, ou o casamento da reimportação. Ler ou alterar dados de produção.
@@ -97,7 +97,7 @@ Hoje 16/11/26; tolerância 10; Bombinhas (6 parcelas Jul a Dez/26, três partes 
 - [x] `sprint-status.yaml` (6.6 em `review`), `deferred-work.md`, `docs/infraestrutura.md`.
 - [x] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
 - [x] `done` no sprint-status só depois do merge, em PR separada.
-- [ ] `supabase db push` da migração `20261129120000_divida_programada.sql`: só quando o dono pedir.
+- [x] `supabase db push` da migração `20261129120000_divida_programada.sql`: feito em 18/11/2026, a pedido do dono (o `--dry-run` seguinte diz "Remote database is up to date").
 
 ## Verification
 
