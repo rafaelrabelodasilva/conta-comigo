@@ -301,7 +301,7 @@ describe("a mensagem de cobrança não muda com o atraso (AD-10, UX: 'Não pago'
 
   it("entra o que não está pago, esteja atrasado ou não: a regra olha o Status, nunca a data", () => {
     const linhas = [msg("1"), msg("2", { status_id: PAGO })];
-    const opcoes = { mes: "2026-11", statusPagos: new Set([PAGO]), temFatura: true, incluirPrevistos: false };
+    const opcoes = { mes: "2026-11", statusPagos: new Set([PAGO]), temFatura: true, incluirPrevistos: false, hoje: "2026-11-17" };
     const r = projetarMensagem(new Set(["1", "2"]), linhas, opcoes);
     expect(r.entram.map((i) => i.id)).toEqual(["1"]);
     expect(r.fora.porMotivo.pago).toBe(1);

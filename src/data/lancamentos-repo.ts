@@ -60,6 +60,12 @@
 // Divisão voltam em `aPerguntar` ("Aplicar a todos" → `aplicarDivisaoAosPrevistos`).
 // `desfazer` leva os itens que devolvem tudo ao que era (`restaurarDivisao`).
 //
+// Dívida programada (História 6.6): `programarDivida` grava os itens que o núcleo planejou
+// (`planejarProgramacao` / `planejarDesligar`, em `divida.ts`) pela RPC `programar_divida`, em transação:
+// tudo ou nada. Sem otimismo (são poucas linhas e a RPC confere dono, mãe dividida e exclusão); as
+// linhas devolvidas entram no gerenciador do Mês aberto e no dos Lançamentos de todos os Meses
+// (Recebimentos, "A receber"). O "Desfazer" é a mesma chamada com os valores de antes.
+//
 // Casamento (História 3.6): `manterPrevisto` é o "Manter" da variante "Não
 // veio na fatura": o previsto sai da fila (`revisao_motivo` e `revisao_dados`
 // nulos, `revisado_em`) e continua previsto, sem ensinar Regra. O "Desfazer" é
@@ -68,6 +74,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { planejarApelidoEmMassa, type OrigemDoApelido, type PlanoDoApelido } from "@/domain/apelido";
+import type { ItemProgramar } from "@/domain/divida";
 import {
   itemParaRestaurar,
   juntarItensDividir,
@@ -97,7 +104,7 @@ import type { EventoAprender } from "@/domain/regras";
 import { estaOnline } from "./conexao";
 import type { Database, Json } from "./database.types";
 import { FALHOU, gravarComOtimismo, semConexao, type CodigoFalhaGravacao, type Online } from "./gravacao";
-import { gerenciador, gerenciadorFila, type Gerenciador, type LinhaDe } from "./realtime";
+import { gerenciador, gerenciadorFila, gerenciadorTodosOsLancamentos, type Gerenciador, type LinhaDe } from "./realtime";
 import { repoRegras } from "./regras-repo";
 import { criarClienteNavegador } from "./supabase/navegador";
 
@@ -209,6 +216,14 @@ export type ResultadoDivisao =
   | { ok: true; linhas: LinhaLancamento[]; preenchidos: number; aPerguntar: ItemDividir[]; desfazer: ItemDividir[] }
   | { ok: false; codigo: FalhaDaDivisao };
 
+/** O que `programar_divida` devolve: as linhas gravadas, ou o código da recusa (do banco ou de `gravacao.ts`). */
+export type ResultadoProgramacao =
+  | { ok: true; linhas: LinhaLancamento[] }
+  | { ok: false; codigo: CodigoFalhaGravacao | "programada.nao_encontrada" | "programada.mae_dividida" };
+
+/** Os códigos que `programar_divida` levanta e a tela mostra como estão. */
+const CODIGOS_DA_PROGRAMACAO = ["programada.nao_encontrada", "programada.mae_dividida"] as const;
+
 /** Teto de linhas lidas por Nome no Apelido em massa (o limite do PostgREST e da RPC do lote). */
 const LIMITE_DE_LINHAS_DO_NOME = 1000;
 
@@ -219,8 +234,10 @@ export function criarRepoLancamentos(deps: {
   online?: Online;
   /** Aprende a Regra da classificação; sem ele, nenhuma Regra é aprendida. */
   aprender?: Aprender;
+  /** Os Lançamentos de todos os Meses (Recebimentos, 6.6): a Dívida programada aparece em "A receber" sem esperar o Realtime. */
+  memoriaTodosOsLancamentos?: Gerenciador<LinhaLancamento>;
 }) {
-  const { obterCliente, memoria, online = estaOnline, aprender } = deps;
+  const { obterCliente, memoria, online = estaOnline, aprender, memoriaTodosOsLancamentos } = deps;
 
   /** Ensina a Regra pela linha principal, sem esperar; a falha não chega à gravação. */
   function ensinar(nome: string, responsavelAntes: string | null, gravada: LinhaLancamento) {
@@ -699,6 +716,32 @@ export function criarRepoLancamentos(deps: {
       return r.ok ? { ok: true, gravados: itens.length } : r;
     },
 
+    /**
+     * Grava os itens de `planejarProgramacao` ou `planejarDesligar` (o "Desfazer" leva os `desfazer` do
+     * plano) pela RPC `programar_divida`, tudo ou nada. Sem itens, não grava nada.
+     */
+    async programarDivida(itens: readonly ItemProgramar[]): Promise<ResultadoProgramacao> {
+      if (itens.length === 0) return { ok: true, linhas: [] };
+      const bloqueio = semConexao(online);
+      if (bloqueio) return bloqueio;
+      const cliente = obterCliente();
+      if (!cliente) return FALHOU;
+      try {
+        const { data, error } = await cliente.rpc("programar_divida", { p_itens: itens as unknown as Json });
+        if (error) {
+          const codigo = CODIGOS_DA_PROGRAMACAO.find((c) => error.message?.includes(c));
+          return codigo ? { ok: false, codigo } : FALHOU;
+        }
+        if (!Array.isArray(data)) return FALHOU;
+        const linhas = data as unknown as LinhaLancamento[];
+        memoria.aplicarLote(linhas);
+        memoriaTodosOsLancamentos?.aplicarLote(linhas);
+        return { ok: true, linhas };
+      } catch {
+        return FALHOU;
+      }
+    },
+
     /** A linha que gerou o previsto e o vencimento da Fatura dela, lidos do banco. */
     async lerOrigem(origemId: string): Promise<ResultadoOrigem> {
       const cliente = obterCliente();
@@ -867,6 +910,7 @@ export function repoLancamentos(): RepoLancamentos {
     obterCliente: () => criarClienteNavegador() as SupabaseClient<Database> | null,
     memoria: gerenciador("lancamentos"),
     aprender: (evento) => repoRegras().aprender(evento),
+    memoriaTodosOsLancamentos: gerenciadorTodosOsLancamentos(),
   });
   return repo;
 }

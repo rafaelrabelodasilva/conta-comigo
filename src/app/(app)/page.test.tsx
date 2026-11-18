@@ -23,7 +23,9 @@ vi.mock("@/server/log", () => ({ log: falso.log }));
 vi.mock("next/navigation", () => ({ redirect: falso.redirect }));
 // O conteúdo do Painel é o componente cliente (testado à parte).
 vi.mock("@/features/painel/Painel", () => ({
-  Painel: ({ titulo }: { titulo: string }) => <div data-painel={titulo} />,
+  Painel: ({ titulo, mesInicial, lancamentoInicial }: { titulo: string; mesInicial?: string; lancamentoInicial?: string }) => (
+    <div data-painel={titulo} data-mes={mesInicial} data-lancamento={lancamentoInicial} />
+  ),
 }));
 
 const PAINEL = 'data-painel="Painel"';
@@ -35,8 +37,8 @@ const estado = (concluidoEm: string | null, temCadastro: boolean) => ({
   estado: { concluidoEm, temCadastro },
 });
 
-async function desenhar() {
-  return renderToStaticMarkup(await PaginaPainel());
+async function desenhar(parametros: Record<string, string | string[] | undefined> = {}) {
+  return renderToStaticMarkup(await PaginaPainel({ searchParams: Promise.resolve(parametros) }));
 }
 
 describe("Painel", () => {
@@ -81,5 +83,39 @@ describe("Painel", () => {
     expect(await desenhar()).toContain(PAINEL);
     expect(falso.lerEstadoPrimeiroUso).not.toHaveBeenCalled();
     expect(falso.redirect).not.toHaveBeenCalled();
+  });
+});
+
+describe("Painel aberto por 'A receber' (História 6.6): ?mes=…&lancamento=…", () => {
+  const ID = "0a1b2c3d-0000-4000-8000-00000000abcd";
+  beforeEach(() => {
+    vi.clearAllMocks();
+    falso.temSessao.mockResolvedValue(true);
+    falso.criarClienteServidor.mockResolvedValue({});
+    falso.lerEstadoPrimeiroUso.mockResolvedValue(estado("2026-11-01T00:00:00Z", true));
+  });
+
+  it("o Mês e o Lançamento válidos chegam ao Painel", async () => {
+    const html = await desenhar({ mes: "2026-07", lancamento: ID });
+    expect(html).toContain('data-mes="2026-07"');
+    expect(html).toContain(`data-lancamento="${ID}"`);
+  });
+
+  it("sem parâmetros, o Painel abre como sempre", async () => {
+    const html = await desenhar();
+    expect(html).not.toContain("data-mes");
+    expect(html).not.toContain("data-lancamento");
+  });
+
+  it("valor fora do formato é ignorado; o Lançamento sem Mês válido também", async () => {
+    expect(await desenhar({ mes: "julho", lancamento: ID })).not.toContain("data-mes");
+    expect(await desenhar({ mes: "julho", lancamento: ID })).not.toContain("data-lancamento");
+    const soMes = await desenhar({ mes: "2026-07", lancamento: "<script>" });
+    expect(soMes).toContain('data-mes="2026-07"');
+    expect(soMes).not.toContain("data-lancamento");
+  });
+
+  it("parâmetro repetido vale o primeiro", async () => {
+    expect(await desenhar({ mes: ["2026-08", "2026-09"] })).toContain('data-mes="2026-08"');
   });
 });

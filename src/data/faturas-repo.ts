@@ -160,7 +160,7 @@ function ehGravados(dados: unknown): dados is Gravados {
 /** Quantos ids vão numa requisição `in (…)` (o endereço da requisição tem limite). */
 const POR_BLOCO_DE_IDS = 100;
 const COLUNAS_REIMPORTACAO =
-  "id, fatura_id, lancado_por, nome_normalizado, valor_centavos, parcela_n, parcela_total, ordem_fatura, ajuste_de_id, excluido_em, responsavel_id, tipo_id, observacao, apelido, status_id, casado_em, editado_em, revisao_motivo, revisao_dados, serie_id, dividido_de_id, divisao, updated_at";
+  "id, fatura_id, lancado_por, nome_normalizado, valor_centavos, parcela_n, parcela_total, ordem_fatura, ajuste_de_id, excluido_em, responsavel_id, tipo_id, observacao, apelido, status_id, casado_em, editado_em, vencimento_combinado, revisao_motivo, revisao_dados, serie_id, dividido_de_id, divisao, updated_at";
 
 const COLUNAS_CANDIDATAS =
   "id, nome_normalizado, parcela_n, parcela_total, valor_centavos, ordem_fatura, responsavel_id, tipo_id, apelido, observacao, divisao, serie_id, excluido_em, dividido_de_id, ajuste_de_id";
@@ -335,6 +335,7 @@ export function criarRepoFaturas(deps: {
           observacao: l.observacao,
           apelido: l.apelido,
           editado_em: l.editado_em,
+          vencimento_combinado: l.vencimento_combinado,
           divisao: lerDivisao(l.divisao),
           revisao_motivo: l.revisao_motivo,
           revisao_dados: l.revisao_dados,

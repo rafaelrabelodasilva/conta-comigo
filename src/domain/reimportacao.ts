@@ -58,6 +58,8 @@ export type AntigaParaReimportar = {
   observacao: string | null;
   apelido: string | null;
   editado_em: string | null;
+  /** Dívida programada (6.6): uma linha com data combinada é trabalho do Rafael e não some em silêncio. */
+  vencimento_combinado?: string | null;
   /** A Divisão da mãe, com os `filha_id` (lida por `lerDivisao`). */
   divisao: Divisao | null;
   revisao_motivo: MotivoRevisao | null;
@@ -139,11 +141,13 @@ export function casarReimportacao(
 
 /** A linha tem trabalho de Rafael que não se refaz sozinho? (Regra e importação não contam.) */
 export function temTrabalhoManual(
-  l: Pick<AntigaParaReimportar, "editado_em" | "apelido" | "observacao" | "status_id">,
+  l: Pick<AntigaParaReimportar, "editado_em" | "apelido" | "observacao" | "status_id"> &
+    Partial<Pick<AntigaParaReimportar, "vencimento_combinado">>,
   statusPadraoId: string | null,
 ): boolean {
   return (
     l.editado_em !== null ||
+    (l.vencimento_combinado ?? null) !== null ||
     l.apelido !== null ||
     (l.observacao !== null && l.observacao.trim() !== "") ||
     l.status_id !== statusPadraoId

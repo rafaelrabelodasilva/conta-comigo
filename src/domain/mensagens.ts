@@ -154,6 +154,17 @@ export const MENSAGENS = {
   "lancamento.apelido_longo": "Use até 60 caracteres.",
   "lancamento.observacao_longa": "Use até 500 caracteres.",
   "lancamento.sem_cartao": "Escolha o cartão",
+  // História 6.6: Dívida programada.
+  "divida.data_vazia": "Escolha a data combinada.",
+  "divida.data_invalida": "Data inválida.",
+  "divida.data_fora_do_limite": "Use uma data entre 2000 e 2099.",
+  "divida.observacao_longa": "Use até 500 caracteres.",
+  "divida.nada_a_programar": "Nenhum destes lançamentos pode ser programado.",
+  "divida.so_pagos": "Estes lançamentos já estão pagos. Não há o que programar.",
+  "divida.nada_a_desligar": "Nenhum destes lançamentos está programado.",
+  "programada.nao_encontrada": "Este lançamento não existe mais. Nada foi gravado.",
+  "programada.mae_dividida": "A dívida programada é de cada parte da divisão.",
+  "conta.vencimento_invalido": "Escolha a data combinada de cada parte programada.",
   // História 4.1: a Fórmula do Bloco. As razões que deixam "Salvar" desativado.
   "formula.vazia": "Monte a fórmula tocando nas fichas",
   "formula.invalida": "Não foi possível ler esta fórmula.",
@@ -470,6 +481,16 @@ export const ROTULO_ATRASADO = "Atrasado";
 /** "atrasado desde 17/11/26": o primeiro dia de atraso, no nome acessível do selo e na dica dele. */
 export function rotuloAtrasadoDesde(data: string): string {
   return `atrasado desde ${formatarData(data)}`;
+}
+
+/**
+ * O selo "Programada · 06/04/27" (História 6.6, FR-27): a Dívida programada na grade, no painel do
+ * Lançamento e em Recebimentos. O mesmo texto serve ao nome acessível e à dica do selo.
+ */
+export const ROTULO_PROGRAMADA = "Programada";
+
+export function rotuloProgramada(data: string): string {
+  return `${ROTULO_PROGRAMADA} · ${formatarData(data)}`;
 }
 
 /** O painel do Lançamento: "Atrasado desde 17/11/26" (o selo e, ao lado, a data). */
@@ -2020,15 +2041,104 @@ export function rotuloItensEmVariosGrupos(quantidade: number): string {
  */
 export function rotuloItensDeFora(
   quantidade: number,
-  porMotivo: Readonly<{ pago: number; zero: number; previsto: number }>,
+  porMotivo: Readonly<{ pago: number; zero: number; previsto: number; programada: number }>,
 ): string {
   if (quantidade <= 0) return "";
   const partes: string[] = [];
   if (porMotivo.pago > 0) partes.push(porMotivo.pago === 1 ? "1 já pago" : `${porMotivo.pago} já pagos`);
   if (porMotivo.zero > 0) partes.push(`${porMotivo.zero} de ${formatarDinheiro(0)}`);
   if (porMotivo.previsto > 0) partes.push(porMotivo.previsto === 1 ? "1 previsto" : `${porMotivo.previsto} previstos`);
+  // Dívida programada ainda não vencida (6.6): só entra no mês do vencimento combinado.
+  if (porMotivo.programada > 0) {
+    partes.push(
+      porMotivo.programada === 1
+        ? "1 dívida programada ainda não vencida"
+        : `${porMotivo.programada} dívidas programadas ainda não vencidas`,
+    );
+  }
   const quem = quantidade === 1 ? "1 item não entra" : `${quantidade} itens não entram`;
   return `${quem}: ${partes.join(", ")}`;
+}
+
+// ------------------------------------------------------ Dívida programada (6.6)
+
+/** Os textos de "Programar dívida" (a janela, o campo do painel do Lançamento) e de "A receber" (História 6.6, FR-27, UX-DR19). */
+export const TEXTOS_DIVIDA = {
+  programar: "Programar dívida",
+  /** A janela. */
+  descricao:
+    "Combine uma data para cobrar. Até o mês dela, o lançamento fica fora da mensagem e do saldo pendente. Depois da data, se não for pago, aparece como atrasado.",
+  data: "Data combinada",
+  observacao: "Observação (opcional)",
+  confirmar: "Programar",
+  confirmando: "Programando…",
+  cancelar: "Cancelar",
+  /** A data cai neste mês ou antes: a Dívida já entra na cobrança. */
+  data_ja_chegou: "Essa data já chegou: o lançamento entra na cobrança agora.",
+  /** O campo do painel do Lançamento. */
+  campo: "Dívida programada",
+  editar: "Editar",
+  desprogramar: "Desprogramar",
+  /** Pago: não dá para ligar (desligar continua valendo). */
+  ja_pago: "Já está pago: não há o que programar.",
+  /** A Conta manual: o seletor de cada parte da Divisão. */
+  cobranca_da_parte: "Cobrança",
+  mensal: "Mensal",
+  divida_programada: "Dívida programada",
+  /** "A receber" em Recebimentos. */
+  a_receber: "A receber",
+  a_receber_ajuda: "Dívidas programadas: o que será cobrado numa data combinada.",
+  sem_dividas: "Nenhuma dívida programada",
+  carregando: "Carregando as dívidas programadas…",
+  /** O botão de uma linha com vários lançamentos (mostra e esconde a lista). */
+  ver_lancamentos: "Ver os lançamentos",
+  esconder_lancamentos: "Esconder os lançamentos",
+} as const;
+
+/** "vence 06/04/27". */
+export function rotuloVenceEm(data: string): string {
+  return `vence ${formatarData(data)}`;
+}
+
+/** O resumo de uma linha de "A receber": "Out/26" (um) ou "6 lançamentos · Jul/26 a Dez/26". */
+export function rotuloPeriodoDaDivida(meses: readonly string[]): string {
+  if (meses.length === 0) return "";
+  const primeiro = formatarMes(meses[0]);
+  const ultimo = formatarMes(meses[meses.length - 1]);
+  if (meses.length === 1) return primeiro;
+  return `${rotuloLancamentos(meses.length)} · ${primeiro === ultimo ? primeiro : `${primeiro} a ${ultimo}`}`;
+}
+
+/** O nome acessível de uma linha de "A receber" de um lançamento só: "Abrir MAGALU, vence 06/12/26, R$ 270,00". */
+export function rotuloAbrirDivida(nome: string, data: string, valor: string): string {
+  return `Abrir ${nome}, ${rotuloVenceEm(data)}, ${valor}`;
+}
+
+/** O nome acessível do botão que mostra os lançamentos de uma linha: "Ver os lançamentos de Bombinhas, R$ 636,00". */
+export function rotuloVerLancamentosDaDivida(nome: string, valor: string): string {
+  return `${TEXTOS_DIVIDA.ver_lancamentos} de ${nome}, ${valor}`;
+}
+
+/** O aviso depois de programar: "2 lançamentos programados para 06/04/27 · 1 já pago ficou de fora". */
+export function rotuloProgramados(n: number, data: string, pagos: number): string {
+  const base = n === 1 ? `1 lançamento programado para ${formatarData(data)}` : `${n} lançamentos programados para ${formatarData(data)}`;
+  if (pagos <= 0) return base;
+  return `${base} · ${pagos === 1 ? "1 já pago ficou de fora" : `${pagos} já pagos ficaram de fora`}`;
+}
+
+/** O aviso depois de desprogramar: "Dívida programada desligada em 2 lançamentos". */
+export function rotuloDesprogramados(n: number): string {
+  return n === 1 ? "Dívida programada desligada em 1 lançamento" : `Dívida programada desligada em ${n} lançamentos`;
+}
+
+/** O nome acessível do seletor de cobrança da parte N da Conta manual: "Cobrança da parte 2". */
+export function rotuloCobrancaDaParte(n: number): string {
+  return `${TEXTOS_DIVIDA.cobranca_da_parte} da parte ${n}`;
+}
+
+/** O nome acessível da data da parte N: "Data combinada da parte 2". */
+export function rotuloDataDaParte(n: number): string {
+  return `${TEXTOS_DIVIDA.data} da parte ${n}`;
 }
 
 // ------------------------------------------------------- Recebimentos (6.5)

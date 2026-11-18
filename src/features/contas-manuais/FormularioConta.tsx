@@ -16,10 +16,14 @@ import {
   type RepeticaoConta,
 } from "@/domain/contas-manuais";
 import { formatarMes } from "@/domain/datas";
+import { lerDataCombinada } from "@/domain/divida";
 import { opcoesDoCadastro } from "@/domain/lancamento";
 import {
   TEXTOS_CONTAS as T,
   mensagem,
+  TEXTOS_DIVIDA as TD,
+  rotuloCobrancaDaParte,
+  rotuloDataDaParte,
   rotuloFicamComoEstao,
   rotuloRemoverParte,
   rotuloResponsavelDaParte,
@@ -80,6 +84,12 @@ export type PropsFormularioConta = {
    */
   ficam?: readonly ParcelaMantida[] | null;
 };
+
+// "Mensal" ou "Dívida programada" por parte da Divisão (6.6, mockup `contas-manuais.html`).
+const OPCOES_COBRANCA = [
+  { valor: "mensal", rotulo: TD.mensal },
+  { valor: "programada", rotulo: TD.divida_programada },
+] as const;
 
 const OPCOES_REPETICAO = [
   { valor: "mensal", rotulo: T.mensal_ate_encerrar },
@@ -265,7 +275,7 @@ export function FormularioConta({
         <fieldset className="flex flex-col gap-2" aria-describedby={erro("divisao") ? `${idFormulario}-divisao-erro` : undefined}>
           <legend className="texto-label text-text">{varias ? T.divisao : T.responsavel}</legend>
           {rascunho.partes.map((p, i) => (
-            <div key={i} className="flex items-end gap-2">
+            <div key={i} className="flex flex-wrap items-end gap-2">
               <div className="min-w-0 flex-1">
                 <Seletor
                   rotulo={rotuloResponsavelDaParte(i + 1)}
@@ -287,6 +297,30 @@ export function FormularioConta({
                     autoComplete="off"
                     placeholder="0,00"
                     aria-invalid={tentou && avaliacao.erros.divisao && avaliacao.valoresDasPartes[i] === null ? true : undefined}
+                  />
+                </div>
+              ) : null}
+              {varias ? (
+                <div className="w-44 shrink-0">
+                  <Seletor
+                    rotulo={rotuloCobrancaDaParte(i + 1)}
+                    rotuloOculto
+                    value={p.programada ? "programada" : "mensal"}
+                    opcoes={OPCOES_COBRANCA}
+                    onChange={(e) => mudarParte(i, { programada: e.target.value === "programada" })}
+                  />
+                </div>
+              ) : null}
+              {varias && p.programada ? (
+                <div className="w-40 shrink-0">
+                  <Campo
+                    rotulo={rotuloDataDaParte(i + 1)}
+                    rotuloOculto
+                    type="date"
+                    className="texto-number"
+                    value={p.vencimento ?? ""}
+                    onChange={(e) => mudarParte(i, { vencimento: e.target.value })}
+                    aria-invalid={tentou && !lerDataCombinada(p.vencimento ?? "").ok ? true : undefined}
                   />
                 </div>
               ) : null}

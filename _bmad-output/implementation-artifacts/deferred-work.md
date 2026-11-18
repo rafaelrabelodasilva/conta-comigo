@@ -235,7 +235,7 @@
   evidence: Low, não verificado. O jsdom só confere o DOM, os nomes e as classes; layout, toque e leitor de tela só se provam num aparelho. Junta-se à pendência do VoiceOver da 2.4.
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-6-gerar-a-mensagem-a-partir-da-selecao.md`
   summary: "Dívida programada ainda não vencida" é regra de exclusão da mensagem (EXPERIENCE.md) mas ainda não existe no app; quando o Épico 6 criar a Dívida programada, acrescentar o motivo de fora (e a frase do aviso) em `projetarMensagem`.
-  evidence: Low. `MOTIVOS_DE_FORA` hoje tem pago, zero e previsto; o aviso e o tipo são fáceis de estender.
+  evidence: FECHADA na 6.6 (`spec-6-6-divida-programada.md`, decisões 4 e 5): `MOTIVOS_DE_FORA` ganhou "programada" (precedência previsto, pago, programada, zero) e o aviso diz "N dívidas programadas ainda não vencidas"; a mesma regra (`dividaAindaNaoVence`, o Mês do vencimento ainda não chegou, `hoje` como parâmetro) tira a Dívida do Saldo pendente.
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-6-gerar-a-mensagem-a-partir-da-selecao.md`
   summary: "Editar modelo" sai do Painel e a Seleção (estado local do Painel) se perde; se Rafael sentir falta, guardar a Seleção entre telas ou abrir o modelo numa janela sem sair do Painel.
   evidence: Low. A AC da história pede só que leve a Configurações → Modelo da mensagem.
@@ -265,7 +265,7 @@
   evidence: Low. A Conta é "fora do cartão", então a coincidência não se espera. Se acontecer, mudar o Nome ou o Valor da Conta.
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-cadastrar-uma-conta-manual.md`
   summary: O formulário só divide por valores ("Por valor"); não há "Por proporção" nem o seletor "Mensal ou Dívida programada" por parte do mockup.
-  evidence: Low. A Dívida programada (`vencimento_combinado` por parte) é do Épico 6; a Divisão da Conta já é guardada em frações (`divisao.ts`), então a proporção cabe depois sem migração.
+  evidence: O seletor "Mensal ou Dívida programada" por parte FOI FEITO na 6.6 (decisão 14; só com 2 ou mais partes). Resta o "Por proporção": a Divisão da Conta já é guardada em frações (`divisao.ts`), então a proporção cabe depois sem migração.
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-cadastrar-uma-conta-manual.md`
   summary: Conferir no iPad o formulário: o seletor de Mês nativo (`type=month`), o teclado numérico nos campos de valor, a janela com o teclado aberto e muitas partes, o foco ao tocar em "Salvar" com erro e o VoiceOver lendo "Responsável da parte 2" e "Remover parte 2".
   evidence: Low, não verificado. O jsdom só confere o DOM, os nomes e as classes de 44 pt; o layout em 834 pt e o comportamento do teclado só um aparelho prova.
@@ -376,7 +376,7 @@
   evidence: Low. Decisão 3 da 6.4.
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-4-atrasado.md`
   summary: Ao ligar o campo `vencimento_combinado` (6.6), passá-lo nas linhas que chegam a `atrasosDasLinhas` (a função já o lê, com testes com e sem o campo) e tirar da mensagem as Dívidas programadas ainda não vencidas. Os cartões de Recebimentos (6.5) já usam `atrasosDasLinhas` sobre os Lançamentos de todos os Meses: ao ligar o campo, as linhas do gerenciador `lancamentos:todos` já o trazem.
-  evidence: Low. Decisões 11 e 13 da 6.4 e decisão 5 da 6.5; a parte de todos os Meses foi feita na 6.5.
+  evidence: FECHADA na 6.6: a coluna chega nas linhas (Painel e Recebimentos) e `estaAtrasado` passou a usá-la sem mudar a regra; a mensagem e o Saldo deixam de fora a Dívida ainda não vencida (decisões 4 e 5).
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-4-atrasado.md`
   summary: Os Meses importados da planilha (3.10) entram na regra do atraso e, desde a 6.5, no Saldo pendente de Recebimentos: uma linha `historico` cujo Status não conta como pago (a importação só marca como pago o nome "Pago"), de um Mês que já passou, aparece como pendência, como "Atrasado" e nos Meses em aberto do cartão. Pode haver muita linha em vermelho no primeiro uso real; a saída é "Ver" → "Selecionar todos" → "Aplicar status" "Pago".
   evidence: Medium, não verificado com dados reais (nenhum dado de produção foi lido). Decisão 14 da 6.4 e decisão 9 da 6.5 (entra, porque é o que o dado diz e FR-26 soma todos os Meses). Se incomodar, marcar o histórico como pago na importação ou excluí-lo do atraso e do pendente.
@@ -410,3 +410,18 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-5-recebimentos-por-bloco-de-cobranca.md`
   summary: Rodar no CI a leitura paginada de `lancamentos` pelo PostgREST de verdade e o Realtime do canal `tabela:lancamentos:todos`, e conferir em produção, com dados reais, os cartões de Recebimentos, o "Falta receber" e "Recebido no mês" do hero e as duas chaves de Configurações.
   evidence: Medium, não verificado em produção. A 6.5 não tem migração; nenhum dado de produção foi lido nem alterado. O gerenciador foi provado com um cliente falso (páginas, sem filtros, canal, eventos) e as telas com jsdom.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-6-divida-programada.md`
+  summary: Conferir no iPad e no PC a janela "Programar dívida", o campo "Dívida programada" do painel do Lançamento, o selo neutro "Programada · 06/04/27" (claro e escuro), a seção "A receber" (a linha de vários lançamentos aberta, os alvos de 44 pt), o seletor "Mensal / Dívida programada" com a data na mesma linha de cada parte (834 pt em pé), e o VoiceOver lendo o selo, o interruptor e "Cobrança da parte 3".
+  evidence: Low, não verificado. O jsdom só confere o DOM, os nomes, os `role` e as classes. Junta-se às pendências do VoiceOver da 2.4 e da 6.1 a 6.5.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-6-divida-programada.md`
+  summary: Provar em produção (depois do merge e do `supabase db push`, a pedido) a migração `20261129120000_divida_programada.sql`: "Programar dívida" gravando pela RPC, a Conta com a parte programada materializada pelo Cron diário (a rota lê a `divisao` com a data; só o núcleo e a RPC foram provados), a reimportação mantendo a data, e o backup com as duas colunas novas.
+  evidence: Medium, não verificado em produção. Nenhum dado de produção foi lido; a migração só passou no pglite e (a confirmar) no job `supabase` do CI.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-6-divida-programada.md`
+  summary: Uma Dívida programada num previsto (Conta manual de um Mês sem Fatura) nunca fica "Atrasado": `podeAtrasar` (6.4) exclui previstos. Ela aparece em "A receber" com o vencimento, mas só atrasa quando a Fatura do Mês chega. Se Rafael não importar a Fatura de um Mês, a Dívida vencida daquele Mês segue sem atraso.
+  evidence: Low. Decisão 9 da 6.6 (a regra da 6.4 não foi mudada). Se incomodar, `podeAtrasar` pode tratar a Dívida programada como não previsto.
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-6-divida-programada.md`
+  summary: Sem filtro de Status "Programada" na grade, sem seletor "Mensal / Dívida programada" numa Conta de uma parte só (programa-se depois pelo Painel) e sem "Por proporção" no formulário da Conta; a próxima parcela prevista e a herança de parcelas não copiam a data combinada.
+  evidence: Low. Decisões 8, 12 e 14 da 6.6. O filtro seria um valor calculado como o "Atrasado" (6.4); a Conta de uma parte só pediria guardar a data na `contas_manuais` (migração).
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-6-divida-programada.md`
+  summary: O `next build` local termina com erro ("SecurityFatalError": `next@16.4.3` consta como afetado por uma vulnerabilidade conhecida, consulta ao registro do npm) depois de compilar e passar no TypeScript. Não foi atualizado na 6.6.
+  evidence: Medium. O piso do AD já era 16.4.3 (as versões até 16.4.0 tinham falha crítica); conferir o aviso e decidir a atualização à parte. O CI diz se o build lá passa.

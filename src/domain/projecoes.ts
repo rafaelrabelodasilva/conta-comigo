@@ -4,8 +4,11 @@
 // linhas. `projetarMensagem` (4.6, a regra de inclusão da mensagem),
 // `projetarMensagemDoBloco` (4.7, a forma 2) e `projetarPendente` (6.5, o que falta
 // receber, em Recebimentos) estão neste arquivo. Desde a 6.2 a mensagem cobra só o que
-// falta de um Lançamento "Pago parcialmente" (`restante`, AD-10).
+// falta de um Lançamento "Pago parcialmente" (`restante`, AD-10). Desde a 6.6, uma Dívida programada
+// ainda não vencida (o Mês do `vencimento_combinado` não chegou) fica fora da mensagem e do Saldo
+// pendente (`dividaAindaNaoVence`, de `divida.ts`): a mesma regra nos dois, com `hoje` como parâmetro.
 
+import { dividaAindaNaoVence } from "./divida";
 import { ehMaeDividida, unidadesDoMes } from "./divisao";
 import {
   avaliar,
@@ -43,6 +46,8 @@ export type LancamentoParaProjetar = {
   lancado_por?: string;
   /** A Conta manual que gerou a linha (5.1): previsto enquanto o Mês não tem Fatura. */
   conta_manual_id?: string | null;
+  /** Dívida programada (6.6): a data combinada de `AAAA-MM-DD`; nula ou ausente, sem Dívida programada. */
+  vencimento_combinado?: string | null;
 };
 
 /**
@@ -117,8 +122,11 @@ export type ItemProjetado = {
   liquido_centavos: number;
 };
 
-/** Por que um item da Seleção não entra: já pago, de R$ 0,00 ou previsto. */
-export const MOTIVOS_DE_FORA = ["pago", "zero", "previsto"] as const;
+/**
+ * Por que um item da Seleção não entra: já pago, de R$ 0,00, previsto ou Dívida programada que
+ * ainda não venceu (6.6).
+ */
+export const MOTIVOS_DE_FORA = ["pago", "zero", "previsto", "programada"] as const;
 export type MotivoDeFora = (typeof MOTIVOS_DE_FORA)[number];
 
 export type ForaDaMensagem = {
@@ -136,6 +144,11 @@ export type OpcoesDaMensagem = {
   temFatura: boolean;
   /** "Incluir previstos": só vale num Mês sem Fatura. */
   incluirPrevistos: boolean;
+  /**
+   * Hoje (`AAAA-MM-DD`, America/Sao_Paulo): uma Dívida programada só entra a partir do Mês do
+   * vencimento combinado (6.6). O núcleo não lê o relógio; a tela passa `useHoje()`.
+   */
+  hoje: string;
   /**
    * Os itens de Pagamento das linhas (6.2): com eles um Lançamento "Pago parcialmente"
    * entra só com o que falta. Sem itens, tudo entra com o valor cheio (como antes).
@@ -182,7 +195,9 @@ export function podeIncluirPrevistos(temFatura: boolean): boolean {
  * - "Pago parcialmente" (0 < Σ itens < valor, sem Status pago) entra só com o que
  *   falta (`restante`, AD-10), e o Ajuste dele também. Se os itens já cobrem o valor
  *   todo, o item sai como "já pago". Os itens valem de qualquer Mês: cada linha usa os dela.
- * - Dívida programada ainda não vencida: sem Dívidas programadas no app, não há o que tirar (Épico 6).
+ * - Dívida programada ainda não vencida (6.6): o Mês do `vencimento_combinado` ainda não chegou
+ *   (`opcoes.hoje`). Fica de fora com o motivo "programada"; no Mês do vencimento passa a entrar.
+ *   A precedência é previsto, pago, programada, zero.
  */
 export function projetarMensagem(
   selecao: ReadonlySet<string>,
@@ -215,16 +230,18 @@ export function projetarMensagem(
   const entram: ItemProjetado[] = [];
   const abatidos: { id: string; centavos: number }[] = [];
   const idsPagos: string[] = [];
-  const porMotivo: Record<MotivoDeFora, number> = { pago: 0, zero: 0, previsto: 0 };
+  const porMotivo: Record<MotivoDeFora, number> = { pago: 0, zero: 0, previsto: 0, programada: 0 };
   for (const l of marcadas) {
     const motivo: MotivoDeFora | null =
       ehPrevistoNoMes(l, opcoes.temFatura) && !incluirPrevistos
         ? "previsto"
         : ehPago(l, opcoes.statusPagos) || (jaRecebido(l) !== 0 && abertoDe(l) === 0)
           ? "pago"
-          : l.valor_centavos === 0
-            ? "zero"
-            : null;
+          : dividaAindaNaoVence(l, opcoes.hoje)
+            ? "programada"
+            : l.valor_centavos === 0
+              ? "zero"
+              : null;
     if (motivo !== null) {
       porMotivo[motivo] += 1;
       if (motivo === "pago") idsPagos.push(l.id, ...(ajustesDe.get(l.id) ?? []).map((a) => a.id));
@@ -252,7 +269,7 @@ export function projetarMensagem(
     mes: opcoes.mes,
     entram,
     totalCentavos: entram.reduce((soma, i) => soma + i.liquido_centavos, 0),
-    fora: { quantidade: porMotivo.pago + porMotivo.zero + porMotivo.previsto, porMotivo },
+    fora: { quantidade: porMotivo.pago + porMotivo.zero + porMotivo.previsto + porMotivo.programada, porMotivo },
     abatidos,
     idsPagos,
   };
@@ -408,6 +425,11 @@ export type OpcoesDoPendente = {
   mesesComFatura?: ReadonlySet<string>;
   /** Só este Mês (o "Falta receber" do Painel). Ausente: todos os Meses (Recebimentos). */
   mes?: string;
+  /**
+   * Hoje (`AAAA-MM-DD`, America/Sao_Paulo): uma Dívida programada ainda não vencida (o Mês do
+   * `vencimento_combinado` não chegou) não está em aberto para cobrar (6.6). Aparece em "A receber".
+   */
+  hoje: string;
 };
 
 /** Uma linha do que está em aberto: o que falta receber dela e de quem é. */
@@ -439,8 +461,9 @@ export type LinhaPendente = {
  * - **Crédito:** a linha EXCLUÍDA que tem itens de Pagamento vivos vira uma linha de `-Σ itens`
  *   (AD-11). Só ela entra no Saldo; ela não é um lançamento a cobrar.
  * - **Fora:** previstos (Série `sistema` e Conta manual de um Mês sem Fatura, como na mensagem,
- *   porque ainda não são o que se cobra), pagos, zerados e a mãe dividida. As linhas excluídas
- *   sem Pagamento nunca entram.
+ *   porque ainda não são o que se cobra), pagos, zerados, a mãe dividida e a Dívida programada
+ *   ainda não vencida (6.6, `dividaAindaNaoVence`: a mesma regra da mensagem; ela aparece em "A
+ *   receber"). As linhas excluídas sem Pagamento nunca entram.
  * - O histórico da planilha (3.10) não é previsto: entra se o Status dele não conta como pago.
  */
 export function pendentesDosLancamentos(
@@ -474,6 +497,7 @@ export function pendentesDosLancamentos(
     ) {
       continue;
     }
+    if (dividaAindaNaoVence(l, opcoes.hoje)) continue;
     const restanteCentavos = restante(l, opcoes.statusPagos, recebido);
     if (restanteCentavos === 0) continue;
     saida.push({

@@ -24,6 +24,7 @@ import { Campo } from "@/ui/Campo";
 import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
 import { Esqueleto } from "@/ui/Esqueleto";
 import { useToast } from "@/ui/Toast";
+import { useHoje } from "@/ui/use-hoje";
 import { useAvisarRascunho, type PropsSecao } from "./rascunho";
 
 // Configurações → Modelo da mensagem (História 4.5, FR-23, UX-DR25): saudação,
@@ -67,6 +68,8 @@ export function SecaoModeloMensagem({ aoMudarRascunho }: PropsSecao = {}) {
   const idTituloPrevia = useId();
   // O Mês atual em São Paulo, um só por montagem (a prévia usa os dados dele).
   const [mes] = useState(() => mesAtual(hojeEmSaoPaulo(new Date())));
+  // Hoje: uma Dívida programada ainda não vencida fica fora da prévia (6.6).
+  const hoje = useHoje();
   const [rascunho, setRascunho] = useState<Rascunho | null>(null);
   const [erros, setErros] = useState<Partial<Record<CampoDoModelo, string>>>({});
   const [salvando, setSalvando] = useState(false);
@@ -94,8 +97,8 @@ export function SecaoModeloMensagem({ aoMudarRascunho }: PropsSecao = {}) {
     const doMes = lancamentos.mes === mes && lancamentos.status === "pronto" ? lancamentos.linhas : [];
     const pagos = new Set(status.linhas.filter((s) => s.conta_como_pago).map((s) => s.id));
     const doMesItens = itens.mes === mes && itens.status === "pronto" ? itens.linhas : [];
-    return previaDoModelo(valor, doMes, mes, pagos, doMesItens);
-  }, [valor, lancamentos.mes, lancamentos.status, lancamentos.linhas, status.linhas, itens.mes, itens.status, itens.linhas, mes]);
+    return previaDoModelo(valor, doMes, mes, pagos, hoje, doMesItens);
+  }, [valor, lancamentos.mes, lancamentos.status, lancamentos.linhas, status.linhas, itens.mes, itens.status, itens.linhas, mes, hoje]);
 
   function mudar(novo: ModeloMensagem, campo: CampoDoModelo) {
     setRascunho({ base: rascunho?.base ?? salvo, valor: novo });

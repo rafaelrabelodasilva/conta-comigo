@@ -342,6 +342,8 @@ export type Database = {
           tipo_id: string | null
           updated_at: string
           valor_centavos: number
+          vencimento_combinado: string | null
+          vencimento_observacao: string | null
         }
         Insert: {
           ajuste_de_id?: string | null
@@ -377,6 +379,8 @@ export type Database = {
           tipo_id?: string | null
           updated_at?: string
           valor_centavos: number
+          vencimento_combinado?: string | null
+          vencimento_observacao?: string | null
         }
         Update: {
           ajuste_de_id?: string | null
@@ -412,6 +416,8 @@ export type Database = {
           tipo_id?: string | null
           updated_at?: string
           valor_centavos?: number
+          vencimento_combinado?: string | null
+          vencimento_observacao?: string | null
         }
         Relationships: [
           {
@@ -824,6 +830,7 @@ export type Database = {
         Returns: Json
       }
       pagamento_completo: { Args: { p_id: string }; Returns: Json }
+      programar_divida: { Args: { p_itens: Json }; Returns: Json }
       recriar_filhas: { Args: { p_mae_id: string; p_partes: Json }; Returns: string[] }
       referencias_cadastro: {
         Args: never

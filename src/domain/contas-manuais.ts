@@ -22,9 +22,17 @@
 //   "previsto" só enquanto o Mês não tem Fatura (`ehPrevistoNoMes`, em
 //   `previstos.ts`); nunca vira `sistema` e nunca entra na Conferência (não
 //   tem `fatura_id`).
+// - Dívida programada por parte (História 6.6, FR-27): numa Divisão de 2 ou mais partes, cada
+//   parte pode ser "Mensal" ou "Dívida programada" com uma data combinada. A data vai na própria
+//   parte da `divisao` da Conta (`vencimento_combinado`, AD-8) e `parcelasDaConta` a leva às
+//   `partes` de cada parcela: a RPC materializa as filhas dessa parte com o vencimento (AD-15). Uma
+//   Conta de uma parte só não tem o seletor (a Divisão é quem guarda a data). Alterar a Conta
+//   recria as linhas recriáveis com a data nova; as que ficam (pagas, com Pagamento, editadas)
+//   mantêm a que tinham.
 
 import { ehMes, somarMeses } from "./ciclo";
 import { formatarMes } from "./datas";
+import { lerDataCombinada } from "./divida";
 import { dividirEmPartes, lerReais } from "./dinheiro";
 import {
   MAX_PARTES,
@@ -34,6 +42,7 @@ import {
   divisaoComResponsaveisAtivos,
   lerDivisao,
   mesmaDivisao,
+  mesmosVencimentosDasPartes,
   partesDaImportacao,
   textoDeReais,
   valoresDasPartes,
@@ -147,7 +156,7 @@ function prepararConta(conta: ContaParaParcelas): ContaPreparada | null {
 
   const divisao = conta.divisao === null || conta.divisao === undefined ? null : lerDivisao(conta.divisao);
   if (conta.divisao !== null && conta.divisao !== undefined && divisao === null) return null;
-  const partes = divisao === null ? null : partesDaImportacao(conta.valor_centavos, copiarDivisao(divisao));
+  const partes = divisao === null ? null : partesDaImportacao(conta.valor_centavos, copiarDivisao(divisao, true));
   if (divisao !== null && partes === null) return null;
   return { total, partes };
 }
@@ -189,8 +198,17 @@ export function lerNumeroDeParcelas(texto: string): number | null {
 
 export type CampoDaConta = "nome" | "valor" | "parcelas" | "comecaEm" | "tipo" | "observacao" | "divisao";
 
-/** Uma linha de "Divisão": o Responsável e o valor da parte, em reais ("106,00"). */
-export type ParteDoFormulario = { responsavel_id: string | null; texto: string };
+/**
+ * Uma linha de "Divisão": o Responsável e o valor da parte, em reais ("106,00"). Com 2 ou mais partes,
+ * cada uma pode ser "Dívida programada" (`programada`) com a data combinada (`vencimento`, `AAAA-MM-DD`); sem
+ * isso é "Mensal" (6.6).
+ */
+export type ParteDoFormulario = {
+  responsavel_id: string | null;
+  texto: string;
+  programada?: boolean;
+  vencimento?: string;
+};
 
 /** O que se digita no formulário "Nova conta". */
 export type RascunhoDaConta = {
@@ -240,7 +258,11 @@ export function rascunhoDaConta(c: ContaManual): RascunhoDaConta {
   const valores = d === null ? null : valoresDasPartes(c.valor_centavos, d);
   let partes: ParteDoFormulario[];
   if (d !== null && valores !== null && valores.ok) {
-    partes = d.partes.map((p, i) => ({ responsavel_id: p.responsavel_id, texto: textoDeReais(valores.valor[i]) }));
+    partes = d.partes.map((p, i) => ({
+      responsavel_id: p.responsavel_id,
+      texto: textoDeReais(valores.valor[i]),
+      ...(p.vencimento_combinado !== undefined ? { programada: true, vencimento: p.vencimento_combinado } : {}),
+    }));
   } else {
     partes = [{ responsavel_id: c.divisao === null || c.divisao === undefined ? c.responsavel_id : null, texto: "" }];
   }
@@ -304,7 +326,8 @@ export function contaMudou(salva: ContaManual, nova: NovaConta): boolean {
     (salva.observacao ?? null) !== nova.observacao ||
     salva.repeticao !== nova.repeticao ||
     salva.parcela_total !== nova.parcela_total ||
-    !mesmaDivisao(divisaoSalva, nova.divisao)
+    !mesmaDivisao(divisaoSalva, nova.divisao) ||
+    !mesmosVencimentosDasPartes(divisaoSalva, nova.divisao)
   );
 }
 
@@ -392,16 +415,20 @@ export function avaliarFormularioConta(
     valoresDasPartes = [valorCentavos];
     somaCentavos = valorCentavos;
   } else if (valorCentavos !== null) {
+    // "Dívida programada" por parte (6.6): a data é obrigatória e valida; "Mensal" não leva data.
+    const vencimentoInvalido = r.partes.some((p) => p.programada === true && !lerDataCombinada(p.vencimento ?? "").ok);
     const partes: ParteRascunho[] = r.partes.map((p) => ({
       responsavel_id: p.responsavel_id,
       texto: p.texto,
       status_id: null,
+      ...(p.programada === true && lerDataCombinada(p.vencimento ?? "").ok ? { vencimento_combinado: (p.vencimento ?? "").trim() } : {}),
     }));
     const a = avaliarRascunho(valorCentavos, "valor", partes);
     valoresDasPartes = a.valores;
     somaCentavos = a.somaCentavos;
     if (a.erro !== null || a.divisao === null) erros.divisao = a.erro ?? "salvar.falhou";
     else if (!divisaoComResponsaveisAtivos(a.divisao, responsaveisAtivos)) erros.divisao = "conta.responsavel_arquivado";
+    else if (vencimentoInvalido) erros.divisao = "conta.vencimento_invalido";
     else divisao = a.divisao;
   }
 
