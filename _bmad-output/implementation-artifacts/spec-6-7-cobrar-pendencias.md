@@ -2,7 +2,7 @@
 title: 'História 6.7: Cobrar pendências'
 type: 'feature'
 created: '2026-11-18'
-status: 'review'
+status: 'done'
 baseline_commit: 'c670e4f'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -97,8 +97,8 @@ Hoje 15/10/26. Modelo: "Oi", Pix `pix@exemplo.com`, campos Nome, Parcela e Valor
 - [x] Interface: botão ativo no cartão, `JanelaMensagemDeCobranca`, fiação em `Recebimentos`.
 - [x] Provas: núcleo (matriz), jsdom (cartão, janela, Copiar, Realtime, "Em dia", Dívida programada).
 - [x] `sprint-status.yaml` (6.7 em `review`), `deferred-work.md`, `docs/infraestrutura.md` (sem migração).
-- [ ] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
-- [ ] `done` no sprint-status só depois do merge, em PR separada.
+- [x] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
+- [x] `done` no sprint-status só depois do merge, em PR separada.
 
 ## Verification
 
