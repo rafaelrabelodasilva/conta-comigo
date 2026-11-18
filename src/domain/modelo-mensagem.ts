@@ -24,7 +24,7 @@ import { z } from "zod";
 import { formatarDinheiro } from "./dinheiro";
 import { formatarMesExtenso } from "./datas";
 import { formatarParcela } from "./importacao-fatura";
-import { TEXTOS_GERAR, TEXTOS_MODELO } from "./mensagens";
+import { TEXTOS_GERAR, TEXTOS_MODELO, rotuloMesDaMensagem } from "./mensagens";
 import { nomeExibido } from "./painel";
 import type { ItemLido } from "./pagamento";
 import { SIMBOLO_OPERACAO } from "./formula";
@@ -35,6 +35,7 @@ import {
   type ProjecaoDaMensagem,
   type ProjecaoDoBloco,
 } from "./projecoes";
+import type { ProjecaoDaCobranca } from "./recebimentos";
 import type { Resultado } from "./resultado";
 
 // ------------------------------------------------------------------ o modelo
@@ -411,6 +412,56 @@ export function gerarMensagemDoBloco(modelo: ModeloMensagem, projecao: Resultado
   ]);
   const texto = renderizarModelo(modelo, { detalhes, totalCentavos: bloco.totalCentavos });
   return { estado: "pronta", texto, totalCentavos: bloco.totalCentavos };
+}
+
+// ------------------------------------- gerar a mensagem de cobrança (6.7)
+
+/**
+ * A mensagem da forma 3 (FR-28, "Cobrar pendências"): o mesmo modelo salvo (saudação, Pix, campos da
+ * linha e rodapé), com a frase do total trocada por "Em aberto: R$ X" e os detalhes agrupados por Mês,
+ * do mais antigo ao mais novo:
+ *
+ *     Oi
+ *     Em aberto: R$ 150,00
+ *     Pix chave
+ *
+ *     Detalhes:
+ *     Setembro/26
+ *       NETFLIX | R$ 100,00
+ *     Outubro/26
+ *       SPOTIFY | R$ 50,00
+ *       ↳ Ajuste | - R$ 0,08
+ *     Total: R$ 150,00
+ *
+ * Os itens levam o valor que FALTA de cada Lançamento. Não há subtotal por Mês (dividir ou subtrair mês
+ * a mês e somar quebraria o arredondamento só no final, FR-54). Numa Fórmula que não é soma simples
+ * (o Rangel: Rangel + Casal ÷ 2), os termos vêm no fim, como na forma 2 ("Casal: R$ 200,00 ÷ 2 = R$ 100,00"),
+ * e o total é o da Fórmula sobre tudo. Sem Fórmula que calcule: "sem valor". Sem nada em aberto, ou com total
+ * que não passa de R$ 0,00 (o crédito de algo excluído cobre a dívida): "nada em aberto"; antes do modelo.
+ */
+export function gerarMensagemDeCobranca(modelo: ModeloMensagem, projecao: Resultado<ProjecaoDaCobranca>): MensagemGerada {
+  if (!projecao.ok) return { estado: "sem_valor" };
+  const cobranca = projecao.valor;
+  if (cobranca.meses.length === 0 || cobranca.totalCentavos <= 0) return { estado: "nada_a_cobrar" };
+  const prontidao = prontidaoDoModelo(modelo);
+  if (prontidao === "vazio") return { estado: "modelo_vazio" };
+  if (prontidao === "sem_campos") return { estado: "modelo_sem_campos" };
+  const detalhes = [
+    ...cobranca.meses.flatMap((m) => {
+      const linhas = linhasDaMensagem(
+        m.itens.map((i) => ({ item: itemDaMensagem(i), ajustes: i.ajustes.map((a) => a.valor_centavos) })),
+        modelo.campos,
+      );
+      // Um Mês sem nenhuma linha a mostrar (campos sem texto) não deixa um título solto.
+      return linhas.length === 0 ? [] : [rotuloMesDaMensagem(m.mes), ...linhas.map((linha) => RECUO_DO_GRUPO + linha)];
+    }),
+    ...cobranca.termos.map(linhaDoGrupo),
+  ];
+  const texto = renderizarModelo(
+    { ...modelo, frase_total: TEXTOS_GERAR.frase_em_aberto },
+    { detalhes, totalCentavos: cobranca.totalCentavos },
+  );
+  return { estado: "pronta", texto, totalCentavos: cobranca.totalCentavos };
 }
 
 // ------------------------------------------------------------------- prévia

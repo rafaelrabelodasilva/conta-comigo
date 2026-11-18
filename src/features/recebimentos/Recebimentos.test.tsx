@@ -2,7 +2,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TEXTOS_RECEBIMENTOS as T } from "@/domain/mensagens";
+import { TEXTOS_GERAR as TG, TEXTOS_RECEBIMENTOS as T } from "@/domain/mensagens";
 import { ToastProvider } from "@/ui/Toast";
 import { Recebimentos } from "./Recebimentos";
 
@@ -70,11 +70,23 @@ const repo = vi.hoisted(() => ({
 }));
 vi.mock("@/data/pagamentos-repo", () => ({ repoPagamentos: () => repo }));
 
+const roteador = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => roteador }));
+
 const sem = (t: string | null | undefined) => (t ?? "").replace(/ /g, " ");
 
 const T0 = "2026-10-03T12:00:00.000000+00:00";
 const PAGO = "s-pago";
 const NAO_PAGO = "s-nao";
+
+// O modelo salvo (FR-23): a mensagem "Cobrar pendências" usa o mesmo, com outra frase do total.
+const MODELO = {
+  saudacao: "Oi",
+  frase_total: "Esse mês deu {total}",
+  chave_pix: "pix@exemplo.com",
+  rodape: "",
+  campos: { nome: true, parcela: true, valor: true },
+};
 
 const resp = (id: string) => ({ tipo: "responsavel", id });
 const rangelMaisMetadeDoCasal = {
@@ -133,7 +145,7 @@ function dadosBase() {
       { id: "f1", mes: "2026-10", vencimento: "2026-10-06" },
     ],
     config_ciclo: [{ vigente_desde: "2026-01", created_at: T0, dia_fechamento: 1, dia_vencimento: 6 }],
-    configuracoes: [{ tolerancia_atraso_dias: 10, status_padrao_id: NAO_PAGO }],
+    configuracoes: [{ tolerancia_atraso_dias: 10, status_padrao_id: NAO_PAGO, modelo_mensagem: MODELO }],
     blocos: [
       bloco("b-mae", "Mãe", resp("mae"), 1),
       bloco("b-lucas", "Lucas", resp("lucas"), 2),
@@ -231,13 +243,6 @@ describe("os cartões por Bloco de cobrança (História 6.5, UX-DR22)", () => {
     vi.setSystemTime(new Date("2026-10-16T15:00:00Z"));
     renderizar();
     expect(within(cartao("Mãe")).getByText("Não pago")).toBeTruthy();
-  });
-
-  it("'Cobrar pendências' é só a casca: desativado, com a dica (a mensagem é a História 6.7)", () => {
-    renderizar();
-    const botao = within(cartao("Lucas")).getByRole("button", { name: "Cobrar pendências de Lucas" }) as HTMLButtonElement;
-    expect(botao.disabled).toBe(true);
-    expect(botao.title).toBe(T.cobrar_em_breve);
   });
 
   it("um Pago parcialmente soma só o que falta (a pendência da 6.2)", () => {
@@ -641,5 +646,183 @@ describe("A receber: as Dívidas programadas (História 6.6, FR-27, UX-DR19)", (
     renderizar();
     expect(screen.queryByText("Nenhuma dívida programada")).toBeNull();
     expect(screen.getAllByRole("status", { busy: true }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("Cobrar pendências (História 6.7, FR-28): a forma 3 da mensagem", () => {
+  const cobrarDe = (nome: string) => within(cartao(nome)).getByRole("button", { name: `Cobrar pendências de ${nome}` }) as HTMLButtonElement;
+  const janela = () => screen.getByRole("dialog", { name: TG.titulo });
+  const quadro = () => within(janela()).getByRole("textbox", { name: TG.quadro }) as HTMLTextAreaElement;
+  const textoDaMensagem = () => sem(quadro().value);
+
+  it("o botão está ativo em todo cartão (também no 'Em dia'), sem dica de 'em breve'", () => {
+    renderizar();
+    for (const nome of ["Mãe", "Lucas", "Rangel"]) {
+      expect(cobrarDe(nome).disabled).toBe(false);
+      expect(cobrarDe(nome).title).toBe("");
+    }
+  });
+
+  it("abre a janela Gerar mensagem do Bloco: 'Em aberto', os Meses do mais antigo ao mais novo e só o que falta", async () => {
+    renderizar();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // O número do cartão (AD-11): a janela mostra o mesmo (com a janela aberta o resto da página fica oculto).
+    expect(textoDe(cartao("Lucas"))).toContain("R$ 150,00");
+    await userEvent.setup().click(cobrarDe("Lucas"));
+    expect(textoDaMensagem()).toBe(
+      [
+        "Oi",
+        "Em aberto: R$ 150,00",
+        "Pix pix@exemplo.com",
+        "",
+        "Detalhes:",
+        "Setembro/26",
+        "  NETFLIX | R$ 100,00",
+        "Outubro/26",
+        "  SPOTIFY | R$ 50,00",
+        "Total: R$ 150,00",
+      ].join("\n"),
+    );
+    // Sem "Incluir previstos": um previsto nunca é o que se cobra.
+    expect(within(janela()).queryByText(TG.incluir_previstos)).toBeNull();
+  });
+
+  it("um Pago parcialmente entra com o valor restante", async () => {
+    mudar(() => {
+      falso.banco.pagamento_itens = [
+        { id: "i1", pagamento_id: "p1", lancamento_id: "l2", mes: "2026-10", valor_centavos: 2_000, status_aplicado_id: null, excluido_em: null, created_at: T0, updated_at: T0 },
+      ];
+    });
+    renderizar();
+    await userEvent.setup().click(cobrarDe("Lucas"));
+    expect(textoDaMensagem()).toContain("  SPOTIFY | R$ 30,00");
+    expect(textoDaMensagem()).toContain("Em aberto: R$ 130,00");
+  });
+
+  it("o Rangel: os valores cheios por Mês e o termo do Casal que explica o total", async () => {
+    renderizar();
+    await userEvent.setup().click(cobrarDe("Rangel"));
+    expect(textoDaMensagem()).toBe(
+      [
+        "Oi",
+        "Em aberto: R$ 110,00",
+        "Pix pix@exemplo.com",
+        "",
+        "Detalhes:",
+        "Outubro/26",
+        "  MERCADO | R$ 200,00",
+        "  ACADEMIA | R$ 10,00",
+        "Rangel: R$ 10,00",
+        "Casal: R$ 200,00 ÷ 2 = R$ 100,00",
+        "Total: R$ 110,00",
+      ].join("\n"),
+    );
+  });
+
+  it("Copiar põe o texto na área de transferência, fecha a janela e avisa 'Copiado'", async () => {
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(cobrarDe("Lucas"));
+    const texto = quadro().value;
+    await u.click(within(janela()).getByRole("button", { name: TG.copiar }));
+    expect(await navigator.clipboard.readText()).toBe(texto);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(await screen.findByText(TG.copiado)).toBeTruthy();
+  });
+
+  it("Bloco 'Em dia': 'Nada em aberto neste bloco' e Copiar desativado", async () => {
+    mudar(() => {
+      falso.banco.lancamentos = (falso.banco.lancamentos as { id: string }[]).map((l) => (l.id === "l3" ? { ...l, status_id: PAGO } : l));
+    });
+    renderizar();
+    await userEvent.setup().click(cobrarDe("Mãe"));
+    expect(within(janela()).getByText(TG.nada_em_aberto)).toBeTruthy();
+    expect(within(janela()).queryByRole("textbox", { name: TG.quadro })).toBeNull();
+    expect((within(janela()).getByRole("button", { name: TG.copiar }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("a Dívida programada ainda não vencida fica fora do texto e a janela avisa", async () => {
+    mudar(() => {
+      falso.banco.lancamentos = [
+        ...(falso.banco.lancamentos as Record<string, unknown>[]),
+        lanc("l9", "BOMBINHAS", "lucas", "2026-07", 63_600, { vencimento_combinado: "2027-04-06" }),
+      ];
+    });
+    renderizar();
+    await userEvent.setup().click(cobrarDe("Lucas"));
+    expect(textoDaMensagem()).toContain("Em aberto: R$ 150,00");
+    expect(textoDaMensagem()).not.toContain("BOMBINHAS");
+    expect(within(janela()).getByText("1 item não entra: 1 dívida programada ainda não vencida")).toBeTruthy();
+  });
+
+  it("o cartão e a mensagem concordam com a Dívida programada fora: nenhum dos dois a conta", () => {
+    mudar(() => {
+      falso.banco.lancamentos = [
+        ...(falso.banco.lancamentos as Record<string, unknown>[]),
+        lanc("l9", "BOMBINHAS", "lucas", "2026-07", 63_600, { vencimento_combinado: "2027-04-06" }),
+      ];
+    });
+    renderizar();
+    expect(textoDe(cartao("Lucas"))).toContain("R$ 150,00");
+  });
+
+  it("com a janela aberta, um Pagamento em outro aparelho refaz o texto e avisa que mudou", async () => {
+    renderizar();
+    await userEvent.setup().click(cobrarDe("Lucas"));
+    expect(textoDaMensagem()).toContain("Em aberto: R$ 150,00");
+    mudar(() => {
+      falso.banco.lancamentos = (falso.banco.lancamentos as { id: string }[]).map((l) => (l.id === "l1" ? { ...l, status_id: PAGO } : l));
+    });
+    expect(textoDaMensagem()).toContain("Em aberto: R$ 50,00");
+    expect(textoDaMensagem()).not.toContain("NETFLIX");
+    expect(within(janela()).getByText(TG.mudou)).toBeTruthy();
+  });
+
+  it("'Editar modelo' leva a Configurações → Modelo da mensagem", async () => {
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(cobrarDe("Lucas"));
+    await u.click(within(janela()).getByRole("button", { name: TG.editar_modelo }));
+    expect(roteador.push).toHaveBeenCalledWith("/configuracoes?secao=mensagem");
+  });
+
+  it("o modelo ainda vazio: a janela diz para preencher em Configurações (sem texto)", async () => {
+    mudar(() => {
+      falso.banco.configuracoes = [{ tolerancia_atraso_dias: 10, status_padrao_id: NAO_PAGO }];
+    });
+    renderizar();
+    await userEvent.setup().click(cobrarDe("Lucas"));
+    expect(within(janela()).getByText(TG.modelo_vazio)).toBeTruthy();
+    expect((within(janela()).getByRole("button", { name: TG.copiar }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("um Bloco excluído em outro aparelho com a janela aberta fecha a janela e avisa", async () => {
+    renderizar();
+    await userEvent.setup().click(cobrarDe("Lucas"));
+    mudar(() => {
+      falso.banco.blocos = (falso.banco.blocos as { id: string }[]).filter((b) => b.id !== "b-lucas");
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(await screen.findByText(TG.bloco_excluido)).toBeTruthy();
+  });
+
+  it("'Fechar' fecha sem copiar, e abrir o de outro cartão mostra a mensagem do outro Bloco", async () => {
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(cobrarDe("Lucas"));
+    await u.click(within(janela()).getAllByRole("button", { name: "Fechar" }).find((b) => b.textContent === "Fechar")!);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await u.click(cobrarDe("Mãe"));
+    expect(textoDaMensagem()).toContain("Em aberto: R$ 30,00");
+    expect(textoDaMensagem()).toContain("  FARMACIA | R$ 30,00");
+  });
+
+  it("enquanto os dados leem de novo (reconexão), a janela some em vez de mostrar uma conta com dado velho", async () => {
+    renderizar();
+    await userEvent.setup().click(cobrarDe("Lucas"));
+    mudar(() => {
+      falso.status = { lancamentos: "carregando" };
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

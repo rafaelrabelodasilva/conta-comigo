@@ -2021,7 +2021,17 @@ export const TEXTOS_GERAR = {
   bloco_sem_valor: "Este bloco está sem valor. Edite a fórmula para gerar a mensagem.",
   /** O toast quando outro aparelho exclui o Bloco com a janela aberta. */
   bloco_excluido: "O Bloco foi excluído e a janela foi fechada",
+  // "Cobrar pendências", forma 3 (História 6.7, FR-28).
+  /** A frase do total da forma 3: ocupa o lugar da frase do modelo (o `{total}` é o mesmo marcador). */
+  frase_em_aberto: "Em aberto: {total}",
+  nada_em_aberto: "Nada em aberto neste bloco",
 } as const;
+
+/** O título de um Mês na forma 3: "Outubro/26" (o Mês por extenso, com a inicial maiúscula). */
+export function rotuloMesDaMensagem(mes: string): string {
+  const extenso = formatarMesExtenso(mes);
+  return `${extenso.charAt(0).toUpperCase()}${extenso.slice(1)}`;
+}
 
 /** O aviso da forma 2: quanto dos itens já pagos o Bloco deixou de cobrar. */
 export function rotuloPagosNaoEntram(valor: string): string {
@@ -2157,8 +2167,6 @@ export const TEXTOS_RECEBIMENTOS = {
   ver: "Ver",
   fechar_lista: "Fechar a lista",
   cobrar: "Cobrar pendências",
-  /** A forma 3 (História 6.7) ainda não existe: o botão fica desativado, com esta dica. */
-  cobrar_em_breve: "Disponível em breve",
   nada_em_aberto: "Nada em aberto",
   lista_em_aberto: "Lançamentos em aberto",
   /** Mais de um Mês junto: a lista agrupa por Mês, e a Seleção vale para todos. */
@@ -2198,8 +2206,7 @@ export function rotuloListaEmAberto(nome: string): string {
 
 /** O cabeçalho de um Mês da lista: "Outubro/26 · 3 lançamentos" (o Mês com a inicial maiúscula). */
 export function rotuloMesDaLista(mes: string, quantidade: number): string {
-  const extenso = formatarMesExtenso(mes);
-  return `${extenso.charAt(0).toUpperCase()}${extenso.slice(1)} · ${rotuloLancamentos(quantidade)}`;
+  return `${rotuloMesDaMensagem(mes)} · ${rotuloLancamentos(quantidade)}`;
 }
 
 /** O nome acessível da caixa de uma linha da lista: "Marcar Netflix, R$ 39,90". */

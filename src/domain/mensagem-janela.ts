@@ -14,6 +14,7 @@ import {
 import { formatarDinheiro } from "./dinheiro";
 import {
   gerarMensagem,
+  gerarMensagemDeCobranca,
   gerarMensagemDoBloco,
   type MensagemGerada,
   type ModeloMensagem,
@@ -24,10 +25,12 @@ import {
   projetarMensagemDoBloco,
   type LancamentoParaMensagem,
   type OpcoesDaMensagem,
+  type OpcoesDoPendente,
 } from "./projecoes";
+import { projetarCobrancaDoBloco, type LancamentoDaCobranca } from "./recebimentos";
 
 /** De onde vem a mensagem: só muda o texto de "nada a cobrar". */
-export type OrigemDaMensagem = "selecao" | "bloco";
+export type OrigemDaMensagem = "selecao" | "bloco" | "cobranca";
 
 export type MensagemDaJanela = {
   gerada: MensagemGerada;
@@ -42,6 +45,7 @@ function textoSemMensagem(gerada: MensagemGerada, origem: OrigemDaMensagem): str
     case "pronta":
       return "";
     case "nada_a_cobrar":
+      if (origem === "cobranca") return TEXTOS_GERAR.nada_em_aberto;
       return origem === "bloco" ? TEXTOS_GERAR.nada_a_cobrar_bloco : TEXTOS_GERAR.nada_a_cobrar;
     case "sem_valor":
       return TEXTOS_GERAR.bloco_sem_valor;
@@ -95,5 +99,26 @@ export function mensagemDoBloco(
       bloco.pagosCentavos === 0 ? "" : rotuloPagosNaoEntram(formatarDinheiro(bloco.pagosCentavos)),
       bloco.itensEmVariosGrupos === 0 ? "" : rotuloItensEmVariosGrupos(bloco.itensEmVariosGrupos),
     ]),
+  };
+}
+
+/**
+ * A mensagem da forma 3, "Cobrar pendências" (6.7, FR-28): tudo o que o Bloco de cobrança ainda deve, de
+ * todos os Meses (`projetarCobrancaDoBloco`). O único aviso é o dos itens que ficaram de fora: a Dívida
+ * programada ainda não vencida ("1 item não entra: 1 dívida programada ainda não vencida").
+ */
+export function mensagemDeCobranca(
+  modelo: ModeloMensagem,
+  formula: Formula,
+  lancamentos: readonly LancamentoDaCobranca[],
+  opcoes: OpcoesDoPendente,
+  nomes: NomesDaFormula,
+): MensagemDaJanela {
+  const projecao = projetarCobrancaDoBloco(formula, lancamentos, opcoes, nomes);
+  const gerada = gerarMensagemDeCobranca(modelo, projecao);
+  return {
+    gerada,
+    semTexto: textoSemMensagem(gerada, "cobranca"),
+    avisos: projecao.ok ? soComTexto([avisoDosItensDeFora(projecao.valor.fora)]) : [],
   };
 }

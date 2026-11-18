@@ -11,11 +11,24 @@
 // - `recebidoNoMes`: o "Recebido no mês": Σ do valor RECEBIDO dos Pagamentos com `data` no Mês
 //   (calendário). Num Pagamento `minha_parte` o valor recebido é menor que o que ele quitou.
 // - `listaEmAberto`: os Lançamentos em aberto de um Bloco, agrupados por Mês (o "Ver").
+// - `projetarCobrancaDoBloco` (6.7, FR-28): a forma 3 da mensagem, "Cobrar pendências". O total é o
+//   Saldo do cartão (`avaliar` sobre as linhas de `projetarPendente`, uma conta e um arredondamento,
+//   FR-54) e os detalhes são a mesma lista do "Ver", por Mês, do mais antigo ao mais novo.
 
-import { avaliar, type LinhaDaFormula } from "./formula";
+import { avaliar, type Formula, type LinhaDaFormula, type NomesDaFormula } from "./formula";
 import { responsavelUnico, type Bloco } from "./blocos";
 import { compararPelaFatura } from "./painel";
-import { linhaDaFormulaPendente, type LinhaPendente } from "./projecoes";
+import {
+  linhaDaFormulaPendente,
+  separarPendentes,
+  termosDoBloco,
+  type ForaDaMensagem,
+  type LancamentoParaPendente,
+  type LinhaPendente,
+  type OpcoesDoPendente,
+  type TermoDoBloco,
+} from "./projecoes";
+import type { Resultado } from "./resultado";
 
 /** Os Blocos de cobrança (`de_cobranca`), na ordem recebida. "Meu Bloco" sozinho não conta. */
 export function blocosDeCobranca<B extends Pick<Bloco, "de_cobranca">>(blocos: readonly B[]): B[] {
@@ -194,4 +207,131 @@ export function listaEmAberto<L extends LancamentoDaLista>(
 /** Os ids que têm caixa na lista: as linhas a cobrar, sem os créditos e sem os Ajustes sob uma parcela. */
 export function idsSelecionaveis<L>(grupos: readonly GrupoDoMes<L>[]): string[] {
   return grupos.flatMap((g) => g.itens.filter((i) => !i.pendente.credito).map((i) => i.pendente.id));
+}
+
+// ------------------------------------------------- Cobrar pendências (6.7)
+
+/** As colunas de `lancamentos` que a forma 3 lê: as do pendente, as do "Ver" e o que a linha de detalhe mostra. */
+export type LancamentoDaCobranca = LancamentoParaPendente &
+  LancamentoDaLista & {
+    nome: string;
+    apelido: string | null;
+    parcela_n: number | null;
+    parcela_total: number | null;
+  };
+
+/** Um item da forma 3: o que FALTA de um Lançamento (AD-10) e os Ajustes dele, que ficam logo abaixo. */
+export type ItemDaCobranca = {
+  id: string;
+  nome: string;
+  apelido: string | null;
+  parcela_n: number | null;
+  parcela_total: number | null;
+  /** O restante (o valor cheio, ou só o que falta de um Pago parcialmente). Negativo é estorno ou crédito. */
+  valor_centavos: number;
+  /** O crédito de algo pago e depois excluído (AD-11): sem ele os detalhes não fechariam com o total. */
+  credito: boolean;
+  ajustes: readonly { id: string; valor_centavos: number }[];
+};
+
+export type MesDaCobranca = { mes: string; itens: ItemDaCobranca[] };
+
+export type ProjecaoDaCobranca = {
+  /** O "Em aberto: R$ X": o Saldo pendente do Bloco, a mesma conta do cartão. */
+  totalCentavos: number;
+  /** Os Meses com algo em aberto, do mais antigo ao mais novo (a ordem em que o Pagamento quita). */
+  meses: MesDaCobranca[];
+  /**
+   * Os termos da Fórmula, só quando ela NÃO é uma soma simples (tem ÷, ×, subtração ou valor fixo):
+   * sem eles os detalhes, que mostram os valores cheios, não explicariam o total (o Rangel: o Casal ÷ 2).
+   * Vazio numa Fórmula de soma simples.
+   */
+  termos: readonly Omit<TermoDoBloco, "ids">[];
+  /** Só o motivo `programada` é contado aqui (os outros são o normal de todos os Meses). */
+  fora: ForaDaMensagem;
+};
+
+/** A Fórmula só soma operandos inteiros (sem ÷, ×, subtração nem número solto): os detalhes já são o total. */
+function ehSomaSimples(termos: readonly TermoDoBloco[]): boolean {
+  return termos.every((t) => !t.subtraido && !t.valorFixo && t.fatores.length === 0);
+}
+
+/**
+ * A forma 3 da mensagem (FR-28, EXPERIENCE.md "Formato da mensagem"): tudo o que um Bloco de cobrança
+ * ainda deve, de todos os Meses.
+ *
+ * - **Uma regra de "em aberto" (AD-11):** as linhas são as de `separarPendentes` (as mesmas de
+ *   `projetarPendente`, que alimenta o Saldo do cartão). O total é `avaliar(formula, essas linhas)`:
+ *   um único arredondamento, no fim (FR-54). Nada aqui decide o que está em aberto.
+ * - **Detalhes:** os Lançamentos que a Fórmula usa, com o restante de cada um, agrupados por Mês
+ *   (`listaEmAberto`, a lista do "Ver": o Ajuste fica sob a parcela, a mãe dividida entra pelas
+ *   partes) do mais antigo ao mais novo. Nenhum subtotal por Mês é calculado: dividir ou subtrair
+ *   por Mês e somar os meses quebraria o arredondamento só no final.
+ * - **Fórmula que não é soma simples:** os termos (`termosDoBloco`, os mesmos da forma 2) vêm à parte,
+ *   calculados uma vez sobre todos os Meses.
+ * - **Fora:** a Dívida programada ainda não vencida não entra (como no Saldo) e é contada em
+ *   `fora.porMotivo.programada` para o aviso da janela.
+ *
+ * Erro só quando a Fórmula não calcula (o cartão mostra "—").
+ */
+export function projetarCobrancaDoBloco(
+  formula: Formula,
+  lancamentos: readonly LancamentoDaCobranca[],
+  opcoes: OpcoesDoPendente,
+  nomes: NomesDaFormula,
+): Resultado<ProjecaoDaCobranca> {
+  const { pendentes, programadas } = separarPendentes(lancamentos, opcoes);
+  const linhas = pendentes.map(linhaDaFormulaPendente);
+  const total = avaliar(formula, linhas);
+  if (!total.ok) return total;
+  const termos = termosDoBloco(formula, linhas, nomes);
+  if (!termos.ok) return termos;
+
+  const grupos = listaEmAberto(total.valor.entram, lancamentos, pendentes);
+  const meses = grupos.reverse().map(
+    ({ mes, itens }): MesDaCobranca => ({
+      mes,
+      itens: itens.map((i) => ({
+        id: i.pendente.id,
+        nome: i.lancamento.nome,
+        apelido: i.lancamento.apelido,
+        parcela_n: i.lancamento.parcela_n,
+        parcela_total: i.lancamento.parcela_total,
+        valor_centavos: i.pendente.restanteCentavos,
+        credito: i.pendente.credito,
+        ajustes: i.ajustes.map((a) => ({ id: a.pendente.id, valor_centavos: a.pendente.restanteCentavos })),
+      })),
+    }),
+  );
+
+  // As Dívidas programadas ainda não vencidas que são deste Bloco. O Ajuste de uma parcela programada
+  // segue a parcela e não conta (como na forma 1).
+  const adiadas = avaliar(formula, programadas.map(linhaDaFormulaPendente));
+  const idsAdiados = new Set(programadas.map((p) => p.id));
+  const donaDe = new Map(lancamentos.map((l) => [l.id, l.ajuste_de_id ?? null]));
+  const programada = adiadas.ok
+    ? adiadas.valor.entram.filter((id) => {
+        const mae = donaDe.get(id) ?? null;
+        return !(mae !== null && mae !== id && idsAdiados.has(mae));
+      }).length
+    : 0;
+
+  return {
+    ok: true,
+    valor: {
+      totalCentavos: total.valor.valorCentavos,
+      meses,
+      termos: ehSomaSimples(termos.valor)
+        ? []
+        : termos.valor.map((t) => ({
+            nome: t.nome,
+            subtraido: t.subtraido,
+            valorFixo: t.valorFixo,
+            subtotalCentavos: t.subtotalCentavos,
+            fatores: t.fatores,
+            resultadoCentavos: t.resultadoCentavos,
+          })),
+      fora: { quantidade: programada, porMotivo: { pago: 0, zero: 0, previsto: 0, programada } },
+    },
+  };
 }

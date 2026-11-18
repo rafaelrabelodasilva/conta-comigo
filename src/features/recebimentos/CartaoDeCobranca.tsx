@@ -21,8 +21,8 @@ import { SeloStatus, type VarianteDoSelo } from "@/ui/SeloStatus";
 // (`montarCartoesDeCobranca`): o texto da situação é sempre uma palavra, nunca só uma cor (NFR8).
 //
 // "Ver" abre a lista dos Lançamentos em aberto (quem monta a tela decide onde); o botão é um interruptor
-// (`aria-expanded`) e some a lista ao tocar de novo. "Cobrar pendências" é da História 6.7 (a forma 3 da
-// mensagem): aqui é só a casca, desativada, com a dica "Disponível em breve".
+// (`aria-expanded`) e some a lista ao tocar de novo. "Cobrar pendências" (6.7) abre a janela Gerar mensagem do
+// Bloco (a forma 3, de todos os Meses); fica ativo também com o cartão "Em dia" (a janela diz "Nada em aberto").
 
 const SELOS: Record<SituacaoDeCobranca, { variante: VarianteDoSelo; texto: string }> = {
   em_dia: { variante: "pago", texto: T.selo_em_dia },
@@ -35,6 +35,7 @@ export function CartaoDeCobranca({
   corPessoa,
   aberto,
   aoVer,
+  aoCobrar,
 }: {
   cartao: Cartao;
   /** A cor (1..8) do Responsável de um Bloco de uma pessoa só; senão `null`. */
@@ -42,6 +43,8 @@ export function CartaoDeCobranca({
   /** A lista deste Bloco está aberta. */
   aberto: boolean;
   aoVer: () => void;
+  /** Abre a janela Gerar mensagem do Bloco (forma 3, História 6.7). */
+  aoCobrar: () => void;
 }) {
   const saldo = cartao.saldoCentavos === null ? T.sem_valor : formatarDinheiro(cartao.saldoCentavos);
   const selo = SELOS[cartao.situacao];
@@ -74,7 +77,7 @@ export function CartaoDeCobranca({
         <Botao aria-label={rotuloVerEmAberto(cartao.nome)} aria-expanded={aberto} onClick={aoVer}>
           {T.ver}
         </Botao>
-        <Botao aria-label={rotuloCobrarPendencias(cartao.nome)} disabled title={T.cobrar_em_breve}>
+        <Botao aria-label={rotuloCobrarPendencias(cartao.nome)} onClick={aoCobrar}>
           {T.cobrar}
         </Botao>
       </div>
