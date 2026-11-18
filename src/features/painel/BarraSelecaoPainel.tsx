@@ -1,7 +1,7 @@
 "use client";
 
 import type { ResumoDaSelecao } from "@/domain/selecao";
-import { TEXTOS_PAGAMENTO, TEXTOS_SELECAO as T, mensagem } from "@/domain/mensagens";
+import { TEXTOS_DIVIDA, TEXTOS_PAGAMENTO, TEXTOS_SELECAO as T, mensagem } from "@/domain/mensagens";
 import { BOTAO_NA_BARRA, BarraSelecao } from "@/ui/BarraSelecao";
 import { Botao } from "@/ui/Botao";
 import { MenuAcoes } from "@/ui/MenuAcoes";
@@ -11,7 +11,7 @@ import { MenuAcoes } from "@/ui/MenuAcoes";
 // núcleo), "Limpar", "Aplicar status" (FR-25, História 6.1: abre a janela com a lista de
 // Status; desativado sem conexão, AD-3), "⋯ Mais" (Classificar em lote, Excluir) e "Gerar
 // mensagem" (FR-24, História 4.6), que abre a janela com a mensagem da Seleção. "Programar
-// dívida" é da História 6.6. Em Recebimentos (História 6.5) a mesma barra serve à lista "Ver", que junta
+// dívida" (História 6.6) abre a janela da data combinada. Em Recebimentos (História 6.5) a mesma barra serve à lista "Ver", que junta
 // Meses: ali só existem "Limpar" e "Aplicar status" (as outras três ações são do Painel e ficam de fora
 // quando a tela não passa o `ao…` delas). O anúncio ao leitor de tela é de uma região que o Painel
 // mantém no DOM, vazia, antes da primeira marcação.
@@ -28,6 +28,8 @@ export type PropsBarraSelecaoPainel = {
   online?: boolean;
   aoLimpar: () => void;
   aoAplicarStatus: () => void;
+  /** Sem ele, "Programar dívida" não aparece (Recebimentos). */
+  aoProgramar?: () => void;
   /** Sem ele, "Classificar em lote" não aparece (Recebimentos). */
   aoClassificar?: () => void;
   /** Sem ele, "Excluir" não aparece (Recebimentos). */
@@ -44,11 +46,13 @@ export function BarraSelecaoPainel({
   online = true,
   aoLimpar,
   aoAplicarStatus,
+  aoProgramar,
   aoClassificar,
   aoExcluir,
   aoGerarMensagem,
 }: PropsBarraSelecaoPainel) {
   const itensDoMais = [
+    ...(aoProgramar ? [{ rotulo: TEXTOS_DIVIDA.programar, aoEscolher: aoProgramar }] : []),
     ...(aoClassificar ? [{ rotulo: T.classificar_em_lote, aoEscolher: aoClassificar }] : []),
     ...(podeExcluir && aoExcluir ? [{ rotulo: T.excluir, aoEscolher: aoExcluir, destrutivo: true as const }] : []),
   ];

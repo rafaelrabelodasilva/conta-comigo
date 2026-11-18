@@ -101,7 +101,7 @@ const MAE = [celular, remedio, mercado, farmacia, estorno];
 
 const MES_TODO = [...CASAL, monjaroMae, ...MAE];
 
-const OPCOES: OpcoesDaMensagem = { mes: MES, statusPagos: PAGOS, temFatura: true, incluirPrevistos: false };
+const OPCOES: OpcoesDaMensagem = { mes: MES, statusPagos: PAGOS, temFatura: true, incluirPrevistos: false, hoje: "2026-11-10" };
 const bloco = (formula: Formula, lancamentos = MES_TODO, opcoes: Partial<OpcoesDaMensagem> = {}, modelo = MODELO) =>
   mensagemDoBloco(modelo, formula, lancamentos, { ...OPCOES, ...opcoes }, NOMES);
 const projecao = (formula: Formula, lancamentos = MES_TODO, opcoes: Partial<OpcoesDaMensagem> = {}) => {

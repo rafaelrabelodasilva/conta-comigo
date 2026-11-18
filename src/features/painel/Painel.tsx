@@ -7,6 +7,7 @@ import { lerBlocos } from "@/domain/blocos";
 import { conferir } from "@/domain/conferencia";
 import { TOLERANCIA_ATRASO_PADRAO_DIAS } from "@/domain/configuracoes";
 import { hojeEmSaoPaulo } from "@/domain/datas";
+import { planejarDesligar, planejarProgramacao, programadaDe } from "@/domain/divida";
 import { ehMaeDividida, filhasPorMae, linhasDaFatura, unidadesDoMes } from "@/domain/divisao";
 import { atrasosDasLinhas } from "@/domain/atraso";
 import { alternarSelecao, alternarTodos, selecaoValida } from "@/domain/lancamento";
@@ -40,12 +41,14 @@ import {
   descricaoExcluirLancamento,
   mensagem,
   mensagemDoPagamento,
+  rotuloDesprogramados,
   rotuloIncluidoEm,
   rotuloLancamentos,
   rotuloLancamentosClassificados,
   rotuloLancamentosExcluidos,
   rotuloLancamentosPagos,
   rotuloPagamentoParcial,
+  rotuloProgramados,
   rotuloStatusAplicado,
 } from "@/domain/mensagens";
 import {
@@ -104,6 +107,7 @@ import { JanelaAplicarStatus, type EscolhaAplicada, type ResultadoAplicar } from
 import { JanelaClassificarEmLote } from "./JanelaClassificarEmLote";
 import { JanelaGerarMensagem } from "./JanelaGerarMensagem";
 import { JanelaMensagemDoBloco } from "./JanelaMensagemDoBloco";
+import { JanelaProgramarDivida } from "./JanelaProgramarDivida";
 import { DividirLancamento } from "./DividirLancamento";
 import { PainelLancamento } from "./PainelLancamento";
 import { SeletorMes } from "./SeletorMes";
@@ -247,10 +251,23 @@ function sobreposicaoAberta(): boolean {
   return document.querySelector('[role="alertdialog"], [role="dialog"], [role="menu"]') !== null;
 }
 
-export function Painel({ titulo }: { titulo: string }) {
+export function Painel({
+  titulo,
+  mesInicial,
+  lancamentoInicial,
+}: {
+  titulo: string;
+  /**
+   * O Mês que abre (`AAAA-MM`), em vez do atual: "A receber" (6.6) leva a um Lançamento de outro Mês
+   * (`/?mes=…&lancamento=…`). A página valida o formato.
+   */
+  mesInicial?: string;
+  /** O Lançamento cujo painel já abre (junto de `mesInicial`). Se ele não está no Mês, o painel fecha com o aviso de sempre. */
+  lancamentoInicial?: string;
+}) {
   // O relógio fica fora do núcleo: "hoje" é lido aqui, uma vez.
   const [atual] = useState(() => mesAtual(hojeEmSaoPaulo(new Date())));
-  const [mesAberto, setMesAberto] = useState(atual);
+  const [mesAberto, setMesAberto] = useState(mesInicial ?? atual);
   const mesAbertoRef = useRef(mesAberto);
   useEffect(() => {
     mesAbertoRef.current = mesAberto;
@@ -260,7 +277,9 @@ export function Painel({ titulo }: { titulo: string }) {
   const [importando, setImportando] = useState(false);
   // O anúncio de "N lançamentos" só depois que os filtros mudam a grade.
   const [anunciar, setAnunciar] = useState(false);
-  const [painel, setPainel] = useState<EstadoPainel>(null);
+  const [painel, setPainel] = useState<EstadoPainel>(() =>
+    lancamentoInicial === undefined ? null : { modo: "editar", id: lancamentoInicial },
+  );
   const [selecao, setSelecao] = useState<ReadonlySet<string>>(() => new Set());
   const [excluindo, setExcluindo] = useState<string | null>(null);
   // A mãe cuja janela "Dividir" está aberta (História 3.8).
@@ -271,6 +290,8 @@ export function Painel({ titulo }: { titulo: string }) {
   const [gerandoMensagem, setGerandoMensagem] = useState(false);
   // "Aplicar status" aberta: o "hoje" (America/Sao_Paulo) de quando abriu; `null` é fechada (6.1).
   const [aplicandoStatus, setAplicandoStatus] = useState<string | null>(null);
+  // "Programar dívida" aberta (6.6): os ids que a janela programa (a Seleção, uma linha da grade ou o painel); `null` é fechada.
+  const [programando, setProgramando] = useState<readonly string[] | null>(null);
   // O Bloco cuja janela "Gerar mensagem" (forma 2, 4.7) está aberta.
   const [blocoDaMensagem, setBlocoDaMensagem] = useState<string | null>(null);
   const [lotando, setLotando] = useState(false);
@@ -363,9 +384,10 @@ export function Painel({ titulo }: { titulo: string }) {
             statusPagos,
             itens: itensDePagamento.linhas,
             mesesComFatura: new Set(vencimentosDasFaturas.keys()),
+            hoje,
           })
         : null,
-    [itensProntos, lancamentos.linhas, mesAberto, statusPagos, itensDePagamento.linhas, vencimentosDasFaturas],
+    [itensProntos, lancamentos.linhas, mesAberto, statusPagos, itensDePagamento.linhas, vencimentosDasFaturas, hoje],
   );
   const recebimentosDoHero = useMemo(() => {
     const falta =
@@ -447,6 +469,7 @@ export function Painel({ titulo }: { titulo: string }) {
     setDividindo(null);
     setGerandoMensagem(false);
     setAplicandoStatus(null);
+    setProgramando(null);
     setBlocoDaMensagem(null);
   };
 
@@ -562,6 +585,66 @@ export function Painel({ titulo }: { titulo: string }) {
       },
     });
     return { ok: true };
+  }
+
+  /**
+   * "Programar dívida" (6.6): a data combinada e a observação para `programando`. O núcleo diz quais linhas
+   * valem (mãe dividida → partes, Ajuste com a parcela, pagas fora); a RPC grava tudo ou nada, e o aviso tem
+   * o "Desfazer". O erro volta à janela, que fica aberta.
+   */
+  async function programarDivida(data: string, observacao: string): Promise<ResultadoAplicar> {
+    const plano = planejarProgramacao(
+      programando ?? [],
+      doMes,
+      { statusPagos, recebidoCentavos: somaDosItens(itensDePagamento.linhas), agora: new Date().toISOString() },
+      { data, observacao },
+    );
+    if (!plano.ok) return { ok: false, texto: mensagem(plano.erro.codigo) };
+    if (plano.valor.itens.length === 0) {
+      toast.mostrar({ texto: TEXTOS_SELECAO.nada_a_mudar });
+      return { ok: true };
+    }
+    setLotando(true);
+    const r = await repoLancamentos().programarDivida(plano.valor.itens);
+    setLotando(false);
+    if (!r.ok) return { ok: false, texto: mensagem(r.codigo) };
+    toast.mostrar({
+      texto: rotuloProgramados(plano.valor.programados, data, plano.valor.pagos),
+      aoDesfazer: () => {
+        void repoLancamentos()
+          .programarDivida(plano.valor.desfazer)
+          .then((d) => {
+            if (!d.ok) toast.mostrar({ texto: mensagem(d.codigo) });
+          });
+      },
+    });
+    return { ok: true };
+  }
+
+  /** Desliga a Dívida programada das linhas `ids` (o interruptor do painel do Lançamento), com "Desfazer". */
+  async function desprogramar(ids: readonly string[]) {
+    const plano = planejarDesligar(ids, doMes, { agora: new Date().toISOString() });
+    if (!plano.ok) {
+      toast.mostrar({ texto: mensagem(plano.erro.codigo) });
+      return;
+    }
+    setLotando(true);
+    const r = await repoLancamentos().programarDivida(plano.valor.itens);
+    setLotando(false);
+    if (!r.ok) {
+      toast.mostrar({ texto: mensagem(r.codigo) });
+      return;
+    }
+    toast.mostrar({
+      texto: rotuloDesprogramados(plano.valor.programados),
+      aoDesfazer: () => {
+        void repoLancamentos()
+          .programarDivida(plano.valor.desfazer)
+          .then((d) => {
+            if (!d.ok) toast.mostrar({ texto: mensagem(d.codigo) });
+          });
+      },
+    });
   }
 
   /** "Classificar em lote": o erro vira aviso e a janela fica aberta. */
@@ -737,6 +820,8 @@ export function Painel({ titulo }: { titulo: string }) {
           filhas={filhasPorMae(doMes).get(abertaNoMes.id) ?? []}
           maeDaParte={abertaNoMes.dividido_de_id ? (doMes.find((l) => l.id === abertaNoMes.dividido_de_id) ?? null) : null}
           aoDividir={setDividindo}
+          aoProgramar={(id) => setProgramando([id])}
+          aoDesprogramar={(id) => void desprogramar([id])}
           lerLinha={lerLinha}
           conferencia={conferencia}
           cadastros={cadastrosPainel}
@@ -812,6 +897,7 @@ export function Painel({ titulo }: { titulo: string }) {
           ajustesPorMae={ajustesPorMae}
           maesDivididas={maesDivididas}
           aoDividir={setDividindo}
+          aoProgramar={(id) => setProgramando([id])}
           cadastros={cadastros}
           ordem={ordem}
           aoOrdenar={(coluna) => setOrdem((o) => alternarOrdem(o, coluna))}
@@ -855,6 +941,7 @@ export function Painel({ titulo }: { titulo: string }) {
               online={online}
               aoLimpar={() => setSelecao(new Set())}
               aoAplicarStatus={() => setAplicandoStatus(hojeEmSaoPaulo(new Date()))}
+              aoProgramar={() => setProgramando([...selecionados])}
               aoClassificar={() => setClassificandoLote(true)}
               aoExcluir={() => setExcluindoLote(true)}
               aoGerarMensagem={() => setGerandoMensagem(true)}
@@ -887,6 +974,7 @@ export function Painel({ titulo }: { titulo: string }) {
                     temFatura: fatura !== null,
                     incluirPrevistos,
                     itens: itensDePagamento.linhas,
+                    hoje,
                   })
                 }
               />
@@ -902,6 +990,7 @@ export function Painel({ titulo }: { titulo: string }) {
             lancamentos={lancamentos.linhas}
             mes={mesAberto}
             temFatura={fatura !== null}
+            hoje={hoje}
             statusPagos={statusPagos}
             itens={itensDePagamento.linhas}
             itensProntos={itensProntos}
@@ -981,6 +1070,22 @@ export function Painel({ titulo }: { titulo: string }) {
             tipos={tiposAtivos(tipos.linhas)}
             status={statusAtivos(status.linhas)}
             aoAplicar={classificarSelecao}
+          />
+        ) : null}
+        {programando !== null && programando.length > 0 ? (
+          <JanelaProgramarDivida
+            // Cada abertura é uma janela nova (a data e a observação dela abrem de uma Dívida que já existe).
+            key={programando.join(",")}
+            aberta
+            aoMudar={(abrir) => {
+              if (!abrir) setProgramando(null);
+            }}
+            quantidade={programando.length}
+            dataInicial={programadaDe(programando, doMes)?.vencimento_combinado ?? ""}
+            observacaoInicial={programadaDe(programando, doMes)?.vencimento_observacao ?? ""}
+            hoje={hoje}
+            online={online}
+            aoProgramar={programarDivida}
           />
         ) : null}
         <DividirLancamento

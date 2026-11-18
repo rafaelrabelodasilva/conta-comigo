@@ -111,6 +111,7 @@ const repoL = vi.hoisted(() => {
     classificarEmLote: vi.fn<(entradas: { id: string; campos: Record<string, unknown> }[]) => Promise<unknown>>(),
     desfazerLote: vi.fn<(antes: unknown[]) => Promise<unknown>>(),
     propagarAosPrevistos: vi.fn<(parcelas: unknown[]) => Promise<unknown>>(async () => ({ ok: true, preenchidos: 0, aPerguntar: [] })),
+    programarDivida: vi.fn<(itens: Record<string, unknown>[]) => Promise<unknown>>(),
   };
 });
 // O repositório de Blocos é falso: "Salvar" só registra o pedido e responde o que o teste mandar.
@@ -326,6 +327,17 @@ beforeEach(() => {
   repoL.religar.mockImplementation(async (id, mae) => ({
     ok: true,
     linha: gravarNoBanco(id, { ajuste_de_id: mae.id, tipo_id: mae.tipo_id, responsavel_id: mae.responsavel_id }),
+  }));
+  // "Programar dívida" (6.6): grava as colunas nos itens e devolve as linhas, como a RPC.
+  repoL.programarDivida.mockImplementation(async (itens) => ({
+    ok: true as const,
+    linhas: itens.map((i) =>
+      gravarNoBanco(i.id as string, {
+        vencimento_combinado: i.vencimento_combinado,
+        vencimento_observacao: i.vencimento_observacao,
+        ...("editado_em" in i ? { editado_em: i.editado_em } : {}),
+      }),
+    ),
   }));
   repoL.incluir.mockImplementation(async (novo) => {
     const linha = { ...lanc(novo.mes as string), ...novo, id: "novo" };
@@ -2368,6 +2380,219 @@ describe("Selecionar e ver o total (História 4.4, FR-48)", () => {
     expect(textoDaBarra()).toBe("2 selecionados · R$ 100,00");
   });
 
+  describe("Programar dívida (História 6.6, FR-27, UX-DR19)", () => {
+    const abrirMais = async (u: ReturnType<typeof userEvent.setup>) => {
+      await u.click(within(barra()!).getByRole("button", { name: "Mais" }));
+    };
+    const janela = () => screen.findByRole("dialog", { name: "Programar dívida" });
+    const programar = async (u: ReturnType<typeof userEvent.setup>, data: string, observacao = "") => {
+      const j = await janela();
+      // A janela de uma Dívida que já existe abre com a data dela: troca o valor em vez de digitar por cima.
+      fireEvent.change(within(j).getByLabelText("Data combinada"), { target: { value: data } });
+      if (observacao !== "") await u.type(within(j).getByLabelText("Observação (opcional)"), observacao);
+      await u.click(within(j).getByRole("button", { name: "Programar" }));
+    };
+    const AGORA = "2026-11-08T15:00:00.000Z";
+    const modeloMsg = { saudacao: "Oi", frase_total: "Esse mês deu {total}", chave_pix: "pix@exemplo.com", rodape: "", campos: { nome: true, parcela: true, valor: true } };
+
+    it("Seleção → ⋯ Mais → Programar dívida: a janela pede a data (obrigatória) e a observação; grava as marcadas numa chamada só", async () => {
+      novembroComSelecao();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await u.click(caixaDe("FARMACIA"));
+      await abrirMais(u);
+      await u.click(screen.getByRole("menuitem", { name: "Programar dívida" }));
+      const j = await janela();
+      expect(sem(j.textContent)).toContain("2 lançamentos");
+      // Sem data, nada é gravado.
+      await u.click(within(j).getByRole("button", { name: "Programar" }));
+      expect(within(j).getByText("Escolha a data combinada.")).toBeTruthy();
+      expect(repoL.programarDivida).not.toHaveBeenCalled();
+      await programar(u, "2027-04-06", " Lucas paga no final ");
+      expect(repoL.programarDivida).toHaveBeenCalledTimes(1);
+      expect(repoL.programarDivida).toHaveBeenCalledWith([
+        { id: "c1", vencimento_combinado: "2027-04-06", vencimento_observacao: "Lucas paga no final", editado_em: AGORA },
+        { id: "c2", vencimento_combinado: "2027-04-06", vencimento_observacao: "Lucas paga no final", editado_em: AGORA },
+      ]);
+      expect(screen.queryByRole("dialog", { name: "Programar dívida" })).toBeNull();
+      expect(await screen.findByText("2 lançamentos programados para 06/04/27")).toBeTruthy();
+      // A Seleção continua; a grade mostra o selo nas duas linhas.
+      expect(textoDaBarra()).toBe("2 selecionados · R$ 150,00");
+      expect(within(linhaPorNome("MERCADO")).getByText("Programada · 06/04/27")).toBeTruthy();
+      expect(within(linhaPorNome("FARMACIA")).getByText("Programada · 06/04/27")).toBeTruthy();
+    });
+
+    it("o 'Desfazer' do aviso devolve a data e a observação de antes", async () => {
+      novembroComSelecao([lanc("2026-11", { id: "p9", nome: "ÓCULOS", valor_centavos: 27000, responsavel_id: "r-rafael", vencimento_combinado: "2026-12-06", vencimento_observacao: "antes" } as Partial<LinhaLancamento>)]);
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await u.click(caixaDe("ÓCULOS"));
+      await abrirMais(u);
+      await u.click(screen.getByRole("menuitem", { name: "Programar dívida" }));
+      await programar(u, "2027-04-06");
+      expect(await screen.findByText("2 lançamentos programados para 06/04/27")).toBeTruthy();
+      await u.click(screen.getByRole("button", { name: "Desfazer" }));
+      expect(repoL.programarDivida).toHaveBeenLastCalledWith([
+        { id: "c1", vencimento_combinado: null, vencimento_observacao: null, editado_em: null },
+        { id: "p9", vencimento_combinado: "2026-12-06", vencimento_observacao: "antes", editado_em: null },
+      ]);
+    });
+
+    it("a janela de uma Dívida que já existe abre com a data e a observação dela", async () => {
+      novembroComSelecao([lanc("2026-11", { id: "p9", nome: "ÓCULOS", valor_centavos: 27000, responsavel_id: "r-rafael", vencimento_combinado: "2026-12-06", vencimento_observacao: "no 13º" } as Partial<LinhaLancamento>)]);
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("ÓCULOS"));
+      await abrirMais(u);
+      await u.click(screen.getByRole("menuitem", { name: "Programar dívida" }));
+      const j = await janela();
+      expect((within(j).getByLabelText("Data combinada") as HTMLInputElement).value).toBe("2026-12-06");
+      expect((within(j).getByLabelText("Observação (opcional)") as HTMLTextAreaElement).value).toBe("no 13º");
+    });
+
+    it("o que já está pago fica de fora e o aviso diz quantos", async () => {
+      novembroComSelecao([lanc("2026-11", { id: "pg", nome: "JÁ PAGO", valor_centavos: 3000, responsavel_id: "r-rafael", status_id: "s-pago" })]);
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await u.click(caixaDe("JÁ PAGO"));
+      await abrirMais(u);
+      await u.click(screen.getByRole("menuitem", { name: "Programar dívida" }));
+      await programar(u, "2027-04-06");
+      expect(repoL.programarDivida).toHaveBeenCalledWith([expect.objectContaining({ id: "c1" })]);
+      expect(await screen.findByText("1 lançamento programado para 06/04/27 · 1 já pago ficou de fora")).toBeTruthy();
+    });
+
+    it("só lançamentos pagos: a janela fica aberta com o motivo e nada é gravado", async () => {
+      novembroComSelecao([lanc("2026-11", { id: "pg", nome: "JÁ PAGO", valor_centavos: 3000, responsavel_id: "r-rafael", status_id: "s-pago" })]);
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("JÁ PAGO"));
+      await abrirMais(u);
+      await u.click(screen.getByRole("menuitem", { name: "Programar dívida" }));
+      await programar(u, "2027-04-06");
+      expect(await screen.findByText(mensagem("divida.so_pagos"))).toBeTruthy();
+      expect(repoL.programarDivida).not.toHaveBeenCalled();
+      expect(screen.getByRole("dialog", { name: "Programar dívida" })).toBeTruthy();
+    });
+
+    it("falhou ao gravar: a janela fica aberta com o aviso e a Seleção continua", async () => {
+      novembroComSelecao();
+      repoL.programarDivida.mockResolvedValueOnce({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await abrirMais(u);
+      await u.click(screen.getByRole("menuitem", { name: "Programar dívida" }));
+      await programar(u, "2027-04-06");
+      expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
+      expect(screen.getByRole("dialog", { name: "Programar dívida" })).toBeTruthy();
+      expect(screen.queryByText("1 lançamento programado para 06/04/27")).toBeNull();
+    });
+
+    it("sem conexão, 'Programar' fica desativado", async () => {
+      novembroComSelecao();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await abrirMais(u);
+      await u.click(screen.getByRole("menuitem", { name: "Programar dívida" }));
+      const j = await janela();
+      act(() => {
+        falso.online = false;
+        for (const o of falso.ouvintes) o();
+      });
+      expect((within(j).getByRole("button", { name: "Programar" }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("o ⋯ da linha também programa (uma linha só, sem Seleção)", async () => {
+      novembroComSelecao();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(within(linhaPorNome("PADARIA")).getByRole("button", { name: /ações/i }));
+      await u.click(screen.getByRole("menuitem", { name: "Programar dívida" }));
+      await programar(u, "2027-01-10");
+      expect(repoL.programarDivida).toHaveBeenCalledWith([
+        { id: "c3", vencimento_combinado: "2027-01-10", vencimento_observacao: null, editado_em: AGORA },
+      ]);
+      expect(within(linhaPorNome("PADARIA")).getByText("Programada · 10/01/27")).toBeTruthy();
+    });
+
+    it("a mãe dividida, pelo ⋯ do cabeçalho, programa as partes (nunca a mãe)", async () => {
+      novembroComSelecao(divisao());
+      renderizar();
+      const u = userEvent.setup();
+      const cabecalho = linhasDaGrade().find((r) => r.getAttribute("data-papel") === "cabecalho")!;
+      await u.click(within(cabecalho).getByRole("button", { name: /ações/i }));
+      await u.click(screen.getByRole("menuitem", { name: "Programar dívida" }));
+      await programar(u, "2027-04-06");
+      expect(repoL.programarDivida).toHaveBeenCalledWith([
+        expect.objectContaining({ id: "p1" }),
+        expect.objectContaining({ id: "p2" }),
+      ]);
+    });
+
+    it("painel do Lançamento: o interruptor liga (abre a janela) e desliga (grava na hora, com 'Desfazer')", async () => {
+      novembroComSelecao();
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(within(linhaPorNome("MERCADO")).getAllByRole("cell")[1]);
+      const painel = screen.getByRole("complementary");
+      const chave = within(painel).getByRole("switch", { name: "Dívida programada" });
+      expect(chave.getAttribute("aria-checked")).toBe("false");
+      await u.click(chave);
+      await programar(u, "2027-04-06", "combinado");
+      expect(repoL.programarDivida).toHaveBeenCalledWith([
+        { id: "c1", vencimento_combinado: "2027-04-06", vencimento_observacao: "combinado", editado_em: AGORA },
+      ]);
+      const ligada = within(screen.getByRole("complementary")).getByRole("switch", { name: "Dívida programada" });
+      expect(ligada.getAttribute("aria-checked")).toBe("true");
+      expect(within(screen.getByRole("complementary")).getByText("Programada · 06/04/27")).toBeTruthy();
+      expect(within(screen.getByRole("complementary")).getByText("combinado")).toBeTruthy();
+      // Editar reabre a janela com os valores.
+      await u.click(within(screen.getByRole("complementary")).getByRole("button", { name: "Editar" }));
+      expect((within(await janela()).getByLabelText("Data combinada") as HTMLInputElement).value).toBe("2027-04-06");
+      await u.click(within(await janela()).getByRole("button", { name: "Cancelar" }));
+      // Desligar grava sem janela.
+      await u.click(within(screen.getByRole("complementary")).getByRole("switch", { name: "Dívida programada" }));
+      expect(repoL.programarDivida).toHaveBeenLastCalledWith([
+        { id: "c1", vencimento_combinado: null, vencimento_observacao: null, editado_em: AGORA },
+      ]);
+      expect(await screen.findByText("Dívida programada desligada em 1 lançamento")).toBeTruthy();
+      await u.click(screen.getByRole("button", { name: "Desfazer" }));
+      expect(repoL.programarDivida).toHaveBeenLastCalledWith([
+        { id: "c1", vencimento_combinado: "2027-04-06", vencimento_observacao: "combinado", editado_em: AGORA },
+      ]);
+    });
+
+    it("o painel de um lançamento pago não oferece o interruptor (só o aviso)", async () => {
+      novembroComSelecao([lanc("2026-11", { id: "pg", nome: "JÁ PAGO", valor_centavos: 3000, responsavel_id: "r-rafael", status_id: "s-pago" })]);
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(within(linhaPorNome("JÁ PAGO")).getAllByRole("cell")[1]);
+      const painel = screen.getByRole("complementary");
+      expect(within(painel).queryByRole("switch", { name: "Dívida programada" })).toBeNull();
+      expect(within(painel).getByText("Já está pago: não há o que programar.")).toBeTruthy();
+    });
+
+    it("a mensagem da Seleção deixa a Dívida ainda não vencida de fora (hoje = 08/11/26), e no mês do vencimento ela entra", async () => {
+      novembroComSelecao([lanc("2026-11", { id: "dv", nome: "BOMBINHAS", valor_centavos: 10600, responsavel_id: "r-rafael", vencimento_combinado: "2027-04-06" } as Partial<LinhaLancamento>)]);
+      falso.banco.configuracoes = [{ id: "cfg", status_padrao_id: null, modelo_mensagem: modeloMsg, updated_at: "2026-11-03T12:00:00+00:00" }];
+      falso.versao++;
+      renderizar();
+      const u = userEvent.setup();
+      await u.click(caixaDe("MERCADO"));
+      await u.click(caixaDe("BOMBINHAS"));
+      await u.click(within(barra()!).getByRole("button", { name: "Gerar mensagem" }));
+      const j = await screen.findByRole("dialog", { name: "Gerar mensagem" });
+      expect(sem(j.textContent)).toContain("1 item não entra: 1 dívida programada ainda não vencida");
+      expect((within(j).getByRole("textbox", { name: "Mensagem" }) as HTMLTextAreaElement).value).toContain("MERCADO");
+      expect((within(j).getByRole("textbox", { name: "Mensagem" }) as HTMLTextAreaElement).value).not.toContain("BOMBINHAS");
+    });
+  });
+
   describe("⋯ Mais", () => {
     const abrirMais = async (u: ReturnType<typeof userEvent.setup>) => {
       await u.click(within(barra()!).getByRole("button", { name: "Mais" }));
@@ -3296,5 +3521,32 @@ describe("Recebimentos no hero (História 6.5, FR-26)", () => {
     expect(faltaReceber("R$ 170,00")).toBeTruthy();
     gravarNoBanco("c1", { status_id: "s-pago" });
     expect(faltaReceber("R$ 70,00")).toBeTruthy();
+  });
+});
+
+describe("Aberto por 'A receber' (História 6.6): Mês e Lançamento de outro Mês", () => {
+  it("abre o Mês pedido (não o atual) com o painel do Lançamento já aberto", () => {
+    definir({
+      faturas: [outubro, novembro],
+      lancamentos: [lanc("2026-10", { id: "ox", nome: "ÓCULOS", valor_centavos: 27000 }), lanc("2026-11", { id: "nx", nome: "OUTRA" })],
+    });
+    render(<Painel titulo="Painel" mesInicial="2026-10" lancamentoInicial="ox" />, { wrapper: ToastProvider });
+    expect(falso.abrirMes).toHaveBeenCalledWith("2026-10");
+    expect(falso.abrirMes).not.toHaveBeenCalledWith("2026-11");
+    expect(screen.getByRole("button", { name: "outubro/26, escolher o Mês" })).toBeTruthy();
+    const painel = screen.getByRole("complementary");
+    expect(within(painel).getByRole("heading", { name: "ÓCULOS" })).toBeTruthy();
+  });
+
+  it("só o Mês: abre o Mês sem painel; sem nada, o Mês atual", () => {
+    definir({ faturas: [outubro, novembro], lancamentos: [lanc("2026-10", { id: "ox", nome: "ÓCULOS" })] });
+    const { unmount } = render(<Painel titulo="Painel" mesInicial="2026-10" />, { wrapper: ToastProvider });
+    expect(falso.abrirMes).toHaveBeenCalledWith("2026-10");
+    expect(screen.queryByRole("complementary")).toBeNull();
+    unmount();
+    falso.abrirMes.mockClear();
+    falso.mes = null;
+    render(<Painel titulo="Painel" />, { wrapper: ToastProvider });
+    expect(falso.abrirMes).toHaveBeenCalledWith("2026-11");
   });
 });

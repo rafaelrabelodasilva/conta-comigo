@@ -449,6 +449,8 @@ export function previaDoModelo(
   lancamentos: readonly LancamentoParaMensagem[],
   mes: string,
   statusPagos: ReadonlySet<string>,
+  /** Hoje (`AAAA-MM-DD`, America/Sao_Paulo): uma Dívida programada ainda não vencida fica fora da prévia, como na mensagem real (6.6). */
+  hoje: string,
   /** Os itens de Pagamento do Mês (6.2): um Pago parcialmente mostra só o que falta, como na mensagem real. */
   itensDePagamento: readonly ItemLido[] = [],
 ): Previa {
@@ -458,6 +460,7 @@ export function previaDoModelo(
     itens: itensDePagamento,
     temFatura: true,
     incluirPrevistos: false,
+    hoje,
   });
   const amostra = projecao.entram.slice(0, ITENS_DA_AMOSTRA);
   const doMes = amostra.length > 0;

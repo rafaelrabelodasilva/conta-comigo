@@ -371,3 +371,52 @@ describe("Editar (História 5.4)", () => {
     expect(screen.queryByText(/Vale a partir de/)).toBeNull();
   });
 });
+
+describe("Dívida programada por parte (História 6.6, Flow 5)", () => {
+  const cobranca = (i: number) => screen.getByRole("combobox", { name: `Cobrança da parte ${i}` }) as HTMLSelectElement;
+  const dataDaParte = (i: number) => screen.getByLabelText(`Data combinada da parte ${i}`) as HTMLInputElement;
+
+  it("uma parte só não tem o seletor; com duas, cada parte oferece Mensal ou Dívida programada, e a data só aparece na programada", () => {
+    montar();
+    expect(screen.queryByRole("combobox", { name: /^Cobrança da parte/ })).toBeNull();
+    fireEvent.click(maisParte());
+    expect(cobranca(1).value).toBe("mensal");
+    expect(cobranca(2).value).toBe("mensal");
+    expect(Array.from(cobranca(1).options).map((o) => o.text)).toEqual(["Mensal", "Dívida programada"]);
+    expect(screen.queryByLabelText(/^Data combinada da parte/)).toBeNull();
+    fireEvent.change(cobranca(2), { target: { value: "programada" } });
+    expect(dataDaParte(2).type).toBe("date");
+    expect(screen.queryByLabelText("Data combinada da parte 1")).toBeNull();
+    fireEvent.change(cobranca(2), { target: { value: "mensal" } });
+    expect(screen.queryByLabelText(/^Data combinada da parte/)).toBeNull();
+  });
+
+  it("a Bombinhas: a parte do Lucas é Dívida programada até 06/04/27, e a Conta sai com a data só nela", async () => {
+    const { aoSalvar } = montar();
+    preencherBombinhas();
+    fireEvent.change(cobranca(3), { target: { value: "programada" } });
+    fireEvent.change(dataDaParte(3), { target: { value: "2027-04-06" } });
+    fireEvent.click(salvar());
+    await waitFor(() => expect(aoSalvar).toHaveBeenCalledTimes(1));
+    const conta = aoSalvar.mock.calls[0][0];
+    expect(conta.divisao?.partes.map((p) => p.vencimento_combinado)).toEqual([undefined, undefined, "2027-04-06"]);
+  });
+
+  it("Dívida programada sem data: o erro do mapa, o foco no campo da data e nada é gravado", async () => {
+    const { aoSalvar } = montar();
+    preencherBombinhas();
+    fireEvent.change(cobranca(3), { target: { value: "programada" } });
+    fireEvent.click(salvar());
+    expect(await screen.findByText(mensagem("conta.vencimento_invalido"))).toBeTruthy();
+    expect(dataDaParte(3).getAttribute("aria-invalid")).toBe("true");
+    expect(aoSalvar).not.toHaveBeenCalled();
+  });
+
+  it("os alvos de toque e os nomes acessíveis: seletor e data de cada parte", () => {
+    montar();
+    fireEvent.click(maisParte());
+    fireEvent.change(cobranca(2), { target: { value: "programada" } });
+    expect(cobranca(2).className).toContain("min-h-toque");
+    expect(dataDaParte(2).className).toContain("min-h-toque");
+  });
+});

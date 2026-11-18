@@ -31,6 +31,7 @@ const linha = (id: string, extra: Partial<LancamentoParaPendente> = {}): Lancame
 const opcoes = (extra: Partial<OpcoesDoPendente> = {}): OpcoesDoPendente => ({
   statusPagos: new Set([PAGO]),
   itens: [],
+  hoje: "2026-10-15",
   ...extra,
 });
 

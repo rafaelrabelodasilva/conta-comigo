@@ -7,6 +7,7 @@ import type { ConfigCiclo } from "@/domain/ciclo";
 import type { Conferencia } from "@/domain/conferencia";
 import { formatarHora, instanteEmMicros } from "@/domain/datas";
 import { formatarDinheiro } from "@/domain/dinheiro";
+import { ehDividaProgramada } from "@/domain/divida";
 import { ehFilha, ehMaeDividida, lerDivisao, valoresDasPartes } from "@/domain/divisao";
 import { formatarParcela } from "@/domain/importacao-fatura";
 import {
@@ -28,6 +29,7 @@ import {
   ROTULO_ATRASADO,
   ROTULO_PREVISTO,
   TEXTOS_AJUSTE,
+  TEXTOS_DIVIDA,
   TEXTOS_LANCAMENTO as T,
   TEXTOS_PAGAMENTO as TP,
   TEXTOS_PAINEL,
@@ -43,6 +45,7 @@ import {
   rotuloFalta,
   rotuloIncluidoEm,
   rotuloOrigemPrevisto,
+  rotuloProgramada,
   rotuloApelidoAplicado,
   rotuloPrevistosAtualizados,
   rotuloSalvoAs,
@@ -67,6 +70,7 @@ import { Botao } from "@/ui/Botao";
 import { Campo } from "@/ui/Campo";
 import { cn } from "@/ui/cn";
 import { FaixaPergunta } from "@/ui/FaixaPergunta";
+import { Interruptor } from "@/ui/Interruptor";
 import type { PlanoDoApelido } from "@/domain/apelido";
 import { Seletor, type OpcaoSeletor } from "@/ui/Seletor";
 import { SeloStatus } from "@/ui/SeloStatus";
@@ -141,6 +145,49 @@ function AtrasoDoLancamento({ desde }: { desde: string }) {
   );
 }
 
+/**
+ * "Dívida programada" (6.6, FR-27, UX-DR19): liga ou desliga, com a data. Ligar abre a janela "Programar
+ * dívida" (a mesma da barra de Seleção e do ⋯ da grade, que fica no Painel); desligar grava na hora, com
+ * "Desfazer" no aviso. Programada: o selo "Programada · 06/04/27", "Editar" (reabre a janela com a data) e a
+ * observação do combinado. Pago e sem Dívida: só o aviso, não há o que programar.
+ */
+function DividaDoLancamento({
+  linha,
+  pago,
+  aoProgramar,
+  aoDesprogramar,
+}: {
+  linha: LinhaLancamento;
+  pago: boolean;
+  aoProgramar: (id: string) => void;
+  aoDesprogramar: (id: string) => void;
+}) {
+  const programada = ehDividaProgramada(linha);
+  if (!programada && pago) return <p className="texto-caption text-text-muted">{TEXTOS_DIVIDA.ja_pago}</p>;
+  return (
+    <div className="flex flex-col gap-1">
+      <Interruptor
+        rotulo={TEXTOS_DIVIDA.campo}
+        ligado={programada}
+        aoMudar={(ligar) => (ligar ? aoProgramar(linha.id) : aoDesprogramar(linha.id))}
+      />
+      {programada ? (
+        <>
+          <p role="status" className="flex flex-wrap items-center gap-2 texto-caption text-text-muted">
+            <SeloStatus variante="programada">{rotuloProgramada(linha.vencimento_combinado as string)}</SeloStatus>
+            <Botao tamanho="compacto" onClick={() => aoProgramar(linha.id)}>
+              {TEXTOS_DIVIDA.editar}
+            </Botao>
+          </p>
+          {linha.vencimento_observacao ? (
+            <p className="texto-caption text-text-muted">{linha.vencimento_observacao}</p>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 type Comum = {
   cadastros: CadastrosPainel;
   /**
@@ -154,6 +201,10 @@ type Comum = {
   faltaCentavos?: number | null;
   /** Atrasado (6.4): o primeiro dia de atraso desta linha (`atrasosDasLinhas` do núcleo); `null` se não está atrasada. */
   atrasadoDesde?: string | null;
+  /** Dívida programada (6.6): "Programar dívida" abre a janela da data (o Painel a guarda); sem ele, o campo não aparece. */
+  aoProgramar?: (id: string) => void;
+  /** Desliga a Dívida programada na hora (o Painel grava e mostra o "Desfazer"). */
+  aoDesprogramar?: (id: string) => void;
   aoFechar: () => void;
   /** Para os testes; padrão, o repositório do navegador. */
   repo?: RepoLancamentos;
@@ -365,6 +416,8 @@ function EditarLancamento({
   quitadasPorPagamento = SEM_IDS,
   faltaCentavos = null,
   atrasadoDesde = null,
+  aoProgramar,
+  aoDesprogramar,
   aoFechar,
   aoExcluir,
   repo: repoDado,
@@ -661,6 +714,8 @@ function EditarLancamento({
   const nomeDoCadastro = (lista: readonly { id: string; nome: string }[], id: string | null, sem: string) =>
     id === null ? sem : (lista.find((c) => c.id === id)?.nome ?? sem);
   const maeDividida = ehMaeDividida(linha);
+  // Já pago (Status que conta ou quitado por Pagamento): não há o que programar (6.6).
+  const pagoOuQuitada = (linha.status_id !== null && statusPagos.has(linha.status_id)) || quitadasPorPagamento.has(linha.id);
   const divisao = maeDividida ? lerDivisao(linha.divisao) : null;
   // "Mãe 2/3 · Rafael 1/3" (por valor: "Mãe R$ 310,67 · Rafael R$ 155,33").
   const resumoDaDivisao = (() => {
@@ -731,6 +786,14 @@ function EditarLancamento({
           <p role="alert" className="texto-label font-normal text-danger-fg">
             {erros.status}
           </p>
+        ) : null}
+        {aoProgramar && aoDesprogramar ? (
+          <DividaDoLancamento
+            linha={linha}
+            pago={pagoOuQuitada}
+            aoProgramar={aoProgramar}
+            aoDesprogramar={aoDesprogramar}
+          />
         ) : null}
       </Moldura>
     );
@@ -912,6 +975,15 @@ function EditarLancamento({
         <p role="alert" className="texto-label font-normal text-danger-fg">
           {erros.status}
         </p>
+      ) : null}
+      {/* A mãe dividida programa pelas partes; o Ajuste acompanha a parcela. */}
+      {aoProgramar && aoDesprogramar && !maeDividida && !mae ? (
+        <DividaDoLancamento
+          linha={linha}
+          pago={pagoOuQuitada}
+          aoProgramar={aoProgramar}
+          aoDesprogramar={aoDesprogramar}
+        />
       ) : null}
       <Observacao
         valor={texto("observacao")}

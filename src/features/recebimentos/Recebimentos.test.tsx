@@ -540,3 +540,106 @@ describe("'Aplicar status' em Recebimentos (a janela e o Pagamento são os da 6.
     expect(screen.getByText(T.sem_status_pago)).toBeTruthy();
   });
 });
+
+describe("A receber: as Dívidas programadas (História 6.6, FR-27, UX-DR19)", () => {
+  // A Bombinhas (Flow 5): a parte do Lucas é Dívida programada até 06/04/27 (6 parcelas de R$ 106,00); o Óculos da Mãe vence 06/12/26.
+  function comDividas() {
+    const meses = ["2026-07", "2026-08", "2026-09", "2026-10", "2026-11", "2026-12"];
+    const bombinhas = meses.flatMap((mes, i) => {
+      const mae = lanc(`bm${i}`, "BOMBINHAS", "casal", mes, 31_800, {
+        serie_id: "s-b",
+        parcela_n: i + 1,
+        divisao: { modo: "valor", partes: [] },
+        lancado_por: "manual",
+        fatura_id: null,
+      });
+      const filha = (id: string, r: string, extra: Record<string, unknown> = {}) =>
+        lanc(id, "BOMBINHAS", r, mes, 10_600, { serie_id: "s-b", parcela_n: i + 1, dividido_de_id: mae.id, lancado_por: "manual", fatura_id: null, ...extra });
+      return [mae, filha(`bmae${i}`, "mae"), filha(`bcasal${i}`, "casal"), filha(`blucas${i}`, "lucas", { vencimento_combinado: "2027-04-06" })];
+    });
+    (falso.banco.lancamentos as unknown[]).push(
+      ...bombinhas,
+      lanc("oc", "ÓCULOS", "mae", "2026-10", 27_000, { vencimento_combinado: "2026-12-06", vencimento_observacao: "resto do pagamento" }),
+    );
+  }
+
+  const aReceber = () => screen.getByRole("list", { name: "A receber" });
+  const saldo = (nome: string) => textoDe(cartao(nome));
+
+  it("a seção fica entre os cartões e o Histórico, e lista as Dívidas ordenadas pela data", () => {
+    comDividas();
+    renderizar();
+    const titulos = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(titulos.slice(0, 3)).toEqual([T.titulo, "A receber", "Histórico de Pagamentos"]);
+    // O Óculos (06/12/26) vem antes da Bombinhas (06/04/27).
+    const linhas = within(aReceber()).getAllByRole("listitem").filter((li) => li.parentElement === aReceber());
+    expect(linhas.map((li) => textoDe(li).replace(/^(ÓCULOS|BOMBINHAS).*/, "$1"))).toEqual(["ÓCULOS", "BOMBINHAS"]);
+  });
+
+  it("a parte do Lucas soma R$ 636,00 com vencimento em 06/04/27; o Óculos mostra o vencimento e a observação", () => {
+    comDividas();
+    renderizar();
+    const b = within(aReceber()).getByRole("button", { name: /Bombinhas/i });
+    expect(textoDe(b)).toContain("vence 06/04/27");
+    expect(textoDe(b)).toContain("R$ 636,00");
+    expect(textoDe(b)).toContain("Lucas");
+    const o = within(aReceber()).getByRole("link", { name: /ÓCULOS/ });
+    expect(textoDe(o)).toContain("R$ 270,00");
+    expect(textoDe(o)).toContain("resto do pagamento");
+    expect(o.getAttribute("href")).toBe("/?mes=2026-10&lancamento=oc");
+  });
+
+  it("a Dívida ainda não vencida NÃO entra no Saldo pendente: os cartões ficam como estavam", () => {
+    comDividas();
+    renderizar();
+    // Lucas: só o que já era (R$ 100,00 + R$ 50,00), sem as 6 × R$ 106,00 da Bombinhas.
+    expect(saldo("Lucas")).toContain("R$ 150,00");
+    // Mãe: R$ 30,00 + as 6 parcelas dela da Bombinhas (R$ 106,00 por mês, na cobrança); o Óculos de dezembro ainda não.
+    expect(saldo("Mãe")).toContain("R$ 666,00");
+  });
+
+  it("no Mês do vencimento ela passa a entrar no Saldo; passada a tolerância, o cartão fica Atrasado pelo vencimento combinado", () => {
+    comDividas();
+    // 18/12/26: o Óculos venceu em 06/12 e a tolerância (10 dias) acabou em 16/12 → atrasado desde 17/12/26.
+    vi.setSystemTime(new Date("2026-12-18T15:00:00Z"));
+    renderizar();
+    expect(saldo("Mãe")).toContain("R$ 936,00");
+    expect(saldo("Mãe")).toContain("Atrasado");
+    const o = within(aReceber()).getByRole("link", { name: /ÓCULOS/ });
+    expect(within(o).getByText("Atrasado").getAttribute("title")).toBe("atrasado desde 17/12/26");
+    // A Bombinhas do Lucas segue fora do Saldo (o Mês dela é abril/27).
+    expect(textoDe(within(aReceber()).getByRole("button", { name: /Bombinhas/i }))).not.toContain("Atrasado");
+  });
+
+  it("uma Dívida paga sai de 'A receber' sem recarregar (outro aparelho)", () => {
+    comDividas();
+    renderizar();
+    expect(within(aReceber()).getByRole("link", { name: /ÓCULOS/ })).toBeTruthy();
+    mudar(() => {
+      falso.banco.lancamentos = (falso.banco.lancamentos as Array<{ id: string }>).map((l) => (l.id === "oc" ? { ...l, status_id: PAGO } : l));
+    });
+    expect(within(aReceber()).queryByRole("link", { name: /ÓCULOS/ })).toBeNull();
+    expect(within(aReceber()).getByRole("button", { name: /Bombinhas/i })).toBeTruthy();
+  });
+
+  it("sem nenhuma Dívida programada: 'Nenhuma dívida programada'", () => {
+    renderizar();
+    expect(screen.getByText("Nenhuma dívida programada")).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "A receber" })).toBeNull();
+  });
+
+  it("sem Blocos de cobrança a seção continua (a Dívida não depende de Bloco)", () => {
+    comDividas();
+    falso.banco.blocos = [];
+    renderizar();
+    expect(screen.getByText(T.sem_blocos)).toBeTruthy();
+    expect(within(aReceber()).getByRole("link", { name: /ÓCULOS/ })).toBeTruthy();
+  });
+
+  it("carregando: esqueleto, e não 'Nenhuma dívida programada'", () => {
+    falso.status = { lancamentos: "carregando" };
+    renderizar();
+    expect(screen.queryByText("Nenhuma dívida programada")).toBeNull();
+    expect(screen.getAllByRole("status", { busy: true }).length).toBeGreaterThan(0);
+  });
+});

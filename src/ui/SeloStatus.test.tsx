@@ -17,6 +17,15 @@ describe("SeloStatus", () => {
     expect(selo.getAttribute("data-selo")).toBe(variante);
   });
 
+  it("programada (6.6) é um selo neutro de borda, sem token novo nem cor literal, e o texto é a data", () => {
+    render(<SeloStatus variante="programada">Programada · 06/04/27</SeloStatus>);
+    const selo = screen.getByText("Programada · 06/04/27");
+    expect(selo.getAttribute("data-selo")).toBe("programada");
+    expect(selo.className).toContain("border-border");
+    expect(selo.className).toContain("text-text");
+    expect(selo.className).not.toMatch(/#|rgb|\[|status-/);
+  });
+
   it("a palavra é sempre texto: a cor nunca é a única pista (NFR8)", () => {
     render(<SeloStatus variante="atrasado">Atrasado</SeloStatus>);
     expect(screen.getByText("Atrasado").textContent).toBe("Atrasado");

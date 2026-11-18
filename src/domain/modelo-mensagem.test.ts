@@ -314,16 +314,17 @@ describe("prévia do Mês (um recorte de projetarMensagem)", () => {
     ...extra,
   });
   const PAGOS = new Set(["pago"]);
+  const HOJE = "2026-11-10";
   const NOME = { ...MODELO_DO_RAFAEL, campos: { nome: true, parcela: false, valor: false } };
   /** Os nomes que a prévia mostra, na ordem. */
   const nomes = (linhas: LancamentoParaMensagem[]) => {
-    const texto = previaDoModelo(NOME, linhas, MES, PAGOS).texto;
+    const texto = previaDoModelo(NOME, linhas, MES, PAGOS, HOJE).texto;
     return texto.split("\n").slice(texto.split("\n").indexOf("Detalhes:") + 1, -1);
   };
 
   it("fica com as unidades do Mês, na ordem da fatura, no máximo ITENS_DA_AMOSTRA", () => {
     const linhas = Array.from({ length: 8 }, (_, i) => base({ nome: `C${i}`, ordem_fatura: 8 - i }));
-    expect(previaDoModelo(NOME, linhas, MES, PAGOS).quantidade).toBe(ITENS_DA_AMOSTRA);
+    expect(previaDoModelo(NOME, linhas, MES, PAGOS, HOJE).quantidade).toBe(ITENS_DA_AMOSTRA);
     expect(nomes(linhas)).toEqual(["C7", "C6", "C5", "C4", "C3"]);
   });
 
@@ -353,7 +354,7 @@ describe("prévia do Mês (um recorte de projetarMensagem)", () => {
       base({ nome: "Mercado", valor_centavos: 15990, ordem_fatura: 1 }),
       base({ nome: "Celular", apelido: "Celular da mãe", parcela_n: 5, parcela_total: 10, valor_centavos: 57750, ordem_fatura: 2 }),
     ];
-    const previa = previaDoModelo(MODELO_DO_RAFAEL, linhas, MES, PAGOS);
+    const previa = previaDoModelo(MODELO_DO_RAFAEL, linhas, MES, PAGOS, HOJE);
     expect(previa.origem).toBe("mes");
     expect(previa.quantidade).toBe(2);
     expect(previa.mes).toBe("novembro/26");
@@ -363,7 +364,7 @@ describe("prévia do Mês (um recorte de projetarMensagem)", () => {
   });
 
   it("Mês sem nada a cobrar: itens de exemplo", () => {
-    const previa = previaDoModelo(MODELO_DO_RAFAEL, [base({ valor_centavos: 0 })], MES, PAGOS);
+    const previa = previaDoModelo(MODELO_DO_RAFAEL, [base({ valor_centavos: 0 })], MES, PAGOS, HOJE);
     expect(previa.origem).toBe("exemplo");
     expect(previa.quantidade).toBe(ITENS_DE_EXEMPLO.length);
     expect(previa.mes).toBe("");
@@ -374,20 +375,20 @@ describe("prévia do Mês (um recorte de projetarMensagem)", () => {
   });
 
   it("sem lançamentos nenhum (Mês não carregado), também exemplo", () => {
-    expect(previaDoModelo(MODELO_DO_RAFAEL, [], MES, PAGOS).origem).toBe("exemplo");
+    expect(previaDoModelo(MODELO_DO_RAFAEL, [], MES, PAGOS, HOJE).origem).toBe("exemplo");
   });
 
   it("modelo vazio: texto vazio (a tela mostra a dica)", () => {
-    expect(previaDoModelo(MODELO_VAZIO, [], MES, PAGOS).texto).toBe("");
+    expect(previaDoModelo(MODELO_VAZIO, [], MES, PAGOS, HOJE).texto).toBe("");
   });
 
   it("rascunho inválido ainda tem prévia, com o marcador errado como está", () => {
-    const previa = previaDoModelo({ ...MODELO_DO_RAFAEL, frase_total: "Deu {totl}" }, [], MES, PAGOS);
+    const previa = previaDoModelo({ ...MODELO_DO_RAFAEL, frase_total: "Deu {totl}" }, [], MES, PAGOS, HOJE);
     expect(previa.texto).toContain("Deu {totl}");
   });
 
   it("modelo sem nenhuma caixa: sem linhas, sem título nem Total", () => {
-    const previa = previaDoModelo({ ...MODELO_DO_RAFAEL, campos: { nome: false, parcela: false, valor: false } }, [], MES, PAGOS);
+    const previa = previaDoModelo({ ...MODELO_DO_RAFAEL, campos: { nome: false, parcela: false, valor: false } }, [], MES, PAGOS, HOJE);
     expect(previa.texto).toBe(["Oi", `Esse mês deu ${R(71150)}`, "Pix rafaelrabelodasilva@outlook.com"].join("\n"));
   });
 });

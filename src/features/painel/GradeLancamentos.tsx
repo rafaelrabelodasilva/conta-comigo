@@ -7,11 +7,13 @@ import type { ValorFiltro } from "@/domain/filtros-grade";
 import { formatarDinheiro } from "@/domain/dinheiro";
 import { formatarParcela } from "@/domain/importacao-fatura";
 import { estadoCaixaCabecalho, type EstadoCaixa } from "@/domain/lancamento";
+import { ehDividaProgramada } from "@/domain/divida";
 import { ehPrevistoNoMes } from "@/domain/previstos";
 import {
   COLUNAS_GRADE as C,
   ROTULOS_LANCADO_POR,
   TEXTOS_AJUSTE,
+  TEXTOS_DIVIDA,
   TEXTOS_DIVISAO,
   TEXTOS_FILTROS,
   TEXTOS_LANCAMENTO,
@@ -23,6 +25,7 @@ import {
   rotuloAtrasadoDesde,
   rotuloFalta,
   rotuloFiltrarPor,
+  rotuloProgramada,
   rotuloSelecionar,
   ROTULO_PREVISTO,
 } from "@/domain/mensagens";
@@ -101,6 +104,8 @@ export type PropsGradeLancamentos = {
   maesDivididas?: ReadonlyMap<string, LancamentoGrade>;
   /** "Dividir" / "Editar divisão" do menu ⋯ (a janela mostra por que não dá, se for o caso). */
   aoDividir?: (id: string) => void;
+  /** "Programar dívida" do menu ⋯ (6.6): a janela da data combinada. A mãe dividida programa as partes. */
+  aoProgramar?: (id: string) => void;
   cadastros: CadastrosGrade;
   ordem: Ordem;
   aoOrdenar: (coluna: ColunaOrdem) => void;
@@ -277,6 +282,7 @@ type PropsLinha = {
   /** Cabeçalho da mãe dividida ou parte dela (História 3.8). */
   papel?: PapelNaGrade;
   aoDividir?: (id: string) => void;
+  aoProgramar?: (id: string) => void;
   mesTemFatura: boolean;
   /** "Pago parcialmente" (6.2): o que falta desta linha, derivado do núcleo; ausente nas outras. */
   falta?: number;
@@ -307,6 +313,7 @@ function LinhaGrade({
   semCaixa = false,
   papel,
   aoDividir,
+  aoProgramar,
   mesTemFatura,
   falta,
   atrasadoDesde,
@@ -320,6 +327,12 @@ function LinhaGrade({
   const nome = nomeExibido(l);
   const previsto = ehPrevistoNoMes(l, mesTemFatura);
   const textoAtraso = atrasadoDesde === undefined ? null : rotuloAtrasadoDesde(atrasadoDesde);
+  // Dívida programada (6.6): o selo "Programada · 06/04/27" some quando a linha já está paga e no Ajuste
+  // (que acompanha a parcela, e a parcela mostra o selo).
+  const programada =
+    !mae && papel !== "cabecalho" && ehDividaProgramada(l) && status?.conta_como_pago !== true
+      ? rotuloProgramada(l.vencimento_combinado as string)
+      : null;
   // Com Apelido, o Nome original vai ao lado, em cinza.
   const temApelido = nome !== l.nome;
   const rotulo = rotuloLinhaAcessivel({
@@ -337,6 +350,7 @@ function LinhaGrade({
           : (textoAtraso ?? status?.nome ?? null),
     verificar,
     previsto,
+    programada: programada ?? undefined,
     ajuste: mae ? { nomeMae: nomeExibido(mae), liquidoCentavos: liquidoCentavos(mae, ajustesDaMae) } : undefined,
     parteDe: papel === "parte" ? nome : undefined,
     dividido: papel === "cabecalho",
@@ -436,23 +450,28 @@ function LinhaGrade({
         </span>
       </td>
       <td className={CELULA}>
-        {papel === "cabecalho" ? null : falta !== undefined || atrasadoDesde !== undefined ? (
-          <span className="inline-flex items-center gap-1">
-            {falta !== undefined ? (
-              <SeloStatus variante="parcial" title={rotuloFalta(falta)}>
-                {TEXTOS_PAGAMENTO.pago_parcialmente}
-              </SeloStatus>
+        {papel === "cabecalho" ? null : (
+          <span className="inline-flex flex-wrap items-center gap-1">
+            {falta !== undefined || atrasadoDesde !== undefined ? (
+              <>
+                {falta !== undefined ? (
+                  <SeloStatus variante="parcial" title={rotuloFalta(falta)}>
+                    {TEXTOS_PAGAMENTO.pago_parcialmente}
+                  </SeloStatus>
+                ) : null}
+                {atrasadoDesde !== undefined ? (
+                  <SeloStatus variante="atrasado" title={rotuloAtrasadoDesde(atrasadoDesde)}>
+                    {ROTULO_ATRASADO}
+                  </SeloStatus>
+                ) : null}
+              </>
+            ) : status ? (
+              <SeloStatus variante={varianteDoStatus(status.conta_como_pago)}>{status.nome}</SeloStatus>
+            ) : programada === null ? (
+              <Vazio />
             ) : null}
-            {atrasadoDesde !== undefined ? (
-              <SeloStatus variante="atrasado" title={rotuloAtrasadoDesde(atrasadoDesde)}>
-                {ROTULO_ATRASADO}
-              </SeloStatus>
-            ) : null}
+            {programada === null ? null : <SeloStatus variante="programada">{programada}</SeloStatus>}
           </span>
-        ) : status ? (
-          <SeloStatus variante={varianteDoStatus(status.conta_como_pago)}>{status.nome}</SeloStatus>
-        ) : (
-          <Vazio />
         )}
       </td>
       <td className={cn(CELULA, "text-right")}>
@@ -470,6 +489,8 @@ function LinhaGrade({
                   },
                 ]
               : []),
+            // Dívida programada (6.6): na mãe dividida programa as partes; o Ajuste acompanha a parcela.
+            ...(aoProgramar && !mae ? [{ rotulo: TEXTOS_DIVIDA.programar, aoEscolher: () => aoProgramar(l.id) }] : []),
             // A parte não se exclui: desfaz-se a divisão.
             ...(papel === "parte"
               ? []
@@ -492,6 +513,7 @@ export function GradeLancamentos({
   ajustesPorMae = SEM_AJUSTES,
   maesDivididas = SEM_MAES,
   aoDividir,
+  aoProgramar,
   cadastros,
   ordem,
   aoOrdenar,
@@ -550,6 +572,7 @@ export function GradeLancamentos({
               mae={mae}
               papel={papel}
               aoDividir={aoDividir}
+              aoProgramar={aoProgramar}
               ajustesDaMae={mae ? (ajustesPorMae.get(mae.id) ?? []) : []}
               cadastros={cadastros}
               escolhidos={escolhidos}

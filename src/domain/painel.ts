@@ -44,6 +44,8 @@ export type LancamentoGrade = {
   divisao?: unknown;
   /** A Conta manual que gerou a linha (5.1): previsto enquanto o Mês não tem Fatura. */
   conta_manual_id?: string | null;
+  /** Dívida programada (6.6): a data combinada (`AAAA-MM-DD`); nula ou ausente, sem Dívida programada. */
+  vencimento_combinado?: string | null;
   /** Desempate das linhas sem `ordem_fatura` (o histórico da planilha, 3.10): a ordem em que a aba foi gravada. */
   created_at?: string | null;
 };
@@ -280,6 +282,8 @@ export function rotuloLinhaAcessivel(partes: {
   parteDe?: string;
   /** Mãe dividida (cabeçalho): "NOME, dividido, …". */
   dividido?: boolean;
+  /** Dívida programada (6.6): "Programada · 06/04/27", depois do Status. */
+  programada?: string;
 }): string {
   const ajuste = partes.ajuste;
   return [
@@ -290,6 +294,7 @@ export function rotuloLinhaAcessivel(partes: {
     ajuste ? rotuloLiquido(ajuste.liquidoCentavos) : rotuloParcelaFalada(partes.parcelaN, partes.parcelaTotal),
     partes.responsavel,
     partes.status ?? "",
+    partes.programada ?? "",
     partes.verificar ? TEXTOS_CONFERENCIA.verificar_lancamento : "",
   ]
     .filter((p) => p !== "")

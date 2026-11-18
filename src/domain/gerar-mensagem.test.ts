@@ -49,7 +49,7 @@ function l(extra: Partial<LancamentoParaMensagem> & { nome: string; valor_centav
   };
 }
 
-const OPCOES: OpcoesDaMensagem = { mes: MES, statusPagos: PAGOS, temFatura: true, incluirPrevistos: false };
+const OPCOES: OpcoesDaMensagem = { mes: MES, statusPagos: PAGOS, temFatura: true, incluirPrevistos: false, hoje: "2026-11-10" };
 const ids = (...linhas: LancamentoParaMensagem[]) => new Set(linhas.map((x) => x.id));
 const gerar = (selecao: ReadonlySet<string>, lancamentos: LancamentoParaMensagem[], opcoes: Partial<OpcoesDaMensagem> = {}, modelo = MODELO) =>
   gerarMensagem(modelo, projetarMensagem(selecao, lancamentos, { ...OPCOES, ...opcoes }));
@@ -222,9 +222,9 @@ describe("o que não entra, com o motivo", () => {
   it("um previsto pago ou de R$ 0,00 ainda é “previsto” quando a chave está desligada; ligada, vale o resto", () => {
     const previstoPago = l({ nome: "PP", valor_centavos: 100, lancado_por: "sistema", status_id: "pago" });
     const desligada = projetarMensagem(ids(previstoPago), [previstoPago], { ...OPCOES, temFatura: false });
-    expect(desligada.fora.porMotivo).toEqual({ pago: 0, zero: 0, previsto: 1 });
+    expect(desligada.fora.porMotivo).toEqual({ pago: 0, zero: 0, previsto: 1, programada: 0 });
     const ligada = projetarMensagem(ids(previstoPago), [previstoPago], { ...OPCOES, temFatura: false, incluirPrevistos: true });
-    expect(ligada.fora.porMotivo).toEqual({ pago: 1, zero: 0, previsto: 0 });
+    expect(ligada.fora.porMotivo).toEqual({ pago: 1, zero: 0, previsto: 0, programada: 0 });
   });
 
   it("sem Status vale “não pago” (AD-10): entra", () => {
@@ -260,7 +260,7 @@ describe("o que não entra, com o motivo", () => {
     const itens = [{ lancamento_id: quitada.id, valor_centavos: 5000 }];
     const p = projetarMensagem(ids(quitada), [quitada], { ...OPCOES, itens });
     expect(p.entram).toHaveLength(0);
-    expect(p.fora.porMotivo).toEqual({ pago: 1, zero: 0, previsto: 0 });
+    expect(p.fora.porMotivo).toEqual({ pago: 1, zero: 0, previsto: 0, programada: 0 });
     expect(p.idsPagos).toEqual([quitada.id]);
   });
 
@@ -284,12 +284,18 @@ describe("o que não entra, com o motivo", () => {
   });
 
   it("os textos do aviso, no singular e no plural", () => {
-    expect(rotuloItensDeFora(0, { pago: 0, zero: 0, previsto: 0 })).toBe("");
-    expect(rotuloItensDeFora(1, { pago: 1, zero: 0, previsto: 0 })).toBe("1 item não entra: 1 já pago");
-    expect(rotuloItensDeFora(5, { pago: 2, zero: 2, previsto: 1 })).toBe(
+    expect(rotuloItensDeFora(0, { pago: 0, zero: 0, previsto: 0, programada: 0 })).toBe("");
+    expect(rotuloItensDeFora(1, { pago: 1, zero: 0, previsto: 0, programada: 0 })).toBe("1 item não entra: 1 já pago");
+    expect(rotuloItensDeFora(5, { pago: 2, zero: 2, previsto: 1, programada: 0 })).toBe(
       `5 itens não entram: 2 já pagos, 2 de R$${ESPACO}0,00, 1 previsto`,
     );
-    expect(rotuloItensDeFora(2, { pago: 0, zero: 0, previsto: 2 })).toBe("2 itens não entram: 2 previstos");
+    expect(rotuloItensDeFora(2, { pago: 0, zero: 0, previsto: 2, programada: 0 })).toBe("2 itens não entram: 2 previstos");
+    expect(rotuloItensDeFora(1, { pago: 0, zero: 0, previsto: 0, programada: 1 })).toBe(
+      "1 item não entra: 1 dívida programada ainda não vencida",
+    );
+    expect(rotuloItensDeFora(3, { pago: 1, zero: 0, previsto: 0, programada: 2 })).toBe(
+      "3 itens não entram: 1 já pago, 2 dívidas programadas ainda não vencidas",
+    );
   });
 });
 

@@ -6,6 +6,7 @@ import { lerBlocos } from "@/domain/blocos";
 import { TOLERANCIA_ATRASO_PADRAO_DIAS } from "@/domain/configuracoes";
 import { atrasosDasLinhas } from "@/domain/atraso";
 import { hojeEmSaoPaulo } from "@/domain/datas";
+import { aReceber } from "@/domain/divida";
 import { alternarSelecao, alternarTodos, selecaoValida } from "@/domain/lancamento";
 import {
   TEXTOS_RECEBIMENTOS as T,
@@ -49,10 +50,12 @@ import { useToast } from "@/ui/Toast";
 import { useHoje } from "@/ui/use-hoje";
 import { CartaoDeCobranca } from "./CartaoDeCobranca";
 import { HistoricoDePagamentos } from "./HistoricoDePagamentos";
+import { ListaAReceber } from "./ListaAReceber";
 import { ListaEmAberto } from "./ListaEmAberto";
 
-// Recebimentos (Épico 6, FR-26, AD-11, UX-DR22). Duas seções independentes: os cartões por Bloco de cobrança (História
-// 6.5, esta tela) e o Histórico de Pagamentos (6.3, `HistoricoDePagamentos`, que lê os próprios dados).
+// Recebimentos (Épico 6, FR-26, AD-11, UX-DR22). Três seções: os cartões por Bloco de cobrança (História 6.5, esta
+// tela), "A receber" (6.6, as Dívidas programadas, `ListaAReceber`, calculadas aqui de `aReceber` sobre os mesmos
+// Lançamentos de todos os Meses) e o Histórico de Pagamentos (6.3, `HistoricoDePagamentos`, que lê os próprios dados).
 //
 // Cartões (6.5): um por Bloco marcado "Usar em Recebimentos". O Saldo pendente é a Fórmula do Bloco aplicada às
 // linhas de `projetarPendente` (o `restante` de tudo o que está em aberto, de TODOS os Meses, AD-10, AD-11); o selo
@@ -117,9 +120,10 @@ export function Recebimentos() {
             statusPagos,
             itens: itens.linhas,
             mesesComFatura: new Set(vencimentosDasFaturas.keys()),
+            hoje,
           })
         : [],
-    [pronto, todos.linhas, statusPagos, itens.linhas, vencimentosDasFaturas],
+    [pronto, todos.linhas, statusPagos, itens.linhas, vencimentosDasFaturas, hoje],
   );
   const atrasos = useMemo(
     () =>
@@ -134,6 +138,11 @@ export function Recebimentos() {
     [pronto, todos.linhas, hoje, tolerancia, statusPagos, ciclo.linhas, vencimentosDasFaturas, itens.linhas],
   );
   const cartoes = useMemo(() => montarCartoesDeCobranca(blocos, pendentes, atrasos), [blocos, pendentes, atrasos]);
+  // "A receber" (6.6): as Dívidas programadas em aberto (não dependem de haver Blocos de cobrança).
+  const dividas = useMemo(
+    () => (pronto ? aReceber(todos.linhas, { statusPagos, itens: itens.linhas, atrasos }) : []),
+    [pronto, todos.linhas, statusPagos, itens.linhas, atrasos],
+  );
 
   // A lista do Bloco aberto (some se o Bloco deixou de ser de cobrança ou foi excluído em outro aparelho).
   const aberto = verId === null ? undefined : cartoes.find((c) => c.id === verId);
@@ -273,6 +282,7 @@ export function Recebimentos() {
           {resumo.texto}
         </p>
       </section>
+      {erro ? null : <ListaAReceber linhas={dividas} cadastros={cadastros} carregando={!pronto} />}
       <HistoricoDePagamentos />
       {selecionados.size > 0 ? (
         <>

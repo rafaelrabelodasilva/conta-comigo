@@ -206,6 +206,12 @@ insert into public.lancamentos (
    'b0000000-0000-4000-8000-000000000a02', 'b0000000-0000-4000-8000-000000000b01',
    'b0000000-0000-4000-8000-000000000807');
 
+-- Dívida programada (História 6.6): a filha da Conta ganha a data combinada e a observação (as duas
+-- colunas novas de `lancamentos`, com texto acentuado e emoji como o resto).
+update public.lancamentos
+   set vencimento_combinado = '2027-04-06', vencimento_observacao = 'Combinado por WhatsApp: tudo no final ção 🐱'
+ where id = 'b0000000-0000-4000-8000-000000000808';
+
 -- Pagamentos (História 6.1): um Pagamento total com um item (o Status anterior e o
 -- aplicado) e um desfeito (excluído em lógico, com o item também), com Status nulo
 -- de antes e um Status arquivado de depois. Na História 6.2 entra um Pagamento parcial

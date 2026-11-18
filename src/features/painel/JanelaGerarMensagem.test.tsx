@@ -76,6 +76,7 @@ function props(extra: Partial<Entrada> = {}): PropsJanelaGerarMensagem {
         statusPagos: new Set(["pago"]),
         temFatura: x.temFatura,
         incluirPrevistos,
+        hoje: "2026-11-10",
       }),
   };
 }

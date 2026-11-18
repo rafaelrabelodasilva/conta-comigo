@@ -524,7 +524,7 @@ describe("Mês futuro: previsto, Bloco com “inclui previstos” e fim da grade
   });
 
   it("a mensagem deixa a Conta de fora (previsto) sem “Incluir previstos”, e inclui com ele", () => {
-    const opcoes = { mes: "2026-12", statusPagos: new Set<string>(), temFatura: false };
+    const opcoes = { mes: "2026-12", statusPagos: new Set<string>(), temFatura: false, hoje: "2026-12-10" };
     const selecao = new Set(["f1", "f2"]);
     const sem = projetarMensagem(selecao, todas, { ...opcoes, incluirPrevistos: false });
     expect(sem.entram).toEqual([]);
@@ -692,5 +692,119 @@ describe("pedidoMaterializar com a versão da Conta (História 5.4, corrida com 
     const { p_parcelas } = pedidoMaterializar([comoCadastro(conta(BOMBINHAS, "b1"))], "2027-11");
     expect(p_parcelas.some((p) => "conta_atualizada_em" in p)).toBe(false);
     expect(pedidoSalvarConta(conta(BOMBINHAS, "b1"), 1, "2027-11").p_parcelas.some((p) => "conta_atualizada_em" in p)).toBe(false);
+  });
+});
+
+describe("Dívida programada por parte (História 6.6, FR-27, Flow 5)", () => {
+  // Na parte do Lucas: "Dívida programada" com a data 06/04/27; Mãe e Casal seguem "Mensal".
+  const COM_DIVIDA: RascunhoDaConta = {
+    ...BOMBINHAS,
+    partes: [
+      { responsavel_id: MAE, texto: "106,00" },
+      { responsavel_id: CASAL, texto: "106,00" },
+      { responsavel_id: LUCAS, texto: "106,00", programada: true, vencimento: "2027-04-06" },
+    ],
+  };
+
+  it("a data vai na parte do Lucas da Divisão da Conta; as outras partes não levam data", () => {
+    const c = conta(COM_DIVIDA);
+    expect(c.divisao?.partes.map((p) => p.vencimento_combinado)).toEqual([undefined, undefined, "2027-04-06"]);
+  });
+
+  it("cada parcela leva a data só na parte do Lucas, e os valores continuam R$ 106,00 por parte (R$ 636,00 no total do Lucas)", () => {
+    const parcelas = parcelasDaConta(comoCadastro(conta(COM_DIVIDA)), horizonteDasContas("2026-11"));
+    expect(parcelas).toHaveLength(6);
+    for (const p of parcelas) {
+      expect(p.partes?.map((x) => x.valor_centavos)).toEqual([10_600, 10_600, 10_600]);
+      expect(p.partes?.map((x) => x.vencimento_combinado)).toEqual([undefined, undefined, "2027-04-06"]);
+    }
+    expect(parcelas.reduce((soma, p) => soma + (p.partes?.[2].valor_centavos ?? 0), 0)).toBe(63_600);
+  });
+
+  it("o pedido às RPCs leva a data no corpo das partes e na Divisão da Conta", () => {
+    const pedido = pedidoSalvarConta(conta(COM_DIVIDA), 1, "2027-11");
+    expect(pedido.p_conta.divisao?.partes[2]).toMatchObject({ responsavel_id: LUCAS, vencimento_combinado: "2027-04-06" });
+    expect(pedido.p_parcelas[0].partes?.[2]).toMatchObject({ responsavel_id: LUCAS, valor_centavos: 10_600, vencimento_combinado: "2027-04-06" });
+    expect(pedido.p_parcelas[0].partes?.[0]).not.toHaveProperty("vencimento_combinado");
+  });
+
+  it("a data é obrigatória e válida na parte programada", () => {
+    for (const vencimento of [undefined, "", "2027-02-30", "06/04/27", "1999-01-01"]) {
+      const a = avaliarFormularioConta("c1", {
+        ...COM_DIVIDA,
+        partes: [COM_DIVIDA.partes[0], COM_DIVIDA.partes[1], { responsavel_id: LUCAS, texto: "106,00", programada: true, vencimento }],
+      }, CTX);
+      expect(a.conta, String(vencimento)).toBeNull();
+      expect(a.erros.divisao, String(vencimento)).toBe("conta.vencimento_invalido");
+    }
+    expect(mensagem("conta.vencimento_invalido")).toBe("Escolha a data combinada de cada parte programada.");
+  });
+
+  it("voltar a 'Mensal' (programada: false) tira a data, mesmo com uma data ainda digitada", () => {
+    const c = conta({
+      ...COM_DIVIDA,
+      partes: [COM_DIVIDA.partes[0], COM_DIVIDA.partes[1], { responsavel_id: LUCAS, texto: "106,00", programada: false, vencimento: "2027-04-06" }],
+    });
+    expect(c.divisao?.partes.every((p) => p.vencimento_combinado === undefined)).toBe(true);
+  });
+
+  it("uma Conta de uma parte só não tem o seletor: a data digitada é ignorada", () => {
+    const c = conta({ ...BOMBINHAS, partes: [{ responsavel_id: MAE, texto: "", programada: true, vencimento: "2027-04-06" }] });
+    expect(c.divisao).toBeNull();
+    expect(parcelasDaConta(comoCadastro(c), "2026-12")[0].partes).toBeNull();
+  });
+
+  it("editar: o formulário abre com 'Dívida programada' e a data da parte", () => {
+    const r = rascunhoDaConta(comoCadastro(conta(COM_DIVIDA, "b2")));
+    expect(r.partes).toEqual([
+      { responsavel_id: MAE, texto: "106,00" },
+      { responsavel_id: CASAL, texto: "106,00" },
+      { responsavel_id: LUCAS, texto: "106,00", programada: true, vencimento: "2027-04-06" },
+    ]);
+  });
+
+  it("mudar só a data é mudança da Conta (senão 'Salvar' só fecharia); a mesma data não é", () => {
+    const salva = comoCadastro(conta(COM_DIVIDA, "b3"));
+    const outraData = conta(
+      { ...COM_DIVIDA, partes: [COM_DIVIDA.partes[0], COM_DIVIDA.partes[1], { ...COM_DIVIDA.partes[2], vencimento: "2027-05-06" }] },
+      "b3",
+    );
+    expect(contaMudou(salva, outraData)).toBe(true);
+    expect(contaMudou(salva, conta(COM_DIVIDA, "b3"))).toBe(false);
+    // Tirar a Dívida programada também muda.
+    expect(contaMudou(salva, conta(BOMBINHAS, "b3"))).toBe(true);
+  });
+
+  it("o cron (pedido do dono) leva a mesma data às filhas", () => {
+    const pedido = pedidoMaterializarDoDono("dono-1", [comoCadastro(conta(COM_DIVIDA, "b4"))], "2027-11");
+    expect(pedido.p_parcelas.every((p) => p.partes?.[2].vencimento_combinado === "2027-04-06")).toBe(true);
+  });
+
+  it("Mãe e Casal continuam com R$ 106,00 por mês nas mensagens; o Lucas só entra no Mês do vencimento", () => {
+    const parcelas = parcelasDaConta(comoCadastro(conta(COM_DIVIDA, "b5")), "2026-12");
+    const linhas: LancamentoParaMensagem[] = parcelas[0].partes!.map((p, i) => ({
+      id: `f${i}`,
+      mes: "2026-07",
+      excluido_em: null,
+      valor_centavos: p.valor_centavos,
+      responsavel_id: p.responsavel_id,
+      tipo_id: VIAGEM,
+      nome: "Bombinhas",
+      apelido: null,
+      parcela_n: 1,
+      parcela_total: 6,
+      status_id: null,
+      lancado_por: "manual",
+      ordem_fatura: i + 1,
+      vencimento_combinado: p.vencimento_combinado ?? null,
+    }));
+    const opcoes = (hoje: string) => ({ mes: "2026-07", statusPagos: new Set<string>(), temFatura: true, incluirPrevistos: false, hoje });
+    const ids = new Set(linhas.map((l) => l.id));
+    const em = (hoje: string) => projetarMensagem(ids, linhas, opcoes(hoje)).entram.map((i) => [i.id, i.valor_centavos]);
+    expect(em("2026-11-16")).toEqual([
+      ["f0", 10_600],
+      ["f1", 10_600],
+    ]);
+    expect(em("2027-04-01")).toHaveLength(3);
   });
 });

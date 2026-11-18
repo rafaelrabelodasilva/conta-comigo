@@ -13,6 +13,7 @@
 // - Classificada: `tipo_id` e (`responsavel_id` ou `divisao`). A mãe dividida
 //   tem Responsável nulo.
 
+import { ehData } from "./ciclo";
 import { dividirEmPartes, lerReais, type Fracao } from "./dinheiro";
 import type { Resultado } from "./resultado";
 
@@ -31,6 +32,12 @@ export type ParteDaDivisao = {
   denominador: number;
   /** A filha desta parte (só na mãe, gravada pela RPC). */
   filha_id?: string;
+  /**
+   * Dívida programada (História 6.6, AD-8): a data combinada (`AAAA-MM-DD`) desta parte. Só a
+   * Conta manual a usa, como receita: as filhas que ela materializa levam a data na coluna
+   * `vencimento_combinado`, que é quem vale (a mãe e a janela "Dividir" não a editam).
+   */
+  vencimento_combinado?: string;
 };
 
 export type Divisao = {
@@ -56,9 +63,15 @@ export function lerDivisao(dados: unknown): Divisao | null {
   const partes: ParteDaDivisao[] = [];
   for (const p of d.partes as unknown[]) {
     if (typeof p !== "object" || p === null) return null;
-    const { responsavel_id, numerador, denominador, filha_id } = p as Record<string, unknown>;
+    const { responsavel_id, numerador, denominador, filha_id, vencimento_combinado } = p as Record<string, unknown>;
     if (!ehTexto(responsavel_id) || !ehInteiroPositivo(numerador) || !ehInteiroPositivo(denominador)) return null;
-    partes.push({ responsavel_id, numerador, denominador, ...(ehTexto(filha_id) ? { filha_id } : {}) });
+    partes.push({
+      responsavel_id,
+      numerador,
+      denominador,
+      ...(ehTexto(filha_id) ? { filha_id } : {}),
+      ...(ehTexto(vencimento_combinado) && ehData(vencimento_combinado) ? { vencimento_combinado } : {}),
+    });
   }
   const divisao: Divisao = { modo: d.modo, partes };
   if (ehTexto(d.regra_chave)) divisao.regra_chave = d.regra_chave;
@@ -71,11 +84,20 @@ export function fracoesDaDivisao(d: Divisao): Fracao[] {
   return d.partes.map((p) => ({ numerador: p.numerador, denominador: p.denominador }));
 }
 
-/** O que o previsto, a herança e a Regra copiam: as partes sem `filha_id` e sem o Responsável de antes. */
-export function copiarDivisao(d: Divisao): Divisao {
+/**
+ * O que o previsto, a herança e a Regra copiam: as partes sem `filha_id` e sem o Responsável de
+ * antes. A data combinada de uma parte (6.6) NÃO é copiada, a não ser que se peça (`comVencimentos`:
+ * só a Conta manual, que materializa as filhas dela).
+ */
+export function copiarDivisao(d: Divisao, comVencimentos = false): Divisao {
   const copia: Divisao = {
     modo: d.modo,
-    partes: d.partes.map((p) => ({ responsavel_id: p.responsavel_id, numerador: p.numerador, denominador: p.denominador })),
+    partes: d.partes.map((p) => ({
+      responsavel_id: p.responsavel_id,
+      numerador: p.numerador,
+      denominador: p.denominador,
+      ...(comVencimentos && p.vencimento_combinado !== undefined ? { vencimento_combinado: p.vencimento_combinado } : {}),
+    })),
   };
   if (d.regra_chave !== undefined) copia.regra_chave = d.regra_chave;
   return copia;
@@ -93,6 +115,14 @@ export function mesmaDivisao(a: Divisao | null, b: Divisao | null): boolean {
         p.denominador === b.partes[i].denominador,
     )
   );
+}
+
+/** As duas Divisões têm a mesma data combinada em cada parte (6.6)? Ausente vale "sem data". */
+export function mesmosVencimentosDasPartes(a: Divisao | null, b: Divisao | null): boolean {
+  const datas = (d: Divisao | null) => (d === null ? [] : d.partes.map((p) => p.vencimento_combinado ?? null));
+  const x = datas(a);
+  const y = datas(b);
+  return x.length === y.length && x.every((v, i) => v === y[i]);
 }
 
 /** Todos os Responsáveis da Divisão estão ativos? (Um arquivado ou inexistente a invalida.) */
@@ -222,6 +252,8 @@ export type ParteRascunho = {
   status_id: string | null;
   /** A filha que esta linha já tem (modo edição). */
   filha_id?: string | null;
+  /** A data combinada da parte (6.6, só o formulário da Conta manual a preenche); nula ou ausente: sem data. */
+  vencimento_combinado?: string | null;
 };
 
 const erro = (codigo: string): { ok: false; erro: { codigo: string } } => ({ ok: false, erro: { codigo } });
@@ -307,6 +339,7 @@ export function avaliarRascunho(
           numerador: fracoes[i].numerador,
           denominador: fracoes[i].denominador,
           ...(p.filha_id ? { filha_id: p.filha_id } : {}),
+          ...(p.vencimento_combinado ? { vencimento_combinado: p.vencimento_combinado } : {}),
         })),
       },
     };
@@ -422,12 +455,17 @@ export type MaeParaDividir = {
   divisao: unknown;
 };
 
-/** Uma parte a gravar na filha; `status_id` ausente mantém (ou usa o da mãe numa filha nova). */
+/**
+ * Uma parte a gravar na filha; `status_id` ausente mantém (ou usa o da mãe numa filha nova). Com a
+ * data combinada (6.6, `AAAA-MM-DD`), a filha nasce Dívida programada; `null` limpa a que ela tem;
+ * ausente mantém.
+ */
 export type ParteParaGravar = {
   filha_id: string | null;
   responsavel_id: string;
   valor_centavos: number;
   status_id?: string | null;
+  vencimento_combinado?: string | null;
 };
 
 /** Um item de `dividir_lancamento(p_itens)`. */
@@ -632,5 +670,6 @@ export function partesDaImportacao(
     filha_id: filhasExistentes[i] ?? p.filha_id ?? null,
     responsavel_id: p.responsavel_id,
     valor_centavos: valores.valor[i],
+    ...(p.vencimento_combinado !== undefined ? { vencimento_combinado: p.vencimento_combinado } : {}),
   }));
 }

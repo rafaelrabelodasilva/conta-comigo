@@ -58,7 +58,7 @@ const lancamento = (id: string, extra: Partial<LancamentoParaPendente> = {}): La
 });
 
 const pendentes = (linhas: LancamentoParaPendente[], itens: { lancamento_id: string; valor_centavos: number }[] = []) =>
-  pendentesDosLancamentos(linhas, { statusPagos: new Set([PAGO]), itens });
+  pendentesDosLancamentos(linhas, { statusPagos: new Set([PAGO]), itens, hoje: "2026-10-15" });
 
 const SEM_ATRASO = new Map<string, string>();
 const lucas = bloco("b-lucas", "Lucas", resp("lucas"));
@@ -157,7 +157,7 @@ describe("montarCartoesDeCobranca", () => {
 
   it("previsto não conta no Saldo (nem a Conta manual de um Mês sem Fatura)", () => {
     const linhas = [lancamento("p", { lancado_por: "sistema" }), lancamento("c", { lancado_por: "manual", conta_manual_id: "k", mes: "2026-12" })];
-    const p = pendentesDosLancamentos(linhas, { statusPagos: new Set([PAGO]), itens: [], mesesComFatura: new Set(["2026-10"]) });
+    const p = pendentesDosLancamentos(linhas, { statusPagos: new Set([PAGO]), itens: [], mesesComFatura: new Set(["2026-10"]), hoje: "2026-10-15" });
     expect(montarCartoesDeCobranca([lucas], p, SEM_ATRASO)[0]?.saldoCentavos).toBe(0);
   });
 

@@ -27,6 +27,8 @@ export type PropsJanelaMensagemDoBloco = {
   lancamentos: readonly LancamentoParaMensagem[];
   mes: string;
   temFatura: boolean;
+  /** Hoje (`AAAA-MM-DD`, America/Sao_Paulo): a Dívida programada ainda não vencida fica de fora (6.6). */
+  hoje: string;
   /** Os Status que contam como pago. */
   statusPagos: ReadonlySet<string>;
   /** Os itens de Pagamento do Mês (6.2): um Pago parcialmente entra só com o que falta. */
@@ -43,6 +45,7 @@ export function JanelaMensagemDoBloco({
   lancamentos,
   mes,
   temFatura,
+  hoje,
   statusPagos,
   itens,
   itensProntos,
@@ -79,7 +82,7 @@ export function JanelaMensagemDoBloco({
       aoEditarModelo={aoEditarModelo}
       aguardando={!itensProntos}
       montar={(incluirPrevistos) =>
-        mensagemDoBloco(modelo, bloco.formula, lancamentos, { mes, statusPagos, temFatura, incluirPrevistos, itens }, nomes)
+        mensagemDoBloco(modelo, bloco.formula, lancamentos, { mes, statusPagos, temFatura, incluirPrevistos, itens, hoje }, nomes)
       }
     />
   );
