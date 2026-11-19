@@ -128,7 +128,7 @@ Hoje 19/11/26. Ciclo: fechamento 28, vencimento 06 (desde Jan/26). Tolerância 1
 - [x] Provas: núcleo (matriz), jsdom (a faixa, o toque, os interruptores, a virada do dia, carregando e erro), `test/integracao` (a migração) e o backup (as colunas no `dados-exemplo.sql`).
 - [x] Textos "desde 16/11/26" → "desde 17/11/26" (EXPERIENCE.md, epics.md); item da 5.4/6.4 fechado no `deferred-work.md`; `docs/infraestrutura.md`; `sprint-status.yaml` (7.4 em `review`).
 - [x] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura"): o `supabase` e o backup provam a migração de verdade.
-- [ ] `supabase db push` da migração, **só quando o Rafael pedir** (logo depois do merge).
+- [x] `supabase db push` da migração, feito em 19/11/2026 a pedido do Rafael (só ela estava pendente).
 - [x] `done` no sprint-status só depois do merge, em PR separada.
 
 ## Verification
