@@ -12,6 +12,7 @@ import { arredondar, formatarDinheiro } from "./dinheiro";
 import type { Divisao } from "./divisao";
 import { primeiraDiferenca, type ComposicaoTotalAPagar, type ConferenciaImportacao } from "./importacao-fatura";
 import type { AvisoDePagamento } from "./aviso-pagamento";
+import type { Lembrete } from "./lembretes";
 import type { ResumoDoPlano } from "./reimportacao";
 
 export const MENSAGENS = {
@@ -2462,4 +2463,43 @@ export function rotuloDaSerie(s: {
   if (s.parcelaAtual === null) return `${s.nome} → ${valor} por ${rotuloMeses(s.restantes)}${aPartirDe}`;
   const parcela = `${String(s.parcelaAtual).padStart(2, "0")}/${String(s.parcelaTotal).padStart(2, "0")}`;
   return `${s.nome} ${parcela} → ${valor} por mais ${rotuloMeses(s.restantes)}`;
+}
+
+// ------------------------------------------------------------ Lembretes (7.4)
+
+/** A faixa de lembretes dentro do app e os dois interruptores de Configurações → Aparência (FR-55). */
+export const TEXTOS_LEMBRETES = {
+  /** O nome da região da faixa para o leitor de tela. */
+  regiao: "Lembretes",
+  abrir_painel: "Abrir o Painel",
+  abrir_recebimentos: "Abrir Recebimentos",
+  /** O título do grupo de interruptores na seção Aparência. */
+  titulo_preferencias: "Lembretes",
+  ajuda_preferencias: "Aparecem numa faixa no topo do app. Desligado, o aviso não aparece mais.",
+  fechamento: "No dia do fechamento da fatura",
+  atraso: "Quando um Bloco tem itens atrasados",
+} as const;
+
+/**
+ * O texto da faixa. Fechamento: "A fatura de novembro fechou. Importe o PDF quando chegar" ("novembro" é o
+ * Mês da Fatura, o do vencimento). Atraso: "O Lucas tem R$ 115,16 em atraso desde 17/11/26" (a data é o
+ * primeiro dia de atraso, `primeiroDiaDeAtraso`). O nome do Bloco vai como está, depois de "O".
+ */
+export function textoDoLembrete(lembrete: Lembrete): string {
+  if (lembrete.tipo === "fechamento") {
+    return `A fatura de ${formatarNomeDoMes(lembrete.mes)} fechou. Importe o PDF quando chegar`;
+  }
+  return `O ${lembrete.blocoNome} tem ${formatarDinheiro(lembrete.valorCentavos)} em atraso desde ${formatarData(lembrete.desde)}`;
+}
+
+/** O verbo do toque na faixa: o destino dito em texto, não só pelo ícone. */
+export function rotuloAcaoDoLembrete(lembrete: Lembrete): string {
+  return lembrete.tipo === "fechamento" ? TEXTOS_LEMBRETES.abrir_painel : TEXTOS_LEMBRETES.abrir_recebimentos;
+}
+
+/** "E mais 1 Bloco com itens atrasados" / "E mais 2 Blocos com itens atrasados": o que passou do limite de faixas. */
+export function rotuloMaisAtrasos(quantidade: number): string {
+  return quantidade === 1
+    ? "E mais 1 Bloco com itens atrasados"
+    : `E mais ${quantidade} Blocos com itens atrasados`;
 }

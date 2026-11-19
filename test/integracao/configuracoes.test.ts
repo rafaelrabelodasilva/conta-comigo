@@ -146,4 +146,58 @@ describe.skipIf(!ligado)("Primeiro uso em configuracoes no Supabase local", () =
     const { data } = await outro.cliente.from("configuracoes").select("modelo_mensagem");
     expect(data).toEqual([]);
   });
+
+  it("lembretes: as duas colunas nascem ligadas, o dono liga e desliga cada uma e o banco não aceita nulo (História 7.4)", async () => {
+    const u = await local.criarUsuario("lembretes");
+    // A linha nasce só com a Aparência: as colunas novas ganham o padrão (é o que a linha antiga também ganha).
+    const { data: criada, error } = await u.cliente
+      .from("configuracoes")
+      .upsert({ aparencia: "claro" }, { onConflict: "owner_id" })
+      .select()
+      .single();
+    expect(error).toBeNull();
+    expect(criada!.lembrete_fechamento).toBe(true);
+    expect(criada!.lembrete_atraso).toBe(true);
+
+    // Desliga só o do fechamento; as outras colunas ficam como estavam.
+    const { data: sem, error: erroSem } = await u.cliente
+      .from("configuracoes")
+      .upsert({ lembrete_fechamento: false }, { onConflict: "owner_id" })
+      .select()
+      .single();
+    expect(erroSem).toBeNull();
+    expect(sem!.id).toBe(criada!.id);
+    expect(sem!.lembrete_fechamento).toBe(false);
+    expect(sem!.lembrete_atraso).toBe(true);
+    expect(sem!.aparencia).toBe("claro");
+
+    const { data: ambos } = await u.cliente
+      .from("configuracoes")
+      .upsert({ lembrete_atraso: false, lembrete_fechamento: true }, { onConflict: "owner_id" })
+      .select()
+      .single();
+    expect(ambos).toMatchObject({ lembrete_fechamento: true, lembrete_atraso: false });
+
+    // Nulo não passa (not null): o núcleo lê coluna ausente ou nula como ligada, mas o banco nunca guarda nulo.
+    for (const ruim of [{ lembrete_fechamento: null }, { lembrete_atraso: null }]) {
+      const { error: recusa } = await u.cliente
+        .from("configuracoes")
+        .upsert(ruim as never, { onConflict: "owner_id" })
+        .select()
+        .single();
+      expect(recusa, JSON.stringify(ruim)).not.toBeNull();
+    }
+    const { data: depois } = await u.cliente.from("configuracoes").select("lembrete_fechamento, lembrete_atraso").single();
+    expect(depois).toEqual({ lembrete_fechamento: true, lembrete_atraso: false });
+  });
+
+  it("outro usuário não lê nem muda os lembretes do dono (RLS)", async () => {
+    const dono = await local.criarUsuario("lembretes-dono");
+    const outro = await local.criarUsuario("lembretes-outro");
+    await dono.cliente.from("configuracoes").upsert({ lembrete_atraso: false }, { onConflict: "owner_id" });
+    const { data } = await outro.cliente.from("configuracoes").select("lembrete_atraso");
+    expect(data).toEqual([]);
+    const { data: lido } = await dono.cliente.from("configuracoes").select("lembrete_atraso").single();
+    expect(lido!.lembrete_atraso).toBe(false);
+  });
 });

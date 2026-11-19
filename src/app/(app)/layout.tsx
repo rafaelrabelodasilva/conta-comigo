@@ -2,12 +2,14 @@ import type { ReactNode } from "react";
 import { mensagem } from "@/domain/mensagens";
 import { FaixaSemConexao } from "@/features/conexao/FaixaSemConexao";
 import { AplicarTema } from "@/features/configuracoes/AplicarTema";
+import { FaixaDeLembretes } from "@/features/lembretes/FaixaDeLembretes";
 import { MenuLateral } from "@/features/revisar/MenuLateral";
 import { ToastProvider } from "@/ui/Toast";
 
 // Layout das telas autenticadas: menu lateral fixo (com o contador do Revisar) e conteúdo. Cada página
 // confere a sessão por conta própria (o proxy também confere).
-// A faixa "Sem conexão" fica no topo do conteúdo.
+// A faixa "Sem conexão" fica no topo do conteúdo e, logo abaixo dela, a faixa de Lembretes (7.4: fechamento da
+// fatura e Bloco com itens atrasados; fora do Primeiro uso, que tem layout próprio).
 // Abaixo de 700 px (celular, fora da v1), só o aviso de tela pequena.
 // `AplicarTema` segue a Aparência de Configurações em tempo real.
 export default function LayoutApp({ children }: { children: ReactNode }) {
@@ -18,6 +20,7 @@ export default function LayoutApp({ children }: { children: ReactNode }) {
         <MenuLateral />
         <div className="flex min-w-0 flex-1 flex-col">
           <FaixaSemConexao />
+          <FaixaDeLembretes />
           <main className="min-h-0 min-w-0 flex-1 overflow-auto p-4">{children}</main>
         </div>
       </div>

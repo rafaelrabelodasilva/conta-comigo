@@ -1517,7 +1517,7 @@ So that eu não esqueça de importar a fatura nem de cobrar (FR-55).
 
 **Given** um Bloco de cobrança que passa a ter itens atrasados
 **When** o app abre
-**Then** aparece a faixa "O Lucas tem R$ 115,16 em atraso desde 16/11/26", e tocar abre Recebimentos
+**Then** aparece a faixa "O Lucas tem R$ 115,16 em atraso desde 17/11/26", e tocar abre Recebimentos
 **And** "atrasado" usa a mesma `estaAtrasado` da grade
 
 **Given** Configurações → Aparência
