@@ -2351,8 +2351,6 @@ export const TEXTOS_PREVISAO = {
   aba_proximos_meses: "Próximos meses",
   aba_evolucao: "Evolução",
   aba_meu_gasto: "Meu gasto por Tipo",
-  em_breve: "Em breve",
-  em_breve_meu_gasto: "O seu gasto por Tipo ainda está sendo construído.",
   evolucao_minimo: "Evolução disponível a partir de 2 meses importados",
   evolucao_ajuda:
     "É a mesma soma que o Painel de cada Mês mostra no Bloco “Todos”. Só entram Meses com Fatura importada. Toque num Mês para abrir o Painel dele.",
@@ -2378,7 +2376,44 @@ export const TEXTOS_PREVISAO = {
   series: "Séries em andamento",
   series_ajuda: "As parcelas e as Contas manuais que ainda têm Meses pela frente.",
   ver_todas_as_series: "Mostrar só as maiores",
+  // Meu gasto por Tipo (História 7.3).
+  carregando_meu_gasto: "Carregando o seu gasto…",
+  meu_gasto_sem_bloco: "Escolha qual Bloco representa o seu gasto",
+  meu_gasto_ir_para_configuracoes: "Escolher em Configurações",
+  meu_gasto_vazio: "Nenhum lançamento neste mês",
+  meu_gasto_sem_gasto: "O seu Bloco não soma nada neste mês",
+  meu_gasto_grafico: "Gasto por Tipo",
+  meu_gasto_fixo: "Valor fixo do Bloco",
+  meu_gasto_fixo_ajuda: "Parte da Fórmula que não depende dos Lançamentos",
+  meu_gasto_ajuda: "Toque num Tipo para abrir o Painel do Mês só com ele.",
+  inclui_previstos: "inclui previstos",
 } as const;
+
+/** "Meu gasto em outubro/26 por Tipo": o título da aba. */
+export function tituloDoMeuGasto(mes: string): string {
+  return `Meu gasto em ${formatarMesExtenso(mes)} por Tipo`;
+}
+
+/** "pelo meu Bloco “Rafael + metade”: Rafael + (Casal ÷ 2) · total R$ 2.063,44": de onde vêm as barras. */
+export function rotuloDoBlocoDoMeuGasto(nomeDoBloco: string, formula: string, totalCentavos: number): string {
+  return `pelo meu Bloco “${nomeDoBloco}”: ${formula} · total ${formatarDinheiro(totalCentavos)}`;
+}
+
+/** O Bloco que não calcula: "O seu Bloco “Mãe” não calcula neste mês. Confira a Fórmula." */
+export function textoMeuGastoSemValor(nomeDoBloco: string, naoReparte: boolean): string {
+  return naoReparte
+    ? `O seu Bloco “${nomeDoBloco}” não se reparte por Tipo.`
+    : `O seu Bloco “${nomeDoBloco}” não calcula neste mês. Confira a Fórmula.`;
+}
+
+/**
+ * O nome acessível de uma barra de Tipo: "Casa: R$ 311,42, 15% do total. Abrir o Painel de Out/26 só com Casa". O valor
+ * e a porcentagem também estão em texto na linha: a cor e o comprimento da barra nunca são a única informação.
+ */
+export function rotuloDaBarraDoMeuGasto(nome: string, centavos: number, percentual: number | null, mes: string): string {
+  const fatia = percentual === null ? "" : `, ${percentual}% do total`;
+  return `${nome}: ${formatarDinheiro(centavos)}${fatia}. Abrir o Painel de ${formatarMes(mes)} só com ${nome}`;
+}
 
 /** O título da Evolução: "Últimos 6 meses com Fatura importada" (com menos Meses, os que existem: "Os 3 meses …"). */
 export function tituloDaEvolucao(quantidade: number): string {

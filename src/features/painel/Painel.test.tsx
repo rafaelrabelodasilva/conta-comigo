@@ -3562,6 +3562,92 @@ describe("Aberto por 'A receber' (História 6.6): Mês e Lançamento de outro M�
   });
 });
 
+describe("Aberto por 'Meu gasto por Tipo' (História 7.3): o Tipo do endereço já filtra a grade", () => {
+  const tiposDoMes = [
+    { id: "t-casa", nome: "Casa", arquivado: false, ordem: 1 },
+    { id: "t-viagem", nome: "Viagem", arquivado: false, ordem: 2 },
+    { id: "t-velho", nome: "Antigo", arquivado: true, ordem: 3 },
+  ];
+
+  function novembroComTipos() {
+    definir({
+      faturas: [outubro, novembro],
+      lancamentos: [
+        lanc("2026-11", { id: "n-casa", nome: "ALUGUEL", valor_centavos: 5000, tipo_id: "t-casa", responsavel_id: "r-rafael" }),
+        lanc("2026-11", { id: "n-casa-casal", nome: "LUZ", valor_centavos: 3000, tipo_id: "t-casa", responsavel_id: "r-casal" }),
+        lanc("2026-11", { id: "n-viagem", nome: "HOTEL", valor_centavos: 9000, tipo_id: "t-viagem", responsavel_id: "r-rafael" }),
+        lanc("2026-11", { id: "n-velho", nome: "ANTIGA", valor_centavos: 700, tipo_id: "t-velho", responsavel_id: "r-rafael" }),
+        lanc("2026-11", { id: "n-sem", nome: "SEM CLASSE", valor_centavos: 400, tipo_id: null, responsavel_id: "r-rafael" }),
+        lanc("2026-10", { id: "o-casa", nome: "OUTUBRO CASA", valor_centavos: 1111, tipo_id: "t-casa", responsavel_id: "r-rafael" }),
+        lanc("2026-10", { id: "o-viagem", nome: "OUTUBRO VIAGEM", valor_centavos: 2222, tipo_id: "t-viagem", responsavel_id: "r-rafael" }),
+      ],
+      tipos: tiposDoMes,
+    });
+  }
+
+  const nomesDaGrade = () => linhasDaGrade().map(nomeVisivel);
+
+  it("com o id de um Tipo: só as linhas dele, a pílula 'Tipo: Casa' e 'Limpar filtros' desfaz", async () => {
+    novembroComTipos();
+    render(<Painel titulo="Painel" mesInicial="2026-11" tipoInicial="t-casa" />, { wrapper: ToastProvider });
+    expect(nomesDaGrade().sort()).toEqual(["ALUGUEL", "LUZ"]);
+    expect(screen.getByRole("button", { name: "Tipo: Casa" }).className).toContain("bg-selection");
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: TEXTOS_FILTROS.limpar_filtros }));
+    expect(linhasDaGrade()).toHaveLength(5);
+  });
+
+  it("com null: só as linhas sem Tipo ('Sem tipo')", () => {
+    novembroComTipos();
+    render(<Painel titulo="Painel" mesInicial="2026-11" tipoInicial={null} />, { wrapper: ToastProvider });
+    expect(nomesDaGrade()).toEqual(["SEM CLASSE"]);
+    expect(screen.getByRole("button", { name: "Tipo: Sem tipo" })).toBeTruthy();
+  });
+
+  it("um Tipo arquivado também filtra (continua na lista do popover)", () => {
+    novembroComTipos();
+    render(<Painel titulo="Painel" mesInicial="2026-11" tipoInicial="t-velho" />, { wrapper: ToastProvider });
+    expect(nomesDaGrade()).toEqual(["ANTIGA"]);
+    expect(screen.getByRole("button", { name: "Tipo: Antigo" })).toBeTruthy();
+  });
+
+  it("o Mês pedido abre já filtrado: outubro mostra só as linhas de outubro daquele Tipo", () => {
+    novembroComTipos();
+    render(<Painel titulo="Painel" mesInicial="2026-10" tipoInicial="t-viagem" />, { wrapper: ToastProvider });
+    expect(falso.abrirMes).toHaveBeenCalledWith("2026-10");
+    expect(nomesDaGrade()).toEqual(["OUTUBRO VIAGEM"]);
+  });
+
+  it("o filtro vale ao trocar de Mês, como qualquer filtro de coluna", async () => {
+    novembroComTipos();
+    render(<Painel titulo="Painel" mesInicial="2026-11" tipoInicial="t-casa" />, { wrapper: ToastProvider });
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("button", { name: "Mês anterior" }));
+    await waitFor(() => expect(nomesDaGrade()).toEqual(["OUTUBRO CASA"]));
+  });
+
+  it("um id que o cadastro não tem não quebra: o filtro liga e a grade fica vazia, com 'Limpar filtros'", () => {
+    novembroComTipos();
+    render(<Painel titulo="Painel" mesInicial="2026-11" tipoInicial="t-fantasma" />, { wrapper: ToastProvider });
+    expect(linhasDaGrade()).toHaveLength(0);
+    expect(screen.getAllByRole("button", { name: TEXTOS_FILTROS.limpar_filtros }).length).toBeGreaterThan(0);
+  });
+
+  it("sem o parâmetro, a grade abre sem filtro nenhum (como antes)", () => {
+    novembroComTipos();
+    render(<Painel titulo="Painel" mesInicial="2026-11" />, { wrapper: ToastProvider });
+    expect(linhasDaGrade()).toHaveLength(5);
+    expect(screen.queryByRole("button", { name: TEXTOS_FILTROS.limpar_filtros })).toBeNull();
+    expect(screen.getByRole("button", { name: "Tipo", expanded: false })).toBeTruthy();
+  });
+
+  it("o hero e os Blocos seguem o Mês inteiro (o filtro só vale na grade)", () => {
+    novembroComTipos();
+    render(<Painel titulo="Painel" mesInicial="2026-11" tipoInicial="t-casa" />, { wrapper: ToastProvider });
+    expect(screen.getByRole("region", { name: "Fatura de novembro · vence 06/11/26" })).toBeTruthy();
+  });
+});
+
 describe("Excluir algo já pago (História 6.9, FR-46)", () => {
   const casal = {
     id: "b-casal",

@@ -128,13 +128,12 @@ describe("as abas", () => {
     for (const a of abas) expect(a.className).toContain("min-h-toque");
   });
 
-  it("Meu gasto por Tipo diz 'Em breve', sem prometer dado (a Evolução funciona desde a 7.2)", async () => {
+  it("Meu gasto por Tipo funciona desde a 7.3: sem 'meu Bloco' pede para escolher um (sem 'Em breve')", async () => {
     const u = userEvent.setup();
     render(<Previsao />);
     await u.click(screen.getByRole("tab", { name: "Meu gasto por Tipo" }));
-    expect(screen.getByText(T.em_breve)).toBeTruthy();
-    expect(screen.queryByRole("table")).toBeNull();
-    expect(screen.getByText(T.em_breve_meu_gasto)).toBeTruthy();
+    expect(screen.queryByText("Em breve")).toBeNull();
+    expect(screen.getByText(T.meu_gasto_sem_bloco)).toBeTruthy();
     expect((screen.getByRole("tab", { name: "Meu gasto por Tipo" })).getAttribute("aria-selected")).toBe("true");
   });
 

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ehMes } from "@/domain/ciclo";
+import { lerTipoDoEndereco } from "@/domain/meu-gasto";
 import { deveAbrirPrimeiroUso } from "@/domain/primeiro-uso";
 import type { Database } from "@/data/database.types";
 import { lerEstadoPrimeiroUso } from "@/data/estado-primeiro-uso";
@@ -22,7 +23,8 @@ const primeiro = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] 
 // Painel: o servidor decide o Primeiro uso; o conteúdo (o Painel do Mês com
 // o seletor, o cartão da fatura, a grade e a janela "Importar fatura") é o
 // componente cliente, que lê dos gerenciadores de Realtime. `?mes=AAAA-MM&lancamento=<id>` abre o Mês
-// e o painel do Lançamento (Recebimentos → "A receber", História 6.6); valor que não tem esse formato é ignorado.
+// e o painel do Lançamento (Recebimentos → "A receber", História 6.6); `?tipo=<id>` (ou `tipo=sem`) já filtra a grade por
+// aquele Tipo ("Meu gasto por Tipo", História 7.3); valor que não tem esse formato é ignorado.
 export default async function PaginaPainel({
   searchParams,
 }: {
@@ -45,5 +47,6 @@ export default async function PaginaPainel({
   const lancamento = primeiro(parametros.lancamento);
   const mesInicial = mes !== undefined && ehMes(mes) ? mes : undefined;
   const lancamentoInicial = mesInicial !== undefined && lancamento !== undefined && UUID.test(lancamento) ? lancamento : undefined;
-  return <Painel titulo={item.titulo} mesInicial={mesInicial} lancamentoInicial={lancamentoInicial} />;
+  const tipoInicial = lerTipoDoEndereco(parametros.tipo);
+  return <Painel titulo={item.titulo} mesInicial={mesInicial} lancamentoInicial={lancamentoInicial} tipoInicial={tipoInicial} />;
 }
