@@ -424,7 +424,7 @@
   evidence: Low. Decisões 8, 12 e 14 da 6.6. O filtro seria um valor calculado como o "Atrasado" (6.4); a Conta de uma parte só pediria guardar a data na `contas_manuais` (migração).
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-6-divida-programada.md`
   summary: O `next build` local termina com erro ("SecurityFatalError": `next@16.4.3` consta como afetado por uma vulnerabilidade conhecida, consulta ao registro do npm) depois de compilar e passar no TypeScript. Não foi atualizado na 6.6.
-  evidence: Medium. O piso do AD já era 16.4.3 (as versões até 16.4.0 tinham falha crítica); conferir o aviso e decidir a atualização à parte. O CI diz se o build lá passa.
+  evidence: FECHADA em 19/11/2026: `next` e `eslint-config-next` foram de 16.4.3 para 16.4.6 (a última 16.4.x), a pedido do Rafael, numa PR só disso. Lint, typecheck, testes e `npm run build` passam e o build não para mais no aviso. (Antes: medium. O piso do AD já era 16.4.3, as versões até 16.4.0 tinham falha crítica.)
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-7-cobrar-pendencias.md`
   summary: "Cobrar pendências" gera a mensagem do Bloco de cobrança INTEIRO, não de uma seleção nem de um Responsável avulso: o FR-28 diz "filtra os Lançamentos não pagos de um Responsável, seleciona e gera", mas o cartão (6.5) é por Bloco e a mensagem usa todos os Lançamentos em aberto dele. Não há como cobrar só alguns Meses ou só algumas linhas da lista "Ver".
   evidence: Low. Decisão 3 da 6.7. Se Rafael quiser cobrar só uma parte, é a Seleção da lista "Ver" alimentando `projetarCobrancaDoBloco` (um parâmetro de ids), sem mudar o formato.
