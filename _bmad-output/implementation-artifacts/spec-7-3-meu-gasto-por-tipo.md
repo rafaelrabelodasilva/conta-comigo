@@ -2,7 +2,7 @@
 title: 'História 7.3: Meu gasto por Tipo'
 type: 'feature'
 created: '2026-11-19'
-status: 'review'
+status: 'done'
 baseline_commit: '5df3699'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -128,8 +128,8 @@ Hoje 19/11/26. Responsáveis Rafael e Casal; Tipos Casa, Bobiças, Saúde e Anti
 - [x] Interface: a aba "Meu gasto por Tipo" com o seletor de Mês próprio, as barras horizontais e os estados; o Painel abre filtrado por `?tipo=`.
 - [x] Provas: núcleo (matriz: sem "meu Bloco"; "Rafael"; "Rafael + (Casal ÷ 2)"; Mês vazio; 1 Tipo; vários; "Sem tipo"; arquivado; crédito; Divisão; excluído; previsto; valor fixo; Fórmula que não calcula; arredondamento de borda e 600 casos sorteados; ordem e desempate; %; igual ao `resumirBloco` do Painel), jsdom (a aba, o seletor, o sem "meu Bloco" com o atalho, vazio, carregando, erro, o toque no Tipo e o endereço, o texto equivalente, o Realtime) e a regressão do Painel com o filtro novo e das abas "Próximos meses" e "Evolução".
 - [x] `sprint-status.yaml` (7.3 em `review`), `deferred-work.md`, `docs/infraestrutura.md` (sem migração).
-- [ ] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
-- [ ] `done` no sprint-status só depois do merge, em PR separada.
+- [x] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
+- [x] `done` no sprint-status só depois do merge, em PR separada.
 
 ## Verification
 
