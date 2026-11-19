@@ -14,7 +14,7 @@ import { criarClienteAdmin } from "@/server/supabase-admin";
 // 1. Materializa as Contas manuais até o Mês atual + 12 (`materializarContasDoDia`, AD-15). Essa leitura também
 //    mantém o projeto Supabase Free ativo.
 // 2. Avisa os lembretes do dia pelo Web Push (`notificarLembretesDoDia`, História 7.5, FR-55): as mesmas funções
-//    da faixa do app (`lembretesDasLinhas`), respeitando as preferências, com a chave inserida em
+//    da Central de Avisos (`lembretesDasLinhas`), respeitando as preferências, com a chave inserida em
 //    `lembretes_enviados` ANTES do envio. Roda mesmo que a materialização tenha falhado, e uma falha dele NUNCA
 //    desfaz o que já foi gravado nem muda a resposta: a resposta continua sendo só a da materialização.
 //

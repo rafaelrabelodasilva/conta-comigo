@@ -71,7 +71,7 @@ async function tocar(m: Montado, data: unknown) {
 
 const AVISO = {
   titulo: "Conta Comigo",
-  corpo: "O Lucas tem R$ 115,16 em atraso desde 17/11/26",
+  corpo: "Lucas: R$ 115,16 em atraso desde 17/11/26",
   destino: "/recebimentos",
   tag: "atraso:b-lucas",
 };

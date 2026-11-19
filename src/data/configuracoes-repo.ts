@@ -114,8 +114,8 @@ export function criarRepoConfiguracoes(deps: {
     },
 
     /**
-     * Liga ou desliga um tipo de lembrete (FR-55, 7.4): uma coluna só, otimista como a Aparência (a
-     * faixa some ou volta na hora e o banco desfaz se recusar). Antes de a migração da 7.4 entrar no
+     * Liga ou desliga um tipo de lembrete (FR-55, 7.4): uma coluna só, otimista como a Aparência (o
+     * aviso some ou volta na hora, da Central de Avisos, e o banco desfaz se recusar). Antes de a migração da 7.4 entrar no
      * banco, o upsert responde erro (a coluna não existe) e a tela avisa "Não foi possível salvar".
      */
     definirLembrete(tipo: TipoDeLembrete, ligado: boolean): Promise<ResultadoGravacao> {

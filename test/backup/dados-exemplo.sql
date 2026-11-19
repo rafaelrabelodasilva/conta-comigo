@@ -248,4 +248,12 @@ insert into public.lembretes_enviados (id, owner_id, tipo, referencia, dia) valu
   ('b0000000-0000-4000-8000-000000000f01', 'b0000000-0000-4000-8000-000000000001',
    'atraso', 'b0000000-0000-4000-8000-000000000a01', '2026-11-17');
 
+-- Central de Avisos (História 8.1): o aviso que o dono já leu (a mesma chave do lembrete avisado acima: tipo,
+-- referência, dia) e um de fechamento, que vale em todos os aparelhos.
+insert into public.avisos_lidos (id, owner_id, tipo, referencia, dia) values
+  ('b0000000-0000-4000-8000-000000000f11', 'b0000000-0000-4000-8000-000000000001',
+   'atraso', 'b0000000-0000-4000-8000-000000000a01', '2026-11-17'),
+  ('b0000000-0000-4000-8000-000000000f12', 'b0000000-0000-4000-8000-000000000001',
+   'fechamento', '2026-11', '2026-10-28');
+
 commit;

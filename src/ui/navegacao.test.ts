@@ -8,13 +8,14 @@ import {
 } from "./navegacao";
 
 describe("itens do menu", () => {
-  it("seis itens na ordem do EXPERIENCE.md, com as rotas da spec", () => {
+  it("sete itens na ordem do EXPERIENCE.md (Avisos antes de Config.), com as rotas da spec", () => {
     expect(ITENS_NAV.map((i) => [i.rotulo, i.rota])).toEqual([
       ["Painel", "/"],
       ["Revisar", "/revisar"],
       ["Receber", "/recebimentos"],
       ["Previsão", "/previsao"],
       ["Contas", "/contas"],
+      ["Avisos", "/avisos"],
       ["Config.", "/configuracoes"],
     ]);
   });
@@ -24,6 +25,12 @@ describe("itemAtivo", () => {
   it("ativa o item da rota", () => {
     expect(itemAtivo("/recebimentos")?.rotulo).toBe("Receber");
     expect(itemAtivo("/configuracoes")?.rotulo).toBe("Config.");
+  });
+
+  it("Avisos ativa em /avisos e o atalho 6 abre; Config. vira o 7", () => {
+    expect(itemAtivo("/avisos")?.rotulo).toBe("Avisos");
+    expect(destinoDoAtalho(tecla({ ctrlKey: true, key: "6", code: "Digit6" }))).toBe("/avisos");
+    expect(destinoDoAtalho(tecla({ ctrlKey: true, key: "7", code: "Digit7" }))).toBe("/configuracoes");
   });
 
   it("subrota ativa o item pai", () => {
@@ -69,8 +76,8 @@ describe("destinoDoAtalho", () => {
     expect(destinoDoAtalho(tecla({ ctrlKey: true }))).toBe("/recebimentos");
   });
 
-  it("1 a 6 seguem a ordem do menu", () => {
-    const destinos = [1, 2, 3, 4, 5, 6].map((n) =>
+  it("1 a 7 seguem a ordem do menu", () => {
+    const destinos = [1, 2, 3, 4, 5, 6, 7].map((n) =>
       destinoDoAtalho(tecla({ ctrlKey: true, key: String(n), code: `Digit${n}` })),
     );
     expect(destinos).toEqual(ITENS_NAV.map((i) => i.rota));
@@ -83,7 +90,7 @@ describe("destinoDoAtalho", () => {
   });
 
   it("outras teclas ignoram", () => {
-    expect(destinoDoAtalho(tecla({ ctrlKey: true, key: "7", code: "Digit7" }))).toBeNull();
+    expect(destinoDoAtalho(tecla({ ctrlKey: true, key: "8", code: "Digit8" }))).toBeNull();
     expect(destinoDoAtalho(tecla({ ctrlKey: true, key: "0", code: "Digit0" }))).toBeNull();
     expect(destinoDoAtalho(tecla({ ctrlKey: true, key: "a", code: "KeyA" }))).toBeNull();
   });

@@ -12,6 +12,7 @@ import { arredondar, formatarDinheiro } from "./dinheiro";
 import type { Divisao } from "./divisao";
 import { primeiraDiferenca, type ComposicaoTotalAPagar, type ConferenciaImportacao } from "./importacao-fatura";
 import type { AvisoDePagamento } from "./aviso-pagamento";
+import { LIMITE_DO_CONTADOR_DE_AVISOS } from "./avisos";
 import type { Lembrete } from "./lembretes";
 import type { EstadoDasNotificacoes } from "./notificacoes";
 import type { ResumoDoPlano } from "./reimportacao";
@@ -2468,48 +2469,85 @@ export function rotuloDaSerie(s: {
 
 // ------------------------------------------------------------ Lembretes (7.4)
 
-/** A faixa de lembretes dentro do app e os dois interruptores de Configurações → Aparência (FR-55). */
+/** Os lembretes (a Central de Avisos, 8.1) e os dois interruptores de Configurações → Aparência (FR-55). */
 export const TEXTOS_LEMBRETES = {
-  /** O nome da região da faixa para o leitor de tela. */
-  regiao: "Lembretes",
   abrir_painel: "Abrir o Painel",
   abrir_recebimentos: "Abrir Recebimentos",
   /** O título do grupo de interruptores na seção Aparência. */
   titulo_preferencias: "Lembretes",
-  ajuda_preferencias: "Aparecem numa faixa no topo do app. Desligado, o aviso não aparece mais.",
+  ajuda_preferencias:
+    "Aparecem na Central de Avisos (menu Avisos) e chegam como notificação. Desligado, o aviso não aparece, não conta e não chega.",
   fechamento: "No dia do fechamento da fatura",
   atraso: "Quando um Bloco tem itens atrasados",
 } as const;
 
 /**
- * O texto da faixa. Fechamento: "A fatura de novembro fechou. Importe o PDF quando chegar" ("novembro" é o
- * Mês da Fatura, o do vencimento). Atraso: "O Lucas tem R$ 115,16 em atraso desde 17/11/26" (a data é o
- * primeiro dia de atraso, `primeiroDiaDeAtraso`). O nome do Bloco vai como está, depois de "O".
+ * O texto do lembrete, o mesmo na Central de Avisos e na notificação do sistema (`avisoDoLembrete`).
+ * Fechamento: "A fatura de novembro fechou. Importe o PDF quando chegar" ("novembro" é o Mês da Fatura, o do
+ * vencimento). Atraso: "Mãe: R$ 1.783,73 em atraso desde 17/10/26" (a data é o primeiro dia de atraso,
+ * `primeiroDiaDeAtraso`). O nome do Bloco vai como está, sem artigo (o artigo não concorda com todos os nomes,
+ * "O Mãe").
  */
 export function textoDoLembrete(lembrete: Lembrete): string {
   if (lembrete.tipo === "fechamento") {
     return `A fatura de ${formatarNomeDoMes(lembrete.mes)} fechou. Importe o PDF quando chegar`;
   }
-  return `O ${lembrete.blocoNome} tem ${formatarDinheiro(lembrete.valorCentavos)} em atraso desde ${formatarData(lembrete.desde)}`;
+  return `${lembrete.blocoNome}: ${formatarDinheiro(lembrete.valorCentavos)} em atraso desde ${formatarData(lembrete.desde)}`;
 }
 
-/** O verbo do toque na faixa: o destino dito em texto, não só pelo ícone. */
+/** O verbo do toque no aviso: o destino dito em texto, não só pelo ícone. */
 export function rotuloAcaoDoLembrete(lembrete: Lembrete): string {
   return lembrete.tipo === "fechamento" ? TEXTOS_LEMBRETES.abrir_painel : TEXTOS_LEMBRETES.abrir_recebimentos;
 }
 
-/** "E mais 1 Bloco com itens atrasados" / "E mais 2 Blocos com itens atrasados": o que passou do limite de faixas. */
-export function rotuloMaisAtrasos(quantidade: number): string {
-  return quantidade === 1
-    ? "E mais 1 Bloco com itens atrasados"
-    : `E mais ${quantidade} Blocos com itens atrasados`;
+// ------------------------------------------------------- Central de Avisos (8.1)
+
+/** A tela `/avisos` e o item do menu (FR-55). */
+export const TEXTOS_AVISOS = {
+  /** O rótulo curto do menu lateral e o título da tela. */
+  menu: "Avisos",
+  titulo: "Avisos",
+  /** O nome da lista para o leitor de tela. */
+  lista: "Avisos",
+  marcar_um: "Marcar como lido",
+  marcar_tudo: "Marcar tudo como lido",
+  marcando_tudo: "Marcando…",
+  estado_novo: "Novo",
+  estado_lido: "Lido",
+  carregando: "Carregando os avisos",
+  vazio: "Nenhum aviso",
+  nenhum_novo: "Nenhum aviso novo",
+  /** Anunciado (região `status`) quando "Marcar tudo como lido" termina. */
+  todos_lidos: "Todos os avisos foram marcados como lidos",
+} as const;
+
+/** O número do contador do menu: "3", e "99+" acima de 99. */
+export function textoDoContadorDeAvisos(naoLidos: number): string {
+  return naoLidos > LIMITE_DO_CONTADOR_DE_AVISOS ? `${LIMITE_DO_CONTADOR_DE_AVISOS}+` : String(naoLidos);
+}
+
+/** O complemento falado do contador ("3 não lidos"), que o leitor de tela ouve depois de "Avisos,". */
+export function nomeDoContadorDeAvisos(naoLidos: number): string {
+  if (naoLidos > LIMITE_DO_CONTADOR_DE_AVISOS) return `mais de ${LIMITE_DO_CONTADOR_DE_AVISOS} não lidos`;
+  return naoLidos === 1 ? "1 não lido" : `${naoLidos} não lidos`;
+}
+
+/** O resumo do topo da Central: "1 aviso novo" / "3 avisos novos" / "Nenhum aviso novo". */
+export function rotuloDeAvisosNovos(naoLidos: number): string {
+  if (naoLidos === 0) return TEXTOS_AVISOS.nenhum_novo;
+  return naoLidos === 1 ? "1 aviso novo" : `${naoLidos} avisos novos`;
+}
+
+/** O resumo do atraso no topo da Central: "1 Bloco com itens atrasados" / "4 Blocos com itens atrasados". */
+export function rotuloResumoDeAtrasos(blocos: number): string {
+  return blocos === 1 ? "1 Bloco com itens atrasados" : `${blocos} Blocos com itens atrasados`;
 }
 
 // ------------------------------------------------- Notificações do sistema (7.5)
 
 /** Os textos de "Ativar notificações" (Configurações → Aparência → Lembretes) e do aviso do sistema (FR-55). */
 export const TEXTOS_NOTIFICACOES = {
-  /** O título do aviso do sistema (o corpo é o mesmo texto da faixa). */
+  /** O título do aviso do sistema (o corpo é o mesmo texto do aviso da Central). */
   titulo_aviso: "Conta Comigo",
   /** O corpo do aviso quando o service worker recebe um push que não consegue ler (todo push precisa mostrar algo). */
   corpo_padrao: "Você tem um lembrete no Conta Comigo.",
@@ -2543,9 +2581,9 @@ export type AvisoDoSistema = {
 };
 
 /**
- * O aviso do sistema de um lembrete. O corpo é EXATAMENTE o texto da faixa (`textoDoLembrete`): o conteúdo
- * da faixa é o limite do que pode aparecer na tela bloqueada (nada além do que ela mostra). O título é só o
- * nome do app.
+ * O aviso do sistema de um lembrete. O corpo é EXATAMENTE o texto do aviso da Central (`textoDoLembrete`): o
+ * conteúdo da Central é o limite do que pode aparecer na tela bloqueada (nada além do que ela mostra). O título é
+ * só o nome do app. O toque no aviso abre o `destino` do lembrete e não marca como lido (quem marca é a Central).
  */
 export function avisoDoLembrete(lembrete: Lembrete): AvisoDoSistema {
   return {

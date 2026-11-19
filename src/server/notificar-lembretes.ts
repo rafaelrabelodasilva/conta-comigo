@@ -16,7 +16,7 @@ import type { EnviarPush, InscricaoParaEnviar } from "./push";
 // materialização das Contas manuais, com a chave de serviço (ignora o RLS; por isso cada leitura filtra o dono).
 //
 // A regra NÃO mora aqui. Este arquivo só lê, chama o núcleo e envia:
-//   - `lembretesDasLinhas` (as mesmas funções e o mesmo contexto da faixa do app) diz quais lembretes existem hoje,
+//   - `lembretesDasLinhas` (as mesmas funções e o mesmo contexto da Central de Avisos) diz quais lembretes existem hoje,
 //     respeitando `configuracoes.lembrete_fechamento` e `lembrete_atraso`;
 //   - `lembretesParaNotificar` diz quais saem como aviso e com que chave (`tipo, referencia, dia`).
 //
@@ -27,10 +27,10 @@ import type { EnviarPush, InscricaoParaEnviar } from "./push";
 //      tarde nunca o receberia). Idem se todas as inscrições acabarem no meio.
 //   3. A inscrição que o serviço de push recusa com 404 ou 410 é apagada.
 //   4. Custo assumido: a linha de `lembretes_enviados` fica mesmo que o envio falhe para todos os aparelhos por
-//      outro erro (rede, 5xx): "nunca duas vezes" vale mais que a reentrega. A faixa do app segue sendo o canal.
+//      outro erro (rede, 5xx): "nunca duas vezes" vale mais que a reentrega. A Central de Avisos segue sendo o canal.
 //   5. Falhar aqui nunca desfaz a materialização nem vira 500: devolve contagens e a rota só registra.
 //
-// O texto do aviso é o da faixa (`avisoDoLembrete`, `mensagens.ts`). Nada daqui vai para log: nem o `endpoint`, nem as
+// O texto do aviso é o da Central (`avisoDoLembrete`, `mensagens.ts`). Nada daqui vai para log: nem o `endpoint`, nem as
 // chaves, nem o texto, nem nomes de Bloco, nem valores. Só as contagens do resultado.
 
 export type ClienteDeNotificacoes = Pick<SupabaseClient<Database>, "from">;
@@ -93,7 +93,7 @@ async function lerTudo<T>(pagina: (de: number, ate: number) => Pagina<T>): Promi
 
 type DadosDoDono = { linhas: LinhasParaLembretes; enviados: ChaveDeNotificacao[] };
 
-/** As linhas que o núcleo precisa para o dono, com as mesmas colunas e filtros da faixa. `null` se algo não leu. */
+/** As linhas que o núcleo precisa para o dono, com as mesmas colunas e filtros da Central. `null` se algo não leu. */
 async function lerDoDono(admin: ClienteDeNotificacoes, dono: string): Promise<DadosDoDono | null> {
   const [lancamentos, itens, blocos, status, faturas, ciclo, configuracoes, enviados] = await Promise.all([
     lerTudo((a, b) => admin.from("lancamentos").select(LANCAMENTOS).eq("owner_id", dono).order("id").range(a, b)),

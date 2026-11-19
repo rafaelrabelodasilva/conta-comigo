@@ -20,8 +20,8 @@ import { AtivarNotificacoes } from "./AtivarNotificacoes";
 //
 // Lembretes (História 7.4, FR-55): um interruptor por tipo (o do dia do fechamento e o do Bloco com itens
 // atrasados), guardados em `configuracoes.lembrete_fechamento` e `lembrete_atraso` (padrão ligado). A
-// gravação é otimista como a da Aparência: a faixa do app (`FaixaDeLembretes`) lê a mesma linha em memória
-// e some na hora. Logo abaixo, "Ativar notificações" (História 7.5): o aviso do sistema deste aparelho.
+// gravação é otimista como a da Aparência: a Central de Avisos (8.1, `useCentralDeAvisos`) lê a mesma linha em memória
+// e o aviso do tipo desligado some na hora (da lista e do contador). Logo abaixo, "Ativar notificações" (História 7.5): o aviso do sistema deste aparelho.
 
 const ROTULO_APARENCIA: Record<Aparencia, string> = {
   sistema: ROTULOS.aparencia_sistema,

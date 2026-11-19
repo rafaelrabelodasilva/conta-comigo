@@ -1,10 +1,11 @@
 // Lembretes do dia (História 7.4, FR-55, AD-13, AD-10, AD-1). Puro: "hoje" (`AAAA-MM-DD`, de
 // `hojeEmSaoPaulo`), o Ciclo, os Lançamentos, os Blocos e as preferências entram como parâmetro; o
 // núcleo não lê relógio nem banco. É calculado a cada vez e nunca gravado (a única coisa gravada é a
-// preferência de cada tipo, em `configuracoes`). A faixa do app usa esta função e, desde a 7.5, o Cron
-// diário usa a mesma (por `lembretesDasLinhas`, que monta o contexto das linhas cruas), então cada lembrete
-// leva o que as duas precisam (`tipo`, `referencia`, `destino`). O aviso do sistema (`lembretesParaNotificar`)
-// é um evento por cima desse estado: quais lembretes saem e com que chave (`chaveDeNotificacao`).
+// preferência de cada tipo, em `configuracoes`). A Central de Avisos (História 8.1, `avisos.ts`) usa esta
+// função e, desde a 7.5, o Cron diário usa a mesma (por `lembretesDasLinhas`, que monta o contexto das
+// linhas cruas), então cada lembrete leva o que os dois precisam (`tipo`, `referencia`, `destino`). O aviso
+// do sistema (`lembretesParaNotificar`) é um evento por cima desse estado: quais lembretes saem e com que
+// chave (`chaveDeNotificacao`); a mesma chave diz o que a Central considera lido (`avisos_lidos`).
 //
 // Dois tipos de lembrete:
 //
@@ -34,12 +35,15 @@ import { linhaDaFormulaPendente, pendentesDosLancamentos, type LancamentoParaPen
 import { lerBlocos, type Bloco, type LinhaDoBloco } from "./blocos";
 import { TOLERANCIA_ATRASO_PADRAO_DIAS } from "./configuracoes";
 
-/** Os tipos de lembrete, na ordem em que a faixa e as preferências os mostram. */
+/** Os tipos de lembrete, na ordem em que a Central e as preferências os mostram. */
 export const TIPOS_DE_LEMBRETE = ["fechamento", "atraso"] as const;
 
 export type TipoDeLembrete = (typeof TIPOS_DE_LEMBRETE)[number];
 
-/** Cada tipo pode ser ligado ou desligado em Configurações → Aparência (FR-55). */
+/**
+ * Cada tipo pode ser ligado ou desligado em Configurações → Aparência (FR-55). Desligado, o aviso não aparece na
+ * Central, não conta no menu e não chega como notificação.
+ */
 export type PreferenciasDeLembretes = Record<TipoDeLembrete, boolean>;
 
 /** Os dois ligados: o padrão do banco e o que vale enquanto as colunas ainda não existem. */
@@ -52,9 +56,6 @@ export const PREFERENCIAS_DE_LEMBRETES_PADRAO: PreferenciasDeLembretes = { fecha
  * mais do que a falta da Fatura no Painel.
  */
 export const DIAS_DO_LEMBRETE_DE_FECHAMENTO = 5;
-
-/** Quantas faixas de atraso a tela mostra de uma vez; as outras viram "e mais N". */
-export const LIMITE_DE_FAIXAS_DE_ATRASO = 3;
 
 /** As colunas de `configuracoes` que dizem quais lembretes estão ligados; ausente ou nula vale ligado. */
 export type LinhaDePreferenciasDeLembretes = {
@@ -77,7 +78,7 @@ export type LembreteDeFechamento = {
   /** O Mês da Fatura que fechou (`AAAA-MM`). Estável: o mesmo durante toda a janela do lembrete. */
   referencia: string;
   mes: string;
-  /** O dia do fechamento (`AAAA-MM-DD`): a 7.5 só notifica quando `hoje` é este dia. */
+  /** O dia do fechamento (`AAAA-MM-DD`): é o `dia` da chave do aviso (`chaveDeNotificacao`). */
   fechouEm: string;
   /** Onde o toque leva: o Painel do Mês. */
   destino: string;
@@ -216,7 +217,7 @@ function lembretesDeAtraso(
 }
 
 /**
- * Os lembretes de `hoje`, na ordem em que a faixa os mostra: primeiro os de fechamento (por Mês),
+ * Os lembretes de `hoje`, na ordem em que a Central os mostra: primeiro os de fechamento (por Mês),
  * depois os de atraso (na ordem dos Blocos). Um tipo desligado nas `preferencias` não aparece e nem é
  * calculado. `ciclo` é o histórico de `config_ciclo`; `blocosDeCobranca` são os Blocos "Usar em
  * Recebimentos" (os outros que vierem são ignorados). `hoje` inválido: nenhum lembrete.
@@ -241,9 +242,9 @@ export function lembretesDoDia(
 }
 
 /**
- * As linhas cruas do banco que os lembretes leem (História 7.5): as MESMAS na faixa do app (que as tem dos
+ * As linhas cruas do banco que os lembretes leem (História 7.5): as MESMAS na Central de Avisos (que as tem dos
  * gerenciadores de Realtime) e no Cron (que as lê com a chave de serviço). Montar o `ContextoDeLembretes`
- * aqui, e só aqui, é o que impede o aviso do sistema de divergir da faixa (AD-10, AD-13).
+ * aqui, e só aqui, é o que impede o aviso do sistema de divergir da Central (AD-10, AD-13).
  */
 export type LinhasParaLembretes = {
   /** `config_ciclo`. */
@@ -262,7 +263,7 @@ export type LinhasParaLembretes = {
   configuracao: (LinhaDePreferenciasDeLembretes & { tolerancia_atraso_dias?: number | null }) | null | undefined;
 };
 
-/** Os lembretes de `hoje` a partir das linhas cruas: o que a faixa e o Cron chamam. Nada é gravado. */
+/** Os lembretes de `hoje` a partir das linhas cruas: o que a Central e o Cron chamam. Nada é gravado. */
 export function lembretesDasLinhas(hoje: string, linhas: LinhasParaLembretes): Lembrete[] {
   return lembretesDoDia(
     hoje,
@@ -279,7 +280,10 @@ export function lembretesDasLinhas(hoje: string, linhas: LinhasParaLembretes): L
   );
 }
 
-/** A chave de `lembretes_enviados` (a restrição única, por dono): o que já foi avisado. */
+/**
+ * A chave de `lembretes_enviados` e de `avisos_lidos` (a restrição única, por dono): o que já foi avisado pelo
+ * sistema e o que já foi lido na Central. As duas tabelas usam a mesma forma de propósito.
+ */
 export type ChaveDeNotificacao = {
   tipo: TipoDeLembrete;
   referencia: string;
@@ -291,10 +295,11 @@ export type ChaveDeNotificacao = {
 export type NotificacaoDeLembrete = ChaveDeNotificacao & { lembrete: Lembrete };
 
 /**
- * A chave do aviso do sistema de um lembrete (História 7.5, AD-13). Um aviso é um EVENTO; a faixa é um estado.
+ * A chave de um lembrete (História 7.5, AD-13; a Central de Avisos, 8.1, a usa para o "lido"). Um aviso é um EVENTO; o
+ * lembrete é um estado.
  *
  * - Fechamento: `(fechamento, Mês da Fatura, dia do fechamento)`. Sai uma vez por fechamento, e como a chave é
- *   o dia do fechamento (não "hoje"), um Cron que falhou no dia ainda avisa nos dias seguintes da janela da faixa
+ *   o dia do fechamento (não "hoje"), um Cron que falhou no dia ainda avisa nos dias seguintes da janela do lembrete
  *   sem duplicar.
  * - Atraso: `(atraso, id do Bloco, desde)`. Avisa quando o Bloco passa a ter item atrasado, e de novo só quando o
  *   "desde" muda (um atraso novo depois de o Bloco quitar tudo, ou o mais antigo pago com outro ainda em atraso).
@@ -306,52 +311,29 @@ export function chaveDeNotificacao(lembrete: Lembrete): ChaveDeNotificacao {
     : { tipo: "atraso", referencia: lembrete.referencia, dia: lembrete.desde };
 }
 
-const textoDaChave = (c: ChaveDeNotificacao) => `${c.tipo}|${c.referencia}|${c.dia}`;
+/** A chave como texto, para comparar chaves (o Cron e a Central de Avisos usam a mesma). */
+export function textoDaChaveDeNotificacao(c: { tipo: string; referencia: string; dia: string }): string {
+  return `${c.tipo}|${c.referencia}|${c.dia}`;
+}
 
 /**
- * Quais dos lembretes do dia saem como aviso do sistema (História 7.5): só os que a faixa MOSTRA (os de fechamento e
- * os três primeiros de atraso, `lembretesParaExibir`: o aviso nunca leva nome nem valor que a faixa não leva) e
- * ainda não enviados (`jaEnviados` é o que está em `lembretes_enviados`). A ordem é a da faixa. As preferências já
- * valeram em `lembretesDoDia`, e quem decide se há aparelho inscrito é o servidor (sem inscrição, nada é gravado).
+ * Quais dos lembretes do dia saem como aviso do sistema (História 7.5) e ainda não foram enviados (`jaEnviados` é o
+ * que está em `lembretes_enviados`). Desde a 8.1, TODOS os lembretes novos saem, de fechamento e de atraso, sem limite:
+ * a Central de Avisos mostra todos, então o aviso do sistema também os traz (antes só saíam os 3 primeiros Blocos).
+ * A ordem é a da Central. As preferências já valeram em `lembretesDoDia`, e quem decide se há aparelho inscrito é o
+ * servidor (sem inscrição, nada é gravado). Marcar um aviso como lido na Central não interfere aqui (`avisos_lidos` é
+ * outra tabela), nem tocar no aviso do sistema marca como lido.
  */
 export function lembretesParaNotificar(
   lembretes: readonly Lembrete[],
   jaEnviados: readonly ChaveDeNotificacao[],
 ): NotificacaoDeLembrete[] {
-  const enviados = new Set(jaEnviados.map(textoDaChave));
+  const enviados = new Set(jaEnviados.map(textoDaChaveDeNotificacao));
   const saida: NotificacaoDeLembrete[] = [];
-  for (const lembrete of lembretesParaExibir(lembretes).visiveis) {
+  for (const lembrete of lembretes) {
     const chave = chaveDeNotificacao(lembrete);
-    if (enviados.has(textoDaChave(chave))) continue;
+    if (enviados.has(textoDaChaveDeNotificacao(chave))) continue;
     saida.push({ ...chave, lembrete });
   }
   return saida;
-}
-
-/** O que a faixa desenha: os lembretes até o limite de atraso e quantos de atraso ficaram de fora. */
-export type LembretesParaExibir = {
-  visiveis: Lembrete[];
-  /** Quantos lembretes de atraso passaram do limite ("e mais 2 com itens atrasados"). */
-  maisAtrasos: number;
-};
-
-/** Corta os lembretes de atraso em `limite` (os de fechamento nunca são cortados). */
-export function lembretesParaExibir(
-  lembretes: readonly Lembrete[],
-  limite: number = LIMITE_DE_FAIXAS_DE_ATRASO,
-): LembretesParaExibir {
-  const visiveis: Lembrete[] = [];
-  let atrasos = 0;
-  let maisAtrasos = 0;
-  for (const l of lembretes) {
-    if (l.tipo === "atraso") {
-      atrasos += 1;
-      if (atrasos > limite) {
-        maisAtrasos += 1;
-        continue;
-      }
-    }
-    visiveis.push(l);
-  }
-  return { visiveis, maisAtrasos };
 }

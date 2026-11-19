@@ -155,7 +155,7 @@ describe("notificarLembretesDoDia: o que roda e o que pula", () => {
 });
 
 describe("notificarLembretesDoDia: inserir antes de enviar", () => {
-  it("o atraso do Lucas: insere (atraso, Bloco, desde) ANTES do primeiro envio e envia o texto da faixa a cada aparelho", async () => {
+  it("o atraso do Lucas: insere (atraso, Bloco, desde) ANTES do primeiro envio e envia o texto do aviso a cada aparelho", async () => {
     const { resultado, banco, enviados } = await rodar(cenario());
     expect(resultado).toEqual({ pulou: null, enviadas: 1, ignoradas: 0, inscricoesApagadas: 0, falhas: 0 });
 
@@ -170,13 +170,13 @@ describe("notificarLembretesDoDia: inserir antes de enviar", () => {
     const aviso = JSON.parse(enviados[0].corpo);
     expect(aviso).toEqual({
       titulo: "Conta Comigo",
-      corpo: expect.stringMatching(/^O Lucas tem R\$\s115,16 em atraso desde 17\/11\/26$/),
+      corpo: expect.stringMatching(/^Lucas: R\$\s115,16 em atraso desde 17\/11\/26$/),
       destino: "/recebimentos",
       tag: "atraso:b-lucas",
     });
   });
 
-  it("o corpo enviado é o texto do lembrete da faixa (uma fonte só), e leva o destino para o toque", async () => {
+  it("o corpo enviado é o texto do lembrete da Central (uma fonte só), e leva o destino para o toque", async () => {
     const { enviados } = await rodar(cenario());
     const aviso = JSON.parse(enviados[0].corpo);
     const lembrete = {
@@ -291,7 +291,7 @@ describe("notificarLembretesDoDia: inserir antes de enviar", () => {
     expect(enviados).toEqual([]);
   });
 
-  it("só os lembretes que a faixa mostra: 5 Blocos atrasados são 3 avisos", async () => {
+  it("sem limite (8.1): 5 Blocos atrasados são 5 avisos, cada chave inserida antes do envio", async () => {
     const nomes = ["Ana", "Beto", "Caio", "Duda", "Eva"];
     const { resultado, banco } = await rodar(
       cenario({
@@ -299,8 +299,33 @@ describe("notificarLembretesDoDia: inserir antes de enviar", () => {
         lancamentos: nomes.map((n, i) => lancamento(`l${i}`, n.toLowerCase())),
       }),
     );
-    expect(resultado.enviadas).toBe(3);
-    expect(insercoes(banco.eventos).map((e) => (e as { linha: Linha }).linha.referencia)).toEqual(["b-Ana", "b-Beto", "b-Caio"]);
+    expect(resultado.enviadas).toBe(5);
+    expect(insercoes(banco.eventos).map((e) => (e as { linha: Linha }).linha.referencia)).toEqual([
+      "b-Ana",
+      "b-Beto",
+      "b-Caio",
+      "b-Duda",
+      "b-Eva",
+    ]);
+  });
+
+  it("os já avisados não saem de novo: só o 4º e o 5º Bloco (a rajada acontece uma vez)", async () => {
+    const nomes = ["Ana", "Beto", "Caio", "Duda", "Eva"];
+    const { resultado, banco } = await rodar(
+      cenario({
+        blocos: nomes.map((n, i) => bloco(`b-${n}`, n, n.toLowerCase(), i + 1)),
+        lancamentos: nomes.map((n, i) => lancamento(`l${i}`, n.toLowerCase())),
+        lembretes_enviados: ["Ana", "Beto", "Caio"].map((n) => ({
+          id: `e-${n}`,
+          owner_id: DONO,
+          tipo: "atraso",
+          referencia: `b-${n}`,
+          dia: "2026-11-17",
+        })),
+      }),
+    );
+    expect(resultado.enviadas).toBe(2);
+    expect(insercoes(banco.eventos).map((e) => (e as { linha: Linha }).linha.referencia)).toEqual(["b-Duda", "b-Eva"]);
   });
 });
 

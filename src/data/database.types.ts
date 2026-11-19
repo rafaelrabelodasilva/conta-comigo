@@ -39,6 +39,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      avisos_lidos: {
+        Row: {
+          created_at: string
+          dia: string
+          id: string
+          owner_id: string
+          referencia: string
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          dia: string
+          id?: string
+          owner_id?: string
+          referencia: string
+          tipo: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          dia?: string
+          id?: string
+          owner_id?: string
+          referencia?: string
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       blocos: {
         Row: {
           created_at: string
