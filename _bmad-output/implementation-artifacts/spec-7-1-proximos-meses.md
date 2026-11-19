@@ -2,7 +2,7 @@
 title: 'História 7.1: Próximos meses'
 type: 'feature'
 created: '2026-11-19'
-status: 'review'
+status: 'done'
 baseline_commit: 'e4ad8c0'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -114,8 +114,8 @@ Hoje 19/11/26: Mês atual 2026-11, janela Dez/26 a Mai/27. Responsáveis Rafael 
 - [x] Interface: as abas (guardadas), "Próximos meses", "Em breve" nas outras duas; `page.tsx`.
 - [x] Provas: núcleo (matriz), jsdom (a tela, o seletor, a aba guardada e sem armazenamento, os estados, o toque no Mês, o texto equivalente ao gráfico) e a amarra com o Painel.
 - [x] `sprint-status.yaml` (7.1 em `review`, `epic-7: in-progress`), `deferred-work.md`, `docs/infraestrutura.md` (sem migração).
-- [ ] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
-- [ ] `done` no sprint-status só depois do merge, em PR separada.
+- [x] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
+- [x] `done` no sprint-status só depois do merge, em PR separada.
 
 ## Verification
 
