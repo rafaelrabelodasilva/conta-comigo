@@ -143,3 +143,15 @@ describe("SecaoAparencia", () => {
     });
   });
 });
+
+describe("SecaoAparencia: texto de ajuda dos Lembretes (História 8.1)", () => {
+  it("diz que o aviso mora na Central de Avisos e que, desligado, não aparece, não conta e não chega", () => {
+    falso.linhas = [];
+    montar();
+    const ajuda = screen.getByText(L.ajuda_preferencias);
+    expect(ajuda.textContent).toContain("Central de Avisos");
+    expect(ajuda.textContent).toContain("não aparece, não conta e não chega");
+    // A faixa no topo das telas acabou.
+    expect(ajuda.textContent).not.toContain("faixa");
+  });
+});

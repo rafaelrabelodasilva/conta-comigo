@@ -12,9 +12,6 @@ vi.mock("@/features/configuracoes/AplicarTema", () => ({ AplicarTema: () => <i d
 // A faixa lê o detector de conexão; aqui só importa onde ela fica.
 vi.mock("@/features/conexao/FaixaSemConexao", () => ({ FaixaSemConexao: () => <b data-teste="faixa" /> }));
 
-// A faixa de Lembretes lê os gerenciadores de Realtime; aqui só importa onde ela fica (logo abaixo da de conexão).
-vi.mock("@/features/lembretes/FaixaDeLembretes", () => ({ FaixaDeLembretes: () => <u data-teste="lembretes" /> }));
-
 const { default: LayoutApp } = await import("./layout");
 
 describe("layout das telas autenticadas", () => {
@@ -28,6 +25,11 @@ describe("layout das telas autenticadas", () => {
     expect(html).toContain('<i data-teste="tema"></i>');
   });
 
+  it("não tem mais a faixa de Lembretes: os avisos moram na Central (menu Avisos)", () => {
+    expect(html).not.toContain("lembretes");
+    expect(html).not.toContain('role="status" aria-label="Lembretes"');
+  });
+
   it("abaixo de 700 px mostra só o aviso de tela pequena", () => {
     const css = readFileSync(
       fileURLToPath(new URL("../globals.css", import.meta.url)),
@@ -35,7 +37,7 @@ describe("layout das telas autenticadas", () => {
     );
     expect(css).toMatch(/--breakpoint-app:\s*700px/);
     // O app (menu + conteúdo) fica escondido até o ponto `app`…
-    expect(html).toMatch(/<div class="hidden h-dvh app:flex"><nav data-teste="menu"><\/nav><div[^>]*><b data-teste="faixa"><\/b><u data-teste="lembretes"><\/u><main[^>]*><p>conteúdo<\/p><\/main><\/div><\/div>/);
+    expect(html).toMatch(/<div class="hidden h-dvh app:flex"><nav data-teste="menu"><\/nav><div[^>]*><b data-teste="faixa"><\/b><main[^>]*><p>conteúdo<\/p><\/main><\/div><\/div>/);
     // …e o aviso some a partir dele.
     expect(html).toContain(
       `<div class="flex min-h-dvh items-center justify-center p-6 text-center app:hidden"><p role="status" class="max-w-xs texto-title">${mensagem("app.tela_pequena")}</p></div>`,

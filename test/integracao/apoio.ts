@@ -53,6 +53,7 @@ export function supabaseLocal(prefixo: string) {
 
   async function limpar() {
     for (const u of usuarios) {
+      await admin.from("avisos_lidos").delete().eq("owner_id", u.id);
       await admin.from("lembretes_enviados").delete().eq("owner_id", u.id);
       await admin.from("push_inscricoes").delete().eq("owner_id", u.id);
       await admin.from("pagamento_itens").delete().eq("owner_id", u.id);
@@ -86,7 +87,7 @@ export function supabaseLocal(prefixo: string) {
  */
 export async function esperarEvento<T>(
   ouvinte: Cliente,
-  tabela: "status" | "configuracoes" | "config_ciclo" | "faturas" | "fatura_cartoes" | "lancamentos" | "regras" | "contas_manuais" | "pagamentos" | "pagamento_itens",
+  tabela: "avisos_lidos" | "status" | "configuracoes" | "config_ciclo" | "faturas" | "fatura_cartoes" | "lancamentos" | "regras" | "contas_manuais" | "pagamentos" | "pagamento_itens",
   evento: "INSERT" | "UPDATE" | "DELETE",
   aceita: (linha: T) => boolean,
   gravar: (tentativa: number) => PromiseLike<unknown>,

@@ -83,7 +83,7 @@ Este documento quebra em épicos e histórias implementáveis os requisitos do P
 **4.10 Acesso, edição e aparelhos**
 - FR-34: Só Rafael acessa, com login. Dados iguais no PC e no iPad.
 - FR-46: Editar e excluir qualquer Lançamento, Conta manual, Pagamento, Regra, Bloco, Responsável, Tipo e Status, com todos os totais recalculados na hora em todas as telas e aparelhos. Excluir parcelado ou Conta manual pergunta sobre os previstos. Editar ou excluir algo com Pagamento avisa o efeito no Saldo pendente. Excluir cadastro em uso pede substituto ou arquiva.
-- FR-55: Lembretes por notificação (app instalado e permissão dada) e faixa no app: no dia do fechamento e quando alguém passa a ter itens atrasados. Cada tipo pode ser desligado.
+- FR-55: Lembretes por notificação (app instalado e permissão dada) e numa Central de Avisos no app (item de menu com contador de não lidos; "lido" vale em todos os aparelhos): no dia do fechamento e quando alguém passa a ter itens atrasados. Cada tipo pode ser desligado.
 - FR-35: Instalar o web app na tela inicial do iPad, sem App Store.
 
 ### NonFunctional Requirements
@@ -219,7 +219,7 @@ Da Arquitetura (ARCHITECTURE-SPINE.md, final):
 | FR-52 | 3 | Dar Apelido |
 | FR-53 | 4 | Mensagem a partir de um Bloco |
 | FR-54 | 4 | Cálculo passo a passo do Bloco |
-| FR-55 | 7 | Lembretes |
+| FR-55 | 7 e 8 | Lembretes (7.4 e 7.5); Central de Avisos (8.1; 8.2 leva a Conferência e o Revisar para ela) |
 
 ## Epic List
 
@@ -250,6 +250,10 @@ Rafael registra quem pagou (total, "fica pendente" ou "minha parte"), desfaz Pag
 ### Epic 7: Previsão e lembretes
 Rafael vê quanto está comprometido nos próximos Meses, a evolução dos últimos 6 Meses e o próprio gasto por Tipo, e recebe lembretes no dia do fechamento e quando alguém atrasa.
 **FRs covered:** FR-31, FR-32, FR-33, FR-55
+
+### Epic 8: Central de avisos
+Rafael tem um lugar só para os avisos do app, um item de menu com o contador de não lidos, com "Marcar tudo como lido" e o "lido" valendo em todos os aparelhos. A Central substitui a faixa de lembretes no topo das telas (a 8.1 traz os lembretes de fechamento e de atraso; a 8.2 traz a diferença da Conferência e a fila do Revisar).
+**FRs covered:** FR-55 (revisado)
 
 ## Epic 1: Entrar e montar a base
 
@@ -1545,3 +1549,58 @@ So that eu seja avisado sem precisar abrir o app (FR-55, AD-13).
 **And** tocar na notificação abre o Painel ou Recebimentos
 
 **And** a notificação nunca leva valores de outras pessoas além do que a faixa do app mostra, e nada é registrado em log
+
+## Epic 8: Central de avisos
+
+Rafael tem um lugar só para os avisos do app: um item de menu com o contador de não lidos, "Marcar tudo como lido" e o "lido" valendo em todos os aparelhos. Isto substitui a faixa de lembretes no topo das telas (que ocupava a tela inteira com vários Blocos atrasados, escondia o 4º Bloco sem nome nem valor e dizia "O Mãe"). A 8.1 traz a Central e os dois lembretes de hoje (fechamento e atraso), com o formato pronto para outros tipos; a 8.2 traz a diferença da Conferência e a fila do Revisar.
+
+### Story 8.1: Central de Avisos
+
+As a Rafael,
+I want uma Central de Avisos, um item de menu com o contador de não lidos, onde os avisos moram,
+So that eu veja tudo o que precisa de mim num lugar só, sem uma pilha de faixas no topo das telas (FR-55 revisado, AD-13).
+
+**Acceptance Criteria:**
+
+**Given** o menu lateral
+**When** o app abre
+**Then** existe o item "Avisos" (rota `/avisos`, antes de "Config.") com o contador de avisos não lidos, em texto ("99+" acima de 99, nome acessível "Avisos, 3 não lidos"), que some em zero e enquanto os dados carregam (nunca um número parcial)
+**And** as faixas de lembrete no topo das telas deixam de existir
+
+**Given** a tela `/avisos`
+**When** Rafael a abre
+**Then** aparecem TODOS os lembretes do dia (sem limite), os não lidos primeiro, cada um uma linha com o texto, o destino em palavras ("Abrir Recebimentos", "Abrir o Painel") e o estado em texto ("Novo" ou "Lido")
+**And** tocar na linha abre o destino e marca como lido; "Marcar como lido" marca sem sair; "Marcar tudo como lido" (desativado sem não lidos) marca todos de uma vez, num pedido só, e anuncia "Todos os avisos foram marcados como lidos"
+**And** o topo traz o resumo ("4 Blocos com itens atrasados", só a contagem) e, sem avisos, a tela diz "Nenhum aviso"
+
+**Given** o lembrete de atraso
+**When** o texto é montado (`textoDoLembrete`, o mesmo da notificação do sistema)
+**Then** diz "Mãe: R$ 1.783,73 em atraso desde 17/10/26", o nome do Bloco sem artigo
+
+**Given** a migração que cria `avisos_lidos (tipo, referencia, dia)` com a mesma chave do aviso do sistema, única por dono, com RLS por dono e no Realtime
+**When** Rafael marca um aviso como lido num aparelho
+**Then** ele aparece como lido em todos os aparelhos abertos, sem recarregar, e o contador baixa
+**And** a regra (a ordem, o "lido", a contagem e as chaves de "Marcar tudo") mora no núcleo (`avisosDaCentral`), sem conta na tela nem no SQL
+
+**Given** um aviso já lido
+**When** o atraso continua (mesma chave) **Then** continua lido
+**And** quando o atraso é novo, ou o "desde" mudou, volta como não lido; quando o aviso deixa de existir (Bloco quitou, Fatura importada), some da lista e do contador
+
+**Given** a notificação do sistema (7.5)
+**When** o Cron roda **Then** notifica TODOS os lembretes novos, sem o limite de 3 Blocos; tocar na notificação abre o destino e não marca como lido
+
+**Given** Configurações → Aparência → Lembretes
+**When** Rafael desliga um tipo **Then** o tipo não aparece na Central, não conta no contador e não chega como notificação
+
+**Given** o merge publicado antes do `supabase db push`
+**When** a tabela ainda não existe **Then** a Central e o contador funcionam (tudo aparece como não lido) e "Marcar como lido" e "Marcar tudo como lido" respondem "Não foi possível salvar", sem quebrar nenhuma outra tela
+
+### Story 8.2: Conferência e Revisar na Central de Avisos
+
+As a Rafael,
+I want a diferença da Conferência e a fila do Revisar também na Central de Avisos,
+So that eu não precise abrir cada tela para saber o que precisa de mim (FR-55 revisado).
+
+**Status:** backlog (só registrada; nada foi implementado). A 8.1 deixou o formato dos avisos extensível por `tipo` (`avisos_lidos.tipo` é livre e a chave do aviso é `tipo, referencia, dia`).
+
+**Acceptance Criteria:** a definir quando a história for planejada. Direção: a Conferência com diferença e a fila do Revisar viram tipos novos de aviso (cada um com a sua chave estável e o seu destino), contam no mesmo contador e entram na mesma lista; o contador do Revisar no menu continua existindo.

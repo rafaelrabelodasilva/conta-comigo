@@ -14,8 +14,35 @@ describe("NavRail", () => {
   const html = renderToStaticMarkup(<NavRail />);
   const links = [...html.matchAll(/<a\b[^>]*>/g)].map((m) => m[0]);
 
-  it("mostra os seis itens", () => {
-    expect(links).toHaveLength(6);
+  it("mostra os sete itens", () => {
+    expect(links).toHaveLength(7);
+  });
+
+  it("o item Avisos leva a /avisos, entre Contas e Config.", () => {
+    expect(links.map((a) => /href="([^"]+)"/.exec(a)?.[1])).toEqual([
+      "/",
+      "/revisar",
+      "/recebimentos",
+      "/previsao",
+      "/contas",
+      "/avisos",
+      "/configuracoes",
+    ]);
+  });
+
+  it("sem contador de avisos por padrão; com contador, o número é texto e o nome diz 'não lidos'", () => {
+    expect(html).not.toContain("não lido");
+    const com = renderToStaticMarkup(<NavRail contadorAvisos={3} />);
+    expect(com).toContain("3");
+    expect(com).toContain(", 3 não lidos");
+    expect(renderToStaticMarkup(<NavRail contadorAvisos={1} />)).toContain(", 1 não lido<");
+  });
+
+  it("acima de 99 mostra '99+' e o leitor de tela ouve 'mais de 99 não lidos'", () => {
+    const com = renderToStaticMarkup(<NavRail contadorAvisos={150} />);
+    expect(com).toContain("99+");
+    expect(com).toContain(", mais de 99 não lidos");
+    expect(com).not.toContain("150");
   });
 
   it("na subrota, só Contas fica ativo", () => {

@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
+import { nomeDoContadorDeAvisos, textoDoContadorDeAvisos } from "@/domain/mensagens";
 import { cn } from "./cn";
 import { ITENS_NAV, destinoDoAtalho, itemAtivo, type IconeNav } from "./navegacao";
 
-// Menu lateral (`nav-rail`): seis itens com ícone de traço (1,8 px, 22 px) e
+// Menu lateral (`nav-rail`): sete itens com ícone de traço (1,8 px, 22 px) e
 // rótulo curto. O ativo tem fundo branco a 8%, ícone `accent-line` e rótulo
-// branco. No PC, ⌘/Ctrl + 1…6 navega. As regras estão em `navegacao.ts`.
+// branco. No PC, ⌘/Ctrl + 1…7 navega. As regras estão em `navegacao.ts`.
 
 // Traços copiados do mockup `painel.html`.
 const TRACOS: Record<IconeNav, ReactNode> = {
@@ -30,6 +31,12 @@ const TRACOS: Record<IconeNav, ReactNode> = {
     <>
       <rect x="5" y="3" width="14" height="18" rx="2" />
       <path d="M9 8h6M9 12h6M9 16h4" />
+    </>
+  ),
+  avisos: (
+    <>
+      <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" />
+      <path d="M10 21h4" />
     </>
   ),
   config: (
@@ -61,7 +68,14 @@ function Icone({ nome }: { nome: IconeNav }) {
   );
 }
 
-export function NavRail({ contadorRevisar = 0 }: { contadorRevisar?: number }) {
+export function NavRail({
+  contadorRevisar = 0,
+  contadorAvisos = 0,
+}: {
+  contadorRevisar?: number;
+  /** Avisos não lidos (a Central de Avisos, 8.1); 0 some. Acima de 99 mostra "99+". */
+  contadorAvisos?: number;
+}) {
   const caminho = usePathname();
   const router = useRouter();
   const ativo = itemAtivo(caminho);
@@ -104,6 +118,7 @@ export function NavRail({ contadorRevisar = 0 }: { contadorRevisar?: number }) {
       {ITENS_NAV.map((item, i) => {
         const eAtivo = ativo?.rota === item.rota;
         const contador = item.icone === "revisar" && contadorRevisar > 0 ? contadorRevisar : 0;
+        const avisos = item.icone === "avisos" && contadorAvisos > 0 ? contadorAvisos : 0;
         return (
           <Link
             key={item.rota}
@@ -125,6 +140,13 @@ export function NavRail({ contadorRevisar = 0 }: { contadorRevisar?: number }) {
                 <span className="sr-only">, </span>
                 {contador}
                 <span className="sr-only"> para revisar</span>
+              </span>
+            ) : null}
+            {avisos > 0 ? (
+              // O número é texto (nunca só cor); o leitor de tela ouve "Avisos, 3 não lidos" (e "mais de 99").
+              <span className="absolute top-0.5 right-2 rounded-full bg-verify px-1.25 texto-nav-label font-bold text-on-dark tabular-nums">
+                <span aria-hidden>{textoDoContadorDeAvisos(avisos)}</span>
+                <span className="sr-only">, {nomeDoContadorDeAvisos(avisos)}</span>
               </span>
             ) : null}
           </Link>

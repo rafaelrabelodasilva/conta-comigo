@@ -20,7 +20,7 @@ import { criarNavegadorDePush, type NavegadorDePush } from "./navegador-de-push"
 // - A inscrição só fica no navegador se também foi guardada no banco: se o banco recusa, a do navegador é cancelada
 //   (o estado nunca diz "ativado" sem o Cron enxergar o aparelho). "Desativar neste aparelho" apaga primeiro a linha
 //   do banco e só depois cancela no navegador.
-// - Sem conexão nada é tentado (a faixa de lembretes do app segue sendo o canal sem a notificação).
+// - Sem conexão nada é tentado (a Central de Avisos do app segue sendo o canal sem a notificação).
 // - Erros por toast, como o resto de Configurações; o `endpoint` nunca aparece em texto.
 
 const navegadorReal: { atual: NavegadorDePush | null } = { atual: null };

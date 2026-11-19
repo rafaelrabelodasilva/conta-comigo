@@ -77,10 +77,10 @@ Web Push (VAPID) para o iPad (iPadOS 18+, **com o app instalado na tela inicial*
 - **Depois de tudo:** o Cron das 09:00 (Brasília) avisa o que for novo. Sem aparelho inscrito ele **não grava nada** em `lembretes_enviados` (senão o aviso do dia ficaria "gasto" e quem ativasse as notificações à tarde nunca o receberia).
 
 ### Regras do aviso (o que o Cron decide, tudo no núcleo)
-- **Fechamento da fatura:** uma vez por fechamento, chave `(fechamento, Mês da Fatura, dia do fechamento)`. Se o Cron falhar no dia, ainda avisa nos 5 dias seguintes (a janela da faixa), sem duplicar, porque a chave é o dia do fechamento. Some assim que o Mês tem Fatura importada.
+- **Fechamento da fatura:** uma vez por fechamento, chave `(fechamento, Mês da Fatura, dia do fechamento)`. Se o Cron falhar no dia, ainda avisa nos 5 dias seguintes (a janela do lembrete), sem duplicar, porque a chave é o dia do fechamento. Some assim que o Mês tem Fatura importada.
 - **Atraso:** chave `(atraso, id do Bloco, desde)`. Avisa quando o Bloco passa a ter item atrasado e **de novo só quando o "desde" muda** (o atraso novo depois de o Bloco quitar tudo; o item mais antigo pago com outro ainda em atraso). Não repete todo dia, nem quando só o valor muda; um Pagamento desfeito que traz o mesmo atraso de volta não avisa outra vez.
-- **Só o que a faixa mostra:** o aviso nunca leva nome nem valor que a faixa não leva (a faixa mostra os 3 primeiros Blocos atrasados; os outros só aparecem como "E mais N" e não geram aviso). O texto é o mesmo da faixa (`textoDoLembrete`); o título é "Conta Comigo". **Na tela bloqueada do iPad aparece o mesmo texto da faixa** ("O Lucas tem R$ 115,16 em atraso desde 17/11/26"); quem não quer isso ali pode, no iPad, em Ajustes → Notificações → Conta Comigo, escolher "Mostrar pré-visualizações: Quando desbloqueado".
-- **Nunca duas vezes vale mais que a reentrega:** a chave é inserida antes do envio; se o envio falhar para todos os aparelhos por um erro que não seja 404 ou 410 (rede, 5xx), a linha continua e o aviso não é reenviado (a faixa do app segue sendo o canal). 404 e 410 apagam a inscrição.
+- **Todos os lembretes novos, sem limite (muda na 8.1):** antes só saíam os 3 primeiros Blocos atrasados (os outros só apareciam como "E mais N" na faixa). Com a Central de Avisos mostrando todos, o aviso do sistema também traz todos. **Custo:** na primeira execução depois do deploy da 8.1, os Blocos atrasados que ainda não tinham aviso (do 4º em diante) saem de uma vez, uma notificação por Bloco, e a partir daí só o que for novo; o iPad agrupa os avisos do app. O texto é o da Central (`textoDoLembrete`, "Mãe: R$ 1.783,73 em atraso desde 17/10/26"); o título é "Conta Comigo". **Na tela bloqueada do iPad aparece esse mesmo texto**; quem não quer isso ali pode, no iPad, em Ajustes → Notificações → Conta Comigo, escolher "Mostrar pré-visualizações: Quando desbloqueado". Tocar na notificação abre o Painel ou Recebimentos e **não** marca como lido (quem marca é a Central).
+- **Nunca duas vezes vale mais que a reentrega:** a chave é inserida antes do envio; se o envio falhar para todos os aparelhos por um erro que não seja 404 ou 410 (rede, 5xx), a linha continua e o aviso não é reenviado (a Central de Avisos segue sendo o canal). 404 e 410 apagam a inscrição.
 - **Tempo:** a rota tem `maxDuration = 60`; cada envio tem limite de 10 s e nenhum aviso novo começa depois de 40 s (o que sobrar, por não ter sido inserido, sai no próximo dia).
 
 ### Trocar as chaves VAPID
@@ -88,6 +88,23 @@ As inscrições existentes passam a ser recusadas pelo serviço de push (401 ou 
 
 ### Dependência nova
 `web-push` 3.6.7 (MPL-2.0, ~48 KB, 5 dependências; a 4.0.0 saiu em 06/11/2026, com menos de duas semanas, então ficou a 3.6.7) e `@types/web-push` 3.6.4 (MIT). Só roda no Cron (`serverExternalPackages` em `next.config.ts`); nada dele vai para o navegador.
+
+## Central de Avisos (História 8.1)
+O item "Avisos" do menu (rota `/avisos`) tem o contador de não lidos e a lista dos lembretes do dia (fechamento da fatura e Bloco com itens atrasados). **As faixas de lembrete no topo das telas acabaram.** O "lido" vale em todos os aparelhos e mora em uma tabela nova, `avisos_lidos` (`tipo`, `referencia`, `dia`: a mesma chave do aviso do sistema, única por dono, RLS por dono, no Realtime).
+
+### Há migração
+`supabase/migrations/20261203120000_avisos_lidos.sql` (uma tabela nova, só aditiva; nada existente muda). **O banco de produção já tem a migração da 7.5; esta é outra.** Nenhum `db push` foi feito por quem escreveu o código: quem pede é o Rafael.
+
+### O que acontece em cada ordem
+- **Entre o merge e o `db push`:** o app funciona. A Central abre, lista **todos** os avisos como **Novo** e o contador conta todos (a leitura de `avisos_lidos` falha e vale como "nada lido"; isso nunca vira o erro "Não foi possível carregar" da Central, e nenhuma outra tela toca a tabela). **O que responde erro:** "Marcar como lido" e "Marcar tudo como lido" mostram "Não foi possível salvar" (o aviso volta a Novo). Quem abre o destino pelo toque na linha não vê erro algum (só deixa de marcar). O canal Realtime da tabela nova pode registrar falha de conexão no console do navegador até o `db push`; é inofensivo.
+- **`db push` antes do merge:** **é seguro.** Só cria uma tabela nova e a coloca na publicação do Realtime; o front antigo nem a conhece (e continua com as faixas até o deploy). Ordem recomendada: `db push` (confira com `--dry-run` que só essa migração está pendente) → merge.
+- **Depois de tudo:** marcar num aparelho aparece nos outros sem recarregar. A linha lida de um aviso que deixou de existir (Bloco quitou, Fatura importada) **fica no banco** (são poucas linhas por mês; nada as limpa por enquanto, veja `deferred-work.md`).
+
+### Regras (tudo no núcleo, `src/domain/avisos.ts`)
+- **Lista:** todos os lembretes do dia, sem limite; não lidos primeiro, depois os lidos; dentro de cada grupo a ordem de antes (fechamento e, por Bloco, a ordem dos Blocos).
+- **Quando volta a ser não lido:** a chave é a do aviso do sistema (fechamento: Mês da Fatura + dia do fechamento; atraso: id do Bloco + "desde"). O atraso que continua e já foi lido **fica lido** (só o valor mudar não muda a chave); um atraso novo, ou um "desde" que mudou (quitou o mais antigo com outro ainda atrasado), **volta como não lido**.
+- **Preferências:** um tipo desligado em Configurações → Aparência → Lembretes não aparece na Central, não conta e não notifica.
+- **Contador:** some em zero e enquanto carrega ou dá erro (nunca um número parcial); "99+" acima de 99.
 
 ## Auth (História 1.2)
 - Supabase Auth com e-mail e senha via `@supabase/ssr`. Telas: `/entrar` (com "Esqueci a senha" em `/entrar?modo=esqueci`), `/auth/confirmar` (troca o `code` do link do e-mail) e `/redefinir-senha`. "Sair" encerra só a sessão deste aparelho.

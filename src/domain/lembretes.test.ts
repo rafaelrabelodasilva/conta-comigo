@@ -6,17 +6,15 @@ import { formatarDinheiro } from "./dinheiro";
 import type { Formula } from "./formula";
 import {
   DIAS_DO_LEMBRETE_DE_FECHAMENTO,
-  LIMITE_DE_FAIXAS_DE_ATRASO,
   PREFERENCIAS_DE_LEMBRETES_PADRAO,
   lembretesDoDia,
-  lembretesParaExibir,
   preferenciasDeLembretes,
   type ContextoDeLembretes,
   type Lembrete,
   type LancamentoParaLembrete,
   type PreferenciasDeLembretes,
 } from "./lembretes";
-import { rotuloMaisAtrasos, textoDoLembrete } from "./mensagens";
+import { textoDoLembrete } from "./mensagens";
 import { somaDosItens } from "./pagamento";
 
 // Lembretes do dia (História 7.4, FR-55): o do fechamento da fatura e o do Bloco de cobrança com itens
@@ -260,11 +258,11 @@ describe("o lembrete de atraso", () => {
     ]);
   });
 
-  it("o texto: 'O Lucas tem R$ 115,16 em atraso desde 17/11/26'", () => {
+  it("o texto, sem artigo: 'Lucas: R$ 115,16 em atraso desde 17/11/26'", () => {
     const [l] = dia("2026-11-19", { linhas: [lanc("l1", { valor_centavos: 11_516 })], blocos: [lucas] });
     // O "R$ 115,16" leva o espaço sem quebra do formatador de dinheiro.
-    expect(textoDoLembrete(l)).toBe(`O Lucas tem ${formatarDinheiro(11_516)} em atraso desde 17/11/26`);
-    expect(textoDoLembrete(l).replace(/ /g, " ")).toBe("O Lucas tem R$ 115,16 em atraso desde 17/11/26");
+    expect(textoDoLembrete(l)).toBe(`Lucas: ${formatarDinheiro(11_516)} em atraso desde 17/11/26`);
+    expect(textoDoLembrete(l).replace(/ /g, " ")).toBe("Lucas: R$ 115,16 em atraso desde 17/11/26");
   });
 
   it("tolerância 0: atrasa no dia seguinte ao vencimento", () => {
@@ -464,44 +462,26 @@ describe("amarrada ao 'atrasado' da grade (estaAtrasado)", () => {
   }
 });
 
-describe("lembretesParaExibir", () => {
-  const atraso = (n: number): Lembrete => ({
+describe("o texto do lembrete de atraso (sem o artigo)", () => {
+  const atraso = (blocoNome: string, valorCentavos: number, desde = "2026-10-17"): Lembrete => ({
     tipo: "atraso",
-    referencia: `b-${n}`,
-    blocoId: `b-${n}`,
-    blocoNome: `Bloco ${n}`,
-    valorCentavos: 100 * n,
-    desde: "2026-11-17",
+    referencia: "b-1",
+    blocoId: "b-1",
+    blocoNome,
+    valorCentavos,
+    desde,
     destino: "/recebimentos",
   });
-  const fechamento: Lembrete = {
-    tipo: "fechamento",
-    referencia: "2026-11",
-    mes: "2026-11",
-    fechouEm: "2026-10-28",
-    destino: "/?mes=2026-11",
-  };
+  const texto = (l: Lembrete) => textoDoLembrete(l).replace(/ /g, " ");
 
-  it(`mostra até ${LIMITE_DE_FAIXAS_DE_ATRASO} de atraso e conta o resto`, () => {
-    expect(LIMITE_DE_FAIXAS_DE_ATRASO).toBe(3);
-    const r = lembretesParaExibir([fechamento, atraso(1), atraso(2), atraso(3), atraso(4), atraso(5)]);
-    expect(r.visiveis.map((l) => l.referencia)).toEqual(["2026-11", "b-1", "b-2", "b-3"]);
-    expect(r.maisAtrasos).toBe(2);
+  it("nome feminino não erra: 'Mãe: R$ 1.783,73 em atraso desde 17/10/26' (e não 'O Mãe')", () => {
+    expect(texto(atraso("Mãe", 178_373))).toBe("Mãe: R$ 1.783,73 em atraso desde 17/10/26");
+    expect(texto(atraso("Mãe", 178_373))).not.toMatch(/^O /);
   });
 
-  it("até o limite, nada fica de fora; o fechamento nunca é cortado", () => {
-    const r = lembretesParaExibir([atraso(1), atraso(2), atraso(3)]);
-    expect(r).toEqual({ visiveis: [atraso(1), atraso(2), atraso(3)], maisAtrasos: 0 });
-    expect(lembretesParaExibir([fechamento, atraso(1)], 0)).toEqual({ visiveis: [fechamento], maisAtrasos: 1 });
-  });
-
-  it("sem lembretes: nada", () => {
-    expect(lembretesParaExibir([])).toEqual({ visiveis: [], maisAtrasos: 0 });
-  });
-
-  it("o texto do que passou do limite", () => {
-    expect(rotuloMaisAtrasos(1)).toBe("E mais 1 Bloco com itens atrasados");
-    expect(rotuloMaisAtrasos(2)).toBe("E mais 2 Blocos com itens atrasados");
+  it("o nome do Bloco vai como está, qualquer que seja ele", () => {
+    expect(texto(atraso("Rangel", 526_347))).toBe("Rangel: R$ 5.263,47 em atraso desde 17/10/26");
+    expect(texto(atraso("Casal do 2º andar", 100))).toBe("Casal do 2º andar: R$ 1,00 em atraso desde 17/10/26");
   });
 });
 

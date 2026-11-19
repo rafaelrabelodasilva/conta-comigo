@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { avisosDaCentral } from "./avisos";
 import { lerBlocos } from "./blocos";
 import {
   chaveDeNotificacao,
   lembretesDasLinhas,
   lembretesDoDia,
-  lembretesParaExibir,
   lembretesParaNotificar,
   preferenciasDeLembretes,
   type ChaveDeNotificacao,
@@ -15,7 +15,7 @@ import { TEXTOS_NOTIFICACOES, avisoDoLembrete, textoDoLembrete } from "./mensage
 import { somaDosItens } from "./pagamento";
 
 // O aviso do sistema dos lembretes (História 7.5, FR-55, AD-13): quais lembretes do dia saem como notificação e com
-// que chave, a mesma montagem de contexto da faixa e do Cron, e o texto do aviso. O Ciclo fecha dia 28 e vence dia 06,
+// que chave, a mesma montagem de contexto da Central de Avisos e do Cron (8.1: sem o limite de 3 Blocos), e o texto do aviso. O Ciclo fecha dia 28 e vence dia 06,
 // a tolerância é 10 e o Lucas é Bloco de cobrança.
 
 const PAGO = "s-pago";
@@ -127,11 +127,11 @@ describe("lembretesParaNotificar: atraso", () => {
     expect(chaves("2026-11-17", comAtraso())).toEqual([ATRASO_DO_LUCAS]);
   });
 
-  it("o corpo do aviso é o texto da faixa: 'O Lucas tem R$ 115,16 em atraso desde 17/11/26'", () => {
+  it("o corpo do aviso é o texto da Central: 'Lucas: R$ 115,16 em atraso desde 17/11/26' (sem artigo)", () => {
     const [n] = notificar("2026-11-17", comAtraso());
     expect(avisoDoLembrete(n.lembrete)).toEqual({
       titulo: TEXTOS_NOTIFICACOES.titulo_aviso,
-      corpo: `O Lucas tem ${formatarDinheiro(11_516)} em atraso desde 17/11/26`,
+      corpo: `Lucas: ${formatarDinheiro(11_516)} em atraso desde 17/11/26`,
       destino: "/recebimentos",
       tag: "atraso:b-lucas",
     });
@@ -190,7 +190,7 @@ describe("lembretesParaNotificar: atraso", () => {
     expect(chaves("2026-11-17", comAtraso({ configuracao: { lembrete_atraso: false } }))).toEqual([]);
   });
 
-  it("dois Blocos: um aviso por Bloco, na ordem da faixa", () => {
+  it("dois Blocos: um aviso por Bloco, na ordem da Central", () => {
     const dois = linhas({
       blocos: [blocoDb("b-rangel", "Rangel", "rangel", 2), blocoDb("b-lucas", "Lucas", "lucas", 1)],
       lancamentos: [lanc("l1", "lucas"), lanc("l2", "rangel", { valor_centavos: 3_000 })],
@@ -235,17 +235,49 @@ describe("lembretesParaNotificar: atraso", () => {
     expect(chaves("2026-11-19", linhas())).toEqual([]);
   });
 
-  it("só os que a faixa mostra: 5 Blocos atrasados são 3 avisos; o 4º só sai quando um dos 3 quitar", () => {
+  it("sem limite (8.1): 5 Blocos atrasados são 5 avisos, na ordem dos Blocos", () => {
     const nomes = ["Ana", "Beto", "Caio", "Duda", "Eva"];
     const cinco = linhas({
       blocos: nomes.map((n, i) => blocoDb(`b-${n}`, n, n, i + 1)),
       lancamentos: nomes.map((n, i) => lanc(`l${i}`, n)),
     });
-    expect(chaves("2026-11-17", cinco).map((c) => c.referencia)).toEqual(["b-Ana", "b-Beto", "b-Caio"]);
-    // A Ana quitou: o Duda entra no que a faixa mostra e, agora sim, é avisado.
+    expect(chaves("2026-11-17", cinco).map((c) => c.referencia)).toEqual(["b-Ana", "b-Beto", "b-Caio", "b-Duda", "b-Eva"]);
+  });
+
+  it("o 4º Bloco em diante tem aviso, com nome e valor, sem esperar um dos 3 quitar", () => {
+    const nomes = ["Ana", "Beto", "Caio", "Duda"];
+    const quatro = linhas({
+      blocos: nomes.map((n, i) => blocoDb(`b-${n}`, n, n, i + 1)),
+      lancamentos: nomes.map((n, i) => lanc(`l${i}`, n, { valor_centavos: 100_00 + i })),
+    });
+    const quarto = notificar("2026-11-17", quatro)[3];
+    expect(quarto.referencia).toBe("b-Duda");
+    expect(avisoDoLembrete(quarto.lembrete).corpo).toBe(`Duda: ${formatarDinheiro(10_003)} em atraso desde 17/11/26`);
+  });
+
+  it("os já avisados não saem de novo; o que ainda não foi avisado sai (rajada só na primeira execução)", () => {
+    const nomes = ["Ana", "Beto", "Caio", "Duda", "Eva"];
+    const cinco = linhas({
+      blocos: nomes.map((n, i) => blocoDb(`b-${n}`, n, n, i + 1)),
+      lancamentos: nomes.map((n, i) => lanc(`l${i}`, n)),
+    });
+    const jaAvisados: ChaveDeNotificacao[] = ["Ana", "Beto", "Caio"].map((n) => ({
+      tipo: "atraso",
+      referencia: `b-${n}`,
+      dia: "2026-11-17",
+    }));
+    expect(chaves("2026-11-17", cinco, jaAvisados).map((c) => c.referencia)).toEqual(["b-Duda", "b-Eva"]);
+    // A Ana quitou: os que já foram avisados continuam quietos e nada novo sai.
     const semAna = { ...cinco, lancamentos: cinco.lancamentos.map((x, i) => (i === 0 ? { ...x, status_id: PAGO } : x)) };
-    const jaAvisados: ChaveDeNotificacao[] = [{ tipo: "atraso", referencia: "b-Beto", dia: "2026-11-17" }];
-    expect(chaves("2026-11-17", semAna, jaAvisados).map((c) => c.referencia)).toEqual(["b-Caio", "b-Duda"]);
+    expect(chaves("2026-11-17", semAna, [...jaAvisados, ...["Duda", "Eva"].map((n) => ({ tipo: "atraso" as const, referencia: `b-${n}`, dia: "2026-11-17" }))])).toEqual([]);
+  });
+
+  it("marcar como lido na Central não interfere no aviso do sistema (são tabelas diferentes)", () => {
+    const l = comAtraso();
+    const central = avisosDaCentral(lembretesDasLinhas("2026-11-17", l), [{ tipo: "atraso", referencia: "b-lucas", dia: "2026-11-17" }]);
+    expect(central.naoLidos).toBe(0);
+    // O Cron só olha `lembretes_enviados`: o lido na Central não o impede de avisar.
+    expect(chaves("2026-11-17", l)).toEqual([ATRASO_DO_LUCAS]);
   });
 
   it("a mesma referência com outro tipo ou outro dia não conta como já enviada", () => {
@@ -285,7 +317,7 @@ describe("chaveDeNotificacao", () => {
   });
 });
 
-describe("o servidor e a faixa dizem a mesma coisa (AD-10)", () => {
+describe("o servidor e a Central dizem a mesma coisa (AD-10)", () => {
   // O jeito de a faixa montar o contexto ANTES da 7.5 (a conta do `FaixaDeLembretes` da 7.4), escrito de novo à mão:
   // `lembretesDasLinhas` precisa devolver o mesmo que ele para as mesmas linhas.
   function comoAFaixaMontava(hoje: string, l: LinhasParaLembretes) {
@@ -344,19 +376,24 @@ describe("o servidor e a faixa dizem a mesma coisa (AD-10)", () => {
       for (const hoje of dias) expect(lembretesDasLinhas(hoje, l)).toEqual(comoAFaixaMontava(hoje, l));
     });
 
-    it(`${nome}: todo aviso é um lembrete da faixa, com o mesmo texto`, () => {
+    it(`${nome}: a Central, o aviso do sistema e o texto são uma fonte só, todos os dias`, () => {
       for (const hoje of dias) {
-        const faixa = lembretesParaExibir(lembretesDasLinhas(hoje, l)).visiveis;
-        for (const aviso of notificar(hoje, l)) {
-          const igual = faixa.find((f) => f.tipo === aviso.tipo && f.referencia === aviso.referencia);
-          expect(igual).toEqual(aviso.lembrete);
-          expect(avisoDoLembrete(aviso.lembrete).corpo).toBe(textoDoLembrete(igual!));
+        const lembretes = lembretesDasLinhas(hoje, l);
+        const central = avisosDaCentral(lembretes, []);
+        const avisos = notificar(hoje, l);
+        // Sem limite: o que a Central mostra é exatamente o que o Cron avisa (mesma ordem, mesma chave).
+        expect(avisos.map((a) => a.lembrete)).toEqual(lembretes);
+        expect(central.avisos.map((a) => a.lembrete)).toEqual(lembretes);
+        expect(central.avisos.map((a) => a.chave)).toEqual(avisos.map(({ tipo, referencia, dia }) => ({ tipo, referencia, dia })));
+        for (const aviso of avisos) {
+          const naCentral = central.avisos.find((a) => a.chave.tipo === aviso.tipo && a.chave.referencia === aviso.referencia);
+          expect(avisoDoLembrete(aviso.lembrete).corpo).toBe(textoDoLembrete(naCentral!.lembrete));
         }
       }
     });
   }
 
-  it("o Pagamento parcial entra pelo que falta, como na faixa", () => {
+  it("o Pagamento parcial entra pelo que falta, como na grade", () => {
     const l = linhas({
       lancamentos: [lanc("l1", "lucas", { valor_centavos: 10_000 })],
       itens: [{ lancamento_id: "l1", valor_centavos: 4_000 }],

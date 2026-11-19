@@ -353,11 +353,11 @@ Rafael pode editar e excluir qualquer Lançamento, Conta manual, Pagamento, Regr
 - Excluir um Responsável, Tipo ou Status em uso pede para escolher um substituto, ou arquiva em vez de excluir.
 
 #### FR-55: Lembretes
-O app avisa Rafael, por notificação (com o app instalado e a permissão dada) e por uma faixa dentro do app:
+O app avisa Rafael, por notificação (com o app instalado e a permissão dada) e numa Central de Avisos dentro do app (um item de menu com o contador de avisos não lidos):
 - no dia do fechamento da fatura, para importar o PDF quando ele chegar;
 - quando alguém passa a ter itens atrasados (FR-49).
 
-Cada tipo de lembrete pode ser desligado em Configurações.
+Cada aviso pode ser marcado como lido, um a um ou todos de uma vez, e o "lido" vale em todos os aparelhos. Cada tipo de lembrete pode ser desligado em Configurações: desligado, não aparece na Central, não conta e não chega como notificação.
 
 #### FR-35: Instalar como app
 O web app pode ser instalado na tela inicial do iPad, sem App Store.

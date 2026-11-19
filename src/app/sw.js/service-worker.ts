@@ -13,7 +13,7 @@
 // Notificações (História 7.5, AD-13): `avisosDoSistema` acrescenta só dois ouvintes, `push` (mostra o aviso que o
 // Cron mandou) e `notificationclick` (foca uma janela do app e vai ao destino do aviso, ou abre uma). Não mexe no
 // cache, não responde nenhuma requisição e não grava nada (AD-3). O texto do aviso vem pronto do servidor (o mesmo
-// da faixa do app); o service worker só mostra. Cada `push` PRECISA mostrar um aviso (o Safari revoga a inscrição de
+// da Central de Avisos); o service worker só mostra. Cada `push` PRECISA mostrar um aviso (o Safari revoga a inscrição de
 // quem recebe push sem mostrar), então um corpo ilegível mostra o texto padrão. `pushsubscriptionchange` NÃO é
 // tratado: o service worker não tem a sessão do Supabase para gravar a inscrição nova (veja deferred-work.md).
 //

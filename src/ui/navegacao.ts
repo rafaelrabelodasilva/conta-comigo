@@ -1,8 +1,8 @@
-// Regras puras do menu lateral (`nav-rail`): os seis itens na ordem do
+// Regras puras do menu lateral (`nav-rail`): os sete itens na ordem do
 // EXPERIENCE.md, qual está ativo para um caminho e qual o destino de um
-// atalho ⌘/Ctrl + 1…6.
+// atalho ⌘/Ctrl + 1…7.
 
-export type IconeNav = "painel" | "revisar" | "receber" | "previsao" | "contas" | "config";
+export type IconeNav = "painel" | "revisar" | "receber" | "previsao" | "contas" | "avisos" | "config";
 
 export type ItemNav = {
   /** Rótulo curto sob o ícone. */
@@ -19,6 +19,7 @@ export const ITENS_NAV = [
   { rotulo: "Receber", titulo: "Recebimentos", rota: "/recebimentos", icone: "receber" },
   { rotulo: "Previsão", titulo: "Previsão", rota: "/previsao", icone: "previsao" },
   { rotulo: "Contas", titulo: "Contas manuais", rota: "/contas", icone: "contas" },
+  { rotulo: "Avisos", titulo: "Avisos", rota: "/avisos", icone: "avisos" },
   { rotulo: "Config.", titulo: "Configurações", rota: "/configuracoes", icone: "config" },
 ] as const satisfies readonly ItemNav[];
 
@@ -89,7 +90,7 @@ export function ehCampoDeTexto(alvo: AlvoTecla | undefined): boolean {
 }
 
 /**
- * Destino do atalho ⌘/Ctrl + 1…6, ou `null`. Sem modificador, com Alt ou
+ * Destino do atalho ⌘/Ctrl + 1…7, ou `null`. Sem modificador, com Alt ou
  * Shift, tecla repetida, com sobreposição aberta ou dentro de um campo de
  * texto, o atalho é ignorado.
  */
@@ -99,7 +100,7 @@ export function destinoDoAtalho(evento: EventoTecla): RotaNav | null {
   if (evento.repeat || evento.dentroDeSobreposicao) return null;
   if (ehCampoDeTexto(evento.alvo)) return null;
 
-  const digito = /^Digit([1-6])$/.exec(evento.code ?? "")?.[1] ?? evento.key;
-  if (!/^[1-6]$/.test(digito)) return null;
+  const digito = /^Digit([1-7])$/.exec(evento.code ?? "")?.[1] ?? evento.key;
+  if (!/^[1-7]$/.test(digito)) return null;
   return ITENS_NAV[Number(digito) - 1].rota;
 }
