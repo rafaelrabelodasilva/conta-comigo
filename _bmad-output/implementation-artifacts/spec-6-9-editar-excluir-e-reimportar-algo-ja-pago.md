@@ -93,7 +93,7 @@ Hoje 15/11/26. Bloco de cobrança "Mãe" (= Responsável Mãe). Linha NETFLIX: M
 - [x] `sprint-status.yaml` (6.9 em `review`), `deferred-work.md`, `docs/infraestrutura.md` (HÁ migração e o que muda até o `db push`).
 - [x] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura"; os dois últimos provam a migração de verdade).
 - [x] Merge (#104) e `done` no sprint-status, em PR separada.
-- [ ] `supabase db push` da migração `20261130120000`: só quando Rafael pedir (ainda não aplicada).
+- [x] `supabase db push` da migração `20261130120000` feito em 19/11/2026, a pedido do Rafael.
 
 ## Verification
 
