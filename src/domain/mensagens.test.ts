@@ -655,11 +655,15 @@ describe("sugestão da fila no painel (História 3.1)", () => {
 });
 
 describe("reimportar um Mês (História 3.11)", () => {
-  const plano = { quantidade: 0, mantidas: 0, valorMudou: 0, novas: 0, apagadas: 0, sumiram: 0, voltaramAPrevisto: 0, excluidos: 0 };
+  const plano = { quantidade: 0, mantidas: 0, valorMudou: 0, novas: 0, apagadas: 0, sumiram: 0, voltaramAPrevisto: 0, excluidos: 0, excluidosComPagamento: 0 };
+  it("6.9: os excluídos com pagamento ficam excluídos e o pagamento fica; os outros voltam", () => {
+    expect(avisoReimportar("2026-10", { ...plano, quantidade: 3, mantidas: 3, excluidos: 3, excluidosComPagamento: 1 })).toContain("Os 2 excluídos voltam. 1 excluído tem pagamento registrado e continua excluído (o pagamento fica); a linha da fatura nova volta como nova.");
+    expect(avisoReimportar("2026-10", { ...plano, quantidade: 3, mantidas: 3, excluidos: 2, excluidosComPagamento: 2 })).toContain("2 excluídos têm pagamento registrado e continuam excluídos (os pagamentos ficam); as linhas da fatura nova voltam como novas.");
+  });
 
   it("aviso (3.12): mantém a classificação, traz as novas, apaga o que sumiu e diz os excluídos que voltam", () => {
     expect(
-      avisoReimportar("2026-11", { ...plano, quantidade: 47, mantidas: 44, valorMudou: 2, novas: 3, apagadas: 1, sumiram: 2, excluidos: 2 }),
+      avisoReimportar("2026-11", { ...plano, quantidade: 47, mantidas: 44, valorMudou: 2, novas: 3, apagadas: 1, sumiram: 2, excluidos: 2, excluidosComPagamento: 0 }),
     ).toBe(
       "Esta fatura já foi importada. Importar de novo mantém a classificação dos 44 lançamentos de novembro que continuam na fatura (2 com valor diferente) e traz 3 novos. 1 que não vem mais na fatura é apagado; 2 que você mexeu saem da fatura e vão para o Revisar. Os 2 excluídos voltam.",
     );
@@ -667,7 +671,7 @@ describe("reimportar um Mês (História 3.11)", () => {
 
   it("singulares; sem sobras, sem excluídos e sem novas, as frases somem", () => {
     expect(
-      avisoReimportar("2026-10", { ...plano, quantidade: 3, mantidas: 1, valorMudou: 1, novas: 1, apagadas: 1, sumiram: 1, voltaramAPrevisto: 1, excluidos: 1 }),
+      avisoReimportar("2026-10", { ...plano, quantidade: 3, mantidas: 1, valorMudou: 1, novas: 1, apagadas: 1, sumiram: 1, voltaramAPrevisto: 1, excluidos: 1, excluidosComPagamento: 0 }),
     ).toBe(
       "Esta fatura já foi importada. Importar de novo mantém a classificação do 1 lançamento de outubro que continua na fatura (1 com valor diferente) e traz 1 novo. 1 que não vem mais na fatura é apagado; 1 que você mexeu sai da fatura e vai para o Revisar; 1 volta a ser previsto. O 1 excluído volta.",
     );

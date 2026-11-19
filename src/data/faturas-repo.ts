@@ -86,7 +86,10 @@ export type LeituraReimportacao = Substituir & {
   antigas: AntigaParaReimportar[];
   /** O Status padrão de `configuracoes`, lido junto (null: sem padrão). */
   statusPadraoId: string | null;
-  /** Linhas com referência que impede apagar (Pagamento, Épico 6); vazio até lá. */
+  /**
+   * As linhas da Fatura (inclusive excluídas) com item de Pagamento, vivo ou de um Pagamento desfeito (AD-15, 6.9): a
+   * vida não as apaga. As vivas sem par saem da Fatura (`sumiu_na_reimportacao`); as excluídas ficam excluídas.
+   */
   referenciadas: string[];
   /** Linhas do Mês que ocupam uma parcela de Série fora da Fatura e não são previstos (ex.: as que saíram numa reimportação antes). */
   outrasDaSerie: PrevistoParaCasar[];
@@ -282,7 +285,8 @@ export function criarRepoFaturas(deps: {
             l.parcela_n !== null &&
             l.parcela_total !== null,
         );
-        // As antigas com Pagamento (ela ou uma parte dela): não são apagadas, saem da Fatura (AD-7, História 6.1).
+        // As antigas com item de Pagamento (ela ou uma parte dela): não são apagadas, saem da Fatura (AD-7, 6.1). Conta o item de
+        // um Pagamento DESFEITO também (6.9): a FK de `pagamento_itens` impede apagar a linha com qualquer item, vivo ou não.
         const comItem = new Set<string>();
         const idsDoMes = lidasLinhas.data.map((l) => l.id);
         for (let de = 0; de < idsDoMes.length; de += POR_BLOCO_DE_IDS) {
@@ -290,7 +294,6 @@ export function criarRepoFaturas(deps: {
             .from("pagamento_itens")
             .select("lancamento_id")
             .in("lancamento_id", idsDoMes.slice(de, de + POR_BLOCO_DE_IDS))
-            .is("excluido_em", null)
             .limit(POR_BLOCO_DE_IDS * 10);
           if (itens.error || !itens.data) return falhou(itens.error);
           for (const i of itens.data) comItem.add(i.lancamento_id);

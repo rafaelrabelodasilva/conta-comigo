@@ -16,6 +16,8 @@ export type PropsConfirmarAcao = {
   /** Diz o que o botão faz, ex.: "Excluir bloco". */
   rotuloConfirmar: string;
   aoConfirmar: () => void;
+  /** O botão fica desativado (ex.: ainda se confere o efeito da ação, História 6.9). */
+  desativarConfirmar?: boolean;
 };
 
 export function ConfirmarAcao({
@@ -25,6 +27,7 @@ export function ConfirmarAcao({
   descricao,
   rotuloConfirmar,
   aoConfirmar,
+  desativarConfirmar = false,
 }: PropsConfirmarAcao) {
   const confirmar = useRef<HTMLButtonElement>(null);
 
@@ -48,7 +51,7 @@ export function ConfirmarAcao({
               <Botao variante="secundario">{ROTULOS.cancelar}</Botao>
             </AlertDialog.Cancel>
             <AlertDialog.Action asChild>
-              <Botao ref={confirmar} variante="destrutivo" onClick={aoConfirmar}>
+              <Botao ref={confirmar} variante="destrutivo" onClick={aoConfirmar} disabled={desativarConfirmar}>
                 {rotuloConfirmar}
               </Botao>
             </AlertDialog.Action>

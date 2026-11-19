@@ -16,8 +16,10 @@
 //   Fatura com `sumiu_na_reimportacao`; as outras são apagadas. O Ajuste sem
 //   par acompanha a mãe: sai junto se ela sai, senão é apagado. Linhas
 //   excluídas são sempre apagadas (voltam novas), como na 3.11.
-// - `referenciadas` é o ponto de extensão do Épico 6: os ids de linhas com
-//   Pagamento. Hoje o repositório manda o conjunto vazio.
+// - `referenciadas` (Épico 6, AD-15): os ids de linhas com item de Pagamento (a linha ou uma parte dela; o item de um
+//   Pagamento desfeito conta, a FK impede apagar). A viva sem par e referenciada sai da Fatura com
+//   `sumiu_na_reimportacao` e o Pagamento segue com ela (o Saldo continua contando); a excluída referenciada
+//   fica excluída (`resumo.excluidosComPagamento`) em vez de ser apagada.
 // - `aplicarReimportacao` dá a cada nova a classificação final com o mesmo
 //   motor do casamento de previstos (`aplicarCasamento`): a antiga pareada faz o
 //   papel de "previsto" (a classificação dela vale, as Regras só completam o que
@@ -169,8 +171,13 @@ export type ResumoDoPlano = {
   sumiram: number;
   /** Eram previstos casados e voltam a previstos. */
   voltaramAPrevisto: number;
-  /** Linhas excluídas: são apagadas e voltam como novas. */
+  /** Linhas excluídas: são apagadas e voltam como novas (as com Pagamento, não: ver `excluidosComPagamento`). */
   excluidos: number;
+  /**
+   * Dessas, as excluídas que têm item de Pagamento (6.9, AD-15): a FK impede apagá-las, então ficam EXCLUÍDAS, fora da
+   * Fatura, com o Pagamento (o crédito de AD-11 segue no Saldo), e a linha da Fatura nova volta como nova.
+   */
+  excluidosComPagamento: number;
 };
 
 export type PlanoDeReimportacao = {
@@ -209,7 +216,8 @@ export function planejarReimportacao(
   for (const id of semPar) {
     const a = porId.get(id) as AntigaParaReimportar;
     if (a.ajuste_de_id === null) continue;
-    destino.set(id, a.ajuste_de_id !== null && destino.get(a.ajuste_de_id) === "sumiram" ? "sumiram" : "apagar");
+    // O Ajuste com Pagamento próprio (6.9) também sai da Fatura: a FK de pagamento_itens impede apagá-lo.
+    destino.set(id, destino.get(a.ajuste_de_id) === "sumiram" || referenciadas.has(id) ? "sumiram" : "apagar");
   }
   for (const id of semPar) {
     const d = destino.get(id);
@@ -237,6 +245,7 @@ export function planejarReimportacao(
       sumiram: sumiram.length,
       voltaramAPrevisto: voltar.length,
       excluidos: antigas.filter((a) => a.excluido_em !== null).length,
+      excluidosComPagamento: antigas.filter((a) => a.excluido_em !== null && referenciadas.has(a.id)).length,
     },
   };
 }

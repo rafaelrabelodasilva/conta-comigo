@@ -65,7 +65,8 @@ import {
 } from "@/domain/painel";
 import { mensagemDaSelecao } from "@/domain/mensagem-janela";
 import { lerModelo } from "@/domain/modelo-mensagem";
-import { faltaDoParcial, idsQuitadosPorPagamento, projetarPagamento, recusarStatusNaoPago, somaDosItens } from "@/domain/pagamento";
+import { faltaDoParcial, idsComPagamento, idsQuitadosPorPagamento, projetarPagamento, recusarStatusNaoPago, somaDosItens } from "@/domain/pagamento";
+import { TEXTOS_AVISO_PAGAMENTO } from "@/domain/mensagens";
 import { pendentesDosLancamentos, projetarPainel } from "@/domain/projecoes";
 import { faltaReceberDoMes, recebidoNoMes } from "@/domain/recebimentos";
 import { ativos as responsaveisAtivos } from "@/domain/responsaveis";
@@ -109,6 +110,7 @@ import { JanelaGerarMensagem } from "./JanelaGerarMensagem";
 import { JanelaMensagemDoBloco } from "./JanelaMensagemDoBloco";
 import { JanelaProgramarDivida } from "./JanelaProgramarDivida";
 import { DividirLancamento } from "./DividirLancamento";
+import { ConfirmarComPagamento, type ContextoDoAviso } from "./ConfirmarComPagamento";
 import { PainelLancamento } from "./PainelLancamento";
 import { SeletorMes } from "./SeletorMes";
 
@@ -205,6 +207,9 @@ import { SeletorMes } from "./SeletorMes";
 // cobrança sobre o que está em aberto no Mês aberto (`pendentesDosLancamentos` com `mes`, e `faltaReceberDoMes`:
 // `avaliar` do núcleo). Tocar em "Falta receber" abre Recebimentos. Sem os itens de Pagamento, os Blocos ou os
 // Pagamentos lidos, o valor é "—" (nunca um número com a regra errada).
+
+/** Qualquer valor não nulo: o aviso só precisa saber que a linha sai (o relógio não entra no núcleo). */
+const EXCLUIDO_PARA_O_AVISO = "excluido";
 
 const TABELAS = ["faturas", "fatura_cartoes", "lancamentos", "responsaveis", "tipos", "status", "blocos", "pagamento_itens", "pagamentos"] as const;
 
@@ -346,6 +351,9 @@ export function Painel({
   const statusPagos = useMemo(() => new Set(status.linhas.filter((s) => s.conta_como_pago).map((s) => s.id)), [status.linhas]);
   // Os que um Pagamento quitou (o "pago" que não se tira à mão) e o quanto cada linha já recebeu (Pago parcialmente, 6.2).
   const quitadasPorPagamento = useMemo(() => idsQuitadosPorPagamento(itensDePagamento.linhas), [itensDePagamento.linhas]);
+  // Os Lançamentos do Mês aberto com Pagamento vivo (6.9): mexer no Valor deles, ou excluí-los, pede o aviso do Saldo (FR-46).
+  const comPagamento = useMemo(() => idsComPagamento(itensDePagamento.linhas), [itensDePagamento.linhas]);
+  const contextoDoAviso = useMemo<ContextoDoAviso>(() => ({ blocos, statusPagos, hoje }), [blocos, statusPagos, hoje]);
   // "Pago parcialmente" e o que falta (derivados do núcleo, nunca gravados): a grade e o painel do Lançamento leem daqui.
   const faltaPorLinha = useMemo(() => {
     const recebido = somaDosItens(itensDePagamento.linhas);
@@ -827,6 +835,8 @@ export function Painel({
           cadastros={cadastrosPainel}
           statusPagos={statusPagos}
           quitadasPorPagamento={quitadasPorPagamento}
+          comPagamento={comPagamento}
+          contextoDoAviso={contextoDoAviso}
           faltaCentavos={faltaPorLinha.get(abertaNoMes.id) ?? null}
           atrasadoDesde={atrasoPorLinha.get(abertaNoMes.id) ?? null}
           aoFechar={() => setPainel(null)}
@@ -1003,6 +1013,9 @@ export function Painel({
   }
 
   const aExcluir = excluindo === null ? undefined : lancamentos.linhas.find((l) => l.id === excluindo);
+  // O que sai junto com a linha (os Ajustes e as filhas) e, no lote, as marcadas e os Ajustes delas: o aviso (6.9) olha todas.
+  const idsDaExclusao = aExcluir === undefined ? [] : [aExcluir.id, ...ajustesDe(aExcluir.id), ...filhasDe(aExcluir.id)];
+  const idsDaExclusaoEmLote = [...planoDaExclusao.ids, ...planoDaExclusao.ajustes];
 
   return (
     // iPad deitado e PC: o conteúdo reserva a largura do painel lateral.
@@ -1028,36 +1041,67 @@ export function Painel({
       >
         {conteudo}
         {painelLateral}
-        <ConfirmarAcao
-          aberta={aExcluir !== undefined}
-          aoMudar={(abrir) => {
-            if (!abrir) setExcluindo(null);
-          }}
-          titulo={TEXTOS_LANCAMENTO.confirmar_excluir_titulo}
-          descricao={
-            aExcluir
-              ? descricaoExcluirLancamento(nomeExibido(aExcluir), aExcluir.fatura_id !== null, ajustesDe(aExcluir.id).length)
-              : ""
-          }
-          rotuloConfirmar={TEXTOS_LANCAMENTO.confirmar_excluir}
-          aoConfirmar={() => {
-            if (excluindo !== null) void excluir(excluindo);
-            setExcluindo(null);
-          }}
-        />
-        <ConfirmarAcao
-          aberta={excluindoLote && selecao.size > 0 && planoDaExclusao.ids.length > 0}
-          aoMudar={(abrir) => {
-            if (!abrir) setExcluindoLote(false);
-          }}
-          titulo={TEXTOS_SELECAO.titulo_excluir}
-          descricao={descricaoExcluirEmLote(planoDaExclusao.ids.length, planoDaExclusao.ajustes.length, planoDaExclusao.partesQueFicam)}
-          rotuloConfirmar={TEXTOS_SELECAO.confirmar_excluir}
-          aoConfirmar={() => {
-            setExcluindoLote(false);
-            void excluirSelecao();
-          }}
-        />
+        {aExcluir !== undefined && idsDaExclusao.some((id) => comPagamento.has(id)) ? (
+          // Com Pagamento (6.9, FR-46): a mesma confirmação, com o aviso do efeito no Saldo pendente antes da descrição.
+          <ConfirmarComPagamento
+            mudancas={idsDaExclusao.map((id) => ({ id, patch: { excluido_em: EXCLUIDO_PARA_O_AVISO } }))}
+            contexto={contextoDoAviso}
+            titulo={TEXTOS_AVISO_PAGAMENTO.titulo_excluir}
+            descricao={descricaoExcluirLancamento(nomeExibido(aExcluir), aExcluir.fatura_id !== null, ajustesDe(aExcluir.id).length)}
+            rotuloConfirmar={TEXTOS_LANCAMENTO.confirmar_excluir}
+            aoCancelar={() => setExcluindo(null)}
+            aoConfirmar={() => {
+              if (excluindo !== null) void excluir(excluindo);
+              setExcluindo(null);
+            }}
+          />
+        ) : (
+          <ConfirmarAcao
+            aberta={aExcluir !== undefined}
+            aoMudar={(abrir) => {
+              if (!abrir) setExcluindo(null);
+            }}
+            titulo={TEXTOS_LANCAMENTO.confirmar_excluir_titulo}
+            descricao={
+              aExcluir
+                ? descricaoExcluirLancamento(nomeExibido(aExcluir), aExcluir.fatura_id !== null, ajustesDe(aExcluir.id).length)
+                : ""
+            }
+            rotuloConfirmar={TEXTOS_LANCAMENTO.confirmar_excluir}
+            aoConfirmar={() => {
+              if (excluindo !== null) void excluir(excluindo);
+              setExcluindo(null);
+            }}
+          />
+        )}
+        {excluindoLote && selecao.size > 0 && planoDaExclusao.ids.length > 0 && idsDaExclusaoEmLote.some((id) => comPagamento.has(id)) ? (
+          <ConfirmarComPagamento
+            mudancas={idsDaExclusaoEmLote.map((id) => ({ id, patch: { excluido_em: EXCLUIDO_PARA_O_AVISO } }))}
+            contexto={contextoDoAviso}
+            titulo={TEXTOS_AVISO_PAGAMENTO.titulo_excluir}
+            descricao={descricaoExcluirEmLote(planoDaExclusao.ids.length, planoDaExclusao.ajustes.length, planoDaExclusao.partesQueFicam)}
+            rotuloConfirmar={TEXTOS_SELECAO.confirmar_excluir}
+            aoCancelar={() => setExcluindoLote(false)}
+            aoConfirmar={() => {
+              setExcluindoLote(false);
+              void excluirSelecao();
+            }}
+          />
+        ) : (
+          <ConfirmarAcao
+            aberta={excluindoLote && selecao.size > 0 && planoDaExclusao.ids.length > 0}
+            aoMudar={(abrir) => {
+              if (!abrir) setExcluindoLote(false);
+            }}
+            titulo={TEXTOS_SELECAO.titulo_excluir}
+            descricao={descricaoExcluirEmLote(planoDaExclusao.ids.length, planoDaExclusao.ajustes.length, planoDaExclusao.partesQueFicam)}
+            rotuloConfirmar={TEXTOS_SELECAO.confirmar_excluir}
+            aoConfirmar={() => {
+              setExcluindoLote(false);
+              void excluirSelecao();
+            }}
+          />
+        )}
         {classificandoLote && selecao.size > 0 ? (
           <JanelaClassificarEmLote
             aberta

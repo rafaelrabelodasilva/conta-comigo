@@ -71,8 +71,19 @@ vi.mock("@/data/realtime", async () => {
     cache.set(tabela, { versao: falso.versao, retrato: novo });
     return novo;
   };
+  const cacheDeTodos = new Map<string, { versao: number; retrato: unknown }>();
+  const retratoDeTodos = (tabela: string) => {
+    const guardado = cacheDeTodos.get(tabela);
+    if (guardado && guardado.versao === falso.versao) return guardado.retrato;
+    const novo = { status: falso.statusTabelas[`${tabela}:todos`] ?? falso.status, linhas: falso.banco[tabela] ?? [] };
+    cacheDeTodos.set(tabela, { versao: falso.versao, retrato: novo });
+    return novo;
+  };
   return {
     useLinhas: (tabela: string) => useSyncExternalStore(assinar, () => retrato(tabela)),
+    // Os gerenciadores de TODOS os Meses (a confirmação de algo já pago, 6.9): as linhas inteiras, sem escopo de Mês.
+    useTodosOsLancamentos: () => useSyncExternalStore(assinar, () => retratoDeTodos("lancamentos")),
+    useItensDoHistorico: () => useSyncExternalStore(assinar, () => retratoDeTodos("pagamento_itens")),
     gerenciador: () => ({
       recarregar: falso.recarregar,
       abrirMes: (mes: string) => {
@@ -3548,5 +3559,125 @@ describe("Aberto por 'A receber' (História 6.6): Mês e Lançamento de outro M�
     falso.mes = null;
     render(<Painel titulo="Painel" />, { wrapper: ToastProvider });
     expect(falso.abrirMes).toHaveBeenCalledWith("2026-11");
+  });
+});
+
+describe("Excluir algo já pago (História 6.9, FR-46)", () => {
+  const casal = {
+    id: "b-casal",
+    owner_id: "dono",
+    nome: "Casal",
+    formula: { tipo: "responsavel", id: "r-casal" },
+    ordem: 1,
+    de_cobranca: true,
+    meu_bloco: false,
+    updated_at: "2026-11-03T12:00:00+00:00",
+  };
+  const pagamento = {
+    id: "p1",
+    data: "2026-10-08",
+    valor_recebido_centavos: 31067,
+    modo: "total",
+    excluido_em: null,
+    updated_at: "2026-11-03T12:00:00+00:00",
+  };
+  const itemDoPago = {
+    id: "i1",
+    pagamento_id: "p1",
+    lancamento_id: "pg",
+    mes: "2026-11",
+    valor_centavos: 31067,
+    status_anterior_id: "s-nao",
+    status_aplicado_id: "s-pago",
+    excluido_em: null,
+    updated_at: "2026-11-03T12:00:00+00:00",
+  };
+
+  /** Novembro/26 com um pago (R$ 310,67, 08/10/26) e um livre (R$ 10,00), os dois do Casal; Bloco de cobrança "Casal". */
+  function novembroComPago() {
+    definir({
+      faturas: [outubro, novembro],
+      lancamentos: [
+        lanc("2026-11", { id: "pg", nome: "JA PAGO", valor_centavos: 31067, responsavel_id: "r-casal", status_id: "s-pago" }),
+        lanc("2026-11", { id: "lv", nome: "LIVRE", valor_centavos: 1000, responsavel_id: "r-casal" }),
+      ],
+      blocos: [casal],
+    });
+    falso.banco = { ...falso.banco, pagamentos: [pagamento], pagamento_itens: [itemDoPago] };
+    falso.versao++;
+  }
+  const linhaPorNome = (nome: string) => linhasDaGrade().find((r) => nomeVisivel(r) === nome)!;
+  const barra = () => screen.queryByRole("region", { name: "Ações da seleção", hidden: true });
+  const abrirExcluir = async (u: ReturnType<typeof userEvent.setup>, nome: string) => {
+    await u.click(within(linhaPorNome(nome)).getByRole("button", { name: `Ações de ${nome}` }));
+    await u.click(screen.getByRole("menuitem", { name: "Excluir" }));
+  };
+
+  it("excluir uma linha com Pagamento avisa o efeito no Saldo (de R$ 10,00 para - R$ 300,67) antes de excluir", async () => {
+    novembroComPago();
+    renderizar();
+    const u = userEvent.setup();
+    await abrirExcluir(u, "JA PAGO");
+    const janela = await screen.findByRole("alertdialog", { name: "Excluir lançamento com pagamento?" });
+    expect(sem(janela.textContent)).toContain(
+      "Este lançamento tem pagamento registrado em 08/10/26. O Saldo pendente do Bloco Casal muda de R$ 10,00 para - R$ 300,67.",
+    );
+    // A descrição de sempre segue depois do aviso.
+    expect(sem(janela.textContent)).toContain("sai da grade");
+    expect(repoL.excluir).not.toHaveBeenCalled();
+    await u.click(within(janela).getByRole("button", { name: "Excluir lançamento" }));
+    expect(repoL.excluir).toHaveBeenCalledWith("pg");
+  });
+
+  it("Cancelar não exclui", async () => {
+    novembroComPago();
+    renderizar();
+    const u = userEvent.setup();
+    await abrirExcluir(u, "JA PAGO");
+    const janela = await screen.findByRole("alertdialog", { name: "Excluir lançamento com pagamento?" });
+    await u.click(within(janela).getByRole("button", { name: "Cancelar" }));
+    expect(repoL.excluir).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("uma linha sem Pagamento mantém a confirmação de sempre, sem aviso do Saldo", async () => {
+    novembroComPago();
+    renderizar();
+    const u = userEvent.setup();
+    await abrirExcluir(u, "LIVRE");
+    const janela = await screen.findByRole("alertdialog", { name: "Excluir lançamento?" });
+    expect(sem(janela.textContent)).not.toContain("pagamento registrado");
+    await u.click(within(janela).getByRole("button", { name: "Excluir lançamento" }));
+    expect(repoL.excluir).toHaveBeenCalledWith("lv");
+  });
+
+  it("enquanto os pagamentos de todos os Meses leem, a janela diz 'Conferindo…' e o botão fica desativado", async () => {
+    novembroComPago();
+    falso.statusTabelas["pagamento_itens:todos"] = "carregando";
+    falso.versao++;
+    renderizar();
+    const u = userEvent.setup();
+    await abrirExcluir(u, "JA PAGO");
+    const janela = await screen.findByRole("alertdialog", { name: "Excluir lançamento com pagamento?" });
+    expect(sem(janela.textContent)).toContain("Conferindo os pagamentos já registrados…");
+    expect((within(janela).getByRole("button", { name: "Excluir lançamento" }) as HTMLButtonElement).disabled).toBe(true);
+    delete falso.statusTabelas["pagamento_itens:todos"];
+  });
+
+  it("Excluir da Seleção: o aviso olha as linhas marcadas (o crédito entra e a livre sai do Saldo)", async () => {
+    novembroComPago();
+    renderizar();
+    const u = userEvent.setup();
+    await u.click(screen.getByRole("checkbox", { name: "Selecionar JA PAGO" }));
+    await u.click(screen.getByRole("checkbox", { name: "Selecionar LIVRE" }));
+    await u.click(within(barra()!).getByRole("button", { name: "Mais" }));
+    await u.click(screen.getByRole("menuitem", { name: "Excluir" }));
+    const janela = await screen.findByRole("alertdialog", { name: "Excluir lançamento com pagamento?" });
+    expect(sem(janela.textContent)).toContain(
+      "Este lançamento tem pagamento registrado em 08/10/26. O Saldo pendente do Bloco Casal muda de R$ 10,00 para - R$ 310,67.",
+    );
+    expect(sem(janela.textContent)).toContain("2 lançamentos saem da grade");
+    await u.click(within(janela).getByRole("button", { name: "Excluir lançamentos" }));
+    expect(repoL.excluir).toHaveBeenCalledWith("pg", { junto: ["lv"] });
   });
 });

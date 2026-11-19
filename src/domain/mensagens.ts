@@ -11,6 +11,7 @@ import { formatarData, formatarMes, formatarMesExtenso, formatarNomeDoMes } from
 import { arredondar, formatarDinheiro } from "./dinheiro";
 import type { Divisao } from "./divisao";
 import { primeiraDiferenca, type ComposicaoTotalAPagar, type ConferenciaImportacao } from "./importacao-fatura";
+import type { AvisoDePagamento } from "./aviso-pagamento";
 import type { ResumoDoPlano } from "./reimportacao";
 
 export const MENSAGENS = {
@@ -336,8 +337,14 @@ export function avisoReimportar(mes: string, r: ResumoDoPlano, historico = 0): s
     sobras.push(`${um(r.voltaramAPrevisto, "volta a ser previsto", "voltam a ser previstos")}`);
   }
   const resto = sobras.length === 0 ? "" : ` ${sobras.join("; ")}.`;
+  // Os excluídos com Pagamento ficam excluídos (a FK impede apagar) e a linha da fatura nova volta como nova (6.9).
+  const comPagamento = r.excluidosComPagamento;
+  const voltam = r.excluidos - comPagamento;
   const excluidos =
-    r.excluidos === 0 ? "" : r.excluidos === 1 ? " O 1 excluído volta." : ` Os ${r.excluidos} excluídos voltam.`;
+    (voltam === 0 ? "" : voltam === 1 ? " O 1 excluído volta." : ` Os ${voltam} excluídos voltam.`) +
+    (comPagamento === 0
+      ? ""
+      : ` ${um(comPagamento, "excluído tem pagamento registrado e continua excluído (o pagamento fica); a linha da fatura nova volta como nova", "excluídos têm pagamento registrado e continuam excluídos (os pagamentos ficam); as linhas da fatura nova voltam como novas")}.`);
   const doHistorico =
     historico === 0
       ? ""
@@ -2290,4 +2297,47 @@ export function rotuloUsarEmRecebimentos(nome: string): string {
 /** O nome acessível da chave "É o meu Bloco" de um Bloco. */
 export function rotuloEMeuBloco(nome: string): string {
   return `É o meu Bloco: ${nome}`;
+}
+
+// ------------------------------------------- Aviso ao mexer em algo já pago (História 6.9)
+
+export const TEXTOS_AVISO_PAGAMENTO = {
+  /** Enquanto os Lançamentos e os itens de todos os Meses não chegaram. */
+  conferindo: "Conferindo os pagamentos já registrados…",
+  nenhum_saldo_muda: "Nenhum Saldo pendente muda.",
+  /** A leitura dos Lançamentos ou dos pagamentos de todos os Meses falhou: a confirmação vale sem o de-para. */
+  nao_conferiu: "Este lançamento tem pagamento registrado, mas não foi possível conferir o efeito nos Saldos pendentes.",
+  /** Mudar o Valor (ou Responsável, Tipo, Status) de uma linha com Pagamento: a confirmação do painel. */
+  titulo_mudar: "Mudar um lançamento com pagamento?",
+  confirmar_mudar: "Mudar mesmo assim",
+  /** Excluir linha(s) com Pagamento: o título da janela de sempre. */
+  titulo_excluir: "Excluir lançamento com pagamento?",
+} as const;
+
+/** "08/10/26", "08/10/26 e 12/10/26", "08/10/26, 12/10/26 e 15/10/26"; mais de três: "5 datas, de 01/10/26 a 20/10/26". */
+export function rotuloDatasDoPagamento(datas: readonly string[]): string {
+  const f = datas.map(formatarData);
+  if (f.length <= 1) return f[0] ?? "";
+  if (f.length === 2) return `${f[0]} e ${f[1]}`;
+  if (f.length === 3) return `${f[0]}, ${f[1]} e ${f[2]}`;
+  return `${f.length} datas, de ${f[0]} a ${f[f.length - 1]}`;
+}
+
+/**
+ * O aviso (FR-46): "Este lançamento tem pagamento registrado em 08/10/26. O Saldo pendente do Bloco Mãe muda de
+ * R$ 0,00 para - R$ 310,67." Vários Blocos: "...; o do Bloco Rangel muda de ...". Nenhum Bloco muda: "Nenhum Saldo
+ * pendente muda." O nome do Bloco é texto da pessoa, então o artigo fica em "Bloco" ("da Mãe" não serve a todos os nomes).
+ */
+export function textoDoAvisoDePagamento(aviso: AvisoDePagamento): string {
+  const varias = aviso.datas.length > 1;
+  const onde = aviso.datas.length === 0 ? "" : ` em ${rotuloDatasDoPagamento(aviso.datas)}`;
+  const pagamento = varias ? "pagamentos registrados" : "pagamento registrado";
+  const quem =
+    aviso.quantidade === 1
+      ? `Este lançamento tem ${pagamento}${onde}.`
+      : `${aviso.quantidade} lançamentos têm ${pagamento}${onde}.`;
+  if (aviso.efeitos.length === 0) return `${quem} ${TEXTOS_AVISO_PAGAMENTO.nenhum_saldo_muda}`;
+  const efeito = (e: AvisoDePagamento["efeitos"][number], primeiro: boolean) =>
+    `${primeiro ? "O Saldo pendente do Bloco" : "o do Bloco"} ${e.nome} muda de ${formatarDinheiro(e.antesCentavos)} para ${formatarDinheiro(e.depoisCentavos)}`;
+  return `${quem} ${aviso.efeitos.map((e, i) => efeito(e, i === 0)).join("; ")}.`;
 }

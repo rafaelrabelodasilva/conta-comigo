@@ -142,6 +142,40 @@ describe("planejarReimportacao", () => {
     expect(plano.apagar).toEqual([]);
   });
 
+  it("6.9: a viva sem par com Pagamento sai da Fatura (sumiu_na_reimportacao) mesmo sem trabalho manual, e a pareada segue", () => {
+    const paga = antiga({ nome_normalizado: "A", status_id: "padrao" });
+    const pareada = antiga({ nome_normalizado: "B", status_id: "padrao" });
+    const limpa = antiga({ nome_normalizado: "C", status_id: "padrao" });
+    const plano = planejarReimportacao([nova(1, { nome_normalizado: "B", valor_centavos: pareada.valor_centavos })], [paga, pareada, limpa], {
+      ...opcoes,
+      referenciadas: new Set([paga.id, pareada.id]),
+    });
+    expect(plano.pares.map((p) => p.antiga_id)).toEqual([pareada.id]);
+    expect(plano.sumiram).toEqual([paga.id]);
+    expect(plano.apagar).toEqual([limpa.id]);
+  });
+
+  it("6.9: a excluída com Pagamento conta à parte no resumo (fica excluída, não é apagada); a excluída sem Pagamento volta como antes", () => {
+    const comPagamento = antiga({ nome_normalizado: "A", excluido_em: "2026-11-03T00:00:00Z" });
+    const semPagamento = antiga({ nome_normalizado: "B", excluido_em: "2026-11-03T00:00:00Z" });
+    const plano = planejarReimportacao([], [comPagamento, semPagamento], { ...opcoes, referenciadas: new Set([comPagamento.id]) });
+    expect(plano.resumo.excluidos).toBe(2);
+    expect(plano.resumo.excluidosComPagamento).toBe(1);
+    expect(plano.sumiram).toEqual([]);
+    expect(plano.apagar).toEqual([]);
+  });
+
+  it("6.9: o Ajuste sem par com Pagamento próprio sai da Fatura mesmo com a mãe mantida (a FK impede apagar)", () => {
+    const mae = antiga({ nome_normalizado: "M", valor_centavos: 100, status_id: "padrao" });
+    const ajuste = antiga({ ajuste_de_id: mae.id, valor_centavos: -8, status_id: "padrao" });
+    const plano = planejarReimportacao([nova(1, { nome_normalizado: "M", valor_centavos: 100 })], [mae, ajuste], {
+      ...opcoes,
+      referenciadas: new Set([ajuste.id]),
+    });
+    expect(plano.sumiram).toEqual([ajuste.id]);
+    expect(plano.apagar).toEqual([]);
+  });
+
   it("o Ajuste sem par acompanha a mãe: sai com ela se ela sai, senão é apagado", () => {
     const mae = antiga({ editado_em: "2026-11-02T00:00:00Z", status_id: "padrao" });
     const ajuste = antiga({ ajuste_de_id: mae.id, valor_centavos: -8, status_id: "padrao" });
@@ -176,6 +210,7 @@ describe("planejarReimportacao", () => {
       sumiram: 1,
       voltaramAPrevisto: 1,
       excluidos: 1,
+      excluidosComPagamento: 0,
     });
   });
 });
