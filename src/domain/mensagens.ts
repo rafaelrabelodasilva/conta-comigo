@@ -2341,3 +2341,78 @@ export function textoDoAvisoDePagamento(aviso: AvisoDePagamento): string {
     `${primeiro ? "O Saldo pendente do Bloco" : "o do Bloco"} ${e.nome} muda de ${formatarDinheiro(e.antesCentavos)} para ${formatarDinheiro(e.depoisCentavos)}`;
   return `${quem} ${aviso.efeitos.map((e, i) => efeito(e, i === 0)).join("; ")}.`;
 }
+
+/** Os textos da tela Previsão (História 7.1, FR-32, UX-DR23): as abas, "Próximos meses" e o "Em breve" das outras duas. */
+export const TEXTOS_PREVISAO = {
+  abas: "Seções da Previsão",
+  aba_proximos_meses: "Próximos meses",
+  aba_evolucao: "Evolução",
+  aba_meu_gasto: "Meu gasto por Tipo",
+  em_breve: "Em breve",
+  em_breve_evolucao: "A comparação dos últimos meses ainda está sendo construída.",
+  em_breve_meu_gasto: "O seu gasto por Tipo ainda está sendo construído.",
+  carregando: "Carregando a previsão…",
+  titulo: "Comprometido nos próximos 6 meses",
+  ajuda: "É a mesma soma que o Painel de cada Mês mostra: previstos das parcelas e Contas manuais. Toque num Mês para abrir o Painel dele.",
+  agrupar: "Agrupar por",
+  por_responsavel: "Por Responsável",
+  por_tipo: "Por Tipo",
+  grafico: "Total por Mês",
+  legenda: "Legenda",
+  tabela: "Valores por Mês",
+  coluna_responsavel: "Responsável",
+  coluna_tipo: "Tipo",
+  linha_total: "Total",
+  sem_responsavel: "Sem responsável",
+  sem_tipo: "Sem tipo",
+  arquivado: "arquivado",
+  fatura_importada: "Fatura importada",
+  vazio: "Nenhum lançamento previsto para os próximos meses",
+  series: "Séries em andamento",
+  series_ajuda: "As parcelas e as Contas manuais que ainda têm Meses pela frente.",
+  ver_todas_as_series: "Mostrar só as maiores",
+} as const;
+
+/** "Nov/26: R$ 7.999,00": o total de um Mês, para o gráfico e para o nome acessível da barra. */
+export function rotuloDoMesNaPrevisao(mes: string, totalCentavos: number): string {
+  return `${formatarMes(mes)}: ${formatarDinheiro(totalCentavos)}`;
+}
+
+/** "Abrir o Painel de Nov/26": o toque num Mês da Previsão. */
+export function rotuloAbrirPainelDoMes(mes: string): string {
+  return `Abrir o Painel de ${formatarMes(mes)}`;
+}
+
+/** O botão que mostra as Séries além do limite: "Ver as outras 3 séries" (uma: "Ver a outra série"). */
+export function rotuloVerOutrasSeries(quantidade: number): string {
+  return quantidade === 1 ? "Ver a outra série" : `Ver as outras ${quantidade} séries`;
+}
+
+function rotuloMeses(n: number): string {
+  return n === 1 ? "1 mês" : `${n} meses`;
+}
+
+/**
+ * Uma Série da Previsão em uma frase. Parcelada em andamento: "MSC CRUZEIROS 01/12 → R$ 1.140,74 por mais 11 meses";
+ * que só começa depois: "… → R$ 120,00 por 6 meses, a partir de Dez/26"; Conta mensal: "… → R$ 250,00 por mês, sem data
+ * para acabar". Com o Valor mudado no meio, "de R$ A a R$ B" no lugar do valor.
+ */
+export function rotuloDaSerie(s: {
+  nome: string;
+  parcelaAtual: number | null;
+  parcelaTotal: number | null;
+  restantes: number | null;
+  menorCentavos: number;
+  maiorCentavos: number;
+  comecaEm: string | null;
+}): string {
+  const valor =
+    s.menorCentavos === s.maiorCentavos
+      ? formatarDinheiro(s.maiorCentavos)
+      : `de ${formatarDinheiro(s.menorCentavos)} a ${formatarDinheiro(s.maiorCentavos)}`;
+  const aPartirDe = s.comecaEm === null ? "" : `, a partir de ${formatarMes(s.comecaEm)}`;
+  if (s.parcelaTotal === null || s.restantes === null) return `${s.nome} → ${valor} por mês, sem data para acabar${aPartirDe}`;
+  if (s.parcelaAtual === null) return `${s.nome} → ${valor} por ${rotuloMeses(s.restantes)}${aPartirDe}`;
+  const parcela = `${String(s.parcelaAtual).padStart(2, "0")}/${String(s.parcelaTotal).padStart(2, "0")}`;
+  return `${s.nome} ${parcela} → ${valor} por mais ${rotuloMeses(s.restantes)}`;
+}
