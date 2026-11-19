@@ -2,7 +2,7 @@
 title: 'História 7.4: Lembretes dentro do app'
 type: 'feature'
 created: '2026-11-19'
-status: 'review'
+status: 'done'
 baseline_commit: 'b15fb28'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -127,9 +127,9 @@ Hoje 19/11/26. Ciclo: fechamento 28, vencimento 06 (desde Jan/26). Tolerância 1
 - [x] Migração `20261201120000_lembretes_preferencias.sql` e `database.types.ts` (**o SQL foi mostrado ao Rafael; nada foi aplicado em produção**).
 - [x] Provas: núcleo (matriz), jsdom (a faixa, o toque, os interruptores, a virada do dia, carregando e erro), `test/integracao` (a migração) e o backup (as colunas no `dados-exemplo.sql`).
 - [x] Textos "desde 16/11/26" → "desde 17/11/26" (EXPERIENCE.md, epics.md); item da 5.4/6.4 fechado no `deferred-work.md`; `docs/infraestrutura.md`; `sprint-status.yaml` (7.4 em `review`).
-- [ ] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura"): o `supabase` e o backup provam a migração de verdade.
-- [ ] `supabase db push` da migração, **só quando o Rafael pedir** (logo depois do merge).
-- [ ] `done` no sprint-status só depois do merge, em PR separada.
+- [x] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura"): o `supabase` e o backup provam a migração de verdade.
+- [x] `supabase db push` da migração, feito em 19/11/2026 a pedido do Rafael (só ela estava pendente).
+- [x] `done` no sprint-status só depois do merge, em PR separada.
 
 ## Verification
 
