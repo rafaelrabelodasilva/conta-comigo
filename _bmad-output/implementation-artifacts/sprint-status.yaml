@@ -29,13 +29,13 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 11-01-2026 19:39
-last_updated: 19-11-2026 21:00
+last_updated: 19-11-2026 22:00
 project: conta-comigo
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
 development_status:
-  epic-1: in-progress
+  epic-1: done
   1-1-criar-o-projeto-e-publicá-lo-na-vercel: done
   1-2-entrar-com-e-mail-e-senha: done
   1-3-visual-base-e-menu-lateral: done
@@ -48,7 +48,7 @@ development_status:
   1-10-backup-semanal-fora-do-supabase: done
   epic-1-retrospective: optional
 
-  epic-2: in-progress
+  epic-2: done
   2-1-prova-técnica-ler-a-fatura-de-outubro-no-ipad: done
   2-2-formatos-de-dinheiro-data-e-mês: done
   2-3-importar-a-fatura-do-mês: done
@@ -59,7 +59,7 @@ development_status:
   2-8-ajustes-de-centavos: done
   epic-2-retrospective: optional
 
-  epic-3: in-progress
+  epic-3: done
   3-1-regras-que-aprendem-com-a-classificação: done
   3-2-fila-do-revisar: done
   3-3-classificar-em-lote: done
@@ -74,7 +74,7 @@ development_status:
   3-12-reimportar-mantendo-a-classificação: done
   epic-3-retrospective: optional
 
-  epic-4: in-progress
+  epic-4: done
   4-1-montar-um-bloco-com-fichas: done
   4-2-blocos-no-painel: done
   4-3-filtrar-a-grade-pelo-bloco: done
@@ -91,7 +91,7 @@ development_status:
   5-4-alterar-encerrar-e-excluir-uma-conta-manual: done
   epic-5-retrospective: optional
 
-  epic-6: in-progress
+  epic-6: done
   6-1-marcar-como-pago: done
   6-2-pagamento-parcial-e-a-minha-parte: done
   6-3-histórico-e-desfazer-pagamentos: done
@@ -103,7 +103,7 @@ development_status:
   6-9-editar-excluir-e-reimportar-algo-já-pago: done
   epic-6-retrospective: optional
 
-  epic-7: in-progress
+  epic-7: done
   7-1-próximos-meses: done
   7-2-evolução-dos-últimos-meses: done
   7-3-meu-gasto-por-tipo: done
