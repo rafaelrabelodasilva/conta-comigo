@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
-import { criarRepoConfiguracoes, type LinhaConfiguracoes } from "./configuracoes-repo";
+import { configuracoesDoDono, criarRepoConfiguracoes, type LinhaConfiguracoes } from "./configuracoes-repo";
 import type { Database } from "./database.types";
 import { criarGerenciador } from "./realtime";
 
@@ -18,6 +18,8 @@ const linha = (extra: Partial<LinhaConfiguracoes> = {}): LinhaConfiguracoes => (
   limite_ajuste_centavos: 100,
   tolerancia_atraso_dias: 10,
   modelo_mensagem: {},
+  lembrete_fechamento: true,
+  lembrete_atraso: true,
   primeiro_uso_em: null,
   created_at: T1,
   updated_at: T1,
@@ -174,6 +176,31 @@ describe("repositório de Configurações", () => {
       { limite_ajuste_centavos: 200, tolerancia_atraso_dias: 15 },
     ]);
     expect(m.chamadas.every((c) => (c.opcoes as { onConflict: string }).onConflict === "owner_id")).toBe(true);
+  });
+
+  it("definirLembrete grava só a coluna do tipo e não chama o banco se nada mudou (História 7.4)", async () => {
+    const m = montar([linha()], (c) => ({
+      data: linha({ ...(c.corpo as object), updated_at: T2 }),
+      error: null,
+    }));
+    await pronto(m);
+    expect(await m.repo.definirLembrete("fechamento", false)).toEqual({ ok: true });
+    expect(await m.repo.definirLembrete("atraso", false)).toEqual({ ok: true });
+    // Já está desligado: nada a gravar.
+    expect(await m.repo.definirLembrete("atraso", false)).toEqual({ ok: true });
+    expect(await m.repo.definirLembrete("fechamento", true)).toEqual({ ok: true });
+    expect(m.chamadas.map((c) => c.corpo)).toEqual([
+      { lembrete_fechamento: false },
+      { lembrete_atraso: false },
+      { lembrete_fechamento: true },
+    ]);
+  });
+
+  it("definirLembrete desfaz o otimismo se o banco recusa (a coluna ainda não existe)", async () => {
+    const m = montar([linha()], () => ({ data: null, error: { message: "column does not exist" } }));
+    await pronto(m);
+    expect(await m.repo.definirLembrete("atraso", false)).toMatchObject({ ok: false });
+    expect(configuracoesDoDono(m.memoria.linhas())?.lembrete_atraso).toBe(true);
   });
 
   it("sem linha, a Conferência cria a linha num só upsert com as duas colunas", async () => {

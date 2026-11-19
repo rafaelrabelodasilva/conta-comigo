@@ -110,6 +110,8 @@ export type Database = {
           aparencia: string
           created_at: string
           id: string
+          lembrete_atraso: boolean
+          lembrete_fechamento: boolean
           limite_ajuste_centavos: number
           modelo_mensagem: NonNullable<Json>
           owner_id: string
@@ -122,6 +124,8 @@ export type Database = {
           aparencia?: string
           created_at?: string
           id?: string
+          lembrete_atraso?: boolean
+          lembrete_fechamento?: boolean
           limite_ajuste_centavos?: number
           modelo_mensagem?: NonNullable<Json>
           owner_id?: string
@@ -134,6 +138,8 @@ export type Database = {
           aparencia?: string
           created_at?: string
           id?: string
+          lembrete_atraso?: boolean
+          lembrete_fechamento?: boolean
           limite_ajuste_centavos?: number
           modelo_mensagem?: NonNullable<Json>
           owner_id?: string

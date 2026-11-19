@@ -5,6 +5,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Aparencia } from "@/domain/configuracoes";
+import type { TipoDeLembrete } from "@/domain/lembretes";
 import { lerModelo, modelosIguais, validarModelo, type ModeloMensagem } from "@/domain/modelo-mensagem";
 import type { Database } from "./database.types";
 import { gerenciador, type Gerenciador, type LinhaDe } from "./realtime";
@@ -41,6 +42,8 @@ export type MudancaConfiguracoes = Partial<
     | "tolerancia_atraso_dias"
     | "modelo_mensagem"
     | "primeiro_uso_em"
+    | "lembrete_fechamento"
+    | "lembrete_atraso"
   >
 >;
 
@@ -108,6 +111,15 @@ export function criarRepoConfiguracoes(deps: {
     /** A tela já validou com o núcleo (`APARENCIAS`). */
     definirAparencia(aparencia: Aparencia): Promise<ResultadoGravacao> {
       return definir({ aparencia });
+    },
+
+    /**
+     * Liga ou desliga um tipo de lembrete (FR-55, 7.4): uma coluna só, otimista como a Aparência (a
+     * faixa some ou volta na hora e o banco desfaz se recusar). Antes de a migração da 7.4 entrar no
+     * banco, o upsert responde erro (a coluna não existe) e a tela avisa "Não foi possível salvar".
+     */
+    definirLembrete(tipo: TipoDeLembrete, ligado: boolean): Promise<ResultadoGravacao> {
+      return definir(tipo === "fechamento" ? { lembrete_fechamento: ligado } : { lembrete_atraso: ligado });
     },
 
     /**

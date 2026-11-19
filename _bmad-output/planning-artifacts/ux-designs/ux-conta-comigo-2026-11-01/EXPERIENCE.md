@@ -195,7 +195,7 @@ Total: R$ 2.819,68
 
 | Componente | Comportamento |
 |---|---|
-| **Lembretes** (FR-55) | Avisos do sistema (notificação no iPad e no PC, com o app instalado e a permissão dada) e uma faixa dentro do app: **no dia do fechamento** ("A fatura de novembro fechou. Importe o PDF quando chegar") e **quando um Bloco de cobrança passa a ter itens atrasados** ("O Lucas tem R$ 115,16 em atraso desde 16/11/26"). Tocar no aviso abre o Painel ou Recebimentos. Em Configurações → Aparência, cada tipo de lembrete pode ser ligado ou desligado. |
+| **Lembretes** (FR-55) | Avisos do sistema (notificação no iPad e no PC, com o app instalado e a permissão dada) e uma faixa dentro do app: **no dia do fechamento** ("A fatura de novembro fechou. Importe o PDF quando chegar") e **quando um Bloco de cobrança passa a ter itens atrasados** ("O Lucas tem R$ 115,16 em atraso desde 17/11/26"). Tocar no aviso abre o Painel ou Recebimentos. Em Configurações → Aparência, cada tipo de lembrete pode ser ligado ou desligado. |
 | **Menu lateral** | O item ativo fica destacado. O contador do Revisar mostra os itens pendentes da fila e some quando ela zera. No PC, há atalhos ⌘/Ctrl + 1…6. |
 | **Etiqueta de pessoa** | Tocar filtra a grade pelo Responsável (atalho). |
 | **Aviso inferior** | Aparece por 6 segundos, e um novo aviso substitui o anterior. "Desfazer" reverte a última ação. |
