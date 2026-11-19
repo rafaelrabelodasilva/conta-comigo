@@ -2,7 +2,7 @@
 title: 'História 6.9: Editar, excluir e reimportar algo já pago'
 type: 'feature'
 created: '2026-11-18'
-status: 'review'
+status: 'done'
 baseline_commit: '834c5db'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -91,8 +91,9 @@ Hoje 15/11/26. Bloco de cobrança "Mãe" (= Responsável Mãe). Linha NETFLIX: M
 - [x] Interface: confirmação no painel do Lançamento e na exclusão (simples e em lote).
 - [x] Provas: núcleo, jsdom, `test/integracao` e o aceite.
 - [x] `sprint-status.yaml` (6.9 em `review`), `deferred-work.md`, `docs/infraestrutura.md` (HÁ migração e o que muda até o `db push`).
-- [ ] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura"; os dois últimos provam a migração de verdade).
-- [ ] Depois do merge, e só quando Rafael pedir: `db push`. `done` no sprint-status só depois, em PR separada.
+- [x] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura"; os dois últimos provam a migração de verdade).
+- [x] Merge (#104) e `done` no sprint-status, em PR separada.
+- [ ] `supabase db push` da migração `20261130120000`: só quando Rafael pedir (ainda não aplicada).
 
 ## Verification
 
