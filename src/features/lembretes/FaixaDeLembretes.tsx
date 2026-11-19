@@ -2,13 +2,10 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { lerBlocos } from "@/domain/blocos";
-import { TOLERANCIA_ATRASO_PADRAO_DIAS } from "@/domain/configuracoes";
 import {
   DESTINO_DO_LEMBRETE_DE_ATRASO,
-  lembretesDoDia,
+  lembretesDasLinhas,
   lembretesParaExibir,
-  preferenciasDeLembretes,
   type Lembrete,
 } from "@/domain/lembretes";
 import { TEXTOS_LEMBRETES, rotuloAcaoDoLembrete, rotuloMaisAtrasos, textoDoLembrete } from "@/domain/mensagens";
@@ -45,20 +42,16 @@ export function FaixaDeLembretes() {
 
   const lembretes = useMemo<Lembrete[]>(() => {
     if (!pronto) return [];
-    const linha = configuracoesDoDono(configuracoes.linhas);
-    return lembretesDoDia(
-      hoje,
-      ciclo.linhas,
-      todos.linhas,
-      lerBlocos(blocosLidos.linhas).filter((b) => b.de_cobranca),
-      preferenciasDeLembretes(linha),
-      {
-        statusPagos: new Set(status.linhas.filter((s) => s.conta_como_pago).map((s) => s.id)),
-        itens: itens.linhas,
-        vencimentosDasFaturas: new Map(faturas.linhas.map((f) => [f.mes, f.vencimento] as const)),
-        tolerancia: linha?.tolerancia_atraso_dias ?? TOLERANCIA_ATRASO_PADRAO_DIAS,
-      },
-    );
+    // A mesma função que o Cron usa (`lembretesDasLinhas`): o aviso do sistema nunca diverge da faixa (AD-10).
+    return lembretesDasLinhas(hoje, {
+      ciclo: ciclo.linhas,
+      lancamentos: todos.linhas,
+      blocos: blocosLidos.linhas,
+      status: status.linhas,
+      itens: itens.linhas,
+      faturas: faturas.linhas,
+      configuracao: configuracoesDoDono(configuracoes.linhas),
+    });
   }, [pronto, hoje, ciclo.linhas, todos.linhas, blocosLidos.linhas, configuracoes.linhas, status.linhas, itens.linhas, faturas.linhas]);
 
   const { visiveis, maisAtrasos } = useMemo(() => lembretesParaExibir(lembretes), [lembretes]);

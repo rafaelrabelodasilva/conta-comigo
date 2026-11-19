@@ -1,6 +1,8 @@
 import { autorizadoPeloCron, segredoDoCron } from "@/server/cron";
 import { log } from "@/server/log";
 import { materializarContasDoDia } from "@/server/materializar-contas";
+import { notificarLembretesDoDia, type ClienteDeNotificacoes } from "@/server/notificar-lembretes";
+import { configuracaoVapid, criarEnviadorWebPush } from "@/server/push";
 import { criarClienteAdmin } from "@/server/supabase-admin";
 
 // GET /api/cron/diario (AD-13): chamado todos os dias pelo Vercel Cron
@@ -8,15 +10,16 @@ import { criarClienteAdmin } from "@/server/supabase-admin";
 // `Authorization: Bearer CRON_SECRET`. Sem o segredo certo responde 401 e não
 // lê nem grava nada (o cliente do Supabase nem é criado).
 //
-// Hoje faz uma coisa: materializa as Contas manuais até o Mês atual + 12
-// (`materializarContasDoDia`, AD-15). Essa leitura também mantém o projeto
-// Supabase Free ativo. O log leva só rota, status, duração e quantidades
-// (AD-17), nunca Nomes nem Valores. A resposta é mínima: `{ ok, quantidade }`.
+// Faz duas coisas, nesta ordem:
+// 1. Materializa as Contas manuais até o Mês atual + 12 (`materializarContasDoDia`, AD-15). Essa leitura também
+//    mantém o projeto Supabase Free ativo.
+// 2. Avisa os lembretes do dia pelo Web Push (`notificarLembretesDoDia`, História 7.5, FR-55): as mesmas funções
+//    da faixa do app (`lembretesDasLinhas`), respeitando as preferências, com a chave inserida em
+//    `lembretes_enviados` ANTES do envio. Roda mesmo que a materialização tenha falhado, e uma falha dele NUNCA
+//    desfaz o que já foi gravado nem muda a resposta: a resposta continua sendo só a da materialização.
 //
-// PONTO DE EXTENSÃO (FR-55, história própria): depois da materialização entram
-// as funções de lembrete e atraso do núcleo e o envio por Web Push. Nada disso
-// existe ainda; quando existir, fica neste ponto, depois do `await` da
-// materialização, e uma falha dele não pode desfazer o que já foi gravado.
+// O log leva só rota, status, duração e quantidades (AD-17), nunca Nomes, Valores, endpoints nem chaves. A resposta
+// é mínima: `{ ok, quantidade }`.
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -40,6 +43,39 @@ function responder(status: number, corpo: Corpo, inicio: number, codigo: string,
   return Response.json(corpo, { status, headers: { "cache-control": "no-store" } });
 }
 
+/**
+ * O aviso do sistema dos lembretes (7.5). Nunca lança e nunca muda a resposta do Cron: só registra contagens e
+ * códigos. Sem as variáveis VAPID (Previews, CI, produção antes de o Rafael cadastrar), só pula, com um aviso.
+ */
+async function avisarLembretes(admin: ClienteDeNotificacoes, agora: Date): Promise<void> {
+  try {
+    const vapid = configuracaoVapid();
+    const r = await notificarLembretesDoDia(admin, agora, vapid === null ? null : criarEnviadorWebPush(vapid));
+    if (r.pulou !== null) {
+      log("cron.diario.notificacoes", {
+        nivel: r.pulou === "sem_inscricao" ? "info" : "warn",
+        codigo: `cron.notificacao_${r.pulou}`,
+        campos: { rota: ROTA },
+      });
+      return;
+    }
+    log("cron.diario.notificacoes", {
+      nivel: r.falhas > 0 ? "warn" : "info",
+      codigo: "cron.notificou",
+      campos: {
+        rota: ROTA,
+        enviadas: r.enviadas,
+        ignoradas: r.ignoradas,
+        inscricoes_apagadas: r.inscricoesApagadas,
+        falhas: r.falhas,
+      },
+    });
+  } catch {
+    // Nada do erro vai para o log (poderia citar endpoint ou chave).
+    log("cron.diario.notificacoes", { nivel: "warn", codigo: "cron.notificacao_excecao", campos: { rota: ROTA } });
+  }
+}
+
 export async function GET(request: Request) {
   const inicio = Date.now();
 
@@ -53,7 +89,8 @@ export async function GET(request: Request) {
     return responder(503, { ok: false, erro: "cron.indisponivel" }, inicio, "cron.indisponivel");
   }
 
-  const resultado = await materializarContasDoDia(admin, new Date());
+  const agora = new Date();
+  const resultado = await materializarContasDoDia(admin, agora);
 
   // Contas que não deram para ler: avisa (só a contagem) e segue.
   if (resultado.ilegiveis > 0) {
@@ -63,6 +100,9 @@ export async function GET(request: Request) {
       campos: { rota: ROTA, quantidade: resultado.ilegiveis },
     });
   }
+
+  // Depois da materialização (que já gravou): o aviso do sistema, sem poder desfazê-la nem derrubar o Cron.
+  await avisarLembretes(admin, agora);
 
   if (!resultado.ok) {
     if (resultado.codigo === "cron.materializacao_falhou") {

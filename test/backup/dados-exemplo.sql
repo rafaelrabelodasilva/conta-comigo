@@ -238,4 +238,14 @@ insert into public.pagamento_itens (
    'b0000000-0000-4000-8000-000000000c03', 'b0000000-0000-4000-8000-000000000803', '2026-11',
    10000, 'b0000000-0000-4000-8000-000000000302', null, null);
 
+-- Notificações do sistema (História 7.5): a inscrição Web Push de um aparelho (o endpoint é segredo, aqui um
+-- valor de teste) e o lembrete que o Cron já avisou (a chave única dono, tipo, referência, dia).
+insert into public.push_inscricoes (id, owner_id, endpoint, chave_p256dh, chave_auth) values
+  ('b0000000-0000-4000-8000-000000000e01', 'b0000000-0000-4000-8000-000000000001',
+   'https://push.exemplo.test/ipad-de-teste-ção', 'BPubKeyDeTesteP256dh', 'authDeTeste');
+
+insert into public.lembretes_enviados (id, owner_id, tipo, referencia, dia) values
+  ('b0000000-0000-4000-8000-000000000f01', 'b0000000-0000-4000-8000-000000000001',
+   'atraso', 'b0000000-0000-4000-8000-000000000a01', '2026-11-17');
+
 commit;

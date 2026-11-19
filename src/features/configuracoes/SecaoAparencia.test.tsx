@@ -2,7 +2,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ROTULOS, TEXTOS_LEMBRETES as L, mensagem } from "@/domain/mensagens";
+import { ROTULOS, TEXTOS_LEMBRETES as L, TEXTOS_NOTIFICACOES as N, mensagem } from "@/domain/mensagens";
 import { ToastProvider } from "@/ui/Toast";
 import { SecaoAparencia } from "./SecaoAparencia";
 
@@ -122,6 +122,24 @@ describe("SecaoAparencia", () => {
       montar();
       await userEvent.setup().click(interruptor(L.fechamento));
       expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
+    });
+  });
+
+  describe("Notificações neste aparelho (História 7.5)", () => {
+    it("o grupo fica dentro da seção Aparência, abaixo dos interruptores de Lembretes", async () => {
+      montar();
+      const secao = screen.getByRole("region", { name: ROTULOS.aparencia });
+      const grupo = screen.getByRole("group", { name: N.titulo });
+      expect(secao.contains(grupo)).toBe(true);
+      const lembretes = screen.getByRole("group", { name: L.titulo_preferencias });
+      // O de Lembretes vem antes na ordem do documento.
+      expect(lembretes.compareDocumentPosition(grupo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("no jsdom (sem service worker nem Push) diz que o navegador não permite, e nada é pedido ao abrir", async () => {
+      montar();
+      expect(await screen.findByText(N.estado_sem_suporte)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: N.ativar })).toBeNull();
     });
   });
 });

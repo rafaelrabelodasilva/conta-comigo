@@ -57,7 +57,9 @@ import { guardadaPelaFila } from "@/domain/revisar";
 import { aoVoltar } from "./conexao";
 import { criarClienteNavegador } from "./supabase/navegador";
 
-export type TabelaRealtime = keyof Database["public"]["Tables"];
+// `lembretes_enviados` (História 7.5) é só do Cron (chave de serviço; o navegador nem tem acesso) e não tem
+// `updated_at`: nunca é uma tabela de Realtime.
+export type TabelaRealtime = Exclude<keyof Database["public"]["Tables"], "lembretes_enviados">;
 export type LinhaDe<T extends TabelaRealtime> = Database["public"]["Tables"][T]["Row"];
 
 /**

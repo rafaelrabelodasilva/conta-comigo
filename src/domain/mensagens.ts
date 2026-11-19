@@ -13,6 +13,7 @@ import type { Divisao } from "./divisao";
 import { primeiraDiferenca, type ComposicaoTotalAPagar, type ConferenciaImportacao } from "./importacao-fatura";
 import type { AvisoDePagamento } from "./aviso-pagamento";
 import type { Lembrete } from "./lembretes";
+import type { EstadoDasNotificacoes } from "./notificacoes";
 import type { ResumoDoPlano } from "./reimportacao";
 
 export const MENSAGENS = {
@@ -2502,4 +2503,73 @@ export function rotuloMaisAtrasos(quantidade: number): string {
   return quantidade === 1
     ? "E mais 1 Bloco com itens atrasados"
     : `E mais ${quantidade} Blocos com itens atrasados`;
+}
+
+// ------------------------------------------------- Notificações do sistema (7.5)
+
+/** Os textos de "Ativar notificações" (Configurações → Aparência → Lembretes) e do aviso do sistema (FR-55). */
+export const TEXTOS_NOTIFICACOES = {
+  /** O título do aviso do sistema (o corpo é o mesmo texto da faixa). */
+  titulo_aviso: "Conta Comigo",
+  /** O corpo do aviso quando o service worker recebe um push que não consegue ler (todo push precisa mostrar algo). */
+  corpo_padrao: "Você tem um lembrete no Conta Comigo.",
+  titulo: "Notificações neste aparelho",
+  ajuda: "Os lembretes chegam como aviso do aparelho, mesmo com o app fechado. Cada aparelho se ativa sozinho.",
+  ativar: "Ativar notificações",
+  ativando: "Ativando…",
+  desativar: "Desativar neste aparelho",
+  desativando: "Desativando…",
+  estado_ativo: "Notificações ativadas neste aparelho.",
+  estado_pode_ativar: "Notificações desativadas neste aparelho.",
+  estado_negada:
+    "As notificações estão bloqueadas neste aparelho. Para liberar: no iPad, Ajustes → Notificações → Conta Comigo; no computador, o cadeado ao lado do endereço. Depois volte aqui.",
+  estado_instalar_primeiro:
+    "No iPad, as notificações só funcionam com o app instalado na tela inicial. Toque em Compartilhar, depois em Adicionar à Tela de Início, e abra o Conta Comigo por lá.",
+  estado_sem_suporte: "Este navegador não permite notificações.",
+  estado_sem_chave: "As notificações ainda não estão configuradas neste ambiente.",
+  /** A inscrição não saiu (a permissão foi dada, mas o navegador não a criou, ou o app ainda não está pronto). */
+  erro_ativar: "Não foi possível ativar as notificações. Tente de novo.",
+  erro_desativar: "Não foi possível desativar as notificações. Tente de novo.",
+} as const;
+
+/** O aviso do sistema, pronto para o `showNotification` do service worker. */
+export type AvisoDoSistema = {
+  titulo: string;
+  corpo: string;
+  /** Para onde o toque leva (`/?mes=AAAA-MM` ou `/recebimentos`). */
+  destino: string;
+  /** Agrupa o aviso do mesmo lembrete (um novo substitui o anterior em vez de empilhar). */
+  tag: string;
+};
+
+/**
+ * O aviso do sistema de um lembrete. O corpo é EXATAMENTE o texto da faixa (`textoDoLembrete`): o conteúdo
+ * da faixa é o limite do que pode aparecer na tela bloqueada (nada além do que ela mostra). O título é só o
+ * nome do app.
+ */
+export function avisoDoLembrete(lembrete: Lembrete): AvisoDoSistema {
+  return {
+    titulo: TEXTOS_NOTIFICACOES.titulo_aviso,
+    corpo: textoDoLembrete(lembrete),
+    destino: lembrete.destino,
+    tag: `${lembrete.tipo}:${lembrete.referencia}`,
+  };
+}
+
+/** O texto do estado das notificações neste aparelho (sempre em texto, nunca só cor ou ícone). */
+export function textoDoEstadoDasNotificacoes(estado: EstadoDasNotificacoes): string {
+  switch (estado) {
+    case "ativo":
+      return TEXTOS_NOTIFICACOES.estado_ativo;
+    case "pode_ativar":
+      return TEXTOS_NOTIFICACOES.estado_pode_ativar;
+    case "negada":
+      return TEXTOS_NOTIFICACOES.estado_negada;
+    case "instalar_primeiro":
+      return TEXTOS_NOTIFICACOES.estado_instalar_primeiro;
+    case "sem_suporte":
+      return TEXTOS_NOTIFICACOES.estado_sem_suporte;
+    case "sem_chave":
+      return TEXTOS_NOTIFICACOES.estado_sem_chave;
+  }
 }
