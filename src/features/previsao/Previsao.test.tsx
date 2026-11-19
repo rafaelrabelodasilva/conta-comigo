@@ -128,14 +128,12 @@ describe("as abas", () => {
     for (const a of abas) expect(a.className).toContain("min-h-toque");
   });
 
-  it("Evolução e Meu gasto por Tipo dizem 'Em breve', sem prometer dado", async () => {
+  it("Meu gasto por Tipo diz 'Em breve', sem prometer dado (a Evolução funciona desde a 7.2)", async () => {
     const u = userEvent.setup();
     render(<Previsao />);
-    await u.click(screen.getByRole("tab", { name: "Evolução" }));
-    expect(screen.getByText(T.em_breve)).toBeTruthy();
-    expect(screen.getByText(T.em_breve_evolucao)).toBeTruthy();
-    expect(screen.queryByRole("table")).toBeNull();
     await u.click(screen.getByRole("tab", { name: "Meu gasto por Tipo" }));
+    expect(screen.getByText(T.em_breve)).toBeTruthy();
+    expect(screen.queryByRole("table")).toBeNull();
     expect(screen.getByText(T.em_breve_meu_gasto)).toBeTruthy();
     expect((screen.getByRole("tab", { name: "Meu gasto por Tipo" })).getAttribute("aria-selected")).toBe("true");
   });
@@ -148,7 +146,7 @@ describe("as abas", () => {
     primeira.unmount();
     render(<Previsao />);
     expect((screen.getByRole("tab", { name: "Evolução" })).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByText(T.em_breve_evolucao)).toBeTruthy();
+    expect(screen.getByText(T.evolucao_minimo)).toBeTruthy();
   });
 
   it("um valor estranho guardado abre a primeira aba", () => {
@@ -409,7 +407,7 @@ describe("sem armazenamento no aparelho", () => {
     expect((screen.getByRole("tab", { name: "Próximos meses" })).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("table", { name: T.tabela })).toBeTruthy();
     await u.click(screen.getByRole("tab", { name: "Evolução" }));
-    expect(screen.getByText(T.em_breve_evolucao)).toBeTruthy();
+    expect(screen.getByText(T.evolucao_minimo)).toBeTruthy();
     await u.click(screen.getByRole("tab", { name: "Próximos meses" }));
     expect(screen.getByRole("table", { name: T.tabela })).toBeTruthy();
   });

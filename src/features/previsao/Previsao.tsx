@@ -5,10 +5,11 @@ import { TEXTOS_PREVISAO as T } from "@/domain/mensagens";
 import { ABAS_DA_PREVISAO, ABA_PADRAO, lerAba, type AbaDaPrevisao } from "@/domain/previsao";
 import { cn } from "@/ui/cn";
 import { EstadoVazio } from "@/ui/EstadoVazio";
+import { Evolucao } from "./Evolucao";
 import { ProximosMeses } from "./ProximosMeses";
 
-// Tela Previsão (História 7.1, UX-DR23): as três abas "Próximos meses", "Evolução" e "Meu gasto por Tipo". Só a primeira
-// funciona; as outras duas dizem "Em breve" (7.2 e 7.3) sem prometer dado.
+// Tela Previsão (UX-DR23): as três abas "Próximos meses" (7.1), "Evolução" (7.2) e "Meu gasto por Tipo". A terceira ainda
+// diz "Em breve" (7.3) sem prometer dado.
 //
 // A aba escolhida fica guardada POR APARELHO, no `localStorage` (preferência de tela, como o filtro de Contas: não é dado
 // do app nem precisa seguir Rafael entre o iPad e o PC, então não há migração em `configuracoes`). Todo acesso ao
@@ -21,11 +22,6 @@ const NOME_DA_ABA: Record<AbaDaPrevisao, string> = {
   proximos_meses: T.aba_proximos_meses,
   evolucao: T.aba_evolucao,
   meu_gasto: T.aba_meu_gasto,
-};
-
-const TEXTO_EM_BREVE: Record<Exclude<AbaDaPrevisao, "proximos_meses">, string> = {
-  evolucao: T.em_breve_evolucao,
-  meu_gasto: T.em_breve_meu_gasto,
 };
 
 // A escolha que o armazenamento recusou (janela privada, dados bloqueados): vale na memória até a página fechar.
@@ -114,11 +110,10 @@ export function Previsao() {
       <div role="tabpanel" id={`painel-previsao-${aba}`} aria-labelledby={`aba-previsao-${aba}`}>
         {aba === "proximos_meses" ? (
           <ProximosMeses />
+        ) : aba === "evolucao" ? (
+          <Evolucao />
         ) : (
-          <EstadoVazio
-            texto={TEXTO_EM_BREVE[aba]}
-            acao={<p className="texto-body-strong text-text">{T.em_breve}</p>}
-          />
+          <EstadoVazio texto={T.em_breve_meu_gasto} acao={<p className="texto-body-strong text-text">{T.em_breve}</p>} />
         )}
       </div>
     </div>
