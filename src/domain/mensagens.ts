@@ -2342,16 +2342,23 @@ export function textoDoAvisoDePagamento(aviso: AvisoDePagamento): string {
   return `${quem} ${aviso.efeitos.map((e, i) => efeito(e, i === 0)).join("; ")}.`;
 }
 
-/** Os textos da tela Previsão (História 7.1, FR-32, UX-DR23): as abas, "Próximos meses" e o "Em breve" das outras duas. */
+/**
+ * Os textos da tela Previsão (UX-DR23): as abas, "Próximos meses" (7.1), "Evolução" (7.2) e o "Em breve" de "Meu gasto
+ * por Tipo" (7.3).
+ */
 export const TEXTOS_PREVISAO = {
   abas: "Seções da Previsão",
   aba_proximos_meses: "Próximos meses",
   aba_evolucao: "Evolução",
   aba_meu_gasto: "Meu gasto por Tipo",
   em_breve: "Em breve",
-  em_breve_evolucao: "A comparação dos últimos meses ainda está sendo construída.",
   em_breve_meu_gasto: "O seu gasto por Tipo ainda está sendo construído.",
+  evolucao_minimo: "Evolução disponível a partir de 2 meses importados",
+  evolucao_ajuda:
+    "É a mesma soma que o Painel de cada Mês mostra no Bloco “Todos”. Só entram Meses com Fatura importada. Toque num Mês para abrir o Painel dele.",
+  evolucao_buraco: "Há Meses sem Fatura importada entre os mostrados: eles ficam de fora.",
   carregando: "Carregando a previsão…",
+  carregando_evolucao: "Carregando a evolução…",
   titulo: "Comprometido nos próximos 6 meses",
   ajuda: "É a mesma soma que o Painel de cada Mês mostra: previstos das parcelas e Contas manuais. Toque num Mês para abrir o Painel dele.",
   agrupar: "Agrupar por",
@@ -2372,6 +2379,11 @@ export const TEXTOS_PREVISAO = {
   series_ajuda: "As parcelas e as Contas manuais que ainda têm Meses pela frente.",
   ver_todas_as_series: "Mostrar só as maiores",
 } as const;
+
+/** O título da Evolução: "Últimos 6 meses com Fatura importada" (com menos Meses, os que existem: "Os 3 meses …"). */
+export function tituloDaEvolucao(quantidade: number): string {
+  return quantidade >= 6 ? "Últimos 6 meses com Fatura importada" : `Os ${quantidade} meses com Fatura importada`;
+}
 
 /** "Nov/26: R$ 7.999,00": o total de um Mês, para o gráfico e para o nome acessível da barra. */
 export function rotuloDoMesNaPrevisao(mes: string, totalCentavos: number): string {

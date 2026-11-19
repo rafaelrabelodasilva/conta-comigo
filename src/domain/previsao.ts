@@ -1,6 +1,7 @@
-// Previsão dos próximos Meses (História 7.1, FR-32, AD-1/AD-11/AD-15). Monta o que a aba "Próximos meses" desenha: o
-// total dos 6 Meses seguintes ao atual, por Responsável ou por Tipo, e as Séries ainda em andamento. Puro: sem relógio,
-// rede ou banco (o Mês atual entra como parâmetro); a tela chama e desenha, e nada é gravado.
+// Previsão dos próximos Meses (História 7.1, FR-32, AD-1/AD-11/AD-15) e Evolução dos últimos Meses (História 7.2, FR-33).
+// Monta o que a aba "Próximos meses" desenha: o total dos 6 Meses seguintes ao atual, por Responsável ou por Tipo, e as
+// Séries ainda em andamento; e o que a aba "Evolução" desenha: o mesmo gráfico dos últimos 6 Meses com Fatura importada.
+// Puro: sem relógio, rede ou banco (o Mês atual entra como parâmetro); a tela chama e desenha, e nada é gravado.
 //
 // - Uma só projeção (AD-11): o valor de um Mês é a soma de `projetarPainel(linhas, mes)`, a mesma lista que o Painel
 //   desse Mês soma no Bloco "Todos". A mãe dividida nunca soma e as filhas valem (AD-8); linha excluída nunca entra
@@ -91,23 +92,30 @@ export type PrevisaoDosMeses = {
 
 const SEM = "sem";
 
+type AgrupadoPorMes = {
+  meses: MesDaPrevisao[];
+  grupos: GrupoDaPrevisao[];
+  maiorBarraCentavos: number;
+};
+
 /**
- * A janela dos 6 Meses seguintes, agrupada. `mesesComFatura` (`AAAA-MM` das `faturas`) só marca o Mês; ele não muda a
- * soma. Responsável ou Tipo que não está no cadastro lido cai em "Sem …", para o total nunca perder uma linha.
+ * O miolo comum das duas abas: para cada Mês de `lista`, a soma de `projetarPainel(linhas, mes)` (uma só projeção,
+ * AD-11), agrupada por Responsável ou por Tipo. Quem chama decide QUAIS Meses entram; aqui ninguém filtra nada.
+ * `mesesComFatura` só marca o Mês (`temFatura`); ele não muda a soma. Responsável ou Tipo que não está no cadastro lido
+ * cai em "Sem …", para o total nunca perder uma linha.
  */
-export function projetarPrevisao(
+function agruparMeses(
   linhas: readonly LancamentoParaProjetar[],
+  lista: readonly string[],
   opcoes: {
-    mesAtual: string;
     mesesComFatura: readonly string[];
     agrupamento: Agrupamento;
     responsaveis: readonly Responsavel[];
     tipos: readonly Tipo[];
   },
-): PrevisaoDosMeses {
-  const { mesAtual, agrupamento } = opcoes;
+): AgrupadoPorMes {
+  const { agrupamento } = opcoes;
   const comFatura = new Set(opcoes.mesesComFatura);
-  const lista = mesesDaPrevisao(mesAtual);
   const porResponsavel = agrupamento === "responsavel";
 
   const cadastro = porResponsavel
@@ -152,11 +160,93 @@ export function projetarPrevisao(
     m.barraCentavos = grupos.reduce((soma, g) => soma + Math.max(g.porMes[i], 0), 0);
   }
   return {
-    agrupamento,
     meses,
     grupos,
-    vazia: meses.every((m) => m.quantidade === 0),
     maiorBarraCentavos: meses.reduce((maior, m) => Math.max(maior, m.barraCentavos), 0),
+  };
+}
+
+/** O que as duas abas recebem para montar os números (as colunas já lidas pela tela). */
+export type OpcoesDaPrevisao = {
+  mesAtual: string;
+  /** `AAAA-MM` das `faturas`. */
+  mesesComFatura: readonly string[];
+  agrupamento: Agrupamento;
+  responsaveis: readonly Responsavel[];
+  tipos: readonly Tipo[];
+};
+
+/** A janela dos 6 Meses seguintes, agrupada. */
+export function projetarPrevisao(linhas: readonly LancamentoParaProjetar[], opcoes: OpcoesDaPrevisao): PrevisaoDosMeses {
+  const agrupado = agruparMeses(linhas, mesesDaPrevisao(opcoes.mesAtual), opcoes);
+  return { agrupamento: opcoes.agrupamento, ...agrupado, vazia: agrupado.meses.every((m) => m.quantidade === 0) };
+}
+
+// -------------------------------------------------------------- Evolução
+
+/** Quantos Meses com Fatura importada a Evolução mostra, no máximo. */
+export const MESES_DA_EVOLUCAO = 6;
+
+/** Menos Meses importados que isto: a Evolução não desenha nada ("Evolução disponível a partir de 2 meses importados"). */
+export const MINIMO_DA_EVOLUCAO = 2;
+
+/** Os Meses com Fatura importada até o Mês atual, sem repetição, em ordem crescente. */
+function mesesImportadosAteAgora(mesAtual: string, mesesComFatura: readonly string[]): string[] {
+  return [...new Set(mesesComFatura)].filter((m) => m <= mesAtual).sort();
+}
+
+/**
+ * Os Meses da Evolução: os `MESES_DA_EVOLUCAO` mais novos com linha em `faturas` (um "Mês com Fatura importada", FR-36),
+ * em ordem crescente. Só entram Meses até o atual: um Mês depois dele é da Previsão ("Próximos meses"), então cada Mês
+ * aparece em uma aba só e as duas nunca mostram o mesmo Mês. O Mês atual entra se já tem Fatura. Um Mês só com histórico
+ * da planilha (3.10) ou só com previstos não tem Fatura e não entra. Buraco entre Meses (Jan e Mar, sem Fev): só os
+ * importados entram, na ordem.
+ */
+export function mesesDaEvolucao(mesAtual: string, mesesComFatura: readonly string[]): string[] {
+  return mesesImportadosAteAgora(mesAtual, mesesComFatura).slice(-MESES_DA_EVOLUCAO);
+}
+
+export type EvolucaoDosMeses = {
+  agrupamento: Agrupamento;
+  /** Há Meses importados o bastante (`MINIMO_DA_EVOLUCAO`) para desenhar; sem isso `meses` e `grupos` vêm vazios. */
+  disponivel: boolean;
+  /** Quantos Meses com Fatura importada existem até o atual (podem ser mais que os mostrados). */
+  importados: number;
+  /** Em ordem crescente; todos com `temFatura`. */
+  meses: MesDaPrevisao[];
+  grupos: GrupoDaPrevisao[];
+  /** Falta algum Mês entre os mostrados (Jan e Mar, sem Fev): a tela avisa que só os importados entram. */
+  temBuraco: boolean;
+  /** A maior barra dos Meses da Evolução (a escala é da aba, não da Previsão); 0 se não há segmento positivo. */
+  maiorBarraCentavos: number;
+};
+
+/**
+ * Os últimos Meses com Fatura importada, agrupados como a Previsão (mesma ordem, mesmo "Sem …", mesmas cores). O valor
+ * de um Mês é a soma de `projetarPainel(linhas, mes)`, o que o Painel soma no Bloco "Todos" (AD-11): inclui Contas
+ * manuais, Ajustes, Lançamentos à mão e algum previsto que ficou sem par, não só as linhas da Fatura. Com menos de
+ * `MINIMO_DA_EVOLUCAO` Meses importados, nada é calculado.
+ */
+export function projetarEvolucao(linhas: readonly LancamentoParaProjetar[], opcoes: OpcoesDaPrevisao): EvolucaoDosMeses {
+  const importados = mesesImportadosAteAgora(opcoes.mesAtual, opcoes.mesesComFatura);
+  const lista = importados.slice(-MESES_DA_EVOLUCAO);
+  if (lista.length < MINIMO_DA_EVOLUCAO) {
+    return {
+      agrupamento: opcoes.agrupamento,
+      disponivel: false,
+      importados: importados.length,
+      meses: [],
+      grupos: [],
+      temBuraco: false,
+      maiorBarraCentavos: 0,
+    };
+  }
+  return {
+    agrupamento: opcoes.agrupamento,
+    disponivel: true,
+    importados: importados.length,
+    ...agruparMeses(linhas, lista, opcoes),
+    temBuraco: lista.some((m, i) => i > 0 && somarMeses(lista[i - 1], 1) !== m),
   };
 }
 
@@ -224,7 +314,7 @@ export function seriesEmAndamento(linhas: readonly LancamentoParaPrever[], mesAt
 
 // ------------------------------------------------------------------ Abas
 
-/** As abas da tela Previsão (UX-DR23). Só "Próximos meses" funciona na 7.1; as outras são a 7.2 e a 7.3. */
+/** As abas da tela Previsão (UX-DR23). "Próximos meses" é a 7.1 e "Evolução" a 7.2; "Meu gasto por Tipo" é a 7.3. */
 export const ABAS_DA_PREVISAO = ["proximos_meses", "evolucao", "meu_gasto"] as const;
 export type AbaDaPrevisao = (typeof ABAS_DA_PREVISAO)[number];
 export const ABA_PADRAO: AbaDaPrevisao = "proximos_meses";
