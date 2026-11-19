@@ -11,7 +11,7 @@ import {
   type LinhasParaLembretes,
 } from "./lembretes";
 import { formatarDinheiro } from "./dinheiro";
-import { TEXTOS_NOTIFICACOES, avisoDoLembrete, textoDoLembrete } from "./mensagens";
+import { TEXTOS_NOTIFICACOES, avisoDoLembrete, textoDoAviso } from "./mensagens";
 import { somaDosItens } from "./pagamento";
 
 // O aviso do sistema dos lembretes (História 7.5, FR-55, AD-13): quais lembretes do dia saem como notificação e com
@@ -383,11 +383,11 @@ describe("o servidor e a Central dizem a mesma coisa (AD-10)", () => {
         const avisos = notificar(hoje, l);
         // Sem limite: o que a Central mostra é exatamente o que o Cron avisa (mesma ordem, mesma chave).
         expect(avisos.map((a) => a.lembrete)).toEqual(lembretes);
-        expect(central.avisos.map((a) => a.lembrete)).toEqual(lembretes);
+        expect(central.avisos.map((a) => a.origem)).toEqual(lembretes);
         expect(central.avisos.map((a) => a.chave)).toEqual(avisos.map(({ tipo, referencia, dia }) => ({ tipo, referencia, dia })));
         for (const aviso of avisos) {
           const naCentral = central.avisos.find((a) => a.chave.tipo === aviso.tipo && a.chave.referencia === aviso.referencia);
-          expect(avisoDoLembrete(aviso.lembrete).corpo).toBe(textoDoLembrete(naCentral!.lembrete));
+          expect(avisoDoLembrete(aviso.lembrete).corpo).toBe(textoDoAviso(naCentral!.origem));
         }
       }
     });

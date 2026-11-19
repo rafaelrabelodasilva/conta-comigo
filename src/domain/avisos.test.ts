@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { LIMITE_DO_CONTADOR_DE_AVISOS, avisosDaCentral, type ChaveLida } from "./avisos";
+import { LIMITE_DO_CONTADOR_DE_AVISOS, TIPOS_DE_AVISO, avisosDaCentral, chaveDoAviso, type ChaveLida, type OrigemDoAviso } from "./avisos";
+import { avisosDeConferencia } from "./avisos-conferencia";
+import { avisoDoRevisar } from "./avisos-revisar";
+import { conferir } from "./conferencia";
 import { formatarDinheiro } from "./dinheiro";
 import {
   chaveDeNotificacao,
@@ -7,13 +10,16 @@ import {
   type Lembrete,
   type LinhasParaLembretes,
 } from "./lembretes";
+import { contarFila, montarFila, resumoDaFila, type LinhaDaFila } from "./revisar";
 import {
   TEXTOS_AVISOS,
+  frasesFaixaConferencia,
   nomeDoContadorDeAvisos,
+  rotuloAcaoDoAviso,
   rotuloDeAvisosNovos,
   rotuloResumoDeAtrasos,
   textoDoContadorDeAvisos,
-  textoDoLembrete,
+  textoDoAviso,
 } from "./mensagens";
 
 // A Central de Avisos (História 8.1, FR-55): os lembretes do dia mais o "lido" (a chave do aviso do sistema).
@@ -43,7 +49,7 @@ const referencias = (r: ReturnType<typeof avisosDaCentral>) => r.avisos.map((a) 
 describe("avisosDaCentral: o aviso e o 'lido'", () => {
   it("aviso novo: aparece como não lido e conta", () => {
     const r = avisosDaCentral([atraso("lucas")], []);
-    expect(r.avisos).toEqual([{ chave: { tipo: "atraso", referencia: "lucas", dia: "2026-11-17" }, lembrete: atraso("lucas"), lido: false }]);
+    expect(r.avisos).toEqual([{ chave: { tipo: "atraso", referencia: "lucas", dia: "2026-11-17" }, origem: atraso("lucas"), lido: false }]);
     expect(r.naoLidos).toBe(1);
     expect(r.chavesNaoLidas).toEqual([{ tipo: "atraso", referencia: "lucas", dia: "2026-11-17" }]);
   });
@@ -101,8 +107,8 @@ describe("avisosDaCentral: o aviso e o 'lido'", () => {
     expect(r.naoLidos).toBe(1);
   });
 
-  it("linhas lidas de um tipo que o código não conhece (8.2) não casam com nada e não quebram", () => {
-    const r = avisosDaCentral([atraso("lucas")], [{ tipo: "conferencia", referencia: "2026-11", dia: "2026-11-30" }]);
+  it("linhas lidas de um tipo que o código não conhece (uma história futura) não casam com nada e não quebram", () => {
+    const r = avisosDaCentral([atraso("lucas")], [{ tipo: "tipo-futuro", referencia: "2026-11", dia: "2026-11-30" }]);
     expect(r.naoLidos).toBe(1);
   });
 });
@@ -250,7 +256,7 @@ describe("a Central com os lembretes do dia", () => {
     expect(central("2026-11-16", l).avisos).toEqual([]);
     const r = central("2026-11-17", l);
     expect(r.naoLidos).toBe(1);
-    expect(textoDoLembrete(r.avisos[0].lembrete)).toBe(`Lucas: ${formatarDinheiro(11_516)} em atraso desde 17/11/26`);
+    expect(textoDoAviso(r.avisos[0].origem)).toBe(`Lucas: ${formatarDinheiro(11_516)} em atraso desde 17/11/26`);
   });
 
   it("atraso que continua e já foi lido fica lido nos dias seguintes", () => {
@@ -324,7 +330,7 @@ describe("a Central com os lembretes do dia", () => {
     const r = central("2026-11-19", l);
     expect(r.avisos).toHaveLength(4);
     expect(r.blocosAtrasados).toBe(4);
-    const textos = r.avisos.map((a) => textoDoLembrete(a.lembrete).replace(/ /g, " "));
+    const textos = r.avisos.map((a) => textoDoAviso(a.origem).replace(/ /g, " "));
     expect(textos).toEqual([
       "Rangel: R$ 5.263,47 em atraso desde 17/10/26",
       "Mãe: R$ 1.783,73 em atraso desde 17/10/26",
@@ -364,5 +370,215 @@ describe("os textos da Central", () => {
       vazio: "Nenhum aviso",
       todos_lidos: "Todos os avisos foram marcados como lidos",
     });
+  });
+});
+
+// ------------------------------------------- os três tipos juntos: Conferência, Revisar e lembretes (História 8.2)
+
+const NOV = {
+  id: "f-nov",
+  mes: "2026-11",
+  total_despesas_centavos: 100_000,
+  total_creditos_centavos: 0,
+  fechamento: "2026-10-28",
+  vencimento: "2026-11-06",
+  alerta_dispensado_em: null as string | null,
+  updated_at: "2026-11-18T12:00:00Z",
+};
+const cartoesNov = [{ fatura_id: NOV.id, final: "8673", total_centavos: 100_000 }];
+const lancNov = (valor: number, extra: Record<string, unknown> = {}) => ({
+  fatura_id: NOV.id,
+  valor_centavos: valor,
+  final_cartao: "8673",
+  excluido_em: null,
+  ...extra,
+});
+const naFila = (n: number) =>
+  Array.from({ length: n }, () => ({ excluido_em: null, ajuste_de_id: null, revisao_motivo: "sem_classificacao" as const }));
+
+function origens(
+  opcoes: { faturas?: (typeof NOV)[]; lancamentos?: ReturnType<typeof lancNov>[]; itensNaFila?: number; lembretes?: Lembrete[] } = {},
+): OrigemDoAviso[] {
+  const {
+    faturas = [NOV],
+    lancamentos = [lancNov(28_000)],
+    itensNaFila = 17,
+    lembretes = [fechamento("2026-12", "2026-11-28"), atraso("ana"), atraso("beto")],
+  } = opcoes;
+  const doRevisar = avisoDoRevisar(naFila(itensNaFila), faturas);
+  return [...lembretes, ...avisosDeConferencia(faturas, cartoesNov, lancamentos), ...(doRevisar === null ? [] : [doRevisar])];
+}
+
+describe("avisosDaCentral: os três tipos", () => {
+  it("a ordem entre os tipos: Conferência, Revisar, fechamento, atraso por Bloco (a entrada pode vir em qualquer ordem)", () => {
+    expect(TIPOS_DE_AVISO).toEqual(["conferencia", "revisar", "fechamento", "atraso"]);
+    const r = avisosDaCentral(origens(), []);
+    expect(r.avisos.map((a) => a.chave.tipo)).toEqual(["conferencia", "revisar", "fechamento", "atraso", "atraso"]);
+    expect(r.avisos.map((a) => a.chave.referencia)).toEqual(["2026-11:-72000:0:8673", "fila", "2026-12", "ana", "beto"]);
+    const embaralhada = avisosDaCentral([...origens()].reverse(), []);
+    expect(embaralhada.avisos.map((a) => a.chave.tipo)).toEqual(["conferencia", "revisar", "fechamento", "atraso", "atraso"]);
+    // Dentro do tipo, a ordem recebida (os Blocos vêm na ordem dos Blocos).
+    expect(avisosDaCentral([atraso("ana"), atraso("beto")], []).avisos.map((a) => a.chave.referencia)).toEqual(["ana", "beto"]);
+  });
+
+  it("o contador conta os três tipos; o resumo de atrasos conta só os Blocos", () => {
+    const r = avisosDaCentral(origens(), []);
+    expect(r.naoLidos).toBe(5);
+    expect(r.blocosAtrasados).toBe(2);
+    expect(r.chavesNaoLidas).toEqual(r.avisos.map((a) => a.chave));
+  });
+
+  it("não lidos primeiro (na ordem dos tipos), depois os lidos (na ordem dos tipos)", () => {
+    const o = origens();
+    const lidos = o.filter((x) => x.tipo === "fechamento" || x.tipo === "conferencia").map((x) => chaveDoAviso(x));
+    const r = avisosDaCentral(o, lidos);
+    expect(r.avisos.map((a) => [a.chave.tipo, a.lido])).toEqual([
+      ["revisar", false],
+      ["atraso", false],
+      ["atraso", false],
+      ["conferencia", true],
+      ["fechamento", true],
+    ]);
+    expect(r.naoLidos).toBe(3);
+  });
+
+  it("Marcar tudo: grava as chaves dos três tipos, e depois não há não lidos", () => {
+    const antes = avisosDaCentral(origens(), []);
+    expect(antes.chavesNaoLidas.map((c) => c.tipo)).toEqual(["conferencia", "revisar", "fechamento", "atraso", "atraso"]);
+    const depois = avisosDaCentral(origens(), antes.chavesNaoLidas);
+    expect(depois.naoLidos).toBe(0);
+    expect(depois.chavesNaoLidas).toEqual([]);
+    expect(depois.avisos).toHaveLength(5);
+  });
+
+  it("Conferência: o lido continua; a diferença que muda volta como não lida; a que some, some", () => {
+    const lidos = avisosDaCentral(origens(), []).chavesNaoLidas;
+    const mesma = avisosDaCentral(origens({ lancamentos: [lancNov(10_000), lancNov(18_000)] }), lidos);
+    expect(mesma.avisos.find((a) => a.chave.tipo === "conferencia")?.lido).toBe(true);
+    const outra = avisosDaCentral(origens({ lancamentos: [lancNov(28_000), lancNov(2_000)] }), lidos);
+    const nova = outra.avisos.find((a) => a.chave.tipo === "conferencia");
+    expect(nova?.lido).toBe(false);
+    expect(nova?.chave.referencia).toBe("2026-11:-70000:0:8673");
+    expect(outra.naoLidos).toBe(1);
+    const bateu = avisosDaCentral(origens({ lancamentos: [lancNov(100_000)] }), lidos);
+    expect(bateu.avisos.some((a) => a.chave.tipo === "conferencia")).toBe(false);
+    expect(bateu.naoLidos).toBe(0);
+    const dispensada = avisosDaCentral(origens({ faturas: [{ ...NOV, alerta_dispensado_em: "2026-11-19T10:00:00Z" }] }), []);
+    expect(dispensada.avisos.some((a) => a.chave.tipo === "conferencia")).toBe(false);
+  });
+
+  it("Revisar: classificar itens não traz o aviso de volta; fila zerada some; importação nova volta", () => {
+    const lidos = avisosDaCentral(origens(), []).chavesNaoLidas;
+    const emRevisao = (r: ReturnType<typeof avisosDaCentral>) => r.avisos.find((a) => a.chave.tipo === "revisar");
+    const menos = emRevisao(avisosDaCentral(origens({ itensNaFila: 3 }), lidos));
+    expect(menos?.lido).toBe(true);
+    expect(menos?.origem).toMatchObject({ quantidade: 3 });
+    expect(emRevisao(avisosDaCentral(origens({ itensNaFila: 0 }), lidos))).toBeUndefined();
+    // A fila zera e enche de novo sem importação: continua lido.
+    expect(emRevisao(avisosDaCentral(origens({ itensNaFila: 2 }), lidos))?.lido).toBe(true);
+    // Reimportou: outro dia, volta como não lido.
+    const reimportada = { ...NOV, updated_at: "2026-11-20T12:00:00Z" };
+    expect(emRevisao(avisosDaCentral(origens({ faturas: [reimportada] }), lidos))?.lido).toBe(false);
+  });
+
+  it("mesma entrada, mesma saída: a ordem de origens e de lidos não importa e nada é alterado", () => {
+    const o = origens();
+    const lidos: ChaveLida[] = [chaveDoAviso(o[1]), chaveDoAviso(o[4])];
+    const copia = structuredClone({ o, lidos });
+    const a = avisosDaCentral(o, lidos);
+    expect(avisosDaCentral([...o].reverse(), [...lidos].reverse())).toEqual(a);
+    expect(avisosDaCentral(o, lidos)).toEqual(a);
+    expect({ o, lidos }).toEqual(copia);
+  });
+
+  it("origens com a mesma chave valem uma só (a chave é única no banco)", () => {
+    const o = origens();
+    const r = avisosDaCentral([...o, ...o], []);
+    expect(r.avisos).toHaveLength(5);
+    expect(r.chavesNaoLidas).toHaveLength(5);
+  });
+
+  it("os textos e os destinos: palavras, sem cor nem ícone", () => {
+    const r = avisosDaCentral(origens(), []);
+    const [conferencia, revisar] = r.avisos.map((a) => a.origem);
+    expect(textoDoAviso(conferencia)).toContain("Fatura de novembro/26 com diferença.");
+    expect(textoDoAviso(revisar)).toBe("17 lançamentos para revisar");
+    expect(r.avisos.map((a) => [a.origem.destino, rotuloAcaoDoAviso(a.origem)])).toEqual([
+      ["/?mes=2026-11", "Abrir o Painel"],
+      ["/revisar", "Abrir Revisar"],
+      ["/?mes=2026-12", "Abrir o Painel"],
+      ["/recebimentos", "Abrir Recebimentos"],
+      ["/recebimentos", "Abrir Recebimentos"],
+    ]);
+  });
+});
+
+describe("a Central, a faixa do Painel e o contador do Revisar são a mesma regra", () => {
+  const OUT = { ...NOV, id: "f-out", mes: "2026-10", fechamento: "2026-09-28", vencimento: "2026-10-06" };
+  const SET = { ...NOV, id: "f-set", mes: "2026-09", fechamento: "2026-08-28", vencimento: "2026-09-06" };
+  const cartoes = [
+    { fatura_id: NOV.id, final: "8673", total_centavos: 100_000 },
+    { fatura_id: OUT.id, final: "8673", total_centavos: 100_000 },
+    { fatura_id: SET.id, final: "8673", total_centavos: 100_000 },
+  ];
+
+  it("a Fatura tem aviso se, e só se, o Painel mostraria a faixa; e o texto usa as mesmas frases", () => {
+    const dispensada = { ...SET, alerta_dispensado_em: "2026-10-01T10:00:00Z" };
+    const deOut = (v: number) => ({ ...lancNov(v), fatura_id: OUT.id });
+    const deSet = (v: number) => ({ ...lancNov(v), fatura_id: SET.id });
+    const cenarios = [
+      { faturas: [NOV, OUT, SET], lancamentos: [lancNov(28_000), deOut(100_000), deSet(90_000)] },
+      { faturas: [NOV, OUT, dispensada], lancamentos: [lancNov(100_000), deOut(40_000), deSet(90_000)] },
+      { faturas: [NOV], lancamentos: [lancNov(100_000)] },
+      { faturas: [NOV], lancamentos: [lancNov(130_000), lancNov(-500)] },
+    ];
+    for (const { faturas, lancamentos } of cenarios) {
+      const avisos = avisosDaCentral(avisosDeConferencia(faturas, cartoes, lancamentos), []).avisos;
+      for (const f of faturas) {
+        // Como o Painel decide (mostrarFaixa): Conferência que não bate e alerta não dispensado.
+        const conferencia = conferir(f, cartoes, lancamentos);
+        const faixa = !conferencia.conferido && f.alerta_dispensado_em === null;
+        const aviso = avisos.find((a) => a.origem.tipo === "conferencia" && a.origem.mes === f.mes);
+        expect(aviso !== undefined).toBe(faixa);
+        if (aviso !== undefined) {
+          for (const frase of frasesFaixaConferencia(conferencia)) expect(textoDoAviso(aviso.origem)).toContain(frase);
+        }
+      }
+    }
+  });
+
+  it("o número do aviso do Revisar é o do menu (contarFila) e o do 'Faltam N' (montarFila + resumoDaFila)", () => {
+    const completa = (id: string, extra: Partial<LinhaDaFila>): LinhaDaFila => ({
+      id,
+      nome: `COMPRA ${id}`,
+      apelido: null,
+      mes: "2026-11",
+      valor_centavos: 1_000,
+      parcela_n: null,
+      parcela_total: null,
+      responsavel_id: null,
+      tipo_id: null,
+      ajuste_de_id: null,
+      excluido_em: null,
+      revisao_motivo: "sem_classificacao",
+      revisao_dados: null,
+      ordem_fatura: 1,
+      ...extra,
+    });
+    const linhas = [
+      completa("a", {}),
+      completa("b", { mes: "2026-10" }),
+      completa("c", { revisao_motivo: "valor_mudou" }),
+      completa("ajuste", { ajuste_de_id: "a" }),
+      completa("excluida", { excluido_em: "2026-11-02T00:00:00Z" }),
+      completa("ok", { revisao_motivo: null }),
+    ];
+    const aviso = avisoDoRevisar(linhas, [NOV]);
+    const faltam = resumoDaFila(montarFila(linhas, { responsaveis: [], tipos: [] })).faltam;
+    expect(aviso?.quantidade).toBe(contarFila(linhas));
+    expect(aviso?.quantidade).toBe(faltam);
+    expect(aviso?.quantidade).toBe(3);
+    const central = avisosDaCentral([aviso!], []);
+    expect(textoDoAviso(central.avisos[0].origem)).toBe("3 lançamentos para revisar");
   });
 });

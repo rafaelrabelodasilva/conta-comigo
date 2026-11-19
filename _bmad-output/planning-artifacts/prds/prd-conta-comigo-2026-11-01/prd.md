@@ -357,6 +357,8 @@ O app avisa Rafael, por notificação (com o app instalado e a permissão dada) 
 - no dia do fechamento da fatura, para importar o PDF quando ele chegar;
 - quando alguém passa a ter itens atrasados (FR-49).
 
+A Central de Avisos também mostra, só dentro do app (sem notificação do sistema), a diferença da Conferência de uma Fatura que não bate e não foi dispensada (FR-6) e a fila do Revisar quando há itens (FR-13).
+
 Cada aviso pode ser marcado como lido, um a um ou todos de uma vez, e o "lido" vale em todos os aparelhos. Cada tipo de lembrete pode ser desligado em Configurações: desligado, não aparece na Central, não conta e não chega como notificação.
 
 #### FR-35: Instalar como app
