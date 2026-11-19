@@ -252,7 +252,7 @@ Rafael vê quanto está comprometido nos próximos Meses, a evolução dos últi
 **FRs covered:** FR-31, FR-32, FR-33, FR-55
 
 ### Epic 8: Central de avisos
-Rafael tem um lugar só para os avisos do app, um item de menu com o contador de não lidos, com "Marcar tudo como lido" e o "lido" valendo em todos os aparelhos. A Central substitui a faixa de lembretes no topo das telas (a 8.1 traz os lembretes de fechamento e de atraso; a 8.2 traz a diferença da Conferência e a fila do Revisar).
+Rafael tem um lugar só para os avisos do app, um item de menu com o contador de não lidos, com "Marcar tudo como lido" e o "lido" valendo em todos os aparelhos. A Central substitui a faixa de lembretes no topo das telas (a 8.1 traz os lembretes de fechamento e de atraso; a 8.2 traz a diferença da Conferência e a fila do Revisar, só dentro do app).
 **FRs covered:** FR-55 (revisado)
 
 ## Epic 1: Entrar e montar a base
@@ -1601,6 +1601,41 @@ As a Rafael,
 I want a diferença da Conferência e a fila do Revisar também na Central de Avisos,
 So that eu não precise abrir cada tela para saber o que precisa de mim (FR-55 revisado).
 
-**Status:** backlog (só registrada; nada foi implementado). A 8.1 deixou o formato dos avisos extensível por `tipo` (`avisos_lidos.tipo` é livre e a chave do aviso é `tipo, referencia, dia`).
+**Status:** review (spec: `spec-8-2-conferencia-e-revisar-na-central-de-avisos.md`). A 8.1 deixou o formato dos avisos extensível por `tipo` (`avisos_lidos.tipo` é livre e a chave do aviso é `tipo, referencia, dia`); a 8.2 o usa **sem migração**. Os dois tipos novos existem só dentro do app: o Cron, a notificação do sistema e `lembretes_enviados` não mudam.
 
-**Acceptance Criteria:** a definir quando a história for planejada. Direção: a Conferência com diferença e a fila do Revisar viram tipos novos de aviso (cada um com a sua chave estável e o seu destino), contam no mesmo contador e entram na mesma lista; o contador do Revisar no menu continua existindo.
+**Acceptance Criteria:**
+
+**Given** uma Fatura importada cuja Conferência não bate (`conferir`) e que não foi dispensada (`alerta_dispensado_em` nulo)
+**When** Rafael abre a Central de Avisos
+**Then** há um aviso por Fatura com a diferença, com as MESMAS frases da faixa âmbar do Painel (`frasesFaixaConferencia`, sem texto duplicado): "Fatura de novembro/26 com diferença. A soma dos lançamentos ficou R$ 720,00 abaixo do total da fatura. A diferença está no cartão final 8673."
+**And** o toque abre o Painel daquele Mês (`/?mes=AAAA-MM`, "Abrir o Painel") e marca como lido
+**And** todas as Faturas com diferença não dispensada entram (o Mês antigo com diferença fica na lista até ser resolvido ou dispensado no Painel), do Mês mais novo para o mais antigo; dois cartões com diferença são UM aviso por Fatura
+**And** o aviso some sozinho quando a Conferência volta a bater, quando a Fatura é reimportada e passa a bater, ou quando a faixa é dispensada (o "Desfazer" e a reimportação, que zera a dispensa, o trazem de volta)
+
+**Given** itens na fila do Revisar (`contarFila` maior que zero)
+**When** Rafael abre a Central
+**Then** há UM aviso "17 lançamentos para revisar" ("1 lançamento para revisar"), com o destino `/revisar` ("Abrir Revisar"), e o número é o MESMO do contador "para revisar" do menu e do "Faltam N" do Revisar (nunca uma segunda conta)
+**And** o aviso some quando a fila zera; o contador "para revisar" do item Revisar do menu continua existindo (é a fila de trabalho)
+
+**Given** a chave de cada aviso novo (`tipo, referencia, dia`)
+**When** um aviso já lido encontra a mesma chave **Then** continua lido
+**And** a Conferência é `conferencia`, o Mês e a diferença (`2026-11:-72000:0:8673`) e o fechamento da Fatura: a mesma diferença lida continua lida, e uma diferença nova (reimportou, entrou ou saiu um Lançamento que mexeu na soma) volta como não lida
+**And** o Revisar é `revisar`, `fila` e o dia (em São Paulo) da última importação ou reimportação (`faturas.updated_at`): classificar itens, que baixa o número, não traz o aviso de volta; uma Fatura importada ou reimportada em outro dia, sim
+**And** nenhuma das duas chaves depende de "hoje", então o contador não pisca na virada do dia
+
+**Given** a regra da Central (`avisosDaCentral`, no núcleo)
+**When** os três tipos de origem entram (lembretes, Conferência e Revisar)
+**Then** a ordem é: não lidos primeiro e, dentro do grupo, Conferência, Revisar, fechamento e atraso por Bloco; o contador do menu (`naoLidos`), as chaves de "Marcar tudo como lido" e "Marcar como lido" valem para os três; mesma entrada, mesma saída
+**And** as funções que montam os avisos novos (`avisosDeConferencia`, `avisoDoRevisar`) são puras, em `src/domain`, e chamam `conferir` e `contarFila` (nenhuma regra na tela nem no SQL)
+
+**Given** o hook da Central e o menu lateral
+**When** o app abre **Then** o hook abre também `fatura_cartoes` e a fila do Revisar pelos gerenciadores de Realtime (nenhuma leitura avulsa) e devolve carregando, erro ou pronto: um dado ainda carregando ou com erro é sem contador, nunca um número parcial
+**And** o resumo do topo continua "N avisos novos" e "N Blocos com itens atrasados"
+
+**Given** Configurações → Aparência → Lembretes
+**When** Rafael as abre **Then** não há interruptor novo: o aviso da Conferência já respeita o "Dispensar" e o do Revisar some quando a fila zera (preferência nova seria coluna nova em `configuracoes` e migração)
+
+**Given** o Cron e a notificação do sistema (7.5)
+**When** rodam **Then** não mudam: só os lembretes viram notificação; a Conferência e o Revisar existem só dentro do app (`lembretes_enviados.tipo` continua aceitando só `fechamento` e `atraso`)
+
+**Given** o merge **Then** não há migração: nada a aplicar com `supabase db push`; a `avisos_lidos` da 8.1 já aceita os dois `tipo` novos

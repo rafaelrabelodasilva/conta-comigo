@@ -12,7 +12,7 @@ import { arredondar, formatarDinheiro } from "./dinheiro";
 import type { Divisao } from "./divisao";
 import { primeiraDiferenca, type ComposicaoTotalAPagar, type ConferenciaImportacao } from "./importacao-fatura";
 import type { AvisoDePagamento } from "./aviso-pagamento";
-import { LIMITE_DO_CONTADOR_DE_AVISOS } from "./avisos";
+import { LIMITE_DO_CONTADOR_DE_AVISOS, type OrigemDoAviso } from "./avisos";
 import type { Lembrete } from "./lembretes";
 import type { EstadoDasNotificacoes } from "./notificacoes";
 import type { ResumoDoPlano } from "./reimportacao";
@@ -2519,7 +2519,38 @@ export const TEXTOS_AVISOS = {
   nenhum_novo: "Nenhum aviso novo",
   /** Anunciado (região `status`) quando "Marcar tudo como lido" termina. */
   todos_lidos: "Todos os avisos foram marcados como lidos",
+  /** O verbo do toque no aviso da fila do Revisar (8.2): o destino dito em texto. */
+  abrir_revisar: "Abrir Revisar",
 } as const;
+
+/**
+ * O texto de um aviso da Central (8.1 e 8.2). Os lembretes usam `textoDoLembrete` (o mesmo da notificação do sistema);
+ * a Conferência diz o Mês e a diferença com as MESMAS frases da faixa âmbar do Painel (`frasesFaixaConferencia`, sem
+ * texto duplicado): "Fatura de novembro/26 com diferença. A soma dos lançamentos ficou R$ 720,00 abaixo do total da
+ * fatura."; o Revisar diz quantos itens estão na fila (`contarFila`, o número do menu): "17 lançamentos para revisar".
+ */
+export function textoDoAviso(origem: OrigemDoAviso): string {
+  switch (origem.tipo) {
+    case "conferencia":
+      return `Fatura de ${formatarMesExtenso(origem.mes)} com diferença. ${frasesFaixaConferencia(origem.conferencia).join(" ")}`;
+    case "revisar":
+      return origem.quantidade === 1 ? "1 lançamento para revisar" : `${origem.quantidade} lançamentos para revisar`;
+    default:
+      return textoDoLembrete(origem);
+  }
+}
+
+/** O verbo do toque no aviso, dito em texto: "Abrir o Painel", "Abrir Revisar", "Abrir Recebimentos". */
+export function rotuloAcaoDoAviso(origem: OrigemDoAviso): string {
+  switch (origem.tipo) {
+    case "conferencia":
+      return TEXTOS_LEMBRETES.abrir_painel;
+    case "revisar":
+      return TEXTOS_AVISOS.abrir_revisar;
+    default:
+      return rotuloAcaoDoLembrete(origem);
+  }
+}
 
 /** O número do contador do menu: "3", e "99+" acima de 99. */
 export function textoDoContadorDeAvisos(naoLidos: number): string {

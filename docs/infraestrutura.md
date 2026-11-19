@@ -106,6 +106,24 @@ O item "Avisos" do menu (rota `/avisos`) tem o contador de não lidos e a lista 
 - **Preferências:** um tipo desligado em Configurações → Aparência → Lembretes não aparece na Central, não conta e não notifica.
 - **Contador:** some em zero e enquanto carrega ou dá erro (nunca um número parcial); "99+" acima de 99.
 
+## Central de Avisos: a Conferência e o Revisar (História 8.2)
+A Central ganha dois tipos de aviso, **só dentro do app**: a diferença da Conferência de uma Fatura (uma por Fatura que não bate e não foi dispensada) e a fila do Revisar ("17 lançamentos para revisar"). O contador de Avisos do menu passa a somar os quatro tipos; o contador "para revisar" do item Revisar continua.
+
+### Não há migração
+**Nada a aplicar com `supabase db push`.** A `avisos_lidos` da 8.1 já aceita os dois `tipo` novos (`conferencia` e `revisar`: `tipo` é texto livre de 1 a 32 caracteres, `referencia` vai até 64). Nenhuma coluna, tabela, RPC, política nem publicação mudou, e o `database.types.ts` é o mesmo.
+
+### O que acontece entre o merge e (a falta de) `db push`
+Nada de especial: a Vercel publica no merge e é só isso. O app usa a tabela que a 8.1 já criou em produção (o `db push` da 8.1 foi feito em 19/11/2026). Quem abrir o app depois do deploy vê, na Central, os avisos novos como **Novo** (nenhuma linha lida tem a chave deles ainda) e o contador do menu sobe de uma vez pelo que existir (as diferenças de Conferência de todas as Faturas não dispensadas e, com a fila cheia, mais um). Marcar como lido grava a chave nova na mesma tabela.
+
+### O que o Cron e a notificação do sistema fazem
+**Nada mudou.** Só os lembretes (fechamento e atraso) viram notificação: `lembretesParaNotificar`, `lembretes_enviados` (o `check` de `tipo` continua aceitando só `fechamento` e `atraso`), o Cron e o service worker são os da 7.5 e da 8.1. A Conferência e o Revisar nunca saem como notificação do sistema; se um dia saírem, é outra história com migração do `check`.
+
+### Regras (tudo no núcleo)
+- **Lista:** `avisosDaCentral` (`src/domain/avisos.ts`) recebe os três tipos de origem; não lidos primeiro e, dentro do grupo, Conferência, Revisar, fechamento e atraso por Bloco. Quem monta cada aviso novo: `avisosDeConferencia` (`avisos-conferencia.ts`, que chama `conferir`, a conta da faixa do Painel) e `avisoDoRevisar` (`avisos-revisar.ts`, que chama `contarFila`, a do menu e do "Faltam N").
+- **Conferência:** uma Fatura aparece se a Conferência não bate e o alerta não foi dispensado (`alerta_dispensado_em` nulo; a reimportação o zera). Todas as Faturas, do Mês mais novo ao mais antigo. Chave: `conferencia`, `AAAA-MM:diferença das despesas:diferença dos créditos:finais` (centavos com sinal) e o fechamento da Fatura. A mesma diferença lida continua lida; outra diferença volta como não lida.
+- **Revisar:** um aviso quando há itens na fila. Chave: `revisar`, `fila` e o dia (em São Paulo) do maior `faturas.updated_at`. Classificar itens (o número muda) não traz o aviso de volta; uma Fatura importada ou reimportada em outro dia, sim. "Dispensar" e "Desfazer" da faixa da Conferência também mexem em `updated_at` (custo registrado no `deferred-work.md`).
+- **Leituras:** o hook da Central abre também `fatura_cartoes` e a fila do Revisar. Uma falha numa das nove leituras dos avisos é erro da Central e tira o contador (nunca um número parcial); a leitura dos lidos que falha continua valendo como "nada lido".
+
 ## Auth (História 1.2)
 - Supabase Auth com e-mail e senha via `@supabase/ssr`. Telas: `/entrar` (com "Esqueci a senha" em `/entrar?modo=esqueci`), `/auth/confirmar` (troca o `code` do link do e-mail) e `/redefinir-senha`. "Sair" encerra só a sessão deste aparelho.
 - Sessão renovada em `src/proxy.ts` com `getClaims()`; páginas, Server Actions e rotas conferem a sessão de novo. Sem as variáveis do Supabase, Entrar mostra "Login indisponível neste ambiente".

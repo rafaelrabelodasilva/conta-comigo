@@ -6,7 +6,7 @@ import { TEXTOS_AVISOS as T, TEXTOS_LEMBRETES as L, mensagem } from "@/domain/me
 import { ToastProvider } from "@/ui/Toast";
 import { Avisos } from "./Avisos";
 
-// A Central de Avisos (História 8.1, FR-55): a tela `/avisos`. As contas são do núcleo (`avisos.test.ts`); aqui se prova a
+// A Central de Avisos (História 8.1 e 8.2, FR-55): a tela `/avisos`. As contas são do núcleo (`avisos.test.ts`); aqui se prova a
 // fiação com o hook de verdade: o texto, a ordem, o estado em texto, "Marcar como lido" e "Marcar tudo", o foco, os `role`,
 // carregando, erro, vazio e a tabela `avisos_lidos` ausente. Os gerenciadores de Realtime e o repositório são falsos e o
 // relógio é o de verdade, congelado com `vi.setSystemTime` (o `useHoje` real).
@@ -40,9 +40,11 @@ vi.mock("@/data/realtime", async () => {
     useLinhas: (tabela: string) => useTabela(tabela),
     useTodosOsLancamentos: () => useTabela("lancamentos"),
     useItensDoHistorico: () => useTabela("pagamento_itens"),
+    useFilaRevisar: () => useTabela("fila"),
     gerenciador: () => ({ recarregar: falso.recarregar }),
     gerenciadorTodosOsLancamentos: () => ({ recarregar: falso.recarregar }),
     gerenciadorItensDoHistorico: () => ({ recarregar: falso.recarregar }),
+    gerenciadorFila: () => ({ recarregar: falso.recarregar }),
   };
 });
 vi.mock("@/data/avisos-repo", () => ({ repoAvisos: () => ({ marcar: falso.marcar, marcarUm: falso.marcarUm }) }));
@@ -89,6 +91,19 @@ const lancamento = (id: string, responsavel: string, valor: number, extra: Recor
   tipo_id: "casa",
   status_id: NAO_PAGO,
   lancado_por: "fatura",
+  ...extra,
+});
+
+/** Uma linha de `faturas` completa (a Conferência lê os totais): sem Lançamentos nem cartões ela bate, sem aviso. */
+const fatura = (mes: string, vencimento: string, extra: Record<string, unknown> = {}) => ({
+  id: `f-${mes}`,
+  mes,
+  vencimento,
+  fechamento: mes === "2026-11" ? "2026-10-28" : "2026-09-28",
+  total_despesas_centavos: 0,
+  total_creditos_centavos: 0,
+  alerta_dispensado_em: null,
+  updated_at: "2026-11-18T12:00:00Z",
   ...extra,
 });
 
@@ -173,10 +188,9 @@ beforeEach(() => {
   });
   guardar("config_ciclo", CICLO);
   guardar("status", STATUS);
-  guardar("faturas", [
-    { mes: "2026-10", vencimento: "2026-10-06" },
-    { mes: "2026-11", vencimento: "2026-11-06" },
-  ]);
+  guardar("faturas", [fatura("2026-10", "2026-10-06"), fatura("2026-11", "2026-11-06")]);
+  guardar("fatura_cartoes", []);
+  guardar("fila", []);
   guardar("blocos", QUATRO_BLOCOS);
   guardar("lancamentos", LANCAMENTOS_DOS_QUATRO);
   guardar("pagamento_itens", []);
@@ -214,7 +228,7 @@ describe("Central de Avisos: a lista", () => {
 
   it("o fechamento abre o Painel do Mês, em palavras, e vem antes dos Blocos", () => {
     hoje("2026-10-28");
-    guardar("faturas", [{ mes: "2026-10", vencimento: "2026-10-06" }]);
+    guardar("faturas", [fatura("2026-10", "2026-10-06")]);
     montar();
     expect(textoDeLinha(0)).toContain("A fatura de novembro fechou. Importe o PDF quando chegar");
     expect(within(linhas()[0]).getByText(L.abrir_painel)).toBeTruthy();
@@ -445,7 +459,7 @@ describe("Central de Avisos: vazio, carregando, erro e a tabela ausente", () => 
   });
 
   it("carregando (qualquer das leituras): esqueleto em `status` ocupado, sem lista e sem erro", () => {
-    for (const tabela of ["lancamentos", "pagamento_itens", "blocos", "status", "faturas", "config_ciclo", "configuracoes", "avisos_lidos"]) {
+    for (const tabela of ["lancamentos", "pagamento_itens", "blocos", "status", "faturas", "fatura_cartoes", "fila", "config_ciclo", "configuracoes", "avisos_lidos"]) {
       falso.status = { [tabela]: "carregando" };
       falso.versao += 1;
       const { unmount } = render(
@@ -463,14 +477,29 @@ describe("Central de Avisos: vazio, carregando, erro e a tabela ausente", () => 
     }
   });
 
-  it("erro numa das sete leituras dos lembretes: 'Não foi possível carregar' e 'Tentar de novo' relê tudo", async () => {
+  it("erro numa das nove leituras dos avisos: 'Não foi possível carregar' e 'Tentar de novo' relê tudo", async () => {
     falso.status = { blocos: "erro" };
     const usuario = montar();
     expect(screen.getByRole("alert").textContent).toContain(mensagem("carregar.falhou"));
     expect(linhas()).toHaveLength(0);
     await usuario.click(screen.getByRole("button", { name: "Tentar de novo" }));
-    // As 8 leituras (Lançamentos, itens, Blocos, Status, Faturas, Ciclo, Configurações e os lidos).
-    expect(falso.recarregar).toHaveBeenCalledTimes(8);
+    // As 10 leituras (Lançamentos, itens, fila do Revisar, Blocos, Status, Faturas, cartões, Ciclo, Configurações e os lidos).
+    expect(falso.recarregar).toHaveBeenCalledTimes(10);
+  });
+
+  it("erro na fila do Revisar ou nos cartões das Faturas também é erro (nunca um número parcial)", () => {
+    for (const tabela of ["fila", "fatura_cartoes"]) {
+      falso.status = { [tabela]: "erro" };
+      falso.versao += 1;
+      const { unmount } = render(
+        <ToastProvider>
+          <Avisos />
+        </ToastProvider>,
+      );
+      expect(screen.getByRole("alert").textContent).toContain(mensagem("carregar.falhou"));
+      expect(linhas()).toHaveLength(0);
+      unmount();
+    }
   });
 
   it("sem a tabela avisos_lidos (merge antes do `db push`): a lista aparece, tudo Novo, e só marcar responde erro", async () => {
@@ -522,5 +551,176 @@ describe("Central de Avisos: acessibilidade", () => {
       </ToastProvider>,
     );
     expect(container.innerHTML).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgb\(|bg-\[|text-\[#/);
+  });
+});
+
+// ------------------------------------------------ Conferência e Revisar na Central (História 8.2)
+
+describe("Central de Avisos: a diferença da Conferência e a fila do Revisar", () => {
+  /** Novembro com R$ 720,00 a menos do que a Fatura diz, no cartão 8673 (como a faixa âmbar do Painel). */
+  function comDiferenca(extra: Record<string, unknown> = {}) {
+    guardar("faturas", [
+      fatura("2026-10", "2026-10-06"),
+      fatura("2026-11", "2026-11-06", { total_despesas_centavos: 100_000, ...extra }),
+    ]);
+    guardar("fatura_cartoes", [{ fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000 }]);
+    guardar("lancamentos", [
+      ...LANCAMENTOS_DOS_QUATRO,
+      lancamento("lf", "ninguem", 28_000, { mes: "2026-11", status_id: PAGO, fatura_id: "f-2026-11", final_cartao: "8673" }),
+    ]);
+  }
+  const naFila = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: `q${i}`, excluido_em: null, ajuste_de_id: null, revisao_motivo: "sem_classificacao" }));
+
+  it("mostra a diferença da Fatura com as frases da faixa, o destino em palavras e o estado em texto", () => {
+    comDiferenca();
+    montar();
+    expect(linhas()).toHaveLength(5);
+    const conferencia = linhas()[0];
+    expect(sem(conferencia.textContent)).toContain(
+      "Fatura de novembro/26 com diferença. A soma dos lançamentos ficou R$ 720,00 abaixo do total da fatura. A diferença está no cartão final 8673.",
+    );
+    expect(within(conferencia).getByText(T.estado_novo)).toBeTruthy();
+    expect(within(conferencia).getByText(L.abrir_painel)).toBeTruthy();
+    expect(within(conferencia).getByRole("link").getAttribute("href")).toBe("/?mes=2026-11");
+    expect(within(conferencia).getByRole("link").className).toContain("min-h-toque");
+  });
+
+  it("mostra a fila do Revisar: o número, 'Abrir Revisar' e o destino /revisar", () => {
+    guardar("fila", naFila(17));
+    montar();
+    expect(linhas()).toHaveLength(5);
+    const revisar = linhas()[0];
+    expect(sem(revisar.textContent)).toContain("17 lançamentos para revisar");
+    expect(within(revisar).getByText(T.abrir_revisar)).toBeTruthy();
+    expect(within(revisar).getByRole("link").getAttribute("href")).toBe("/revisar");
+    expect(within(revisar).getByText(T.estado_novo)).toBeTruthy();
+    guardar("fila", naFila(1));
+    mudou();
+    expect(sem(linhas()[0].textContent)).toContain("1 lançamento para revisar");
+  });
+
+  it("o Ajuste, a linha excluída e a que já foi revisada não entram na conta (a do menu)", () => {
+    guardar("fila", [
+      ...naFila(2),
+      { id: "a", excluido_em: null, ajuste_de_id: "q0", revisao_motivo: "sem_classificacao" },
+      { id: "e", excluido_em: "2026-11-01T00:00:00Z", ajuste_de_id: null, revisao_motivo: "sem_classificacao" },
+      { id: "r", excluido_em: null, ajuste_de_id: null, revisao_motivo: null },
+    ]);
+    montar();
+    expect(sem(linhas()[0].textContent)).toContain("2 lançamentos para revisar");
+  });
+
+  it("a ordem: Conferência, Revisar, fechamento, atraso por Bloco; o resumo conta tudo e os atrasos à parte", () => {
+    hoje("2026-10-28");
+    guardar("faturas", [fatura("2026-10", "2026-10-06", { total_despesas_centavos: 100_000 })]);
+    guardar("fatura_cartoes", [{ fatura_id: "f-2026-10", final: "8673", total_centavos: 100_000 }]);
+    guardar("lancamentos", [
+      ...LANCAMENTOS_DOS_QUATRO,
+      lancamento("lf", "ninguem", 28_000, { status_id: PAGO, fatura_id: "f-2026-10", final_cartao: "8673" }),
+    ]);
+    guardar("fila", naFila(3));
+    montar();
+    expect(linhas().map((_, i) => textoDeLinha(i).replace(/^Novo/, "").slice(0, 14))).toEqual([
+      "Fatura de outu",
+      "3 lançamentos ",
+      "A fatura de no",
+      "Rangel: R$ 5.2",
+      "Mãe: R$ 1.783,",
+      "Lucas: R$ 115,",
+      "Casal: R$ 50,0",
+    ]);
+    expect(screen.getByText("7 avisos novos")).toBeTruthy();
+    expect(screen.getByText("4 Blocos com itens atrasados")).toBeTruthy();
+  });
+
+  it("Dispensar na faixa do Painel tira o aviso; o 'Desfazer' e a reimportação o trazem de volta", () => {
+    comDiferenca();
+    montar();
+    expect(linhas()).toHaveLength(5);
+    comDiferenca({ alerta_dispensado_em: "2026-11-19T10:00:00Z" });
+    mudou();
+    expect(linhas()).toHaveLength(4);
+    expect(screen.getByText("4 avisos novos")).toBeTruthy();
+    comDiferenca({ alerta_dispensado_em: null });
+    mudou();
+    expect(linhas()).toHaveLength(5);
+  });
+
+  it("some sozinho quando a Conferência volta a bater e quando a fila zera", () => {
+    comDiferenca();
+    guardar("fila", naFila(2));
+    montar();
+    expect(linhas()).toHaveLength(6);
+    guardar("lancamentos", [
+      ...LANCAMENTOS_DOS_QUATRO,
+      lancamento("lf", "ninguem", 100_000, { mes: "2026-11", status_id: PAGO, fatura_id: "f-2026-11", final_cartao: "8673" }),
+    ]);
+    mudou();
+    expect(linhas()).toHaveLength(5);
+    guardar("fila", []);
+    mudou();
+    expect(linhas()).toHaveLength(4);
+    expect(screen.getByText("4 avisos novos")).toBeTruthy();
+  });
+
+  it("'Marcar como lido' e tocar na linha gravam a chave de cada tipo", async () => {
+    comDiferenca();
+    guardar("fila", naFila(3));
+    const usuario = montar();
+    await usuario.click(within(linhas()[0]).getByRole("link"));
+    expect(falso.marcarUm).toHaveBeenLastCalledWith({ tipo: "conferencia", referencia: "2026-11:-72000:0:8673", dia: "2026-10-28" });
+    await usuario.click(botoesDeMarcar()[0]);
+    expect(falso.marcarUm).toHaveBeenLastCalledWith({ tipo: "revisar", referencia: "fila", dia: "2026-11-18" });
+    expect(screen.getByText("4 avisos novos")).toBeTruthy();
+  });
+
+  it("'Marcar tudo' é UM pedido com as chaves dos três tipos, na ordem da lista", async () => {
+    comDiferenca();
+    guardar("fila", naFila(3));
+    const usuario = montar();
+    await usuario.click(marcarTudo());
+    expect(falso.marcar).toHaveBeenCalledTimes(1);
+    expect(falso.marcar.mock.calls[0][0]).toEqual([
+      { tipo: "conferencia", referencia: "2026-11:-72000:0:8673", dia: "2026-10-28" },
+      { tipo: "revisar", referencia: "fila", dia: "2026-11-18" },
+      { tipo: "atraso", referencia: "b-rangel", dia: "2026-10-17" },
+      { tipo: "atraso", referencia: "b-mae", dia: "2026-10-17" },
+      { tipo: "atraso", referencia: "b-lucas", dia: "2026-10-17" },
+      { tipo: "atraso", referencia: "b-casal", dia: "2026-10-17" },
+    ]);
+    expect(screen.getByText("Nenhum aviso novo")).toBeTruthy();
+  });
+
+  it("o lido continua lido; a diferença nova e a importação nova voltam como Novo", () => {
+    comDiferenca();
+    guardar("fila", naFila(3));
+    guardar("avisos_lidos", [
+      lidaDe("conferencia", "2026-11:-72000:0:8673", "2026-10-28"),
+      lidaDe("revisar", "fila", "2026-11-18"),
+    ]);
+    montar();
+    expect(linhas().slice(-2).map((li) => within(li).getByText(T.estado_lido).textContent)).toEqual([T.estado_lido, T.estado_lido]);
+    // Entrou um Lançamento que mexeu na soma: outra diferença, de novo Novo.
+    guardar("lancamentos", [
+      ...LANCAMENTOS_DOS_QUATRO,
+      lancamento("lf", "ninguem", 28_000, { mes: "2026-11", status_id: PAGO, fatura_id: "f-2026-11", final_cartao: "8673" }),
+      lancamento("lg", "ninguem", 2_000, { mes: "2026-11", status_id: PAGO, fatura_id: "f-2026-11", final_cartao: "8673" }),
+    ]);
+    mudou();
+    expect(sem(linhas()[0].textContent)).toContain("R$ 700,00 abaixo");
+    expect(within(linhas()[0]).getByText(T.estado_novo)).toBeTruthy();
+    // Reimportou a Fatura (outro dia): o Revisar volta como Novo.
+    comDiferenca({ updated_at: "2026-11-19T12:00:00Z" });
+    mudou();
+    const doRevisar = linhas().find((li) => sem(li.textContent).includes("para revisar"))!;
+    expect(within(doRevisar).getByText(T.estado_novo)).toBeTruthy();
+  });
+
+  it("sem aviso novo de nenhum tipo, a Central mostra 'Nenhum aviso' (Fatura que bate, fila vazia)", () => {
+    guardar("lancamentos", []);
+    guardar("fila", []);
+    montar();
+    expect(screen.getByText(T.vazio)).toBeTruthy();
   });
 });

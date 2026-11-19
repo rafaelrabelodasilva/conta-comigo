@@ -7,10 +7,10 @@ import { textoDaChaveDeNotificacao } from "@/domain/lembretes";
 import {
   TEXTOS_AVISOS,
   mensagem,
-  rotuloAcaoDoLembrete,
+  rotuloAcaoDoAviso,
   rotuloDeAvisosNovos,
   rotuloResumoDeAtrasos,
-  textoDoLembrete,
+  textoDoAviso,
 } from "@/domain/mensagens";
 import { repoAvisos } from "@/data/avisos-repo";
 import { Botao } from "@/ui/Botao";
@@ -21,9 +21,10 @@ import { EstadoVazio } from "@/ui/EstadoVazio";
 import { useToast } from "@/ui/Toast";
 import { recarregarCentralDeAvisos, useCentralDeAvisos } from "./use-central-de-avisos";
 
-// A tela `/avisos`, a Central de Avisos (História 8.1, FR-55, EXPERIENCE.md "Lembretes"): todos os lembretes do dia
-// (fechamento da fatura e Bloco com itens atrasados), sem limite, não lidos primeiro. Cada linha diz o que é, para
-// onde leva ("Abrir Recebimentos") e o estado em texto ("Novo" ou "Lido", nunca só cor ou negrito). Tocar na linha
+// A tela `/avisos`, a Central de Avisos (História 8.1 e 8.2, FR-55, EXPERIENCE.md "Lembretes" e "Avisos"): todos os
+// avisos do dia, sem limite, não lidos primeiro: a diferença da Conferência de uma Fatura, a fila do Revisar, o
+// fechamento da fatura e cada Bloco com itens atrasados. Cada linha diz o que é, para onde leva ("Abrir o Painel",
+// "Abrir Revisar", "Abrir Recebimentos") e o estado em texto ("Novo" ou "Lido", nunca só cor ou negrito). Tocar na linha
 // abre o destino e marca como lido; "Marcar como lido" marca sem sair; "Marcar tudo como lido" é um pedido só.
 // Quais avisos existem, a ordem, o "lido" e a contagem são do núcleo (`avisosDaCentral`); aqui só se desenha.
 //
@@ -150,8 +151,8 @@ export function Avisos() {
 }
 
 function LinhaDeAviso({ aviso, aoMarcar }: { aviso: AvisoDaCentral; aoMarcar: () => void }) {
-  const { lembrete, lido } = aviso;
-  const texto = textoDoLembrete(lembrete);
+  const { origem, lido } = aviso;
+  const texto = textoDoAviso(origem);
   return (
     <li
       className={cn(
@@ -161,7 +162,7 @@ function LinhaDeAviso({ aviso, aoMarcar }: { aviso: AvisoDaCentral; aoMarcar: ()
     >
       {/* Tocar abre o destino e marca como lido (sem erro se não der: a pessoa pediu para abrir). */}
       <Link
-        href={lembrete.destino}
+        href={origem.destino}
         onClick={() => {
           if (!lido) void repoAvisos().marcarUm(aviso.chave);
         }}
@@ -176,7 +177,7 @@ function LinhaDeAviso({ aviso, aoMarcar }: { aviso: AvisoDaCentral; aoMarcar: ()
           {lido ? TEXTOS_AVISOS.estado_lido : TEXTOS_AVISOS.estado_novo}
         </span>
         <span className={cn("min-w-0 flex-1", lido ? "texto-body text-text-muted" : "texto-body-strong")}>{texto}</span>
-        <span className="shrink-0 texto-label underline">{rotuloAcaoDoLembrete(lembrete)}</span>
+        <span className="shrink-0 texto-label underline">{rotuloAcaoDoAviso(origem)}</span>
       </Link>
       {lido ? null : (
         <div className="flex items-center pr-2">

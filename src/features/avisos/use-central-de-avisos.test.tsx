@@ -3,7 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { recarregarCentralDeAvisos, useCentralDeAvisos } from "./use-central-de-avisos";
 
-// O hook da Central de Avisos (História 8.1): o estado que o menu (contador) e a tela `/avisos` leem. Os gerenciadores de
+// O hook da Central de Avisos (História 8.1 e 8.2): o estado que o menu (contador) e a tela `/avisos` leem. Os gerenciadores de
 // Realtime são falsos; o relógio é o de verdade, congelado (o `useHoje` real).
 
 const falso = vi.hoisted(() => ({
@@ -34,9 +34,11 @@ vi.mock("@/data/realtime", async () => {
     useLinhas: (tabela: string) => useTabela(tabela),
     useTodosOsLancamentos: () => useTabela("lancamentos"),
     useItensDoHistorico: () => useTabela("pagamento_itens"),
+    useFilaRevisar: () => useTabela("fila"),
     gerenciador: (tabela: string) => recarregavel(tabela),
     gerenciadorTodosOsLancamentos: () => recarregavel("lancamentos:todos"),
     gerenciadorItensDoHistorico: () => recarregavel("pagamento_itens:historico"),
+    gerenciadorFila: () => recarregavel("fila"),
   };
 });
 
@@ -51,6 +53,21 @@ const lancamento = {
   status_id: "s-nao",
   lancado_por: "fatura",
 };
+
+/** Uma linha de `faturas` completa (a Conferência lê os totais): sem Lançamentos nem cartões ela bate, sem aviso. */
+const fatura = (mes: string, vencimento: string, extra: Record<string, unknown> = {}) => ({
+  id: `f-${mes}`,
+  mes,
+  vencimento,
+  fechamento: mes === "2026-11" ? "2026-10-28" : "2026-09-28",
+  total_despesas_centavos: 0,
+  total_creditos_centavos: 0,
+  alerta_dispensado_em: null,
+  updated_at: "2026-11-18T12:00:00Z",
+  ...extra,
+});
+const naFila = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ id: `q${i}`, excluido_em: null, ajuste_de_id: null, revisao_motivo: "sem_classificacao" }));
 
 function mudou() {
   act(() => {
@@ -68,10 +85,9 @@ beforeEach(() => {
       { id: "s-pago", conta_como_pago: true },
       { id: "s-nao", conta_como_pago: false },
     ],
-    faturas: [
-      { mes: "2026-10", vencimento: "2026-10-06" },
-      { mes: "2026-11", vencimento: "2026-11-06" },
-    ],
+    faturas: [fatura("2026-10", "2026-10-06"), fatura("2026-11", "2026-11-06")],
+    fatura_cartoes: [],
+    fila: [],
     blocos: [bloco],
     lancamentos: [lancamento],
     pagamento_itens: [],
@@ -90,11 +106,11 @@ describe("useCentralDeAvisos", () => {
     expect(result.current.status).toBe("pronto");
     if (result.current.status !== "pronto") return;
     expect(result.current.central.naoLidos).toBe(1);
-    expect(result.current.central.avisos[0].lembrete).toMatchObject({ tipo: "atraso", blocoNome: "Lucas", valorCentavos: 11_516 });
+    expect(result.current.central.avisos[0].origem).toMatchObject({ tipo: "atraso", blocoNome: "Lucas", valorCentavos: 11_516 });
   });
 
-  it("carregando: qualquer das oito leituras ainda sem dados, nunca um número parcial", () => {
-    for (const tabela of ["lancamentos", "pagamento_itens", "blocos", "status", "faturas", "config_ciclo", "configuracoes", "avisos_lidos"]) {
+  it("carregando: qualquer das dez leituras ainda sem dados, nunca um número parcial", () => {
+    for (const tabela of ["lancamentos", "pagamento_itens", "blocos", "status", "faturas", "fatura_cartoes", "fila", "config_ciclo", "configuracoes", "avisos_lidos"]) {
       falso.status = { [tabela]: "carregando" };
       falso.versao += 1;
       const { result, unmount } = renderHook(() => useCentralDeAvisos());
@@ -103,8 +119,8 @@ describe("useCentralDeAvisos", () => {
     }
   });
 
-  it("erro numa das sete leituras dos lembretes é erro", () => {
-    for (const tabela of ["lancamentos", "pagamento_itens", "blocos", "status", "faturas", "config_ciclo", "configuracoes"]) {
+  it("erro numa das nove leituras dos avisos é erro (a dos lidos que falha não é)", () => {
+    for (const tabela of ["lancamentos", "pagamento_itens", "blocos", "status", "faturas", "fatura_cartoes", "fila", "config_ciclo", "configuracoes"]) {
       falso.status = { [tabela]: "erro" };
       falso.versao += 1;
       const { result, unmount } = renderHook(() => useCentralDeAvisos());
@@ -141,10 +157,78 @@ describe("useCentralDeAvisos", () => {
     expect(result.current.status === "pronto" && result.current.central.naoLidos).toBe(1);
   });
 
-  it("recarregarCentralDeAvisos relê as oito leituras", () => {
+  it("recarregarCentralDeAvisos relê as dez leituras", () => {
     recarregarCentralDeAvisos();
     expect([...falso.recarregados].sort()).toEqual(
-      ["avisos_lidos", "blocos", "config_ciclo", "configuracoes", "faturas", "lancamentos:todos", "pagamento_itens:historico", "status"].sort(),
+      [
+        "avisos_lidos",
+        "blocos",
+        "config_ciclo",
+        "configuracoes",
+        "fatura_cartoes",
+        "faturas",
+        "fila",
+        "lancamentos:todos",
+        "pagamento_itens:historico",
+        "status",
+      ].sort(),
     );
+  });
+
+  it("a Conferência e o Revisar entram na conta: o contador soma os três tipos, na ordem dos tipos", () => {
+    falso.banco.faturas = [fatura("2026-10", "2026-10-06"), fatura("2026-11", "2026-11-06", { total_despesas_centavos: 100_000 })];
+    falso.banco.fatura_cartoes = [{ fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000 }];
+    falso.banco.lancamentos = [
+      lancamento,
+      { ...lancamento, id: "lf", mes: "2026-11", status_id: "s-pago", responsavel_id: "ninguem", valor_centavos: 28_000, fatura_id: "f-2026-11", final_cartao: "8673" },
+    ];
+    falso.banco.fila = naFila(17);
+    falso.versao += 1;
+    const { result } = renderHook(() => useCentralDeAvisos());
+    expect(result.current.status).toBe("pronto");
+    if (result.current.status !== "pronto") return;
+    expect(result.current.central.naoLidos).toBe(3);
+    expect(result.current.central.avisos.map((a) => a.chave)).toEqual([
+      { tipo: "conferencia", referencia: "2026-11:-72000:0:8673", dia: "2026-10-28" },
+      { tipo: "revisar", referencia: "fila", dia: "2026-11-18" },
+      { tipo: "atraso", referencia: "b-lucas", dia: "2026-10-17" },
+    ]);
+    expect(result.current.central.avisos[1].origem).toMatchObject({ quantidade: 17 });
+  });
+
+  it("a fila e a diferença mudam pelo Realtime sem recarregar: o contador acompanha", () => {
+    falso.banco.fila = naFila(2);
+    falso.versao += 1;
+    const { result } = renderHook(() => useCentralDeAvisos());
+    expect(result.current.status === "pronto" && result.current.central.naoLidos).toBe(2);
+    falso.banco.fila = [];
+    mudou();
+    expect(result.current.status === "pronto" && result.current.central.naoLidos).toBe(1);
+  });
+
+  it("virada do dia: a Conferência e o Revisar não dependem de 'hoje', então o contador não pisca", () => {
+    falso.banco.fila = naFila(2);
+    falso.banco.lancamentos = [];
+    falso.versao += 1;
+    vi.setSystemTime(new Date("2026-11-19T23:50:00-03:00"));
+    const { result } = renderHook(() => useCentralDeAvisos());
+    const antes = result.current.status === "pronto" ? result.current.central.avisos.map((a) => a.chave) : null;
+    expect(antes).toEqual([{ tipo: "revisar", referencia: "fila", dia: "2026-11-18" }]);
+    act(() => {
+      vi.setSystemTime(new Date("2026-11-20T00:05:00-03:00"));
+      vi.advanceTimersByTime(60_000);
+    });
+    const depois = result.current.status === "pronto" ? result.current.central.avisos.map((a) => a.chave) : null;
+    expect(depois).toEqual(antes);
+  });
+
+  it("a leitura dos lidos vale para os três tipos: o lido de um aparelho baixa o contador no outro", () => {
+    falso.banco.fila = naFila(2);
+    falso.versao += 1;
+    const { result } = renderHook(() => useCentralDeAvisos());
+    expect(result.current.status === "pronto" && result.current.central.naoLidos).toBe(2);
+    falso.banco.avisos_lidos = [{ id: "y", tipo: "revisar", referencia: "fila", dia: "2026-11-18" }];
+    mudou();
+    expect(result.current.status === "pronto" && result.current.central.naoLidos).toBe(1);
   });
 });

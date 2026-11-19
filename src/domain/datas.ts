@@ -144,3 +144,13 @@ export function hojeEmSaoPaulo(agora: Date): string {
   const parte = partesEmSaoPaulo(agora);
   return `${parte("year")}-${parte("month")}-${parte("day")}`;
 }
+
+/**
+ * O dia (`AAAA-MM-DD`) em America/Sao_Paulo de um instante com fuso (os formatos de `instanteEmMicros`: o do REST, o
+ * do Realtime); `null` se o formato não é reconhecido. Não lê o relógio: o instante vem de fora.
+ */
+export function diaDoInstanteEmSaoPaulo(instante: string): string | null {
+  const micros = instanteEmMicros(instante);
+  if (Number.isNaN(micros)) return null;
+  return hojeEmSaoPaulo(new Date(Math.floor(micros / 1000)));
+}

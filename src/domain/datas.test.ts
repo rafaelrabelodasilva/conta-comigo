@@ -7,6 +7,7 @@ import {
   formatarMes,
   formatarMesExtenso,
   formatarNomeDoMes,
+  diaDoInstanteEmSaoPaulo,
   hojeEmSaoPaulo,
   instanteEmMicros,
   lerMes,
@@ -80,6 +81,22 @@ describe("formatarHora", () => {
   it("recusa instante sem fuso", () => {
     expect(() => formatarHora("2026-11-07T00:14:00")).toThrow();
     expect(() => formatarHora("2026-11-07")).toThrow();
+  });
+});
+
+describe("diaDoInstanteEmSaoPaulo", () => {
+  it("o dia em São Paulo de um instante com fuso (REST e Realtime), na virada do dia", () => {
+    expect(diaDoInstanteEmSaoPaulo("2026-11-19T02:30:00Z")).toBe("2026-11-18");
+    expect(diaDoInstanteEmSaoPaulo("2026-11-19T03:00:00Z")).toBe("2026-11-19");
+    expect(diaDoInstanteEmSaoPaulo("2026-11-19T00:30:00.123456+00:00")).toBe("2026-11-18");
+    expect(diaDoInstanteEmSaoPaulo("2026-11-19 03:30:00.123456+00")).toBe("2026-11-19");
+    expect(diaDoInstanteEmSaoPaulo("2026-11-19T00:10:00-03:00")).toBe("2026-11-19");
+  });
+
+  it("formato desconhecido: null (nunca lança)", () => {
+    expect(diaDoInstanteEmSaoPaulo("ontem")).toBeNull();
+    expect(diaDoInstanteEmSaoPaulo("2026-11-19")).toBeNull();
+    expect(diaDoInstanteEmSaoPaulo("")).toBeNull();
   });
 });
 
