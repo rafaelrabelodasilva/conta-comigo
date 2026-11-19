@@ -2,7 +2,7 @@
 title: 'História 7.5: Notificações no iPad e no PC'
 type: 'feature'
 created: '2026-11-19'
-status: 'review'
+status: 'done'
 baseline_commit: 'b0ac5e4'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -121,9 +121,9 @@ Hoje (Cron às 09:00 em Brasília). Ciclo: fechamento 28, vencimento 06. Tolerâ
 - [x] Interface: "Ativar notificações" e "Desativar neste aparelho" em Aparência → Lembretes; `push-repo`; a faixa usa a função comum.
 - [x] Dependência `web-push` 3.6.7 e `@types/web-push` 3.6.4; `.env.example`; `docs/infraestrutura.md`; `deferred-work.md`; `sprint-status.yaml` (7.5 em `review`).
 - [x] Provas: núcleo (a matriz e o teste que amarra servidor e faixa), servidor (banco e envio falsos), service worker, jsdom, `test/integracao`, backup (`dados-exemplo.sql`).
-- [ ] **CI verde na PR** (`verificar`, `supabase`, "Backup gera e restaura"): o `supabase` prova a migração, o RLS e a restrição única de verdade, e o Cron contra o banco; o backup prova as duas tabelas.
-- [ ] **O Rafael, fora do código:** gerar as chaves (`npx web-push generate-vapid-keys`), cadastrar as três variáveis na Vercel (só Production), `supabase db push` da migração (quando pedir), instalar o app no iPad e tocar em "Ativar notificações" (e no PC).
-- [ ] `done` no sprint-status só depois do merge, em PR separada (como a #114). **O Épico 7 acaba com esta história; a retrospectiva (`epic-7-retrospective`) fica como está, para o Rafael pedir.**
+- [x] **CI verde na PR** (`verificar`, `supabase`, "Backup gera e restaura"): o `supabase` prova a migração, o RLS e a restrição única de verdade, e o Cron contra o banco; o backup prova as duas tabelas.
+- [ ] **O Rafael, fora do código (pendente: nada disso foi feito até o merge):** gerar as chaves (`npx web-push generate-vapid-keys`), cadastrar as três variáveis na Vercel (só Production), `supabase db push` da migração (quando pedir), instalar o app no iPad e tocar em "Ativar notificações" (e no PC).
+- [x] `done` no sprint-status só depois do merge, em PR separada (como a #114). **O Épico 7 acaba com esta história; a retrospectiva (`epic-7-retrospective`) fica como está, para o Rafael pedir.**
 
 ## Verification
 
