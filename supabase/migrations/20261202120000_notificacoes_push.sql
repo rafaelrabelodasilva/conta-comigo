@@ -34,8 +34,8 @@ create table public.push_inscricoes (
   constraint push_inscricoes_endpoint_key unique (endpoint),
   constraint push_inscricoes_endpoint_check
     check (endpoint ~ '^https://[^[:space:]]+$' and char_length(endpoint) <= 2048),
-  constraint push_inscricoes_chaves_check
-    check (char_length(chave_p256dh) between 1 and 256 and char_length(chave_auth) between 1 and 256)
+  constraint push_inscricoes_chave_p256dh_check check (char_length(chave_p256dh) between 1 and 256),
+  constraint push_inscricoes_chave_auth_check check (char_length(chave_auth) between 1 and 256)
 );
 
 comment on table public.push_inscricoes is

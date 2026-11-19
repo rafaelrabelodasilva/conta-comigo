@@ -178,6 +178,8 @@ describe.skipIf(!ligado)("Notificações do sistema no Supabase local (História
     let pc: string;
 
     beforeAll(async () => {
+      // O dono A já tem chaves dos testes de cima: aqui só vale o que o Cron gravar.
+      await local.admin.from("lembretes_enviados").delete().eq("owner_id", a.id);
       const ciclo = await a.cliente.from("config_ciclo").insert({ dia_fechamento: 28, dia_vencimento: 6, vigente_desde: mesAtual });
       expect(ciclo.error).toBeNull();
       ipad = nova("cron-ipad").endpoint;
