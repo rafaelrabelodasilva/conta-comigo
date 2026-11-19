@@ -2,7 +2,7 @@
 title: 'História 8.1: Central de Avisos'
 type: 'feature'
 created: '2026-11-19'
-status: 'review'
+status: 'done'
 baseline_commit: 'b6f387e'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -105,9 +105,9 @@ Hoje 19/11/26. Ciclo: fechamento 28, vencimento 06. Tolerância 10. Faturas de O
 - [x] Interface: o item "Avisos" com o contador, a tela `/avisos`, as faixas removidas, o hook da Central.
 - [x] Registrar o Épico 8 (`epics.md`, PRD, EXPERIENCE.md, `sprint-status.yaml` com `epic-8: in-progress`, `8-1` em `review`, `8-2` em `backlog`).
 - [x] Provas: núcleo (a matriz e o teste que amarra Central, Cron e texto), servidor, jsdom (o menu, a tela, marcar um, marcar tudo, vazio, carregando, erro, sem a tabela, o foco, os `role`), repositório, `test/integracao` e o backup (`dados-exemplo.sql`).
-- [ ] **CI verde na PR** (`verificar`, `supabase`, "Backup gera e restaura"): o `supabase` prova a migração, o RLS, a restrição única, o Realtime entre dois aparelhos e a igualdade do `database.types.ts`; o backup prova a tabela nova.
+- [x] **CI verde na PR (#118)** (`verificar`, `supabase`, "Backup gera e restaura"): o `supabase` prova a migração, o RLS, a restrição única, o Realtime entre dois aparelhos e a igualdade do `database.types.ts`; o backup prova a tabela nova.
 - [ ] **O Rafael, fora do código (pendente):** `supabase db push` da migração `20261203120000_avisos_lidos.sql` (só quando pedir; confira com `--dry-run`), conferir a Central no iPad e no PC com os dados reais.
-- [ ] `done` no sprint-status só depois do merge, em PR separada (como a #114 e a #116). O Épico 8 continua `in-progress` até a 8.2.
+- [x] `done` no sprint-status só depois do merge, em PR separada (como a #114 e a #116). O Épico 8 continua `in-progress` até a 8.2.
 
 ## Verification
 
