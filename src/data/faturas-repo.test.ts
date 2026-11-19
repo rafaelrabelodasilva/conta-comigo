@@ -421,11 +421,11 @@ describe("reimportar um Mês (História 3.12)", () => {
       ["faturas", "id", ["mes=2026-10"]],
       ["lancamentos", expect.any(String), ["mes=2026-10"]],
       ["configuracoes", "status_padrao_id", []],
-      ["pagamento_itens", "lancamento_id", ["lancamento_id in a,b,c,filha,m", "excluido_em is null", "limit 1000"]],
+      ["pagamento_itens", "lancamento_id", ["lancamento_id in a,b,c,filha,m", "limit 1000"]],
     ]);
   });
 
-  it("lerReimportacao: as antigas com Pagamento (ela ou uma parte da Divisão) vão em `referenciadas`; item de Pagamento desfeito não conta", async () => {
+  it("lerReimportacao: as antigas com Pagamento (ela ou uma parte da Divisão) vão em `referenciadas`, e o item de um Pagamento desfeito também conta (a FK segura a linha)", async () => {
     const m = montar(
       {
         ...banco,
@@ -444,7 +444,7 @@ describe("reimportar um Mês (História 3.12)", () => {
       () => ({ data: null, error: null }),
     );
     const r = await m.repo.lerReimportacao("2026-10");
-    expect(r.ok && r.valor?.referenciadas).toEqual(["a", "c"]);
+    expect(r.ok && r.valor?.referenciadas).toEqual(["a", "c", "d"]);
   });
 
   it("lerReimportacao: falha ao ler os itens de Pagamento é carregar.falhou (nunca reimporta sem saber)", async () => {
@@ -543,7 +543,7 @@ describe("reimportar um Mês (História 3.12)", () => {
       apagar: ["a"],
       sumiram: ["b"],
       voltar_a_previsto: ["c"],
-      resumo: { quantidade: 3, mantidas: 0, valorMudou: 0, novas: 2, apagadas: 1, sumiram: 1, voltaramAPrevisto: 1, excluidos: 0 },
+      resumo: { quantidade: 3, mantidas: 0, valorMudou: 0, novas: 2, apagadas: 1, sumiram: 1, voltaramAPrevisto: 1, excluidos: 0, excluidosComPagamento: 0 },
     };
     const m = montar(
       {

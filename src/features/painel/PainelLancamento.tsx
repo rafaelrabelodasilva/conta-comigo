@@ -54,7 +54,8 @@ import {
 } from "@/domain/mensagens";
 import { nomeExibido } from "@/domain/painel";
 import { recusarStatusNaoPago } from "@/domain/pagamento";
-import { TEXTOS_DIVISAO, rotuloParteDe, rotuloResumoDaDivisao } from "@/domain/mensagens";
+import { TEXTOS_AVISO_PAGAMENTO, TEXTOS_DIVISAO, rotuloParteDe, rotuloResumoDaDivisao } from "@/domain/mensagens";
+import type { MudancaDeLinha, PatchDaLinha } from "@/domain/aviso-pagamento";
 import { ehPrevisto, type MudancaDoPrevisto } from "@/domain/previstos";
 import { ordenarParaConfiguracoes as ordenarResponsaveis } from "@/domain/responsaveis";
 import { ordenarParaConfiguracoes as ordenarStatus } from "@/domain/status";
@@ -73,6 +74,7 @@ import { FaixaPergunta } from "@/ui/FaixaPergunta";
 import { Interruptor } from "@/ui/Interruptor";
 import type { PlanoDoApelido } from "@/domain/apelido";
 import { Seletor, type OpcaoSeletor } from "@/ui/Seletor";
+import { ConfirmarComPagamento, type ContextoDoAviso } from "./ConfirmarComPagamento";
 import { SeloStatus } from "@/ui/SeloStatus";
 import { useToast } from "@/ui/Toast";
 
@@ -197,6 +199,13 @@ type Comum = {
    */
   statusPagos?: ReadonlySet<string>;
   quitadasPorPagamento?: ReadonlySet<string>;
+  /**
+   * Aviso ao mexer em algo já pago (História 6.9, FR-46): os Lançamentos do Mês com Pagamento vivo e o que o núcleo precisa
+   * para o "de R$ X para R$ Y". Mudar o Valor, o Responsável, o Tipo ou o Status de uma linha com Pagamento pede
+   * confirmação quando há o que avisar (o Valor sempre; o resto só se um Saldo muda). Sem eles, nada é perguntado.
+   */
+  comPagamento?: ReadonlySet<string>;
+  contextoDoAviso?: ContextoDoAviso;
   /** "falta R$ X" de um Pago parcialmente (derivado do núcleo, 6.2); `null` nas demais linhas. */
   faltaCentavos?: number | null;
   /** Atrasado (6.4): o primeiro dia de atraso desta linha (`atrasosDasLinhas` do núcleo); `null` se não está atrasada. */
@@ -414,6 +423,8 @@ function EditarLancamento({
   cadastros,
   statusPagos = SEM_IDS,
   quitadasPorPagamento = SEM_IDS,
+  comPagamento = SEM_IDS,
+  contextoDoAviso,
   faltaCentavos = null,
   atrasadoDesde = null,
   aoProgramar,
@@ -434,6 +445,13 @@ function EditarLancamento({
   const [aPerguntar, setAPerguntar] = useState<MudancaDoPrevisto[]>([]);
   // Apelido em massa (História 3.9): as outras linhas do mesmo Nome, à espera do "Só este" / "Aplicar a todos".
   const [apelidoPendente, setApelidoPendente] = useState<{ plano: PlanoDoApelido; depois: string | null; nome: string } | null>(null);
+  // Mudança de uma linha com Pagamento à espera da confirmação (6.9): o campo, o texto digitado e o que o núcleo vai comparar.
+  const [confirmando, setConfirmando] = useState<{
+    campo: CampoLancamento;
+    texto: string;
+    mudanca: MudancaCampo;
+    mudancas: MudancaDeLinha[];
+  } | null>(null);
 
   // Refs para as gravações assíncronas lerem o estado atual.
   const rascunhosRef = useRef(rascunhos);
@@ -643,7 +661,43 @@ function EditarLancamento({
         return;
       }
     }
+    // Linha com Pagamento (6.9, FR-46): o Valor, o Responsável, o Tipo e o Status mudam o Saldo pendente de algum Bloco (ou
+    // deixam o Pagamento sem acompanhar a linha). O núcleo diz se há o que avisar; se houver, confirma antes de gravar.
+    const coluna = r.valor.coluna;
+    if (
+      contextoDoAviso !== undefined &&
+      comPagamento.has(linhaRef.current.id) &&
+      (coluna === "valor_centavos" || coluna === "responsavel_id" || coluna === "tipo_id" || coluna === "status_id")
+    ) {
+      // Fechado (a gravação do desmonte): sem confirmar não se muda uma linha com Pagamento.
+      if (!montado.current) return;
+      const patch = { [coluna]: r.valor.valor } as PatchDaLinha;
+      const junto = [
+        ...(SEGUEM_A_MAE.includes(campo) ? ajustesRef.current.map((a) => a.id) : []),
+        ...(SEGUEM_AS_FILHAS.includes(campo) ? filhasRef.current.map((f) => f.id) : []),
+      ];
+      setConfirmando({
+        campo,
+        texto,
+        mudanca: r.valor,
+        mudancas: [linhaRef.current.id, ...junto].map((id) => ({ id, patch })),
+      });
+      return;
+    }
     void tentar(campo, texto, r.valor, 0);
+  }
+
+  function confirmarMudanca() {
+    const c = confirmando;
+    if (c === null) return;
+    setConfirmando(null);
+    void tentar(c.campo, c.texto, c.mudanca, 0);
+  }
+  /** Não confirmou: o campo volta ao que está gravado. */
+  function cancelarMudanca() {
+    const c = confirmando;
+    setConfirmando(null);
+    if (c !== null) definirRascunho(c.campo, undefined);
   }
 
   const texto = (campo: CampoLancamento) => rascunhos[campo] ?? textoDoCampo(linha, campo);
@@ -957,6 +1011,18 @@ function EditarLancamento({
           ) : null}
         </div>
       )}
+      {confirmando !== null && contextoDoAviso !== undefined ? (
+        <ConfirmarComPagamento
+          mudancas={confirmando.mudancas}
+          contexto={contextoDoAviso}
+          titulo={TEXTOS_AVISO_PAGAMENTO.titulo_mudar}
+          descricao=""
+          rotuloConfirmar={TEXTOS_AVISO_PAGAMENTO.confirmar_mudar}
+          aoSemAviso={confirmarMudanca}
+          aoConfirmar={confirmarMudanca}
+          aoCancelar={cancelarMudanca}
+        />
+      ) : null}
       {aPerguntar.length > 0 ? (
         <FaixaPergunta
           pergunta={perguntaAplicarAosPrevistos(aPerguntar.length)}

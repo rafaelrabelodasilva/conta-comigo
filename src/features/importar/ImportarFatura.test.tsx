@@ -618,7 +618,7 @@ describe("ImportarFatura: reimportar mantendo a classificação (História 3.12)
     ok: true,
     valor: { faturaId, atualizadoEm, antigas: a, statusPadraoId: PADRAO, referenciadas: [], outrasDaSerie: [], historico },
   });
-  const RESUMO = { quantidade: 51, mantidas: 49, valorMudou: 0, novas: 0, apagadas: 1, sumiram: 1, voltaramAPrevisto: 0, excluidos: 2 };
+  const RESUMO = { quantidade: 51, mantidas: 49, valorMudou: 0, novas: 0, apagadas: 1, sumiram: 1, voltaramAPrevisto: 0, excluidos: 2, excluidosComPagamento: 0 };
   const TEXTO_AVISO = avisoReimportar("2026-10", RESUMO);
 
   async function ateOAviso() {
@@ -761,7 +761,7 @@ describe("ImportarFatura: reimportar mantendo a classificação (História 3.12)
     expect(screen.queryByRole("button", { name: T.importar_de_novo })).toBeNull();
     expect(aoImportar).not.toHaveBeenCalled();
     await u.click(screen.getByRole("button", { name: ROTULOS.tentar_de_novo }));
-    const novo = avisoReimportar("2026-10", { quantidade: 10, mantidas: 10, valorMudou: 0, novas: 39, apagadas: 0, sumiram: 0, voltaramAPrevisto: 0, excluidos: 0 });
+    const novo = avisoReimportar("2026-10", { quantidade: 10, mantidas: 10, valorMudou: 0, novas: 39, apagadas: 0, sumiram: 0, voltaramAPrevisto: 0, excluidos: 0, excluidosComPagamento: 0 });
     expect(await screen.findByText(novo)).toBeTruthy();
     await u.click(screen.getByRole("button", { name: T.importar_de_novo }));
     await verNoPainel();

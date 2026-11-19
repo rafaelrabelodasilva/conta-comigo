@@ -183,6 +183,25 @@ describe("projetarPendente: a linha de crédito de algo pago e depois excluído 
     expect(r.map((l) => l.valor_centavos)).toEqual([-4_000]);
   });
 
+  it("excluída depois de dois Pagamentos (um parcial e o que fechou): o crédito soma os itens vivos", () => {
+    const itens = [item("a", 4_000), item("a", 6_000)];
+    expect(projetarPendente([linha("a", { excluido_em: EXCLUIDO })], opcoes({ itens })).map((l) => l.valor_centavos)).toEqual([-10_000]);
+  });
+
+  it("`minha_parte` (6.9): o crédito segue os itens, o restante inteiro; a Fórmula do Rangel divide o Casal por 2 UMA vez", () => {
+    // O Rangel pagou R$ 50,00 ("a minha parte") do Casal de R$ 100,00: o item guarda R$ 100,00 (decisão 2 da 6.2). Excluída a
+    // linha, o crédito é - R$ 100,00 no Casal e a Fórmula Rangel + Casal ÷ 2 o leva a - R$ 50,00, que é o que entrou.
+    const formula: Formula = {
+      tipo: "operacao",
+      operacao: "soma",
+      esquerda: { tipo: "responsavel", id: "rangel" },
+      direita: { tipo: "operacao", operacao: "divisao", esquerda: { tipo: "responsavel", id: "casal" }, direita: { tipo: "numero", valor: "2" } },
+    };
+    const linhas = [linha("a", { responsavel_id: "casal", valor_centavos: 10_000, status_id: PAGO, excluido_em: EXCLUIDO })];
+    const a = avaliar(formula, projetarPendente(linhas, opcoes({ itens: [item("a", 10_000)] })));
+    expect(a.ok && a.valor.valorCentavos).toBe(-5_000);
+  });
+
   it("um Pagamento desfeito (item excluído) não deixa crédito", () => {
     expect(projetarPendente([linha("a", { excluido_em: EXCLUIDO })], opcoes({ itens: [item("a", 4_000, { excluido_em: EXCLUIDO })] }))).toEqual([]);
   });
