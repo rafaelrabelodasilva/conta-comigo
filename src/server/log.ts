@@ -18,6 +18,12 @@ export const CAMPOS_PERMITIDOS = [
   "tentativa",
   "tabela",
   "request_id",
+  // Contagens do aviso do sistema do Cron (7.5): lembretes enviados, ignorados (já avisados), inscrições
+  // apagadas (404 ou 410) e falhas. Nunca o endpoint, a chave, o texto, o Bloco ou o valor.
+  "enviadas",
+  "ignoradas",
+  "inscricoes_apagadas",
+  "falhas",
 ] as const;
 
 export type CampoPermitido = (typeof CAMPOS_PERMITIDOS)[number];

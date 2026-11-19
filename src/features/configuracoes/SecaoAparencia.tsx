@@ -11,6 +11,7 @@ import { Esqueleto } from "@/ui/Esqueleto";
 import { Interruptor } from "@/ui/Interruptor";
 import { Seletor } from "@/ui/Seletor";
 import { useToast } from "@/ui/Toast";
+import { AtivarNotificacoes } from "./AtivarNotificacoes";
 
 // Configurações → Aparência: Sistema (padrão), Claro ou Escuro, guardada em
 // `configuracoes.aparencia` (vale em todos os aparelhos). A gravação é
@@ -20,7 +21,7 @@ import { useToast } from "@/ui/Toast";
 // Lembretes (História 7.4, FR-55): um interruptor por tipo (o do dia do fechamento e o do Bloco com itens
 // atrasados), guardados em `configuracoes.lembrete_fechamento` e `lembrete_atraso` (padrão ligado). A
 // gravação é otimista como a da Aparência: a faixa do app (`FaixaDeLembretes`) lê a mesma linha em memória
-// e some na hora.
+// e some na hora. Logo abaixo, "Ativar notificações" (História 7.5): o aviso do sistema deste aparelho.
 
 const ROTULO_APARENCIA: Record<Aparencia, string> = {
   sistema: ROTULOS.aparencia_sistema,
@@ -79,6 +80,7 @@ export function SecaoAparencia() {
             />
           ))}
         </div>
+        <AtivarNotificacoes />
       </div>
     );
   }

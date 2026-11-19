@@ -1,8 +1,10 @@
 // Lembretes do dia (História 7.4, FR-55, AD-13, AD-10, AD-1). Puro: "hoje" (`AAAA-MM-DD`, de
 // `hojeEmSaoPaulo`), o Ciclo, os Lançamentos, os Blocos e as preferências entram como parâmetro; o
 // núcleo não lê relógio nem banco. É calculado a cada vez e nunca gravado (a única coisa gravada é a
-// preferência de cada tipo, em `configuracoes`). A faixa do app usa esta função; a 7.5 vai usar a
-// mesma no Cron, então cada lembrete leva o que ela precisa (`tipo`, `referencia`, `destino`).
+// preferência de cada tipo, em `configuracoes`). A faixa do app usa esta função e, desde a 7.5, o Cron
+// diário usa a mesma (por `lembretesDasLinhas`, que monta o contexto das linhas cruas), então cada lembrete
+// leva o que as duas precisam (`tipo`, `referencia`, `destino`). O aviso do sistema (`lembretesParaNotificar`)
+// é um evento por cima desse estado: quais lembretes saem e com que chave (`chaveDeNotificacao`).
 //
 // Dois tipos de lembrete:
 //
@@ -29,7 +31,8 @@ import { avaliar, type LinhaDaFormula } from "./formula";
 import { somaDosItens, type ItemLido } from "./pagamento";
 import { montarCartoesDeCobranca } from "./recebimentos";
 import { linhaDaFormulaPendente, pendentesDosLancamentos, type LancamentoParaPendente } from "./projecoes";
-import type { Bloco } from "./blocos";
+import { lerBlocos, type Bloco, type LinhaDoBloco } from "./blocos";
+import { TOLERANCIA_ATRASO_PADRAO_DIAS } from "./configuracoes";
 
 /** Os tipos de lembrete, na ordem em que a faixa e as preferências os mostram. */
 export const TIPOS_DE_LEMBRETE = ["fechamento", "atraso"] as const;
@@ -233,6 +236,94 @@ export function lembretesDoDia(
   }
   if (preferencias.atraso) {
     saida.push(...lembretesDeAtraso(hoje, ciclo, lancamentos, blocosDeCobranca, contexto));
+  }
+  return saida;
+}
+
+/**
+ * As linhas cruas do banco que os lembretes leem (História 7.5): as MESMAS na faixa do app (que as tem dos
+ * gerenciadores de Realtime) e no Cron (que as lê com a chave de serviço). Montar o `ContextoDeLembretes`
+ * aqui, e só aqui, é o que impede o aviso do sistema de divergir da faixa (AD-10, AD-13).
+ */
+export type LinhasParaLembretes = {
+  /** `config_ciclo`. */
+  ciclo: readonly ConfigCiclo[];
+  /** `lancamentos` de TODOS os Meses, vivos e excluídos (a excluída com Pagamento vira crédito). */
+  lancamentos: readonly LancamentoParaLembrete[];
+  /** `blocos` (qualquer um; o núcleo fica com os de cobrança e ignora Fórmula ilegível). */
+  blocos: readonly LinhaDoBloco[];
+  /** `status`: quais contam como pago. */
+  status: readonly { id: string; conta_como_pago: boolean }[];
+  /** `pagamento_itens` vivos de todos os Meses. */
+  itens: readonly ItemLido[];
+  /** `faturas` (Mês e vencimento): os Meses com Fatura importada. */
+  faturas: readonly { mes: string; vencimento: string }[];
+  /** A linha de `configuracoes` do dono (ou nenhuma): as preferências e a tolerância. */
+  configuracao: (LinhaDePreferenciasDeLembretes & { tolerancia_atraso_dias?: number | null }) | null | undefined;
+};
+
+/** Os lembretes de `hoje` a partir das linhas cruas: o que a faixa e o Cron chamam. Nada é gravado. */
+export function lembretesDasLinhas(hoje: string, linhas: LinhasParaLembretes): Lembrete[] {
+  return lembretesDoDia(
+    hoje,
+    linhas.ciclo,
+    linhas.lancamentos,
+    lerBlocos(linhas.blocos).filter((b) => b.de_cobranca),
+    preferenciasDeLembretes(linhas.configuracao),
+    {
+      statusPagos: new Set(linhas.status.filter((s) => s.conta_como_pago).map((s) => s.id)),
+      itens: linhas.itens,
+      vencimentosDasFaturas: new Map(linhas.faturas.map((f) => [f.mes, f.vencimento] as const)),
+      tolerancia: linhas.configuracao?.tolerancia_atraso_dias ?? TOLERANCIA_ATRASO_PADRAO_DIAS,
+    },
+  );
+}
+
+/** A chave de `lembretes_enviados` (a restrição única, por dono): o que já foi avisado. */
+export type ChaveDeNotificacao = {
+  tipo: TipoDeLembrete;
+  referencia: string;
+  /** `AAAA-MM-DD`. */
+  dia: string;
+};
+
+/** Um lembrete que vira aviso do sistema hoje, com a chave que o torna único. */
+export type NotificacaoDeLembrete = ChaveDeNotificacao & { lembrete: Lembrete };
+
+/**
+ * A chave do aviso do sistema de um lembrete (História 7.5, AD-13). Um aviso é um EVENTO; a faixa é um estado.
+ *
+ * - Fechamento: `(fechamento, Mês da Fatura, dia do fechamento)`. Sai uma vez por fechamento, e como a chave é
+ *   o dia do fechamento (não "hoje"), um Cron que falhou no dia ainda avisa nos dias seguintes da janela da faixa
+ *   sem duplicar.
+ * - Atraso: `(atraso, id do Bloco, desde)`. Avisa quando o Bloco passa a ter item atrasado, e de novo só quando o
+ *   "desde" muda (um atraso novo depois de o Bloco quitar tudo, ou o mais antigo pago com outro ainda em atraso).
+ *   Não repete todo dia enquanto o atraso continua, nem quando só o valor muda.
+ */
+export function chaveDeNotificacao(lembrete: Lembrete): ChaveDeNotificacao {
+  return lembrete.tipo === "fechamento"
+    ? { tipo: "fechamento", referencia: lembrete.referencia, dia: lembrete.fechouEm }
+    : { tipo: "atraso", referencia: lembrete.referencia, dia: lembrete.desde };
+}
+
+const textoDaChave = (c: ChaveDeNotificacao) => `${c.tipo}|${c.referencia}|${c.dia}`;
+
+/**
+ * Quais dos lembretes do dia saem como aviso do sistema (História 7.5): só os que a faixa MOSTRA (os de fechamento e
+ * os três primeiros de atraso, `lembretesParaExibir`: o aviso nunca leva nome nem valor que a faixa não leva) e
+ * ainda não enviados (`jaEnviados` é o que está em `lembretes_enviados`). A ordem é a da faixa. As preferências já
+ * valeram em `lembretesDoDia`, e quem decide se há aparelho inscrito é o servidor (sem inscrição, nada é gravado).
+ */
+export function lembretesParaNotificar(
+  lembretes: readonly Lembrete[],
+  jaEnviados: readonly ChaveDeNotificacao[],
+): NotificacaoDeLembrete[] {
+  const enviados = new Set(jaEnviados.map(textoDaChave));
+  const saida: NotificacaoDeLembrete[] = [];
+  for (const lembrete of lembretesParaExibir(lembretes).visiveis) {
+    const chave = chaveDeNotificacao(lembrete);
+    if (enviados.has(textoDaChave(chave))) continue;
+    saida.push({ ...chave, lembrete });
   }
   return saida;
 }

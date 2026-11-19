@@ -10,14 +10,25 @@
 //   (guardada no `install`, com os estáticos dela).
 // - O nome do cache leva a versão do deploy; o `activate` apaga os antigos.
 //
-// `servicoDoCasco` vira texto (`toString()`) dentro do `/sw.js`: tudo o que
-// ela usa está dentro dela ou chega por `ambiente`. Sem `async`/`await` nem
+// Notificações (História 7.5, AD-13): `avisosDoSistema` acrescenta só dois ouvintes, `push` (mostra o aviso que o
+// Cron mandou) e `notificationclick` (foca uma janela do app e vai ao destino do aviso, ou abre uma). Não mexe no
+// cache, não responde nenhuma requisição e não grava nada (AD-3). O texto do aviso vem pronto do servidor (o mesmo
+// da faixa do app); o service worker só mostra. Cada `push` PRECISA mostrar um aviso (o Safari revoga a inscrição de
+// quem recebe push sem mostrar), então um corpo ilegível mostra o texto padrão. `pushsubscriptionchange` NÃO é
+// tratado: o service worker não tem a sessão do Supabase para gravar a inscrição nova (veja deferred-work.md).
+//
+// `servicoDoCasco` e `avisosDoSistema` viram texto (`toString()`) dentro do `/sw.js`: tudo o que
+// elas usam está dentro delas ou chega por `ambiente`/`config`. Sem `async`/`await` nem
 // imports, para o texto não depender de nada de fora.
 
+import { TEXTOS_NOTIFICACOES } from "@/domain/mensagens";
 import { PAGINA_SEM_CONEXAO } from "@/data/supabase/sessao";
 
 /** Página mostrada quando a navegação falha sem rede. */
 export { PAGINA_SEM_CONEXAO };
+
+/** O ícone do aviso do sistema: o mesmo da tela inicial do iPad (180 px, `app/apple-icon.tsx`). */
+export const ICONE_DO_AVISO = "/apple-icon";
 
 /** Prefixo dos caches do app; o `activate` apaga os de outras versões. */
 export const PREFIXO_CACHE = "conta-comigo-casco-";
@@ -159,15 +170,82 @@ export function servicoDoCasco(
     );
   });
 }
+
+export type AmbienteDeAvisos = {
+  location: { origin: string };
+  addEventListener(tipo: string, ouvinte: (evento: any) => void): void;
+  registration: { showNotification(titulo: string, opcoes: any): Promise<void> };
+  clients: {
+    matchAll(opcoes: any): Promise<any[]>;
+    openWindow(url: string): Promise<any>;
+  };
+};
+
+/** Os avisos do sistema: `push` mostra, `notificationclick` abre o destino. */
+export function avisosDoSistema(
+  self: AmbienteDeAvisos,
+  config: { tituloPadrao: string; corpoPadrao: string; icone: string },
+): void {
+  // Só um caminho do próprio app (`/recebimentos`, `/?mes=2026-11`); qualquer outra coisa vira o Painel.
+  function destinoSeguro(destino: any): string {
+    if (typeof destino !== "string" || destino.charAt(0) !== "/") return "/";
+    const segundo = destino.charAt(1);
+    return segundo === "/" || segundo === "\\" ? "/" : destino;
+  }
+
+  self.addEventListener("push", (evento) => {
+    let titulo = config.tituloPadrao;
+    let corpo = config.corpoPadrao;
+    let destino = "/";
+    let tag: string | undefined;
+    try {
+      const dados = evento.data ? evento.data.json() : null;
+      if (dados && typeof dados === "object") {
+        if (typeof dados.titulo === "string" && dados.titulo !== "") titulo = dados.titulo;
+        if (typeof dados.corpo === "string" && dados.corpo !== "") corpo = dados.corpo;
+        destino = destinoSeguro(dados.destino);
+        if (typeof dados.tag === "string" && dados.tag !== "") tag = dados.tag;
+      }
+    } catch {
+      // Corpo ilegível: mostra o aviso padrão (todo push precisa mostrar algo).
+    }
+    const opcoes: any = { body: corpo, icon: config.icone, data: { destino: destino } };
+    if (tag !== undefined) opcoes.tag = tag;
+    evento.waitUntil(self.registration.showNotification(titulo, opcoes));
+  });
+
+  self.addEventListener("notificationclick", (evento) => {
+    evento.notification.close();
+    const origem = self.location.origin;
+    const url = origem + destinoSeguro(evento.notification.data && evento.notification.data.destino);
+    evento.waitUntil(
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((janelas) => {
+        const aberta = janelas.find((j) => typeof j.url === "string" && j.url.indexOf(origem) === 0);
+        if (!aberta) return self.clients.openWindow(url);
+        // Foca a janela do app e leva ao destino; se o navegador não deixar navegar, abre uma nova.
+        return aberta
+          .focus()
+          .then(() => aberta.navigate(url))
+          .catch(() => self.clients.openWindow(url));
+      }),
+    );
+  });
+}
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 /** O texto do `/sw.js` para a versão (deploy) dada. */
 export function scriptServiceWorker(versao: string): string {
   const config = { versao, paginaSemConexao: PAGINA_SEM_CONEXAO, prefixoCache: PREFIXO_CACHE };
+  const avisos = {
+    tituloPadrao: TEXTOS_NOTIFICACOES.titulo_aviso,
+    corpoPadrao: TEXTOS_NOTIFICACOES.corpo_padrao,
+    icone: ICONE_DO_AVISO,
+  };
   return `"use strict";
 (${servicoDoCasco.toString()})(
   { self: self, caches: caches, fetch: fetch.bind(self), Response: Response },
   ${JSON.stringify(config)}
 );
+(${avisosDoSistema.toString()})(self, ${JSON.stringify(avisos)});
 `;
 }

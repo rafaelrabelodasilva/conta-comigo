@@ -122,6 +122,10 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-11-15T12:00:00Z"));
   vi.stubEnv("CRON_SECRET", SEGREDO);
+  // Estes testes são da materialização: sem as chaves VAPID o aviso do sistema só pula (veja route.notificacoes.test.ts).
+  vi.stubEnv("VAPID_PRIVATE_KEY", "");
+  vi.stubEnv("VAPID_SUBJECT", "");
+  vi.stubEnv("NEXT_PUBLIC_VAPID_PUBLIC_KEY", "");
   console_ = {
     log: vi.spyOn(console, "log").mockImplementation(() => {}),
     warn: vi.spyOn(console, "warn").mockImplementation(() => {}),
@@ -378,7 +382,8 @@ describe("GET /api/cron/diario: log (AD-17)", () => {
     const banco = bancoFake([silvia]);
     mocks.criarClienteAdmin.mockReturnValue(banco.cliente);
     await chamar(`Bearer ${SEGREDO}`);
-    expect(linhasDeLog()).toEqual([
+    // Sem as variáveis VAPID o aviso do sistema só pula, com um aviso (a 7.5; o resto está em route.notificacoes.test.ts).
+    expect(linhasDeLog().filter((l) => l.evento === "cron.diario")).toEqual([
       expect.objectContaining({
         nivel: "info",
         evento: "cron.diario",

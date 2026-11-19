@@ -491,6 +491,33 @@ export type Database = {
           },
         ]
       }
+      lembretes_enviados: {
+        Row: {
+          created_at: string
+          dia: string
+          id: string
+          owner_id: string
+          referencia: string
+          tipo: string
+        }
+        Insert: {
+          created_at?: string
+          dia: string
+          id?: string
+          owner_id: string
+          referencia: string
+          tipo: string
+        }
+        Update: {
+          created_at?: string
+          dia?: string
+          id?: string
+          owner_id?: string
+          referencia?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
       pagamento_itens: {
         Row: {
           created_at: string
@@ -592,6 +619,36 @@ export type Database = {
           owner_id?: string
           updated_at?: string
           valor_recebido_centavos?: number
+        }
+        Relationships: []
+      }
+      push_inscricoes: {
+        Row: {
+          chave_auth: string
+          chave_p256dh: string
+          created_at: string
+          endpoint: string
+          id: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          chave_auth: string
+          chave_p256dh: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Update: {
+          chave_auth?: string
+          chave_p256dh?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          owner_id?: string
+          updated_at?: string
         }
         Relationships: []
       }
