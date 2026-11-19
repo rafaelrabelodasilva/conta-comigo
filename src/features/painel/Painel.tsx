@@ -18,6 +18,7 @@ import {
   alternarBloco,
   alternarResponsavelUnico,
   aplicarFiltros,
+  definirColuna,
   limparBloco,
   motivoDoVazio,
   motivoParaDesfazerBloco,
@@ -260,6 +261,7 @@ export function Painel({
   titulo,
   mesInicial,
   lancamentoInicial,
+  tipoInicial,
 }: {
   titulo: string;
   /**
@@ -269,6 +271,11 @@ export function Painel({
   mesInicial?: string;
   /** O Lançamento cujo painel já abre (junto de `mesInicial`). Se ele não está no Mês, o painel fecha com o aviso de sempre. */
   lancamentoInicial?: string;
+  /**
+   * O Tipo que já abre filtrando a grade (`/?mes=…&tipo=…`, de "Meu gasto por Tipo", 7.3): o id do Tipo, ou `null` para
+   * "Sem tipo". Ausente, a grade abre sem filtro. É o filtro da coluna Tipo de sempre (a pílula "Tipo: Casa" o desfaz).
+   */
+  tipoInicial?: string | null;
 }) {
   // O relógio fica fora do núcleo: "hoje" é lido aqui, uma vez.
   const [atual] = useState(() => mesAtual(hojeEmSaoPaulo(new Date())));
@@ -277,7 +284,9 @@ export function Painel({
   useEffect(() => {
     mesAbertoRef.current = mesAberto;
   }, [mesAberto]);
-  const [filtros, setFiltros] = useState<FiltrosGrade>(FILTROS_VAZIOS);
+  const [filtros, setFiltros] = useState<FiltrosGrade>(() =>
+    tipoInicial === undefined ? FILTROS_VAZIOS : definirColuna(FILTROS_VAZIOS, "tipo", [tipoInicial]),
+  );
   const [ordem, setOrdem] = useState<Ordem>(ORDEM_PADRAO);
   const [importando, setImportando] = useState(false);
   // O anúncio de "N lançamentos" só depois que os filtros mudam a grade.

@@ -4,12 +4,11 @@ import { useRef, useSyncExternalStore, type KeyboardEvent } from "react";
 import { TEXTOS_PREVISAO as T } from "@/domain/mensagens";
 import { ABAS_DA_PREVISAO, ABA_PADRAO, lerAba, type AbaDaPrevisao } from "@/domain/previsao";
 import { cn } from "@/ui/cn";
-import { EstadoVazio } from "@/ui/EstadoVazio";
 import { Evolucao } from "./Evolucao";
+import { MeuGasto } from "./MeuGasto";
 import { ProximosMeses } from "./ProximosMeses";
 
-// Tela Previsão (UX-DR23): as três abas "Próximos meses" (7.1), "Evolução" (7.2) e "Meu gasto por Tipo". A terceira ainda
-// diz "Em breve" (7.3) sem prometer dado.
+// Tela Previsão (UX-DR23): as três abas "Próximos meses" (7.1), "Evolução" (7.2) e "Meu gasto por Tipo" (7.3).
 //
 // A aba escolhida fica guardada POR APARELHO, no `localStorage` (preferência de tela, como o filtro de Contas: não é dado
 // do app nem precisa seguir Rafael entre o iPad e o PC, então não há migração em `configuracoes`). Todo acesso ao
@@ -113,7 +112,7 @@ export function Previsao() {
         ) : aba === "evolucao" ? (
           <Evolucao />
         ) : (
-          <EstadoVazio texto={T.em_breve_meu_gasto} acao={<p className="texto-body-strong text-text">{T.em_breve}</p>} />
+          <MeuGasto />
         )}
       </div>
     </div>
