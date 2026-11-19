@@ -2,7 +2,7 @@
 title: 'História 7.2: Evolução dos últimos meses'
 type: 'feature'
 created: '2026-11-19'
-status: 'review'
+status: 'done'
 baseline_commit: '282bdda'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -108,8 +108,8 @@ Hoje 19/11/26: Mês atual 2026-11. Responsáveis Rafael (cor 1), Casal (cor 2) e
 - [x] Interface: a aba "Evolução"; o desenho comum e o hook de dados extraídos da `ProximosMeses`.
 - [x] Provas: núcleo (matriz: 0, 1, 2, 5, 6 e 7 Meses; ordem; buraco; Mês futuro; Divisão; excluído; crédito; sem Responsável; arquivado; por Tipo; total = Bloco "Todos" do Painel), jsdom (a aba, o seletor, os estados, o texto de menos de 2 Meses, o toque no Mês, o texto equivalente ao gráfico) e a regressão da aba "Próximos meses".
 - [x] `sprint-status.yaml` (7.2 em `review`), `deferred-work.md`, `docs/infraestrutura.md` (sem migração).
-- [ ] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
-- [ ] `done` no sprint-status só depois do merge, em PR separada.
+- [x] CI verde na PR (`verificar`, `supabase`, "Backup gera e restaura").
+- [x] `done` no sprint-status só depois do merge, em PR separada.
 
 ## Verification
 
