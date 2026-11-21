@@ -2469,14 +2469,18 @@ export function rotuloDaSerie(s: {
 
 // ------------------------------------------------------------ Lembretes (7.4)
 
-/** Os lembretes (a Central de Avisos, 8.1) e os dois interruptores de Configurações → Aparência (FR-55). */
+/**
+ * Os lembretes (a Central de Avisos, 8.1) e o grupo de interruptores de Configurações → Aparência (FR-55). Desde a 8.3 o
+ * grupo tem quatro interruptores (os dois lembretes e os avisos da Conferência e do Revisar, em `TEXTOS_AVISOS`) e por isso
+ * se chama "Avisos".
+ */
 export const TEXTOS_LEMBRETES = {
   abrir_painel: "Abrir o Painel",
   abrir_recebimentos: "Abrir Recebimentos",
   /** O título do grupo de interruptores na seção Aparência. */
-  titulo_preferencias: "Lembretes",
+  titulo_preferencias: "Avisos",
   ajuda_preferencias:
-    "Aparecem na Central de Avisos (menu Avisos) e chegam como notificação. Desligado, o aviso não aparece, não conta e não chega.",
+    "Aparecem na Central de Avisos (menu Avisos). Desligado, o aviso não aparece, não conta no menu e não entra em “Marcar tudo como lido”. Só o fechamento da fatura e o atraso também chegam como notificação do aparelho.",
   fechamento: "No dia do fechamento da fatura",
   atraso: "Quando um Bloco tem itens atrasados",
 } as const;
@@ -2521,6 +2525,12 @@ export const TEXTOS_AVISOS = {
   todos_lidos: "Todos os avisos foram marcados como lidos",
   /** O verbo do toque no aviso da fila do Revisar (8.2): o destino dito em texto. */
   abrir_revisar: "Abrir Revisar",
+  /** Os dois interruptores novos de Configurações → Aparência (8.3): a Conferência e o Revisar. */
+  preferencia_conferencia: "Quando a Conferência de uma fatura tem diferença",
+  preferencia_revisar: "Quando há lançamentos para revisar",
+  /** "Dispensar" na linha da Conferência (8.3): o mesmo verbo e o mesmo toast da faixa do Painel. */
+  dispensar: TEXTOS_CONFERENCIA.dispensar,
+  alerta_dispensado: TEXTOS_CONFERENCIA.alerta_dispensado,
 } as const;
 
 /**
@@ -2583,7 +2593,8 @@ export const TEXTOS_NOTIFICACOES = {
   /** O corpo do aviso quando o service worker recebe um push que não consegue ler (todo push precisa mostrar algo). */
   corpo_padrao: "Você tem um lembrete no Conta Comigo.",
   titulo: "Notificações neste aparelho",
-  ajuda: "Os lembretes chegam como aviso do aparelho, mesmo com o app fechado. Cada aparelho se ativa sozinho.",
+  ajuda:
+    "O fechamento da fatura e o atraso chegam como aviso do aparelho, mesmo com o app fechado. A Conferência e o Revisar só aparecem dentro do app. Cada aparelho se ativa sozinho.",
   ativar: "Ativar notificações",
   ativando: "Ativando…",
   desativar: "Desativar neste aparelho",

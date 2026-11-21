@@ -38,6 +38,8 @@ export type AvisoDeConferencia = {
   tipo: "conferencia";
   /** O Mês e a diferença (a chave: `2026-11:-72000:0:8673`). */
   referencia: string;
+  /** O id da Fatura: "Dispensar" na Central grava `alerta_dispensado_em` nela (8.3). */
+  faturaId: string;
   /** O Mês da Fatura (`AAAA-MM`). */
   mes: string;
   /** O `dia` da chave: o fechamento da Fatura (ou o vencimento). */
@@ -93,6 +95,7 @@ export function avisosDeConferencia(
         {
           tipo: "conferencia" as const,
           referencia: referenciaDaConferencia(f.mes, conferencia),
+          faturaId: f.id,
           mes: f.mes,
           dia: f.fechamento ?? f.vencimento,
           conferencia,

@@ -51,6 +51,8 @@ describe("avisosDeConferencia: quando há aviso", () => {
       referencia: "2026-11:-72000:0:8673",
       dia: "2026-10-28",
       destino: "/?mes=2026-11",
+      // O id da Fatura: "Dispensar" na Central (8.3) grava `alerta_dispensado_em` nela, como a faixa do Painel.
+      faturaId: NOV.id,
     });
     // A mesma Conferência que o Painel desenha: o texto do aviso usa as frases da faixa, sem texto duplicado.
     expect(r[0].conferencia).toEqual(conferir(NOV, cartoesNov, lancamentosNov));

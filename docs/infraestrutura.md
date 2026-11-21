@@ -124,6 +124,23 @@ Nada de especial: a Vercel publica no merge e é só isso. O app usa a tabela qu
 - **Revisar:** um aviso quando há itens na fila. Chave: `revisar`, `fila` e o dia (em São Paulo) do maior `faturas.updated_at`. Classificar itens (o número muda) não traz o aviso de volta; uma Fatura importada ou reimportada em outro dia, sim. "Dispensar" e "Desfazer" da faixa da Conferência também mexem em `updated_at` (custo registrado no `deferred-work.md`).
 - **Leituras:** o hook da Central abre também `fatura_cartoes` e a fila do Revisar. Uma falha numa das nove leituras dos avisos é erro da Central e tira o contador (nunca um número parcial); a leitura dos lidos que falha continua valendo como "nada lido".
 
+## Central de Avisos: desligar e dispensar (História 8.3)
+Dois interruptores novos em Configurações → Aparência → grupo "Avisos" (o da Conferência e o do Revisar, padrão ligados) e o botão "Dispensar" na linha da Conferência na Central. Desligado, o aviso não aparece na Central, não conta no menu e não entra em "Marcar tudo como lido". Não são lembretes: o Cron e a notificação do sistema **não** leem as colunas novas.
+
+### Há migração
+`supabase/migrations/20261204120000_avisos_preferencias.sql`: duas colunas booleanas em `configuracoes` (`aviso_conferencia` e `aviso_revisar`, `not null default true`, mais os comentários de coluna e o da tabela). Só aditiva; nenhuma restrição, política, função ou publicação do Realtime muda (a tabela já está na publicação com replica identity full e o RLS é por dono). `src/data/database.types.ts` foi **editado à mão** na ordem do gerador (esta máquina não tem Docker); o job `supabase` do CI confere a igualdade com o gerado. Dado novo no backup: as duas colunas entram no `test/backup/dados-exemplo.sql` (Conferência ligada, Revisar desligado) e o job "Backup gera e restaura" as confere. **Nenhum `db push` foi feito por quem escreveu o código: quem pede é o Rafael.**
+
+### O que acontece em cada ordem
+- **Entre o merge e o `db push`:** o app funciona **como na 8.2**. A linha de `configuracoes` que vem do banco ainda não traz as colunas, e o núcleo lê coluna ausente ou nula como ligada (`preferenciasDeAvisos`): a Central mostra os dois avisos, como hoje. **"Dispensar" funciona** (só grava `alerta_dispensado_em`, uma coluna que já existe). **O que responde erro:** ligar ou desligar um dos dois interruptores novos: o upsert manda uma coluna que ainda não existe, o banco recusa, o interruptor volta ao que estava e aparece "Não foi possível salvar" (o mesmo que a 7.4 faz). Nenhuma outra tela lê ou grava as colunas novas.
+- **`db push` antes do merge:** **é seguro.** Só adiciona duas colunas com padrão ligado; o front antigo (8.2) ignora colunas que não conhece e continua mostrando os dois avisos. Ordem recomendada: `db push` (confira com `--dry-run` que só essa migração está pendente) → merge; assim nenhum interruptor responde erro em momento nenhum.
+- **Depois de tudo:** ligar e desligar num aparelho vale no outro sem recarregar (a tabela já está no Realtime).
+
+### Regras (núcleo, `src/domain/avisos-preferencias.ts`)
+- `preferenciasDeAvisos(linha)`: coluna ausente ou nula = ligado. É um tipo à parte de `PreferenciasDeLembretes` (o que o Cron lê).
+- `avisosDeTrabalho(...)`: a Conferência e o Revisar com o filtro aplicado, **antes** de `avisosDaCentral` (como `lembretesDoDia` faz com os lembretes). O tipo desligado nem é calculado.
+- **Desligar e ligar de novo:** a linha de `avisos_lidos` fica no banco; ao religar, a chave dá o mesmo estado (lido continua lido; uma diferença que mudou nesse meio tempo volta como não lida, como sempre).
+- **Dispensar na Central** é o `dispensarAlerta` do Painel (a mesma coluna `faturas.alerta_dispensado_em`); a reimportação a zera (migração da 3.12) e o aviso volta, como já volta a faixa. **Custo registrado:** o gatilho de `updated_at` da Fatura também roda ao dispensar, e a chave do aviso do Revisar usa o dia do maior `faturas.updated_at`: dispensar num dia diferente do da última importação pode trazer o aviso do Revisar (se já lido) de volta como Novo uma vez (`deferred-work.md`).
+
 ## Auth (História 1.2)
 - Supabase Auth com e-mail e senha via `@supabase/ssr`. Telas: `/entrar` (com "Esqueci a senha" em `/entrar?modo=esqueci`), `/auth/confirmar` (troca o `code` do link do e-mail) e `/redefinir-senha`. "Sair" encerra só a sessão deste aparelho.
 - Sessão renovada em `src/proxy.ts` com `getClaims()`; páginas, Server Actions e rotas conferem a sessão de novo. Sem as variáveis do Supabase, Entrar mostra "Login indisponível neste ambiente".

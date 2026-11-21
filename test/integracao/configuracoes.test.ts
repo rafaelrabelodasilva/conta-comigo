@@ -191,6 +191,79 @@ describe.skipIf(!ligado)("Primeiro uso em configuracoes no Supabase local", () =
     expect(depois).toEqual({ lembrete_fechamento: true, lembrete_atraso: false });
   });
 
+  it("avisos da Conferência e do Revisar: as colunas nascem ligadas (linha nova e linha antiga), o dono liga e desliga cada uma e o banco não aceita nulo (História 8.3)", async () => {
+    const u = await local.criarUsuario("avisos");
+    // A linha nasce só com a Aparência: as colunas novas ganham o padrão, e a linha que já existia antes da migração também.
+    const { data: criada, error } = await u.cliente
+      .from("configuracoes")
+      .upsert({ aparencia: "claro" }, { onConflict: "owner_id" })
+      .select()
+      .single();
+    expect(error).toBeNull();
+    expect(criada!.aviso_conferencia).toBe(true);
+    expect(criada!.aviso_revisar).toBe(true);
+    // Os lembretes da 7.4 são outras colunas e seguem ligados.
+    expect(criada!.lembrete_fechamento).toBe(true);
+    expect(criada!.lembrete_atraso).toBe(true);
+
+    // Desliga só o do Revisar; as outras colunas ficam como estavam.
+    const { data: sem, error: erroSem } = await u.cliente
+      .from("configuracoes")
+      .upsert({ aviso_revisar: false }, { onConflict: "owner_id" })
+      .select()
+      .single();
+    expect(erroSem).toBeNull();
+    expect(sem!.id).toBe(criada!.id);
+    expect(sem!.aviso_revisar).toBe(false);
+    expect(sem!.aviso_conferencia).toBe(true);
+    expect(sem!.lembrete_fechamento).toBe(true);
+    expect(sem!.aparencia).toBe("claro");
+
+    // Inverte os dois numa gravação só e depois religa o do Revisar (desligar e ligar de novo).
+    const { data: invertidos } = await u.cliente
+      .from("configuracoes")
+      .upsert({ aviso_conferencia: false, aviso_revisar: true }, { onConflict: "owner_id" })
+      .select()
+      .single();
+    expect(invertidos).toMatchObject({ aviso_conferencia: false, aviso_revisar: true });
+
+    // Desligar um aviso não mexe nos lembretes, e o contrário também.
+    const { data: lembrete } = await u.cliente
+      .from("configuracoes")
+      .upsert({ lembrete_atraso: false }, { onConflict: "owner_id" })
+      .select()
+      .single();
+    expect(lembrete).toMatchObject({ lembrete_atraso: false, aviso_conferencia: false, aviso_revisar: true });
+
+    // Nulo não passa (not null): o núcleo lê coluna ausente ou nula como ligada, mas o banco nunca guarda nulo.
+    for (const ruim of [{ aviso_conferencia: null }, { aviso_revisar: null }]) {
+      const { error: recusa } = await u.cliente
+        .from("configuracoes")
+        .upsert(ruim as never, { onConflict: "owner_id" })
+        .select()
+        .single();
+      expect(recusa, JSON.stringify(ruim)).not.toBeNull();
+    }
+    const { data: depois } = await u.cliente
+      .from("configuracoes")
+      .select("aviso_conferencia, aviso_revisar, lembrete_atraso")
+      .single();
+    expect(depois).toEqual({ aviso_conferencia: false, aviso_revisar: true, lembrete_atraso: false });
+  });
+
+  it("outro usuário não lê nem muda os avisos do dono (RLS)", async () => {
+    const dono = await local.criarUsuario("avisos-dono");
+    const outro = await local.criarUsuario("avisos-outro");
+    await dono.cliente.from("configuracoes").upsert({ aviso_conferencia: false }, { onConflict: "owner_id" });
+    const { data } = await outro.cliente.from("configuracoes").select("aviso_conferencia");
+    expect(data).toEqual([]);
+    // O outro não consegue mudar a linha do dono (o update com o id dela não acha nada).
+    const { data: id } = await dono.cliente.from("configuracoes").select("id").single();
+    await outro.cliente.from("configuracoes").update({ aviso_conferencia: true }).eq("id", id!.id);
+    const { data: lido } = await dono.cliente.from("configuracoes").select("aviso_conferencia").single();
+    expect(lido!.aviso_conferencia).toBe(false);
+  });
+
   it("outro usuário não lê nem muda os lembretes do dono (RLS)", async () => {
     const dono = await local.criarUsuario("lembretes-dono");
     const outro = await local.criarUsuario("lembretes-outro");

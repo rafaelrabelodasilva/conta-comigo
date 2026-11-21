@@ -2,8 +2,13 @@
 
 import type { ReactNode } from "react";
 import { APARENCIAS, APARENCIA_PADRAO, aparenciaDe, type Aparencia } from "@/domain/configuracoes";
+import {
+  TIPOS_DE_AVISO_COM_INTERRUPTOR,
+  preferenciasDeAvisos,
+  type TipoDeAvisoComInterruptor,
+} from "@/domain/avisos-preferencias";
 import { TIPOS_DE_LEMBRETE, preferenciasDeLembretes, type TipoDeLembrete } from "@/domain/lembretes";
-import { ROTULOS, TEXTOS_LEMBRETES, mensagem } from "@/domain/mensagens";
+import { ROTULOS, TEXTOS_AVISOS, TEXTOS_LEMBRETES, mensagem } from "@/domain/mensagens";
 import { configuracoesDoDono, repoConfiguracoes } from "@/data/configuracoes-repo";
 import { gerenciador, useLinhas } from "@/data/realtime";
 import { ErroAoCarregar } from "@/ui/ErroAoCarregar";
@@ -21,7 +26,9 @@ import { AtivarNotificacoes } from "./AtivarNotificacoes";
 // Lembretes (História 7.4, FR-55): um interruptor por tipo (o do dia do fechamento e o do Bloco com itens
 // atrasados), guardados em `configuracoes.lembrete_fechamento` e `lembrete_atraso` (padrão ligado). A
 // gravação é otimista como a da Aparência: a Central de Avisos (8.1, `useCentralDeAvisos`) lê a mesma linha em memória
-// e o aviso do tipo desligado some na hora (da lista e do contador). Logo abaixo, "Ativar notificações" (História 7.5): o aviso do sistema deste aparelho.
+// e o aviso do tipo desligado some na hora (da lista e do contador). Desde a 8.3 o grupo (agora "Avisos") tem mais dois
+// interruptores, os da Conferência e do Revisar (`aviso_conferencia` e `aviso_revisar`, padrão ligado): não são lembretes e
+// nunca viram notificação do sistema, então têm tipo, método e colunas próprios. Logo abaixo, "Ativar notificações" (História 7.5): o aviso do sistema deste aparelho.
 
 const ROTULO_APARENCIA: Record<Aparencia, string> = {
   sistema: ROTULOS.aparencia_sistema,
@@ -34,11 +41,17 @@ const ROTULO_LEMBRETE: Record<TipoDeLembrete, string> = {
   atraso: TEXTOS_LEMBRETES.atraso,
 };
 
+const ROTULO_AVISO: Record<TipoDeAvisoComInterruptor, string> = {
+  conferencia: TEXTOS_AVISOS.preferencia_conferencia,
+  revisar: TEXTOS_AVISOS.preferencia_revisar,
+};
+
 export function SecaoAparencia() {
   const { status, linhas } = useLinhas("configuracoes");
   const toast = useToast();
   const aparencia = aparenciaDe(configuracoesDoDono(linhas)?.aparencia ?? APARENCIA_PADRAO);
   const lembretes = preferenciasDeLembretes(configuracoesDoDono(linhas));
+  const avisos = preferenciasDeAvisos(configuracoesDoDono(linhas));
 
   let conteudo: ReactNode;
   if (status === "erro") {
@@ -75,6 +88,17 @@ export function SecaoAparencia() {
               ligado={lembretes[tipo]}
               aoMudar={async (ligado) => {
                 const r = await repoConfiguracoes().definirLembrete(tipo, ligado);
+                if (!r.ok) toast.mostrar({ texto: mensagem(r.codigo) });
+              }}
+            />
+          ))}
+          {TIPOS_DE_AVISO_COM_INTERRUPTOR.map((tipo) => (
+            <Interruptor
+              key={tipo}
+              rotulo={ROTULO_AVISO[tipo]}
+              ligado={avisos[tipo]}
+              aoMudar={async (ligado) => {
+                const r = await repoConfiguracoes().definirAviso(tipo, ligado);
                 if (!r.ok) toast.mostrar({ texto: mensagem(r.codigo) });
               }}
             />

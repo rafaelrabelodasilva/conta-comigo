@@ -136,3 +136,46 @@ describe("o menu com os avisos da Conferência e do Revisar", () => {
     }
   });
 });
+
+describe("o menu com os interruptores da Conferência e do Revisar (História 8.3)", () => {
+  it("o Revisar desligado: 'Avisos' não conta o aviso, mas o item 'Revisar' segue com a fila de trabalho (17 para revisar)", () => {
+    falso.banco.configuracoes = [{ id: "c", aviso_revisar: false }];
+    falso.versao += 1;
+    render(<MenuLateral />);
+    expect(avisos("Avisos, 1 não lido")).toBeTruthy();
+    expect(revisar().textContent).toBe("Revisar, 17 para revisar");
+  });
+
+  it("a Conferência desligada: 'Avisos' conta só a fila; 'Revisar' não muda", () => {
+    falso.banco.configuracoes = [{ id: "c", aviso_conferencia: false }];
+    falso.versao += 1;
+    render(<MenuLateral />);
+    expect(avisos("Avisos, 1 não lido")).toBeTruthy();
+    expect(revisar().textContent).toBe("Revisar, 17 para revisar");
+  });
+
+  it("os dois desligados: 'Avisos' sem número e 'Revisar' com a fila; religar traz o contador de volta sem recarregar", () => {
+    falso.banco.configuracoes = [{ id: "c", aviso_conferencia: false, aviso_revisar: false }];
+    falso.versao += 1;
+    render(<MenuLateral />);
+    expect(nomeDeAvisos()).toBe("Avisos");
+    expect(revisar().textContent).toBe("Revisar, 17 para revisar");
+    falso.banco.configuracoes = [{ id: "c", aviso_conferencia: true, aviso_revisar: true }];
+    mudou();
+    expect(avisos("Avisos, 2 não lidos")).toBeTruthy();
+  });
+
+  it("religar não faz um aviso já lido voltar como novo (a linha de avisos_lidos fica)", () => {
+    falso.banco.avisos_lidos = [
+      { tipo: "revisar", referencia: "fila", dia: "2026-11-18" },
+      { tipo: "conferencia", referencia: "2026-11:-72000:0:8673", dia: "2026-10-28" },
+    ];
+    falso.banco.configuracoes = [{ id: "c", aviso_revisar: false }];
+    falso.versao += 1;
+    render(<MenuLateral />);
+    expect(nomeDeAvisos()).toBe("Avisos");
+    falso.banco.configuracoes = [{ id: "c", aviso_revisar: true }];
+    mudou();
+    expect(nomeDeAvisos()).toBe("Avisos");
+  });
+});
