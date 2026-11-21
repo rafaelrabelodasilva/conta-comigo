@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import { arquivadosNaFormula, lerBlocos, planejarReordenar, resumirBloco, type BlocoParaGravar } from "@/domain/blocos";
 import { formatarDinheiro } from "@/domain/dinheiro";
 import { textoDaFormula } from "@/domain/formula";
-import { TEXTOS_BLOCO as T, descricaoExcluirBloco, mensagem } from "@/domain/mensagens";
-import { idsDosPrevistos, projetarPainel, type LancamentoParaProjetar } from "@/domain/projecoes";
+import { TEXTOS_BLOCO as T, descricaoExcluirBloco, mensagem, rotuloFaltaDoBloco } from "@/domain/mensagens";
+import { avaliar } from "@/domain/formula";
+import { idsDosPrevistos, linhaDaFormulaPendente, projetarPainel, type LancamentoParaProjetar, type LinhaPendente } from "@/domain/projecoes";
 import { repoBlocos } from "@/data/blocos-repo";
 import { gerenciador, useLinhas } from "@/data/realtime";
 import { ConfirmarAcao } from "@/ui/ConfirmarAcao";
@@ -38,6 +39,7 @@ export function BlocosDoMes({
   linhas,
   mes,
   temFatura = true,
+  pendentes = null,
   ativoId,
   aoFiltrar,
   aoExcluindo,
@@ -48,6 +50,11 @@ export function BlocosDoMes({
   mes: string;
   /** O Mês tem Fatura? Sem ela, as Contas manuais são previstos e entram como "inclui previstos" (5.1). */
   temFatura?: boolean;
+  /**
+   * O que está em aberto no Mês (`pendentesDosLancamentos` com `mes`): o cartão de um Bloco de cobrança diz quanto falta
+   * receber dele, o mesmo número de Recebimentos. `null`/ausente enquanto os pagamentos carregam: nada é dito.
+   */
+  pendentes?: readonly LinhaPendente[] | null;
   /** O Bloco que filtra a grade (borda em destaque). */
   ativoId?: string | null;
   /** Tocar no cartão: liga, desliga ou troca o filtro por Bloco. */
@@ -83,7 +90,16 @@ export function BlocosDoMes({
     () =>
       blocos.map((b) => {
         const resumo = resumirBloco(b, projecao, previstos);
+        // O que falta receber deste Bloco no Mês (só os de cobrança): a Fórmula sobre o que está em aberto.
+        const emAberto = b.de_cobranca && pendentes !== null ? avaliar(b.formula, pendentes.map(linhaDaFormulaPendente)) : null;
+        const falta =
+          emAberto === null || !emAberto.ok
+            ? null
+            : emAberto.valor.valorCentavos > 0
+              ? rotuloFaltaDoBloco(emAberto.valor.valorCentavos)
+              : T.nada_a_receber;
         return {
+          falta,
           id: b.id,
           nome: b.nome,
           formula: textoDaFormula(b.formula, nomes),
@@ -94,7 +110,7 @@ export function BlocosDoMes({
           arquivados: arquivadosNaFormula(b.formula, { responsaveis: responsaveis.linhas, tipos: tipos.linhas }),
         };
       }),
-    [blocos, projecao, previstos, nomes, corDoResponsavel, responsaveis.linhas, tipos.linhas],
+    [blocos, projecao, previstos, pendentes, nomes, corDoResponsavel, responsaveis.linhas, tipos.linhas],
   );
 
   // Um Bloco apagado em outro aparelho fecha a janela que o abria.

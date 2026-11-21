@@ -46,6 +46,11 @@ export type ItemDoCartaoBlocos = {
   valor: string;
   /** A Fórmula não calcula: não há Lançamentos que entram, então o cartão não filtra. */
   semValor?: boolean;
+  /**
+   * Bloco de cobrança: o que falta receber dele neste Mês ("Falta R$ 120,00" ou "Nada a receber"), o mesmo número de
+   * Recebimentos. `null`/ausente: não é de cobrança, ou os pagamentos ainda carregam.
+   */
+  falta?: string | null;
   incluiPrevistos: boolean;
   /** Cor (1..8) do Responsável de um Bloco de uma pessoa só; senão `null`. */
   corPessoa: number | null;
@@ -149,6 +154,7 @@ function BlocoCard({
         ) : null}
       </div>
       <b className="texto-block-value text-text">{item.valor}</b>
+      {item.falta ? <span className="texto-caption text-text-muted">{item.falta}</span> : null}
       {item.incluiPrevistos ? <span className="texto-caption text-forecast-fg">{T.inclui_previstos}</span> : null}
       {item.arquivados.length > 0 ? (
         <span className="texto-caption text-text-muted">{avisoCadastrosArquivados(item.arquivados)}</span>

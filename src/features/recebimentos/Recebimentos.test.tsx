@@ -379,6 +379,23 @@ describe("'Ver': a lista dos Lançamentos em aberto", () => {
     expect(within(lista).getAllByText("Atrasado")).toHaveLength(1);
   });
 
+  it("o Rangel (Rangel + Casal ÷ 2): a linha do Casal mostra o valor cheio E a parte do Rangel; a dele não repete nada", async () => {
+    renderizar();
+    const lista = await ver(userEvent.setup(), "Rangel");
+    const texto = sem(lista.textContent);
+    // Casal R$ 200,00 no total do Saldo de R$ 110,00 (Rangel R$ 10,00 + Casal R$ 200,00 ÷ 2).
+    expect(texto).toContain("parte do Rangel: R$ 100,00");
+    expect(texto).toContain("R$ 200,00");
+    // A linha do próprio Rangel vale inteira: sem a segunda linha de texto.
+    expect(within(lista).getAllByText(/^parte do Rangel:/)).toHaveLength(1);
+  });
+
+  it("um Bloco de soma simples (Lucas) não mostra 'parte do': o valor da lista já é o que se cobra", async () => {
+    renderizar();
+    const lista = await ver(userEvent.setup(), "Lucas");
+    expect(within(lista).queryByText(/^parte do/)).toBeNull();
+  });
+
   it("um Pago parcialmente mostra o selo e 'falta R$ X'", async () => {
     mudar(() => {
       falso.banco.pagamento_itens = [

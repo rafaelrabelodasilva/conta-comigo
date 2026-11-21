@@ -171,6 +171,18 @@ export function estaClassificada(l: {
   return l.tipo_id !== null && (l.responsavel_id !== null || (l.divisao ?? null) !== null);
 }
 
+/**
+ * O andamento de uma despesa dividida (Bombinhas): quantas das partes já contam como pagas. A mãe não tem Status (valem
+ * as partes, AD-8), então o cabeçalho da grade mostra este resumo; é o que faz o Pagamento registrado em Recebimentos
+ * (que quita as PARTES) aparecer também na linha da despesa. Parte "Pago parcialmente" ainda não conta.
+ */
+export function resumoDaDivisao(
+  partes: readonly { status_id: string | null }[],
+  statusPagos: ReadonlySet<string>,
+): { pagas: number; total: number } {
+  return { pagas: partes.filter((p) => p.status_id !== null && statusPagos.has(p.status_id)).length, total: partes.length };
+}
+
 /** As filhas de cada mãe (pelo id dela), na ordem das partes da `divisao`; filha sem mãe na lista não entra. */
 export function filhasPorMae<L extends { id: string; dividido_de_id?: string | null; excluido_em?: string | null; divisao?: unknown }>(
   linhas: readonly L[],
