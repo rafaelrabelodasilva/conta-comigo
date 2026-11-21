@@ -1648,7 +1648,7 @@ As a Rafael,
 I want desligar o aviso da Conferência e o do Revisar e dispensar a Conferência de uma Fatura pela própria Central,
 So that os avisos que ficam o tempo todo na lista (a fila do Revisar, a diferença de um Mês antigo que nunca vai bater) não me atrapalhem a ver o que é novo (FR-55 revisado).
 
-**Status:** review (spec: `spec-8-3-desligar-e-dispensar-avisos.md`). **Há migração** (duas colunas aditivas em `configuracoes`, `supabase/migrations/20261204120000_avisos_preferencias.sql`, a aplicar com `supabase db push` a pedido do Rafael). A necessidade veio das entradas abertas do `deferred-work.md` da 8.2 ("é a história seguinte") e ainda **não foi confirmada olhando a Central do Rafael com os dados reais**; ele pediu para seguir assim mesmo.
+**Status:** done (spec: `spec-8-3-desligar-e-dispensar-avisos.md`). **Há migração** (duas colunas aditivas em `configuracoes`, `supabase/migrations/20261204120000_avisos_preferencias.sql`, a aplicar com `supabase db push` a pedido do Rafael). A necessidade veio das entradas abertas do `deferred-work.md` da 8.2 ("é a história seguinte") e ainda **não foi confirmada olhando a Central do Rafael com os dados reais**; ele pediu para seguir assim mesmo.
 
 **Acceptance Criteria:**
 

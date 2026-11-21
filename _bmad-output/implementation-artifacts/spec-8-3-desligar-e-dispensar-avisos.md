@@ -2,7 +2,7 @@
 title: 'História 8.3: Desligar e dispensar os avisos da Conferência e do Revisar'
 type: 'feature'
 created: '2026-11-21'
-status: 'review'
+status: 'done'
 baseline_commit: '1f902cc'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -100,9 +100,9 @@ Hoje 19/11/26. Nov/26 com R$ 1.000,00 lidos e R$ 280,00 gravados no cartão 8673
 - [x] Dados e interface: `definirAviso`, os quatro interruptores, o hook com o filtro, "Dispensar" na linha da Conferência (o toast, o foco, o layout).
 - [x] Provas: núcleo, repositório, jsdom (Configurações, Central, menu) e integração (as colunas, o padrão, nulo, RLS).
 - [x] Docs: `epics.md`, PRD, EXPERIENCE.md, `docs/infraestrutura.md`, `deferred-work.md`, `sprint-status.yaml` (8.3 em `review`).
-- [ ] **CI verde na PR:** `verificar`, `supabase` (a migração, o `database.types.ts` igual ao gerado e `test/integracao`) e "Backup gera e restaura".
+- [x] **CI verde na PR (#124)** (`verificar`, `supabase`, "Backup gera e restaura" e o preview da Vercel): a migração, o `database.types.ts` editado à mão e `test/integracao` passaram. Mergeada em 21/11/2026.
 - [ ] **O Rafael, fora do código (pendente):** (1) pedir o `supabase db push` quando quiser (confira com `--dry-run` que só `20261204120000_avisos_preferencias.sql` está pendente; antes do merge é seguro); (2) abrir a Central e Configurações no iPad e no PC com os dados reais (os dois interruptores, "Dispensar", o toast, o foco, a linha em 834 pt, o contador no outro aparelho).
-- [ ] `done` no sprint-status só depois do merge, em PR separada (como a #119 e a #123).
+- [x] `done` no sprint-status só depois do merge, em PR separada (como a #119 e a #123); o Épico 8 voltou a `done` junto.
 
 ## Verification
 
