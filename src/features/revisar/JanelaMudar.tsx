@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ROTULOS, TEXTOS_REVISAR as T } from "@/domain/mensagens";
-import { ordenarPorUso, type ItemDaFila } from "@/domain/revisar";
+import { controlesDoItem, ordenarPorUso, type ItemDaFila } from "@/domain/revisar";
 import { repoCadastros } from "@/data/cadastros-repo";
 import { Botao } from "@/ui/Botao";
 import { Janela } from "@/ui/Janela";
@@ -24,7 +24,7 @@ export type PropsJanelaMudar = {
   aberta: boolean;
   aoMudar: (aberta: boolean) => void;
   /** Grava a escolha; devolve se deu certo (a janela fecha). */
-  aoSalvar: (item: ItemDaFila, escolha: { responsavel_id: string; tipo_id: string }) => Promise<boolean>;
+  aoSalvar: (item: ItemDaFila, escolha: { responsavel_id?: string; tipo_id: string }) => Promise<boolean>;
 };
 
 type Usos = { responsaveis: ReadonlyMap<string, number> | null; tipos: ReadonlyMap<string, number> | null };
@@ -69,12 +69,14 @@ export function JanelaMudar({ item, responsaveis, tipos, aberta, aoMudar, aoSalv
     [tipos, usos],
   );
 
-  const completo = responsavelId !== "" && tipoId !== "";
+  // A mãe dividida não pede Responsável (está nas partes: o seletor não gravaria nada); a decisão é do núcleo.
+  const controles = controlesDoItem(item);
+  const completo = tipoId !== "" && (!controles.pedeResponsavel || responsavelId !== "");
 
   async function salvar() {
     if (!completo || salvando) return;
     setSalvando(true);
-    const ok = await aoSalvar(item, { responsavel_id: responsavelId, tipo_id: tipoId });
+    const ok = await aoSalvar(item, controles.pedeResponsavel ? { responsavel_id: responsavelId, tipo_id: tipoId } : { tipo_id: tipoId });
     setSalvando(false);
     if (ok) aoMudar(false);
   }
@@ -95,12 +97,18 @@ export function JanelaMudar({ item, responsaveis, tipos, aberta, aoMudar, aoSalv
       }
     >
       <div className="flex flex-col gap-3">
-        <Seletor
-          rotulo={T.responsavel}
-          value={responsavelId}
-          onChange={(e) => setResponsavelId(e.target.value)}
-          opcoes={[{ valor: "", rotulo: T.escolha }, ...opcoesResponsavel]}
-        />
+        {controles.pedeResponsavel ? (
+          <Seletor
+            rotulo={T.responsavel}
+            value={responsavelId}
+            onChange={(e) => setResponsavelId(e.target.value)}
+            opcoes={[{ valor: "", rotulo: T.escolha }, ...opcoesResponsavel]}
+          />
+        ) : (
+          <p role="note" className="texto-body text-text-muted">
+            {controles.dica}
+          </p>
+        )}
         <Seletor
           rotulo={T.tipo}
           value={tipoId}

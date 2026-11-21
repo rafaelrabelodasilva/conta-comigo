@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { entradasDeSugestoes } from "./lote";
+import { TEXTOS_REVISAR } from "./mensagens";
 import { linhasDoMes } from "./painel";
 import {
   contarFila,
+  controlesDoItem,
   ehDaFila,
   guardadaPelaFila,
   montarFila,
@@ -56,6 +59,57 @@ function linha(extra: Partial<LinhaDaFila> = {}): LinhaDaFila {
 }
 
 const itemUnico = (l: LinhaDaFila, extras: LinhaDaFila[] = []) => montarFila([l, ...extras], cadastros)[0].itens[0];
+
+describe("a mãe dividida que voltou à fila (Defeito 9): nenhum controle que não grava", () => {
+  // Rafael limpou o Tipo de uma mãe dividida: ela volta à fila como `sem_classificacao`. A Responsabilidade está nas partes
+  // (`divisao`); `planejarGravacao` ignora o Responsável da mãe, então só o Tipo grava.
+  const DIVISAO = { modo: "valor", partes: [{ responsavel_id: CASAL, numerador: 1, denominador: 2 }, { responsavel_id: RAFAEL, numerador: 1, denominador: 2 }] };
+  const dividida = (extra: Partial<LinhaDaFila> = {}) => linha({ divisao: DIVISAO, ...extra });
+
+  it("a linha dividida é marcada e a janela Mudar não pede o Responsável (ele está nas partes)", () => {
+    const item = itemUnico(dividida());
+    expect(item.maeDividida).toBe(true);
+    expect(controlesDoItem(item)).toEqual({ pedeResponsavel: false, dica: TEXTOS_REVISAR.divisao_nas_partes });
+    expect(item.preenchido.responsavel_id).toBeNull();
+  });
+
+  it("a linha comum segue como sempre: pede o Responsável e não tem dica", () => {
+    const item = itemUnico(linha());
+    expect(item.maeDividida).toBe(false);
+    expect(controlesDoItem(item)).toEqual({ pedeResponsavel: true, dica: null });
+  });
+
+  it("a dica diz o que fazer: o Responsável está nas partes e a divisão se edita no Painel", () => {
+    expect(TEXTOS_REVISAR.divisao_nas_partes).toContain("Editar divisão");
+    expect(TEXTOS_REVISAR.divisao_nas_partes).toContain("Painel");
+  });
+
+  it("com Tipo sugerido, o ✓ existe e grava SÓ o Tipo (nunca um Responsável que a gravação ignoraria)", () => {
+    const item = itemUnico(
+      dividida({ revisao_motivo: "sugestao", revisao_dados: { responsavel_id: CASAL, tipo_id: SAUDE } }),
+    );
+    expect(item.confirmavel).toBe(true);
+    expect(item.aoConfirmar).toEqual({ tipo_id: SAUDE });
+    expect(item.aoConfirmar).not.toHaveProperty("responsavel_id");
+  });
+
+  it("sem Tipo sugerido não há ✓ (só o Mudar, que pede o Tipo)", () => {
+    const item = itemUnico(dividida());
+    expect(item.confirmavel).toBe(false);
+    expect(item.aoConfirmar).toBeNull();
+  });
+
+  it("'Valor mudou' na mãe dividida: o ✓ mantém o Tipo que a linha já tem", () => {
+    const item = itemUnico(dividida({ revisao_motivo: "valor_mudou", revisao_dados: { valor_antes_centavos: 900 }, tipo_id: CASA }));
+    expect(item.aoConfirmar).toEqual({ tipo_id: CASA });
+  });
+
+  it("'Aplicar sugestões' do lote usa o mesmo ✓: a dividida grava só o Tipo", () => {
+    const item = itemUnico(dividida({ revisao_motivo: "sugestao", revisao_dados: { responsavel_id: CASAL, tipo_id: SAUDE } }));
+    expect(entradasDeSugestoes([item]).entradas).toEqual([{ id: item.id, campos: { tipo_id: SAUDE } }]);
+  });
+});
+
 
 describe("ehDaFila (a única definição de estar na fila)", () => {
   it("motivo, não excluída e não Ajuste", () => {

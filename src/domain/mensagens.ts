@@ -738,6 +738,9 @@ export const TEXTOS_REVISAR = {
   /** Toast do ✓ e do "Mudar": o "Desfazer" vem do próprio toast. */
   classificado: "Classificado",
   titulo_mudar: "Mudar classificação",
+  /** Na mãe dividida que voltou à fila (Defeito 9): o Responsável está nas partes, então não há seletor dele. */
+  divisao_nas_partes:
+    "Esta linha está dividida: o Responsável está nas partes. Para mudar quem paga cada parte, abra o Mês no Painel e use “Editar divisão”.",
   responsavel: "Responsável",
   tipo: "Tipo",
   escolha: "Escolha…",

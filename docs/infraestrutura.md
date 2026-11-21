@@ -191,3 +191,6 @@ Uma PR, um commit por defeito (`Defeito N: ...`). Cada seção diz se o defeito 
 ### Defeito 8: o app refaz a inscrição de notificações que o navegador perdeu (NÃO há migração)
 - Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC, o Cron e o service worker (`/sw.js`) não mudam. Ao abrir o app com a permissão de notificações já dada e sem inscrição neste aparelho, o app grava a inscrição nova em `push_inscricoes` (a mesma gravação do botão "Ativar notificações", com a sessão do Rafael): **uma gravação a mais ao abrir o app, só nesse caso**. Sem a tabela (antes do `db push` da 7.5) a gravação recusa, a inscrição solta é cancelada e nada aparece.
 - O app só reativa um aparelho que já esteve ativado (marca em `localStorage`) e nunca depois de "Desativar neste aparelho". Nenhum dado novo no banco.
+
+### Defeito 9: a mãe dividida na fila do Revisar não mostra controle que não grava (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron não mudam. É só a decisão de quais controles a linha mostra (núcleo `src/domain/revisar.ts`) e a janela "Mudar".

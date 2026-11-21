@@ -170,7 +170,7 @@ export function Revisar({ titulo }: { titulo: string }) {
   }
 
   /** Grava Responsável e Tipo (limpa o motivo e ensina a Regra) e oferece o "Desfazer". */
-  async function classificar(item: ItemDaFila, escolha: { responsavel_id: string; tipo_id: string }): Promise<boolean> {
+  async function classificar(item: ItemDaFila, escolha: { responsavel_id?: string; tipo_id: string }): Promise<boolean> {
     const atual = fila.linhas.find((l) => l.id === item.id);
     if (!atual || emCurso.current.has(item.id)) return false;
     emCurso.current.add(item.id);
