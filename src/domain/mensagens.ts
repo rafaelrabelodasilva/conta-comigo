@@ -1053,6 +1053,11 @@ export function descricaoExcluirLancamento(nome: string, daFatura: boolean, ajus
 
 /** Ajustes de centavos (História 2.8, FR-47). */
 /** A janela "Dividir" e os avisos da Divisão (História 3.8, UX-DR15). */
+/** No cabeçalho de uma despesa dividida: "1 de 2 pagas" (as partes que já contam como pagas). */
+export function rotuloPartesPagas(pagas: number, total: number): string {
+  return pagas === total ? "Todas pagas" : `${pagas} de ${total} pagas`;
+}
+
 export const TEXTOS_DIVISAO = {
   /** Antes do Nome da filha na grade. */
   marca: "↳",
@@ -1615,6 +1620,19 @@ export const TEXTOS_PAGAMENTO = {
   pago_parcialmente: "Pago parcialmente",
 } as const;
 
+/**
+ * Na lista "Ver" de um Bloco cuja Fórmula não é soma simples (o Rangel: Casal ÷ 2): o valor cheio da linha fica como
+ * está e esta linha diz quanto dela é do Bloco, "parte do Rangel: R$ 50,00". A soma das partes é o Saldo do cartão.
+ */
+export function rotuloParteDoBloco(nomeDoBloco: string, centavos: number): string {
+  return `parte do ${nomeDoBloco}: ${formatarDinheiro(centavos)}`;
+}
+
+/** No cartão do Bloco de cobrança do Painel: o que falta receber do Mês (o mesmo número de Recebimentos). */
+export function rotuloFaltaDoBloco(centavos: number): string {
+  return `Falta ${formatarDinheiro(centavos)}`;
+}
+
 /** "falta R$ 115,16" no painel do Lançamento de um Pago parcialmente. */
 export function rotuloFalta(centavos: number): string {
   return `falta ${formatarDinheiro(centavos)}`;
@@ -1866,6 +1884,8 @@ export function tituloApagarHistorico(mes: string): string {
 
 /** Textos do Montador de Bloco e do cartão "Blocos" do Painel (História 4.1, UX-DR16). */
 export const TEXTOS_BLOCO = {
+  /** Bloco de cobrança sem nada em aberto no Mês: tudo o que era dele já foi recebido (ou não há). */
+  nada_a_receber: "Nada a receber",
   titulo_cartao: "Blocos",
   novo: "Novo bloco",
   sem_blocos: "Crie seu primeiro Bloco para ver os totais por pessoa",

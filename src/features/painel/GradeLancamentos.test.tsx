@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -615,5 +615,55 @@ describe("Divisão (História 3.8)", () => {
     await u.click(within(pad).getByRole("button", { name: /Ações de/ }));
     await u.click(screen.getByRole("menuitem", { name: "Dividir" }));
     expect(aoDividir).toHaveBeenCalledWith("pad");
+  });
+});
+
+describe("o cabeçalho da despesa dividida mostra o andamento das partes (o Pagamento de Recebimentos aparece no Painel)", () => {
+  const mae = lanc("bombinhas", {
+    nome: "BOMBINHAS",
+    valor_centavos: 31_800,
+    divisao: { modo: "valor", partes: [{ responsavel_id: "r-casal", filha_id: "p1" }, { responsavel_id: "r-rafael", filha_id: "p2" }] },
+  } as Partial<LancamentoGrade>);
+  const parte = (id: string, status: string) =>
+    lanc(id, { nome: "BOMBINHAS", valor_centavos: 15_900, dividido_de_id: "bombinhas", status_id: status } as Partial<LancamentoGrade>);
+
+  function MontarDivida({ s1, s2, comResumo = true }: { s1: string; s2: string; comResumo?: boolean }) {
+    const partes = [parte("p1", s1), parte("p2", s2)];
+    return (
+      <GradeLancamentos
+        linhas={partes}
+        maesDivididas={new Map([["bombinhas", mae]])}
+        partesPorMae={comResumo ? new Map([["bombinhas", partes.map((p) => ({ status_id: p.status_id }))]]) : undefined}
+        cadastros={cadastros}
+        ordem={ORDEM_PADRAO}
+        aoOrdenar={() => {}}
+        escolhidos={[]}
+        aoFiltrar={() => {}}
+        vazio=""
+      />
+    );
+  }
+  const statusDoCabecalho = () => {
+    const [, tbody] = screen.getAllByRole("rowgroup");
+    const cab = within(tbody).getAllByRole("row")[0];
+    return within(cab).getAllByRole("cell")[7];
+  };
+
+  it("todas as partes pagas: o cabeçalho diz 'Todas pagas'", () => {
+    render(<MontarDivida s1="s-pago" s2="s-pago" />);
+    expect(statusDoCabecalho().textContent).toBe("Todas pagas");
+  });
+
+  it("uma de duas paga: '1 de 2 pagas'", () => {
+    render(<MontarDivida s1="s-pago" s2="s-nao" />);
+    expect(statusDoCabecalho().textContent).toBe("1 de 2 pagas");
+  });
+
+  it("nenhuma paga, ou sem o resumo: o cabeçalho continua sem Status", () => {
+    render(<MontarDivida s1="s-nao" s2="s-nao" />);
+    expect(statusDoCabecalho().textContent).toBe("");
+    cleanup();
+    render(<MontarDivida s1="s-pago" s2="s-pago" comResumo={false} />);
+    expect(statusDoCabecalho().textContent).toBe("");
   });
 });

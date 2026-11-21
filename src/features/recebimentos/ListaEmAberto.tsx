@@ -12,6 +12,7 @@ import {
   rotuloListaEmAberto,
   rotuloMarcarEmAberto,
   rotuloMesDaLista,
+  rotuloParteDoBloco,
 } from "@/domain/mensagens";
 import { nomeExibido } from "@/domain/painel";
 import type { GrupoDoMes, ItemDaLista } from "@/domain/recebimentos";
@@ -28,6 +29,8 @@ import { SeloStatus } from "@/ui/SeloStatus";
 // junta Meses: ela é um conjunto de ids de uma lista só e some ao fechar a lista ou trocar de Bloco. O Ajuste
 // de centavos fica sob a parcela dele (sem caixa); o crédito de algo pago e depois excluído (AD-11) é uma
 // linha só de leitura. Tudo o que a lista diz vem do núcleo (`listaEmAberto`): ela só desenha.
+
+const SEM_PARTES: ReadonlyMap<string, number> = new Map();
 
 export type CadastrosDaLista = {
   responsaveis: ReadonlyMap<string, { nome: string; cor: number }>;
@@ -50,6 +53,8 @@ function SeloDaLinha({ item, atrasadoDesde }: { item: ItemDaLista<LinhaLancament
 
 function Linha({
   item,
+  nomeDoBloco,
+  partes,
   cadastros,
   atrasos,
   selecao,
@@ -57,6 +62,8 @@ function Linha({
   ajuste = false,
 }: {
   item: ItemDaLista<LinhaLancamento>;
+  nomeDoBloco: string;
+  partes: ReadonlyMap<string, number>;
   cadastros: CadastrosDaLista;
   atrasos: ReadonlyMap<string, string>;
   selecao: ReadonlySet<string>;
@@ -70,6 +77,9 @@ function Linha({
   const parcial = p.recebidoCentavos > 0 && !p.credito;
   const desde = atrasos.get(l.id);
   const rotuloDoValor = parcial ? rotuloFalta(p.restanteCentavos) : restante;
+  // A parte do Bloco (Rangel: Casal ÷ 2) só aparece quando difere do valor cheio da linha.
+  const parte = p.credito ? undefined : partes.get(l.id);
+  const comParte = parte !== undefined && parte !== p.restanteCentavos;
   const conteudo = (
     <>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -86,7 +96,10 @@ function Linha({
         {p.credito ? <span className="texto-caption text-text-muted">{T.linha_de_credito}</span> : null}
       </span>
       {p.credito ? null : <SeloDaLinha item={item} atrasadoDesde={desde} />}
-      <span className="min-w-[5.5rem] text-right texto-number tabular-nums">{rotuloDoValor}</span>
+      <span className="flex min-w-[5.5rem] flex-col items-end text-right">
+        <span className="texto-number tabular-nums">{rotuloDoValor}</span>
+        {comParte ? <span className="texto-caption tabular-nums text-text-muted">{rotuloParteDoBloco(nomeDoBloco, parte)}</span> : null}
+      </span>
     </>
   );
   if (p.credito || ajuste) {
@@ -115,6 +128,8 @@ function Linha({
             <Linha
               key={a.pendente.id}
               item={a}
+              nomeDoBloco={nomeDoBloco}
+              partes={partes}
               cadastros={cadastros}
               atrasos={atrasos}
               selecao={selecao}
@@ -131,6 +146,7 @@ function Linha({
 export function ListaEmAberto({
   nomeDoBloco,
   grupos,
+  partes = SEM_PARTES,
   cadastros,
   atrasos,
   selecao,
@@ -141,6 +157,8 @@ export function ListaEmAberto({
 }: {
   nomeDoBloco: string;
   grupos: readonly GrupoDoMes<LinhaLancamento>[];
+  /** Quanto de cada linha é do Bloco (`partesDoBloco`); ausente, nenhuma linha mostra "parte do". */
+  partes?: ReadonlyMap<string, number>;
   cadastros: CadastrosDaLista;
   atrasos: ReadonlyMap<string, string>;
   selecao: ReadonlySet<string>;
@@ -185,6 +203,8 @@ export function ListaEmAberto({
                     <Linha
                       key={i.pendente.id}
                       item={i}
+                      nomeDoBloco={nomeDoBloco}
+                      partes={partes}
                       cadastros={cadastros}
                       atrasos={atrasos}
                       selecao={selecao}

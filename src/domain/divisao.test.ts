@@ -10,6 +10,7 @@ import {
   filhasPorMae,
   juntarItensDividir,
   lerDivisao,
+  resumoDaDivisao,
   lerFracao,
   linhasDaFatura,
   mesmaDivisao,
@@ -461,5 +462,23 @@ describe("motivoParaNaoDividir", () => {
     expect(motivoParaNaoDividir({ ...base, valor_centavos: 0 }, false)).toBe("indisponivel_zero");
     expect(motivoParaNaoDividir({ ...base, valor_centavos: 90_000_001 }, false)).toBe("indisponivel_grande");
     expect(motivoParaNaoDividir({ ...base, tipo_id: null }, false)).toBe("indisponivel_tipo");
+  });
+});
+
+describe("resumoDaDivisao: o cabeçalho da despesa dividida diz quantas partes já foram pagas", () => {
+  const PAGOS = new Set(["s-pago"]);
+  const parte = (status_id: string | null) => ({ status_id });
+
+  it("nenhuma parte paga: nada a dizer (o cabeçalho segue como sempre)", () => {
+    expect(resumoDaDivisao([parte("s-nao"), parte(null)], PAGOS)).toEqual({ pagas: 0, total: 2 });
+  });
+
+  it("uma de duas: 1 de 2; todas: 2 de 2", () => {
+    expect(resumoDaDivisao([parte("s-pago"), parte("s-nao")], PAGOS)).toEqual({ pagas: 1, total: 2 });
+    expect(resumoDaDivisao([parte("s-pago"), parte("s-pago")], PAGOS)).toEqual({ pagas: 2, total: 2 });
+  });
+
+  it("sem partes: zero de zero", () => {
+    expect(resumoDaDivisao([], PAGOS)).toEqual({ pagas: 0, total: 0 });
   });
 });

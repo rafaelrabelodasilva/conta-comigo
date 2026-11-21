@@ -29,6 +29,17 @@ Não é uma história nova. Uma PR (`correcao-10-defeitos-do-deferred-work`), **
 | 9 | Na fila do Revisar, a mãe dividida mostra um seletor que não faz nada (3.8) | Sim (6 testes falharam) | Núcleo: `controlesDoItem`, `montarItem`: na mãe dividida o "Mudar" não tem seletor de Responsável, diz "Editar divisão", exige só o Tipo; o ✓ existe com Tipo e grava só o Tipo (o lote usa o mesmo). | `revisar.test.ts`, `JanelaMudar.test.tsx` | Link direto para a janela de Divisão (o Painel não tem endereço que a abra) |
 | 10 | Sair e entrar sem recarregar deixa o estado da sessão anterior (1.4, "talvez") | **Sim** (a doc do Next diz que o redirect de Server Action é navegação no cliente) | `Gerenciador.zerar()` e `zerarGerenciadores()` em `realtime.ts` (mesmo objeto, repositórios guardam a referência); a página de entrar zera ao abrir; evento atrasado de canal trocado é ignorado. | `realtime-sessao.test.ts`, `ZerarAoEntrar.test.tsx` | Que o canal novo recebe com o token novo só o navegador prova (é do `supabase-js`) |
 
+## Defeito 11 (pedido do Rafael depois de abrir a PR): Recebimentos e Painel
+
+Duas queixas ao ver Recebimentos no iPad: (a) o Bloco "Rangel" parece contar o Casal inteiro; (b) o que se marca como pago em Recebimentos "não aparece direito" no Painel nas despesas divididas (Bombinhas). Investigação: os números do Saldo e do Pagamento já estavam certos (a mãe dividida nunca soma, o Pagamento quita as PARTES; provado em `projecoes-pendente.test.ts`), mas as telas não diziam isso.
+
+| Defeito | O que mudou, onde | Teste |
+|---|---|---|
+| 11a: a lista "Ver" mostra o Casal pelo valor cheio e parece que o Rangel deve tudo | `partesDoBloco` (`recebimentos.ts`): parte exata por linha (as partes somam o Saldo); a lista "Ver" mostra "parte do Rangel: R$ 50,00" sob o valor cheio, só quando difere | `recebimentos.test.ts`, `Recebimentos.test.tsx` |
+| 11b: o Painel não refletia o Pagamento | O cartão de Bloco de cobrança do Painel mostra "Falta R$ X" ou "Nada a receber" do Mês (mesmas `pendentesDosLancamentos` e Fórmula de Recebimentos); o cabeçalho da despesa dividida mostra "1 de 2 pagas" ou "Todas pagas" (`resumoDaDivisao`) | `BlocosDoMes.test.tsx`, `GradeLancamentos.test.tsx`, `divisao.test.ts`, `projecoes-pendente.test.ts` |
+
+Ficou de fora: o Pagamento continua pelo valor cheio da linha (o modo "minha parte" cobre pagar menos); não achei um caso em que o Status de uma parte paga não chegasse ao Painel e peço ao Rafael o caso concreto se ainda ver divergência.
+
 ## Migração (só o defeito 1)
 
 `supabase/migrations/20261205120000_parcela_pulada_da_conta.sql`: `alter table public.lancamentos add column excluido_pela_conta boolean not null default false`, uma marcação das linhas que a Conta já tinha excluído (Conta excluída, Meses depois do Encerramento, `parcela_n` acima do total) e três funções refeitas por `create or replace` com a mesma assinatura e os mesmos `grant`. **Não foi aplicada em produção; nenhum `supabase db push` foi rodado.** Compatível com o código antigo e com o novo em qualquer ordem; o Cron das 09:00 nunca responde 500 por causa dela (veja `docs/infraestrutura.md`).

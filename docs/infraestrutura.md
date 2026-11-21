@@ -197,3 +197,6 @@ Uma PR, um commit por defeito (`Defeito N: ...`). Cada seção diz se o defeito 
 
 ### Defeito 10: sair e entrar sem recarregar não deixa dado da sessão anterior (NÃO há migração)
 - Nada a aplicar com `supabase db push`; só código do navegador (`src/data/realtime.ts`, `ZerarAoEntrar` na página de entrar). Nenhuma gravação nem leitura nova. Em produção, depois do deploy, vale uma conferência no navegador: entrar, sair, entrar de novo na mesma aba e ver que a tela carrega do zero.
+
+### Defeito 11: Recebimentos e Painel se entendem (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron não mudam. Só telas e núcleo (`partesDoBloco`, `resumoDaDivisao`), sobre dados que o Painel e Recebimentos já leem; nada é gravado.

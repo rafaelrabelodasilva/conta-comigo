@@ -24,6 +24,7 @@ import {
   idsSelecionaveis,
   listaEmAberto,
   montarCartoesDeCobranca,
+  partesDoBloco,
 } from "@/domain/recebimentos";
 import { resumoDaSelecao } from "@/domain/selecao";
 import { ativos as statusAtivos } from "@/domain/status";
@@ -169,6 +170,11 @@ export function Recebimentos() {
     () => (aberto === undefined ? [] : listaEmAberto(aberto.ids, todos.linhas, pendentes)),
     [aberto, todos.linhas, pendentes],
   );
+  // A parte do Bloco em cada linha (Rangel: Casal ÷ 2), para a lista não parecer contar o Casal inteiro.
+  const partes = useMemo(() => {
+    const formula = aberto === undefined ? undefined : blocos.find((b) => b.id === aberto.id)?.formula;
+    return formula === undefined ? undefined : partesDoBloco(formula, pendentes);
+  }, [aberto, blocos, pendentes]);
   const idsDaLista = useMemo(() => idsSelecionaveis(grupos), [grupos]);
   // A Seleção é sempre um subconjunto do que a lista mostra: o que foi pago (aqui ou noutro aparelho) sai dela.
   const selecionados = selecaoValida(selecao, idsDaLista);
@@ -285,6 +291,7 @@ export function Recebimentos() {
           <ListaEmAberto
             nomeDoBloco={aberto.nome}
             grupos={grupos}
+            partes={partes}
             cadastros={cadastros}
             atrasos={atrasos}
             selecao={selecionados}
