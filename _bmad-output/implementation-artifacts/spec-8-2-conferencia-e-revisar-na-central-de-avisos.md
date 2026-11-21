@@ -2,7 +2,7 @@
 title: 'História 8.2: Conferência e Revisar na Central de Avisos'
 type: 'feature'
 created: '2026-11-19'
-status: 'review'
+status: 'done'
 baseline_commit: '88bb605'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -96,9 +96,9 @@ Hoje 19/11/26. Ciclo: fechamento 28, vencimento 06. Tolerância 10. Nov/26 com R
 - [x] Interface: o hook abre `fatura_cartoes` e a fila; a tela mostra os três tipos; o contador do menu soma (só o hook mudou).
 - [x] Provas: núcleo (a matriz e os testes que amarram a Central, a faixa do Painel e o contador do Revisar), jsdom (a tela, o menu com o hook de verdade, o hook), datas.
 - [x] Docs: `epics.md`, PRD, EXPERIENCE.md, `docs/infraestrutura.md`, `deferred-work.md`, `sprint-status.yaml` (8.2 em `review`).
-- [ ] **CI verde na PR** (`verificar`, `supabase`, "Backup gera e restaura"): por marcar depois do push. Não há migração, então o `supabase` e o backup só repetem o que já passava.
+- [x] **CI verde na PR (#121)** (`verificar`, `supabase`, "Backup gera e restaura" e o preview da Vercel). Não há migração, então o `supabase` e o backup só repetiram o que já passava. Mergeada em 19/11/2026.
 - [ ] **O Rafael, fora do código (pendente):** conferir a Central no iPad e no PC com os dados reais (os avisos de Conferência de Meses antigos, a fila, o contador somado, marcar num aparelho e ver baixar no outro). Não há `db push` a fazer.
-- [ ] `done` no sprint-status só depois do merge, em PR separada (como a #119); o Épico 8 vai a `done` junto, em PR separada.
+- [x] `done` no sprint-status só depois do merge, em PR separada (como a #119); o Épico 8 foi a `done` junto.
 
 ## Verification
 
