@@ -155,3 +155,15 @@ Dois interruptores novos em Configurações → Aparência → grupo "Avisos" (o
 4. Avisar o agente, que confere por SQL que existe 1 usuário confirmado (`select count(*) from auth.users where email_confirmed_at is not null`) e testa que o cadastro é recusado (`signup_disabled`).
 5. Depois do deploy: `/` leva para `/entrar`; entrar, "Sair" e o e-mail de "Esqueci a senha" funcionam.
 - O e-mail de redefinição usa o SMTP padrão do Supabase (limite baixo de envios por hora), suficiente para um usuário só.
+
+## PR de correção dos 10 defeitos do `deferred-work.md`
+
+Uma PR, um commit por defeito (`Defeito N: ...`). Cada seção diz se o defeito tem migração e o que funciona entre o merge e o `db push`.
+
+### Defeito 1: a parcela de Conta excluída à mão não volta (HÁ migração)
+- Arquivo: `supabase/migrations/20261205120000_parcela_pulada_da_conta.sql` (a coluna `lancamentos.excluido_pela_conta boolean not null default false`, a marcação das linhas que a Conta já tinha excluído e três funções refeitas por `create or replace`, com a mesma assinatura e os mesmos `grant`: `materializar_contas_manuais`, `excluir_linhas_da_conta`, `restaurar_conta_manual`). `src/data/database.types.ts` muda. **Ainda não está em produção** (`supabase db push` só quando o Rafael pedir).
+- **O Cron das 09:00 não responde 500 em nenhuma ordem**: ele não lê a coluna nova (lê `contas_manuais` e chama `materializar_contas_manuais_do_dono`, que chama `materializar_contas_manuais`).
+- **Entre o merge e o `db push`:** tudo funciona como antes, inclusive o defeito (o Cron ainda recria a parcela excluída à mão). O Editar e o Encerrar leem as parcelas puladas com uma leitura tolerante: a coluna ainda não existe, a leitura dá erro e a prévia só não desconta as puladas (o banco antigo as recria, como sempre). Nada responde erro.
+- **Depois do `db push`:** a parcela excluída à mão fica excluída; o Editar, o Encerrar e o Cron a respeitam; o "Desfazer" a devolve. As parcelas que o Cron já recriou antes não são consertadas.
+- Aplicar **antes** do merge também é seguro: o código antigo não conhece a coluna, mas o Cron e o Editar já passam a respeitar a exclusão à mão (o Editar antigo manda as mesmas parcelas e o banco novo pula as puladas).
+- Dados novos no backup: nenhum (a coluna tem `default false` e o dump a leva como as outras; `scripts/backup/*` não listam colunas).

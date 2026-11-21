@@ -28,6 +28,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  parcelasPuladas,
   planoDeAlterarConta,
   planoDeEncerrarConta,
   planoDeExcluirConta,
@@ -35,6 +36,7 @@ import {
   type CodigoDoPlano,
   type ContaSalva,
   type LancamentoDaConta,
+  type LinhaExcluidaDaConta,
   type PedidoRestaurarConta,
   type ResumoDoPlano,
   type SerieParaAlterar,
@@ -88,6 +90,8 @@ export type LeituraDaConta = {
   statusQueContam: ReadonlySet<string>;
   /** Os ids dos Lançamentos lidos que têm item de Pagamento não excluído (AD-15, História 6.1): nunca são recriados. */
   comPagamento: ReadonlySet<string>;
+  /** Os `parcela_n` que Rafael pulou (excluiu à mão): o plano não os recria (Defeito 1). */
+  puladas: ReadonlySet<number>;
   serie: SerieParaAlterar;
 };
 
@@ -203,6 +207,37 @@ export function criarRepoContas(deps: {
     }
   }
 
+  /**
+   * Os `parcela_n` pulados da Conta (excluídos à mão do Mês atual em diante, Defeito 1).
+   * Leitura tolerante: se ela falha (por exemplo, o banco ainda sem a coluna
+   * `excluido_pela_conta`, entre o merge e o `db push`), a prévia só não os desconta; quem
+   * decide ao gravar é `materializar_contas_manuais`, que já os pula.
+   */
+  async function lerPuladas(
+    cliente: SupabaseClient<Database>,
+    contaId: string,
+    mesAtual: string,
+    vivas: readonly LancamentoDaConta[],
+  ): Promise<Set<number>> {
+    const excluidas: LinhaExcluidaDaConta[] = [];
+    for (let de = 0; ; de += POR_PAGINA) {
+      const { data, error } = await cliente
+        .from("lancamentos")
+        .select("parcela_n, dividido_de_id, excluido_pela_conta")
+        .eq("conta_manual_id", contaId)
+        .gte("mes", mesAtual)
+        .not("excluido_em", "is", null)
+        .is("dividido_de_id", null)
+        .order("mes")
+        .order("id")
+        .range(de, de + POR_PAGINA - 1);
+      if (error || !data) return new Set();
+      excluidas.push(...data);
+      if (data.length < POR_PAGINA) break;
+    }
+    return parcelasPuladas(excluidas, vivas);
+  }
+
   /** Dos ids dados, os que têm item de Pagamento não excluído (em blocos: o endereço da requisição tem limite). */
   async function lerIdsComPagamento(cliente: SupabaseClient<Database>, ids: readonly string[]): Promise<Set<string> | null> {
     const com = new Set<string>();
@@ -259,7 +294,8 @@ export function criarRepoContas(deps: {
     if (!existentes || !statusQueContam || !serie) return FALHOU;
     const comPagamento = await lerIdsComPagamento(cliente, existentes.map((l) => l.id));
     if (!comPagamento) return FALHOU;
-    return { ok: true, existentes, statusQueContam, comPagamento, serie };
+    const puladas = await lerPuladas(cliente, conta.id, mesAtual, existentes);
+    return { ok: true, existentes, statusQueContam, comPagamento, puladas, serie };
   }
 
   /** Chama a RPC de uma alteração e aplica a resposta nos gerenciadores. */
@@ -358,6 +394,7 @@ export function criarRepoContas(deps: {
             statusQueContam: l.statusQueContam,
             existentes: l.existentes,
             comPagamento: l.comPagamento,
+            puladas: l.puladas,
           }),
         nova,
       );
@@ -377,6 +414,7 @@ export function criarRepoContas(deps: {
             statusQueContam: l.statusQueContam,
             existentes: l.existentes,
             comPagamento: l.comPagamento,
+            puladas: l.puladas,
           }),
         null,
       );

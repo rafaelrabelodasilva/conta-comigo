@@ -3,6 +3,7 @@ import {
   chaveDaSerieAlterada,
   lerContaSalva,
   mesPadraoDoEncerramento,
+  parcelasPuladas,
   parcelasRecriaveis,
   pedidoRestaurarConta,
   planoDeAlterarConta,
@@ -186,6 +187,37 @@ describe("parcelasRecriaveis: a regra única", () => {
   });
 });
 
+describe("parcelasPuladas: a parcela que Rafael excluiu à mão não volta (Defeito 1)", () => {
+  const excl = (n: number | null, extra: { dividido_de_id?: string | null; excluido_pela_conta?: boolean } = {}) => ({
+    parcela_n: n,
+    dividido_de_id: null,
+    excluido_pela_conta: false,
+    ...extra,
+  });
+
+  it("a mãe excluída sem a marca da Conta é pulada", () => {
+    expect([...parcelasPuladas([excl(4)])]).toEqual([4]);
+  });
+
+  it("a excluída pela Conta (Editar, Encerrar, Excluir a Conta) não é pulada: o Editar a recria e o Encerrar estendido a devolve", () => {
+    expect([...parcelasPuladas([excl(4, { excluido_pela_conta: true })])]).toEqual([]);
+  });
+
+  it("filha excluída e linha sem parcela_n não contam (só a mãe da parcela)", () => {
+    expect([...parcelasPuladas([excl(4, { dividido_de_id: "m4" }), excl(null)])]).toEqual([]);
+  });
+
+  it("se já há uma mãe viva com o mesmo n (o Desfazer, ou o Editar recriou), o n está ocupado e não é pulado", () => {
+    expect([...parcelasPuladas([excl(4), excl(5)], [mae("m4", "2026-12", 4)])]).toEqual([5]);
+  });
+
+  it("Desfazer: a linha deixa de estar excluída, então a parcela deixa de ser pulada", () => {
+    // Antes do Desfazer: pulada. Depois: a linha volta como viva e ocupa o n.
+    expect([...parcelasPuladas([excl(4)])]).toEqual([4]);
+    expect([...parcelasPuladas([], [mae("m4", "2026-12", 4)])]).toEqual([]);
+  });
+});
+
 describe("planoDeAlterarConta (Editar)", () => {
   it("troca o Valor: exclui as recriáveis (mãe e filhas), cria de novo do Mês atual ao horizonte e mantém as paga/editada, sem tocar nos Meses anteriores", () => {
     const salva = salvaDe(SILVIA, "c1");
@@ -332,6 +364,31 @@ describe("validarEncerramento e planoDeEncerrarConta", () => {
     expect(validarEncerramento(ja, "2027-03", MES)).toBe("conta.encerrar_sem_efeito");
     // Um Mês depois do encerramento que já existe estende a Conta (válido).
     expect(validarEncerramento(ja, "2027-06", MES)).toBeNull();
+  });
+
+  it("Editar não recria a parcela pulada (Dez/26) nem a conta na prévia; as outras entram", () => {
+    const salva = salvaDe(SILVIA, "c1");
+    const nova = conta({ ...SILVIA, valor: "450,00" }, "c1");
+    // Rafael excluiu Dez/26 (n=4) à mão: nenhuma mãe viva a ocupa.
+    const vivas = silviaVivas().filter((l) => l.id !== "s4");
+    const plano = planoDeAlterarConta(salva, nova, serie(), entrada(vivas, { puladas: parcelasPuladas([{ parcela_n: 4, dividido_de_id: null, excluido_pela_conta: false }], vivas) }));
+    if (!plano.ok) throw new Error("plano");
+    expect(plano.pedido.parcelas.map((p) => p.parcela_n)).not.toContain(4);
+    expect(plano.resumo.criadas).toBe(12);
+    // Sem o conjunto das puladas (o banco antigo), o plano a preencheria como buraco.
+    const sem = planoDeAlterarConta(salva, nova, serie(), entrada(vivas));
+    if (!sem.ok) throw new Error("plano");
+    expect(sem.pedido.parcelas.map((p) => p.parcela_n)).toContain(4);
+  });
+
+  it("Encerrar estendido não devolve a parcela pulada: só as que o Encerrar excluiu voltam", () => {
+    // Conta encerrada em Fev/27; Rafael estende para Jun/27. Dez/26 (n=4) foi excluída à mão.
+    const salva = salvaDe(SILVIA, "c1", { encerrada_em_mes: "2027-02" });
+    const vivas = silviaVivas().filter((l) => l.id !== "s4" && Number(l.id.slice(1)) <= 6);
+    const plano = planoDeEncerrarConta(salva, serie(), "2027-06", entrada(vivas, { puladas: new Set([4]) }));
+    if (!plano.ok) throw new Error("plano");
+    expect(plano.pedido.parcelas.map((p) => p.parcela_n)).not.toContain(4);
+    expect(plano.pedido.parcelas.map((p) => p.parcela_n)).toContain(7);
   });
 
   it("Encerrar em Jan/27: exclui as recriáveis de Jan/27 em diante, mantém a paga e não cria nada", () => {

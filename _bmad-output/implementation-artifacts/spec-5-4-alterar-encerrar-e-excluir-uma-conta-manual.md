@@ -145,7 +145,7 @@ Revisão inline do agente de implementação; nenhum revisor independente rodou.
 | Outro aparelho paga uma parcela depois da leitura e a alteração a excluiria | corrigido | `updated_at` de cada linha conferido na RPC (`conta.mudou`) |
 | `restaurar_conta_manual` zerava a Conta quando ela já estava viva | corrigido | relê a Conta depois do `UPDATE` (cenário no pglite) |
 | `ContasManuais` chamava `setState` dentro do efeito de leitura | corrigido | a leitura guarda a ação a que pertence (lint `react-hooks/set-state-in-effect`) |
-| O cron recria uma parcela excluída à mão no Painel | adiado | `deferred-work.md` (fora de escopo: materialização diária) |
+| O cron recria uma parcela excluída à mão no Painel | adiado; **revista na PR de correção dos 10 defeitos (defeito 1): corrigido** | a parcela excluída à mão fica excluída (`excluido_pela_conta`, migração `20261205120000_parcela_pulada_da_conta.sql`); ver `spec-correcao-10-defeitos.md` |
 | Não há "Reabrir" de uma Conta que já terminou | adiado | `deferred-work.md` |
 | Duas transações realmente concorrentes não são testadas | aceito | só a semântica das travas; `deferred-work.md` |
 
