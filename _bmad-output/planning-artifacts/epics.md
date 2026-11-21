@@ -1601,7 +1601,7 @@ As a Rafael,
 I want a diferença da Conferência e a fila do Revisar também na Central de Avisos,
 So that eu não precise abrir cada tela para saber o que precisa de mim (FR-55 revisado).
 
-**Status:** review (spec: `spec-8-2-conferencia-e-revisar-na-central-de-avisos.md`). A 8.1 deixou o formato dos avisos extensível por `tipo` (`avisos_lidos.tipo` é livre e a chave do aviso é `tipo, referencia, dia`); a 8.2 o usa **sem migração**. Os dois tipos novos existem só dentro do app: o Cron, a notificação do sistema e `lembretes_enviados` não mudam.
+**Status:** done (spec: `spec-8-2-conferencia-e-revisar-na-central-de-avisos.md`). A 8.1 deixou o formato dos avisos extensível por `tipo` (`avisos_lidos.tipo` é livre e a chave do aviso é `tipo, referencia, dia`); a 8.2 o usa **sem migração**. Os dois tipos novos existem só dentro do app: o Cron, a notificação do sistema e `lembretes_enviados` não mudam.
 
 **Acceptance Criteria:**
 
