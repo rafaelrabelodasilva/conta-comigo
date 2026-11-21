@@ -92,6 +92,12 @@ export type Gerenciador<L extends LinhaBase> = {
   abrirMes(mes: string): void;
   /** O Mês aberto (null sem Mês aberto ou fora do escopo por Mês). */
   mesAberto(): string | null;
+  /**
+   * Esquece tudo da sessão que acabou (Defeito 10): esvazia a memória (volta a "carregando"), solta a leitura em curso
+   * e fecha o canal, que levava o token de quem saiu. O gerenciador continua o MESMO objeto (os repositórios guardam a
+   * referência). Se ainda há quem o assine (troca de sessão com a tela aberta), abre um canal novo, com a sessão de agora.
+   */
+  zerar(): Promise<void>;
 };
 
 /** O corte do PostgREST: uma página lida por vez. */
@@ -234,6 +240,8 @@ export function criarGerenciador<L extends LinhaBase>(opcoes: {
       "postgres_changes",
       { event: "*", schema: "public", table: tabela },
       (payload) => {
+        // Evento atrasado de um canal que já foi trocado ou zerado (outra sessão): ignora.
+        if (canal !== novo) return;
         const evento: EventoRealtime<L> | null =
           payload.eventType === "DELETE"
             ? { tipo: "DELETE", antiga: payload.old as Partial<L> & { id: string } }
@@ -361,6 +369,25 @@ export function criarGerenciador<L extends LinhaBase>(opcoes: {
       else if (canal && caiu) void reabrirCanal();
     },
     mesAberto: () => (porMes ? mes : null),
+    async zerar() {
+      // A leitura em curso (da sessão anterior) deixa de valer e nada aplicado durante ela sobrevive.
+      leitura++;
+      aplicadasDurante.clear();
+      const cliente = obterCliente();
+      const antigo = canal;
+      canal = null;
+      conectado = false;
+      caiu = false;
+      estado = estadoInicial<L>();
+      retrato = comMes({ status: estado.status, linhas: [] });
+      for (const ouvinte of ouvintes) ouvinte();
+      try {
+        if (cliente && antigo) await cliente.removeChannel(antigo);
+      } catch {
+        // Canal antigo já morto: segue.
+      }
+      if (ouvintes.size > 0 && canal === null) abrirCanal();
+    },
   };
 }
 
@@ -370,6 +397,15 @@ let ligadoAoDetector = false;
 /** Relê todos os gerenciadores já criados (a conexão voltou). */
 export async function recarregarTodos(): Promise<void> {
   await Promise.all([...gerenciadores.values()].map((g) => g.recarregar()));
+}
+
+/**
+ * Zera todos os gerenciadores (Defeito 10): quem entra depois de "Sair" (uma Server Action com `redirect`, que NÃO
+ * recarrega a página) não vê dado da sessão anterior e não ouve canal com o token dela. Chamada pela página de entrar
+ * (`ZerarAoEntrar`), onde se chega depois de sair ou de a sessão expirar. Os objetos continuam os mesmos.
+ */
+export async function zerarGerenciadores(): Promise<void> {
+  await Promise.all([...gerenciadores.values()].map((g) => g.zerar()));
 }
 
 /** Liga, uma vez, a releitura de todos os gerenciadores à volta da conexão. */

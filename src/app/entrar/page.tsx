@@ -7,6 +7,7 @@ import { codigoDoMotivo, destinoSeguro } from "@/data/supabase/sessao";
 import { temSessao } from "@/data/supabase/servidor";
 import { FormularioEntrar } from "@/features/entrar/FormularioEntrar";
 import { FormularioEsqueci } from "@/features/entrar/FormularioEsqueci";
+import { ZerarAoEntrar } from "@/features/entrar/ZerarAoEntrar";
 
 export const metadata: Metadata = { title: "Entrar · Conta Comigo" };
 
@@ -34,6 +35,8 @@ export default async function PaginaEntrar({ searchParams }: { searchParams: Bus
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center p-4">
+      {/* Depois de sair (o redirect do Sair não recarrega a página), a memória dos dados da sessão anterior é zerada (Defeito 10). */}
+      <ZerarAoEntrar />
       <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-lg border border-border bg-surface p-6">
         <h1 className="texto-title">Conta Comigo</h1>
 
