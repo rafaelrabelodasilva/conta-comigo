@@ -2297,6 +2297,14 @@ export const TEXTOS_HERO = {
   abrir_recebimentos: "abrir Recebimentos",
 } as const;
 
+/**
+ * Quando um Bloco de cobrança não calcula (Fórmula inválida), o "Falta receber" do hero não o soma e
+ * diz isso em texto (Defeito 4), em vez de calar: "1 Bloco não entrou na soma".
+ */
+export function rotuloBlocosForaDaSoma(n: number): string {
+  return n === 1 ? "1 Bloco não entrou na soma" : `${n} Blocos não entraram na soma`;
+}
+
 /** "Falta receber R$ 636,00, abrir Recebimentos". */
 export function rotuloFaltaReceber(valor: string): string {
   return `${TEXTOS_HERO.falta_receber} ${valor}, ${TEXTOS_HERO.abrir_recebimentos}`;

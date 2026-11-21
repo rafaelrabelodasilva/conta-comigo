@@ -173,3 +173,6 @@ Uma PR, um commit por defeito (`Defeito N: ...`). Cada seção diz se o defeito 
 
 ### Defeito 3: o histórico da planilha não é atraso nem dívida (NÃO há migração)
 - Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron (a rota, a tabela e a chave) não mudam. É só uma regra do núcleo (`ehLinhaDeHistorico`) usada por `podeAtrasar` e `separarPendentes`. O **Cron das 09:00** usa as mesmas funções do navegador (`lembretesDasLinhas`): depois do deploy ele deixa de avisar atraso de linha do histórico. Nenhum aviso já enviado muda e nada é gravado.
+
+### Defeito 4: o "Falta receber" do hero não soma a mesma linha duas vezes (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron não mudam. É uma conta do núcleo (`faltaReceberDoMes`) sobre o que o Painel já lê; nada é gravado.

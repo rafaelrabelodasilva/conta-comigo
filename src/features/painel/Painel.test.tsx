@@ -3479,6 +3479,42 @@ describe("Recebimentos no hero (História 6.5, FR-26)", () => {
     expect(sem(faltaReceber("R$ 170,00").textContent)).toBe("Falta receberR$ 170,00");
   });
 
+  it("dois Blocos que citam a mesma linha ('Casal' e 'Casal ÷ 2') não somam a linha duas vezes (Defeito 4)", () => {
+    const metade = deCobranca(
+      "b-metade",
+      "Casal ÷ 2",
+      { tipo: "operacao", operacao: "divisao", esquerda: { tipo: "responsavel", id: "r-casal" }, direita: { tipo: "numero", valor: "2" } },
+      { ordem: 3 },
+    );
+    novembroDeCobranca([], [casal, rafael, metade]);
+    renderizar();
+    // Casal R$ 100,00 (a linha do Casal entra uma vez) + Rafael R$ 70,00; o "Casal ÷ 2" já não tem o que somar.
+    expect(sem(faltaReceber("R$ 170,00").textContent)).toBe("Falta receberR$ 170,00");
+    expect(within(hero()).queryByText(/não entr/)).toBeNull();
+  });
+
+  it("um Bloco que não calcula fica fora da soma e o hero diz isso em texto (Defeito 4)", () => {
+    const quebrado = deCobranca(
+      "b-quebrado",
+      "Quebrado",
+      { tipo: "operacao", operacao: "divisao", esquerda: { tipo: "responsavel", id: "r-casal" }, direita: { tipo: "numero", valor: "0" } },
+      { ordem: 3 },
+    );
+    novembroDeCobranca([], [casal, rafael, quebrado]);
+    renderizar();
+    expect(sem(faltaReceber("R$ 170,00").textContent)).toBe("Falta receberR$ 170,00");
+    expect(within(hero()).getByText("1 Bloco não entrou na soma")).toBeTruthy();
+  });
+
+  it("todos os Blocos de cobrança sem calcular: '—' (nunca R$ 0,00) e o texto diz quantos ficaram fora", () => {
+    const q = (id: string, ordem: number) =>
+      deCobranca(id, id, { tipo: "operacao", operacao: "divisao", esquerda: { tipo: "responsavel", id: "r-casal" }, direita: { tipo: "numero", valor: "0" } }, { ordem });
+    novembroDeCobranca([], [q("b-q1", 1), q("b-q2", 2)]);
+    renderizar();
+    expect(sem(faltaReceber("—").textContent)).toBe("Falta receber—");
+    expect(within(hero()).getByText("2 Blocos não entraram na soma")).toBeTruthy();
+  });
+
   it("tocar em 'Falta receber' abre Recebimentos", async () => {
     novembroDeCobranca();
     renderizar();

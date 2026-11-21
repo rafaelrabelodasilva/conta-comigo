@@ -413,7 +413,9 @@ export function Painel({
         : null;
     return {
       recebidoCentavos: pagamentos.status === "pronto" ? recebidoNoMes(pagamentos.linhas, mesAberto) : null,
-      faltaCentavos: falta === null || falta.blocos === 0 ? null : falta.totalCentavos,
+      // Nenhum Bloco calculou (todos com Fórmula inválida): "—", nunca R$ 0,00 (Defeito 4).
+      faltaCentavos: falta === null || falta.blocos === 0 || falta.semValor === falta.blocos ? null : falta.totalCentavos,
+      blocosForaDaSoma: falta === null ? 0 : falta.semValor,
     };
   }, [pendentesDoMes, blocosLidos.status, status.status, blocos, pagamentos.status, pagamentos.linhas, mesAberto]);
   const modeloDaMensagem = useMemo(
