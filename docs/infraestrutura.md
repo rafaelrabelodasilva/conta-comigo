@@ -176,3 +176,6 @@ Uma PR, um commit por defeito (`Defeito N: ...`). Cada seção diz se o defeito 
 
 ### Defeito 4: o "Falta receber" do hero não soma a mesma linha duas vezes (NÃO há migração)
 - Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron não mudam. É uma conta do núcleo (`faltaReceberDoMes`) sobre o que o Painel já lê; nada é gravado.
+
+### Defeito 5: dispensar a Conferência não traz o aviso do Revisar de volta (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron não mudam. A chave do aviso do Revisar (`avisos_lidos`: `revisar`, `fila`, dia) passa a usar o `created_at` das Faturas e de `fatura_cartoes`, que o gerenciador de Realtime da Central já lê. **Uma vez depois do deploy**, quem já tinha lido o aviso do Revisar pode vê-lo voltar como "Novo" (a chave muda de dia); nada é apagado e as linhas antigas de `avisos_lidos` ficam.

@@ -108,6 +108,7 @@ const fatura = (mes: string, vencimento: string, extra: Record<string, unknown> 
   total_despesas_centavos: 0,
   total_creditos_centavos: 0,
   alerta_dispensado_em: null,
+  created_at: "2026-11-18T12:00:00Z",
   updated_at: "2026-11-18T12:00:00Z",
   ...extra,
 });
@@ -579,7 +580,7 @@ describe("Central de Avisos: a diferença da Conferência e a fila do Revisar", 
       fatura("2026-10", "2026-10-06"),
       fatura("2026-11", "2026-11-06", { total_despesas_centavos: 100_000, ...extra }),
     ]);
-    guardar("fatura_cartoes", [{ fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000 }]);
+    guardar("fatura_cartoes", [{ fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000, created_at: "2026-11-18T12:00:00Z" }]);
     guardar("lancamentos", [
       ...LANCAMENTOS_DOS_QUATRO,
       lancamento("lf", "ninguem", 28_000, { mes: "2026-11", status_id: PAGO, fatura_id: "f-2026-11", final_cartao: "8673" }),
@@ -630,7 +631,7 @@ describe("Central de Avisos: a diferença da Conferência e a fila do Revisar", 
   it("a ordem: Conferência, Revisar, fechamento, atraso por Bloco; o resumo conta tudo e os atrasos à parte", () => {
     hoje("2026-10-28");
     guardar("faturas", [fatura("2026-10", "2026-10-06", { total_despesas_centavos: 100_000 })]);
-    guardar("fatura_cartoes", [{ fatura_id: "f-2026-10", final: "8673", total_centavos: 100_000 }]);
+    guardar("fatura_cartoes", [{ fatura_id: "f-2026-10", final: "8673", total_centavos: 100_000, created_at: "2026-11-18T12:00:00Z" }]);
     guardar("lancamentos", [
       ...LANCAMENTOS_DOS_QUATRO,
       lancamento("lf", "ninguem", 28_000, { status_id: PAGO, fatura_id: "f-2026-10", final_cartao: "8673" }),
@@ -727,7 +728,7 @@ describe("Central de Avisos: a diferença da Conferência e a fila do Revisar", 
     expect(sem(linhas()[0].textContent)).toContain("R$ 700,00 abaixo");
     expect(within(linhas()[0]).getByText(T.estado_novo)).toBeTruthy();
     // Reimportou a Fatura (outro dia): o Revisar volta como Novo.
-    comDiferenca({ updated_at: "2026-11-19T12:00:00Z" });
+    comDiferenca({ created_at: "2026-11-19T12:00:00Z", updated_at: "2026-11-19T12:00:00Z" });
     mudou();
     const doRevisar = linhas().find((li) => sem(li.textContent).includes("para revisar"))!;
     expect(within(doRevisar).getByText(T.estado_novo)).toBeTruthy();
@@ -750,7 +751,7 @@ describe("Central de Avisos: Dispensar a Conferência e os interruptores (Histó
       fatura("2026-10", "2026-10-06"),
       fatura("2026-11", "2026-11-06", { total_despesas_centavos: 100_000, ...extra }),
     ]);
-    guardar("fatura_cartoes", [{ fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000 }]);
+    guardar("fatura_cartoes", [{ fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000, created_at: "2026-11-18T12:00:00Z" }]);
     guardar("lancamentos", [
       ...LANCAMENTOS_DOS_QUATRO,
       lancamento("lf", "ninguem", 28_000, { mes: "2026-11", status_id: PAGO, fatura_id: "f-2026-11", final_cartao: "8673" }),
@@ -824,6 +825,37 @@ describe("Central de Avisos: Dispensar a Conferência e os interruptores (Histó
       expect(within(conferencia).getByText(T.estado_lido)).toBeTruthy();
       expect(within(conferencia).queryByRole("button", { name: /^Marcar como lido/ })).toBeNull();
       expect(within(conferencia).getByRole("button", { name: /^Dispensar: / })).toBeTruthy();
+    });
+  });
+
+  describe("Dispensar não traz o aviso do Revisar de volta (Defeito 5)", () => {
+    // O gatilho do banco sobe `faturas.updated_at` em qualquer UPDATE da Fatura, inclusive o de `alerta_dispensado_em`.
+    const comoOBanco = (valor: string | null, quando: string) => async (id: string) => {
+      guardar(
+        "faturas",
+        (falso.banco.faturas as { id: string }[]).map((f) =>
+          f.id === id ? { ...f, alerta_dispensado_em: valor, updated_at: quando } : f,
+        ),
+      );
+      mudou();
+      return { ok: true };
+    };
+
+    it("com o aviso do Revisar já lido, dispensar a Conferência (e o Desfazer) num dia diferente do da importação não o faz voltar como 'Novo'", async () => {
+      comDiferenca();
+      guardar("fila", naFila(3));
+      // O aviso do Revisar foi lido: a chave é o dia da importação (18/11, o `created_at` da Fatura e dos cartões).
+      guardar("avisos_lidos", [lidaDe("revisar", "fila", "2026-11-18")]);
+      falso.dispensarAlerta.mockImplementation(comoOBanco("2026-11-25T15:00:00Z", "2026-11-25T15:00:00Z"));
+      falso.desfazerDispensa.mockImplementation(comoOBanco(null, "2026-11-25T15:01:00Z"));
+      const usuario = montar();
+      expect(within(linhaDoTipo("para revisar")).queryByText(T.estado_novo)).toBeNull();
+      await usuario.click(botoesDeDispensar()[0]);
+      // A linha da Conferência sai (6 avisos viram 5) e a do Revisar segue lida.
+      expect(linhas()).toHaveLength(5);
+      expect(within(linhaDoTipo("para revisar")).queryByText(T.estado_novo)).toBeNull();
+      await usuario.click(await screen.findByRole("button", { name: "Desfazer" }));
+      expect(within(linhaDoTipo("para revisar")).queryByText(T.estado_novo)).toBeNull();
     });
   });
 
@@ -919,8 +951,8 @@ describe("Central de Avisos: Dispensar a Conferência e os interruptores (Histó
         fatura("2026-11", "2026-11-06", { total_despesas_centavos: 100_000 }),
       ]);
       guardar("fatura_cartoes", [
-        { fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000 },
-        { fatura_id: "f-2026-10", final: "8673", total_centavos: 50_000 },
+        { fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000, created_at: "2026-11-18T12:00:00Z" },
+        { fatura_id: "f-2026-10", final: "8673", total_centavos: 50_000, created_at: "2026-11-18T12:00:00Z" },
       ]);
       const usuario = montar();
       expect(botoesDeDispensar()).toHaveLength(2);

@@ -383,9 +383,9 @@ const NOV = {
   fechamento: "2026-10-28",
   vencimento: "2026-11-06",
   alerta_dispensado_em: null as string | null,
-  updated_at: "2026-11-18T12:00:00Z",
+  created_at: "2026-11-18T12:00:00Z",
 };
-const cartoesNov = [{ fatura_id: NOV.id, final: "8673", total_centavos: 100_000 }];
+const cartoesNov = [{ fatura_id: NOV.id, final: "8673", total_centavos: 100_000, created_at: "2026-11-18T12:00:00Z" }];
 const lancNov = (valor: number, extra: Record<string, unknown> = {}) => ({
   fatura_id: NOV.id,
   valor_centavos: valor,
@@ -477,7 +477,8 @@ describe("avisosDaCentral: os três tipos", () => {
     // A fila zera e enche de novo sem importação: continua lido.
     expect(emRevisao(avisosDaCentral(origens({ itensNaFila: 2 }), lidos))?.lido).toBe(true);
     // Reimportou: outro dia, volta como não lido.
-    const reimportada = { ...NOV, updated_at: "2026-11-20T12:00:00Z" };
+    // (a reimportação apaga e grava os cartões de novo: o `created_at` deles sobe; o da Fatura também entra na chave)
+    const reimportada = { ...NOV, created_at: "2026-11-20T12:00:00Z" };
     expect(emRevisao(avisosDaCentral(origens({ faturas: [reimportada] }), lidos))?.lido).toBe(false);
   });
 
