@@ -224,7 +224,7 @@ Total: R$ 2.819,68
 | **Verificar** | Grade | Bolinha `{colors.verify}` antes do Nome. Some sozinha quando a Conferência bate. |
 | **Previsto** | Grade, Previsão | Selo "Previsto" junto do Nome, com o texto um pouco mais claro. |
 | **Programada** | Grade, Recebimentos | Selo "Programada · 06/04/27". |
-| **Não pago · Pago · Pago parcialmente · Atrasado** | Grade, Recebimentos | Selo de Status. "Pago parcialmente" mostra "falta R$ X" no painel do Lançamento. "Atrasado" é calculado (vencimento + tolerância, padrão 10 dias, FR-49) e substitui "Não pago". |
+| **Não pago · Pago · Pago parcialmente · Atrasado** | Grade, Recebimentos | Selo de Status. "Pago parcialmente" mostra "falta R$ X" no painel do Lançamento. "Atrasado" é calculado (vencimento + tolerância, padrão 10 dias, FR-49) e substitui "Não pago". As linhas do histórico da planilha nunca ficam "Atrasado" e nunca entram no Saldo pendente nem em Recebimentos (são registro; o Status delas não vira cobrança). |
 | **Salvando / Salvo / Não salvo** | Painel do Lançamento, formulários | Indicador discreto no topo do painel. Se a gravação falhar, o campo volta ao valor anterior e aparece "Não foi possível salvar. Tente de novo", com o botão "Tentar de novo". Nada fica pendente no aparelho. |
 | **Conflito entre aparelhos** | Painel do Lançamento | Como só se grava com internet, a última gravação vale, e o outro aparelho recebe a mudança na hora. Se o Lançamento aberto mudar, aparece a faixa "Este lançamento foi alterado em outro aparelho às 21:30". |
 | **Atualização vinda de outro aparelho** | Todas as telas | Os números mudam na hora, sem recarregar (FR-46). |

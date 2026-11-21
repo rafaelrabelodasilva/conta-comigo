@@ -3334,8 +3334,12 @@ describe("Atrasado (História 6.4, FR-49, UX-DR22)", () => {
   });
 
   it("um Mês sem Fatura usa o vencimento do Ciclo; sem Ciclo, ninguém atrasa e nada quebra", () => {
-    const historico = [lanc("2026-11", { id: "h1", nome: "ALUGUEL", valor_centavos: 90_000, lancado_por: "historico", fatura_id: null })];
-    definir({ faturas: [], lancamentos: historico });
+    // "ALUGUEL" é um lançamento feito à mão; "PLANILHA" é do histórico da planilha (Defeito 3: nunca atrasa).
+    const doMes = [
+      lanc("2026-11", { id: "h1", nome: "ALUGUEL", valor_centavos: 90_000, lancado_por: "manual", fatura_id: null }),
+      lanc("2026-11", { id: "h2", nome: "PLANILHA", valor_centavos: 50_000, lancado_por: "historico", fatura_id: null }),
+    ];
+    definir({ faturas: [], lancamentos: doMes });
     em("2026-11-17T15:00:00Z");
     const { unmount } = renderizar();
     expect(selo("ALUGUEL", "Atrasado")).toBeNull();
@@ -3344,6 +3348,9 @@ describe("Atrasado (História 6.4, FR-49, UX-DR22)", () => {
     noBanco({ config_ciclo: ciclo });
     renderizar();
     expect(selo("ALUGUEL", "Atrasado")).toBeTruthy();
+    // O histórico da planilha, com o Ciclo e o Status "Não pago", continua sem o selo "Atrasado".
+    expect(selo("PLANILHA", "Atrasado")).toBeNull();
+    expect(selo("PLANILHA", "Não pago")).toBeTruthy();
   });
 
   it("'Pago parcialmente' mantém o selo e ganha o Atrasado ao lado (o que falta é o que venceu)", () => {

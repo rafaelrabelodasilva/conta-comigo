@@ -170,3 +170,6 @@ Uma PR, um commit por defeito (`Defeito N: ...`). Cada seção diz se o defeito 
 
 ### Defeito 2: Fatura ou Conta num Mês que já tem histórico da planilha (NÃO há migração)
 - Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron não mudam. O aviso é calculado no navegador (núcleo `src/domain/historico-do-mes.ts`) sobre linhas que já existem: o passo 3 da importação reaproveita a leitura do Mês que já fazia (`lerPrevistosDoMes`), e o formulário de Conta nova lê só as linhas `historico` vivas de `lancamentos` do "Começa em" em diante (paginado, RLS por dono). Nada é gravado nem apagado pelo aviso.
+
+### Defeito 3: o histórico da planilha não é atraso nem dívida (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron (a rota, a tabela e a chave) não mudam. É só uma regra do núcleo (`ehLinhaDeHistorico`) usada por `podeAtrasar` e `separarPendentes`. O **Cron das 09:00** usa as mesmas funções do navegador (`lembretesDasLinhas`): depois do deploy ele deixa de avisar atraso de linha do histórico. Nenhum aviso já enviado muda e nada é gravado.

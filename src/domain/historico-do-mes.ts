@@ -27,6 +27,20 @@ export type MesComHistorico = { mes: string; quantidade: number };
 const ehHistoricoVivo = (l: LinhaParaHistorico): boolean =>
   l.lancado_por === "historico" && l.excluido_em === null && (l.dividido_de_id ?? null) === null;
 
+/**
+ * A linha veio da planilha (`lancado_por = 'historico'`)? É a regra única do Defeito 3: o histórico NÃO
+ * entra no atraso (`podeAtrasar`), no Saldo pendente (`separarPendentes`) nem, por consequência, nos
+ * cartões de Recebimentos, nos Meses em aberto, no lembrete de atraso e no Cron (AD-10: as três contas
+ * concordam porque usam esta). A importação só marca como pago o Status de nome "Pago", então um Mês
+ * antigo cheio de "Não pago" apareceria em vermelho e como dívida, sem ser. Decisão: excluir o
+ * histórico dessas contas, e não marcá-lo como pago na importação (isso reescreveria dado do Rafael).
+ * O histórico segue somando onde a soma é "tudo" (o total do Mês, FR-26, a Previsão, o Meu gasto).
+ * O histórico é registro do que já passou, não cobrança em aberto.
+ */
+export function ehLinhaDeHistorico(l: { lancado_por?: string }): boolean {
+  return l.lancado_por === "historico";
+}
+
 /** Quantos lançamentos vivos do histórico da planilha há em `mes` (0: o Mês não tem histórico). */
 export function historicoDoMes(linhas: readonly LinhaParaHistorico[], mes: string): number {
   return linhas.filter((l) => l.mes === mes && ehHistoricoVivo(l)).length;

@@ -12,6 +12,7 @@
 
 import { dividaAindaNaoVence } from "./divida";
 import { ehMaeDividida, unidadesDoMes } from "./divisao";
+import { ehLinhaDeHistorico } from "./historico-do-mes";
 import {
   avaliar,
   nomeDoOperando,
@@ -487,7 +488,10 @@ export type LinhaPendente = {
  *   porque ainda não são o que se cobra), pagos, zerados, a mãe dividida e a Dívida programada
  *   ainda não vencida (6.6, `dividaAindaNaoVence`: a mesma regra da mensagem; ela aparece em "A
  *   receber"). As linhas excluídas sem Pagamento nunca entram.
- * - O histórico da planilha (3.10) não é previsto: entra se o Status dele não conta como pago.
+ * - O histórico da planilha (3.10) também fica fora (Defeito 3, `ehLinhaDeHistorico`: a mesma regra do
+ *   atraso): a importação só marca como pago o nome "Pago", e um Mês antigo cheio de "Não pago" virava
+ *   dívida de verdade no Saldo. Antes (6.4, decisão 14; 6.5, decisão 9) entrava se o Status não contava
+ *   como pago. Uma linha do histórico excluída com item de Pagamento ainda vira crédito (o dinheiro entrou).
  */
 export function pendentesDosLancamentos(
   lancamentos: readonly LancamentoParaPendente[],
@@ -527,6 +531,8 @@ export function separarPendentes(
       continue;
     }
     if (ehMaeDividida(l)) continue;
+    // O histórico da planilha (3.10) é registro, não dívida (Defeito 3): nunca está "em aberto".
+    if (ehLinhaDeHistorico(l)) continue;
     const temFatura = opcoes.mesesComFatura === undefined || opcoes.mesesComFatura.has(l.mes);
     if (
       l.lancado_por !== undefined &&

@@ -183,6 +183,16 @@ describe("o que nunca atrasa", () => {
     expect(atrasado(tarde, 10, manual, comFatura)).toBe(true);
   });
 
+  it("histórico da planilha (Defeito 3): um Mês antigo com Status 'Não pago' não atrasa, nem no limite de anos depois", () => {
+    const historico = lanc({ mes: "2026-03", lancado_por: "historico" });
+    expect(atrasado("2030-01-01", 10, historico)).toBe(false);
+    expect(primeiroDiaDeAtraso(historico, 10, ctx())).toBeNull();
+    expect(podeAtrasar(historico, ctx())).toBe(false);
+    expect(atrasosDasLinhas([historico, lanc({ id: "real", mes: "2026-03" })], "2026-12-31", 10, ctx()).size).toBe(1);
+    // Com a Fatura do Mês importada por cima, a linha da Fatura segue atrasando; o histórico, não.
+    expect(atrasosDasLinhas([historico], "2026-12-31", 10, ctx({ vencimentosDasFaturas: new Map([["2026-03", "2026-03-06"]]) })).size).toBe(0);
+  });
+
   it("Lançamento feito à mão (sem Conta manual) num Mês sem Fatura atrasa", () => {
     const aMao = lanc({ lancado_por: "manual", conta_manual_id: null });
     expect(atrasado(tarde, 10, aMao, ctx({ vencimentosDasFaturas: new Map() }))).toBe(true);

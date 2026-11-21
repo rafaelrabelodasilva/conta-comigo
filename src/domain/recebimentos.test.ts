@@ -189,6 +189,21 @@ describe("os cartões com o atraso do núcleo (6.4), de todos os Meses", () => {
     expect(c).toMatchObject({ situacao: "atrasado", atrasadoDesde: "2026-09-17" });
   });
 
+  it("um Mês só de histórico da planilha com Status 'Não pago' não vira dívida nem atraso: o cartão fica 'Em dia' e os três concordam (Defeito 3, AD-10)", () => {
+    const historico = [
+      lancamento("h1", { mes: "2026-03", lancado_por: "historico" }),
+      lancamento("h2", { mes: "2026-03", lancado_por: "historico", valor_centavos: 25_000 }),
+    ];
+    const atrasos = atrasosDasLinhas(historico, "2026-12-31", 10, ctx());
+    expect(atrasos.size).toBe(0);
+    const [c] = montarCartoesDeCobranca([lucas], pendentes(historico), atrasos);
+    expect(c).toMatchObject({ saldoCentavos: 0, situacao: "em_dia", mesesEmAberto: [], ids: [], atrasadoDesde: null });
+    // Com uma linha de Fatura de verdade em aberto, só ela conta.
+    const junto = [...historico, lancamento("real", { mes: "2026-10" })];
+    const [d] = montarCartoesDeCobranca([lucas], pendentes(junto), atrasosDasLinhas(junto, "2026-10-10", 10, ctx()));
+    expect(d).toMatchObject({ saldoCentavos: 10_000, situacao: "nao_pago", ids: ["real"] });
+  });
+
   it("em dia na véspera do primeiro dia de atraso: 'Não pago'", () => {
     const linhas = [lancamento("nova")];
     const atrasos = atrasosDasLinhas(linhas, "2026-10-16", 10, ctx());

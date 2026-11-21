@@ -83,9 +83,23 @@ describe("projetarPendente: o que entra", () => {
     ]);
   });
 
-  it("o histórico da planilha não é previsto: entra se o Status não conta como pago", () => {
-    const linhas = [linha("h1", { lancado_por: "historico", mes: "2026-03" }), linha("h2", { lancado_por: "historico", status_id: PAGO })];
-    expect(ids(projetarPendente(linhas, opcoes()))).toEqual(["h1"]);
+  it("o histórico da planilha nunca entra no Saldo pendente, com o Status que for (Defeito 3; revisto: antes entrava se o Status não contava como pago)", () => {
+    const linhas = [
+      linha("h1", { lancado_por: "historico", mes: "2026-03" }),
+      linha("h2", { lancado_por: "historico", status_id: PAGO }),
+      linha("h3", { lancado_por: "historico", mes: "2026-03", status_id: null }),
+      linha("real", { mes: "2026-10" }),
+    ];
+    expect(ids(projetarPendente(linhas, opcoes()))).toEqual(["real"]);
+    // O Mês só de histórico não tem nada em aberto (o "Falta receber" do Painel de um Mês antigo).
+    expect(projetarPendente(linhas, opcoes({ mes: "2026-03" }))).toEqual([]);
+  });
+
+  it("a linha de histórico que teve Pagamento e foi excluída ainda vira crédito (o dinheiro entrou, AD-11)", () => {
+    const h = linha("h1", { lancado_por: "historico", mes: "2026-03", excluido_em: EXCLUIDO });
+    expect(projetarPendente([h], opcoes({ itens: [item("h1", 3_000)] }))).toEqual([
+      { id: "h1", valor_centavos: -3_000, responsavel_id: "mae", tipo_id: "casa" },
+    ]);
   });
 
   it("as linhas excluídas sem Pagamento nunca entram", () => {
