@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { TEXTOS_NOTIFICACOES, textoDoEstadoDasNotificacoes } from "./mensagens";
 import {
   chaveVapidEmBytes,
+  deveReativarNotificacoes,
   estadoDasNotificacoes,
   lerInscricaoDePush,
   type AmbienteDeNotificacao,
@@ -112,5 +113,37 @@ describe("chaveVapidEmBytes", () => {
     ["não começa por 0x04", Buffer.from(Uint8Array.from({ length: 65 }, () => 5)).toString("base64url")],
   ])("recusa: %s", (_nome, chave) => {
     expect(chaveVapidEmBytes(chave)).toBeNull();
+  });
+});
+
+describe("deveReativarNotificacoes (Defeito 8): o app refaz a inscrição que o navegador perdeu", () => {
+  const perdida = { ...PC, permissao: "granted" as const, inscrito: false };
+
+  it("permissão dada, aparelho que já esteve ativado e sem inscrição: reativa", () => {
+    expect(deveReativarNotificacoes(perdida, "ativa")).toBe(true);
+  });
+
+  it("nunca sem a permissão já dada (pedi-la é do toque do Rafael): default e denied não reativam", () => {
+    expect(deveReativarNotificacoes({ ...perdida, permissao: "default" }, "ativa")).toBe(false);
+    expect(deveReativarNotificacoes({ ...perdida, permissao: "denied" }, "ativa")).toBe(false);
+  });
+
+  it("quem desativou de propósito, ou nunca ativou neste aparelho, não é reativado", () => {
+    expect(deveReativarNotificacoes(perdida, "desativada")).toBe(false);
+    expect(deveReativarNotificacoes(perdida, null)).toBe(false);
+  });
+
+  it("com inscrição (já ativo) não há o que refazer", () => {
+    expect(deveReativarNotificacoes({ ...perdida, inscrito: true }, "ativa")).toBe(false);
+  });
+
+  it("onde as notificações nem funcionam (iPad sem o app instalado, sem suporte, sem chave) não tenta", () => {
+    expect(deveReativarNotificacoes({ ...perdida, ehIOS: true, instalado: false }, "ativa")).toBe(false);
+    expect(deveReativarNotificacoes({ ...perdida, temPushManager: false }, "ativa")).toBe(false);
+    expect(deveReativarNotificacoes({ ...perdida, chaveConfigurada: false }, "ativa")).toBe(false);
+  });
+
+  it("o texto de que reativou é o do núcleo", () => {
+    expect(TEXTOS_NOTIFICACOES.reativadas).toBe("Notificações reativadas neste aparelho.");
   });
 });

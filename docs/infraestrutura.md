@@ -187,3 +187,7 @@ Uma PR, um commit por defeito (`Defeito N: ...`). Cada seção diz se o defeito 
 ### Defeito 7: o lembrete não se perde por um erro transitório do push (NÃO há migração)
 - Nada a aplicar com `supabase db push`; `src/data/database.types.ts` e as RPC não mudam, e `lembretes_enviados` fica como está (o `check` de `tipo`, a chave, o texto). O Cron das 09:00 passa a apagar a linha de `lembretes_enviados` de um lembrete quando nenhum aparelho o aceitou por erro transitório (rede, 5xx, 429); a chave de serviço já tem esse privilégio. O Cron nunca vira 500 por isso, e o log `cron.diario.notificacoes` ganha a contagem `reagendadas` (só quando há).
 - **Entre o merge e o deploy:** nada a fazer; a regra vive no código do Cron.
+
+### Defeito 8: o app refaz a inscrição de notificações que o navegador perdeu (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC, o Cron e o service worker (`/sw.js`) não mudam. Ao abrir o app com a permissão de notificações já dada e sem inscrição neste aparelho, o app grava a inscrição nova em `push_inscricoes` (a mesma gravação do botão "Ativar notificações", com a sessão do Rafael): **uma gravação a mais ao abrir o app, só nesse caso**. Sem a tabela (antes do `db push` da 7.5) a gravação recusa, a inscrição solta é cancelada e nada aparece.
+- O app só reativa um aparelho que já esteve ativado (marca em `localStorage`) e nunca depois de "Desativar neste aparelho". Nenhum dado novo no banco.

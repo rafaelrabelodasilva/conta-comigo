@@ -2633,6 +2633,8 @@ export const TEXTOS_NOTIFICACOES = {
   desativando: "Desativando…",
   estado_ativo: "Notificações ativadas neste aparelho.",
   estado_pode_ativar: "Notificações desativadas neste aparelho.",
+  /** O navegador tinha perdido a inscrição deste aparelho e o app a refez sozinho (Defeito 8). */
+  reativadas: "Notificações reativadas neste aparelho.",
   estado_negada:
     "As notificações estão bloqueadas neste aparelho. Para liberar: no iPad, Ajustes → Notificações → Conta Comigo; no computador, o cadeado ao lado do endereço. Depois volte aqui.",
   estado_instalar_primeiro:

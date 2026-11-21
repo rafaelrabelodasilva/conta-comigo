@@ -53,6 +53,23 @@ export function estadoDasNotificacoes(a: AmbienteDeNotificacao): EstadoDasNotifi
   return "pode_ativar";
 }
 
+/**
+ * O que este aparelho guardou sobre as notificações: `ativa` (Rafael tocou em "Ativar notificações" ou o app já a viu
+ * ativa) ou `desativada` (Rafael tocou em "Desativar neste aparelho"). `null`: nunca ativou aqui.
+ */
+export type MarcaDeNotificacao = "ativa" | "desativada";
+
+/**
+ * O app deve refazer sozinho a inscrição deste aparelho (Defeito 8)? Quando o navegador troca ou perde a inscrição
+ * (`pushsubscriptionchange`: a antiga dá 404 ou 410 no Cron e é apagada), o aparelho fica mudo até Rafael tocar em
+ * "Ativar" de novo. O service worker não tem a sessão para gravar a nova (AD-3, AD-12), então quem refaz é o app,
+ * ao abrir: só se a permissão JÁ está dada (nunca pede a permissão: isso é do toque do Rafael), o aparelho já esteve
+ * ativado (`marca` = `ativa`: quem tocou em "Desativar neste aparelho" nunca é reativado à força) e não há inscrição.
+ */
+export function deveReativarNotificacoes(a: AmbienteDeNotificacao, marca: MarcaDeNotificacao | null): boolean {
+  return marca === "ativa" && a.permissao === "granted" && !a.inscrito && estadoDasNotificacoes(a) === "pode_ativar";
+}
+
 /** A inscrição Web Push de um aparelho, como o `PushSubscription.toJSON()` a entrega e o Cron a usa. */
 export type InscricaoDePush = {
   endpoint: string;

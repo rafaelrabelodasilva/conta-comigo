@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { TEXTOS_NOTIFICACOES as T, mensagem } from "@/domain/mensagens";
@@ -7,6 +7,7 @@ import type { AmbienteDeNotificacao, InscricaoDePush, PermissaoDeNotificacao } f
 import { ToastProvider } from "@/ui/Toast";
 import { AtivarNotificacoes } from "./AtivarNotificacoes";
 import type { NavegadorDePush } from "./navegador-de-push";
+import { EVENTO_NOTIFICACOES_REATIVADAS, type MarcaDoAparelho } from "./reativar-notificacoes";
 
 // "Ativar notificações" (História 7.5, FR-55): os estados em texto, a permissão só no toque, a inscrição guardada
 // pelo repositório e desfeita no navegador se o banco recusar, "Desativar neste aparelho", sem conexão. O navegador
@@ -300,5 +301,63 @@ describe("AtivarNotificacoes: desativar neste aparelho", () => {
     expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
     expect(repo.remover).not.toHaveBeenCalled();
     expect(navegador.cancelar).not.toHaveBeenCalled();
+  });
+});
+
+describe("AtivarNotificacoes e a marca deste aparelho (Defeito 8)", () => {
+  const marcaFalsa = () => ({ ler: () => null, gravar: vi.fn<MarcaDoAparelho["gravar"]>() }) satisfies MarcaDoAparelho;
+  const montarComMarca = (navegador: NavegadorDePush, marca: MarcaDoAparelho) =>
+    render(
+      <ToastProvider>
+        <AtivarNotificacoes navegador={navegador} repo={repoFalso()} online={() => true} marca={marca} />
+      </ToastProvider>,
+    );
+
+  it("Ativar notificações (deu certo): o aparelho passa a lembrar que esteve ativado, para o app refazer a inscrição se o navegador a perder", async () => {
+    const marca = marcaFalsa();
+    montarComMarca(navegadorFalso().navegador, marca);
+    await estado(T.estado_pode_ativar);
+    await userEvent.setup().click(botao(T.ativar));
+    await estado(T.estado_ativo);
+    expect(marca.gravar).toHaveBeenCalledExactlyOnceWith("ativa");
+  });
+
+  it("Ativar notificações com o banco recusando: nada é lembrado", async () => {
+    const marca = marcaFalsa();
+    render(
+      <ToastProvider>
+        <AtivarNotificacoes
+          navegador={navegadorFalso().navegador}
+          repo={repoFalso({ ok: false, codigo: "salvar.falhou" })}
+          online={() => true}
+          marca={marca}
+        />
+      </ToastProvider>,
+    );
+    await estado(T.estado_pode_ativar);
+    await userEvent.setup().click(botao(T.ativar));
+    await screen.findByText(mensagem("salvar.falhou"));
+    expect(marca.gravar).not.toHaveBeenCalled();
+  });
+
+  it("Desativar neste aparelho: grava desativada, e o app nunca a reativa à força", async () => {
+    const marca = marcaFalsa();
+    montarComMarca(navegadorFalso({ permissao: "granted", inscrito: true }).navegador, marca);
+    await estado(T.estado_ativo);
+    await userEvent.setup().click(botao(T.desativar));
+    await estado(T.estado_pode_ativar);
+    expect(marca.gravar).toHaveBeenCalledExactlyOnceWith("desativada");
+  });
+
+  it("quando o app reativa sozinho a inscrição, a tela de Configurações relê o estado e passa a dizer ativado", async () => {
+    const { navegador, estado: ambiente } = navegadorFalso({ permissao: "granted", inscrito: false });
+    montarComMarca(navegador, marcaFalsa());
+    await estado(T.estado_pode_ativar);
+    // O app (ReativarNotificacoes) refez a inscrição no navegador e avisou a tela.
+    ambiente.inscrito = true;
+    act(() => {
+      window.dispatchEvent(new Event(EVENTO_NOTIFICACOES_REATIVADAS));
+    });
+    await estado(T.estado_ativo);
   });
 });
