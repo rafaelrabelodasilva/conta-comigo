@@ -58,22 +58,30 @@ type Pedido = { p_owner_id: string; p_ate_mes: string; p_parcelas: { conta_id: s
  */
 function bancoFake(
   linhas: unknown[],
-  opcoes: { falhaLeitura?: boolean; falhaNaConta?: string[]; lanca?: string[]; ignoraFiltro?: boolean } = {},
+  opcoes: { falhaLeitura?: boolean; falhaNaPagina?: number; falhaNaConta?: string[]; lanca?: string[]; ignoraFiltro?: boolean } = {},
 ) {
   const existentes = new Set<string>();
   const select = vi.fn();
   const filtros: [string, unknown][] = [];
-  const order = vi.fn(async () =>
-    opcoes.falhaLeitura
-      ? { data: null, error: { message: "relation contas_manuais: Bombinhas R$ 318,00" } }
-      : {
-          // Respeita `.is(coluna, valor)` como o PostgREST (o teste "filtro que escapa" a ignora).
-          data: opcoes.ignoraFiltro
-            ? linhas
-            : linhas.filter((l) => filtros.every(([c, v]) => ((l as Record<string, unknown>)[c] ?? null) === v)),
-          error: null,
-        },
-  );
+  /** As faixas `.range(de, ate)` pedidas, uma por página lida. */
+  const faixas: [number, number][] = [];
+  const order = vi.fn((coluna: string) => {
+    expect(coluna).toBe("id");
+    return {
+      // Como o PostgREST: devolve no máximo `ate - de + 1` linhas (a leitura segue até vir uma página incompleta).
+      range: async (de: number, ate: number) => {
+        faixas.push([de, ate]);
+        if (opcoes.falhaLeitura || (opcoes.falhaNaPagina !== undefined && faixas.length === opcoes.falhaNaPagina)) {
+          return { data: null, error: { message: "relation contas_manuais: Bombinhas R$ 318,00" } };
+        }
+        // Respeita `.is(coluna, valor)` como o PostgREST (o teste "filtro que escapa" a ignora).
+        const doFiltro = opcoes.ignoraFiltro
+          ? linhas
+          : linhas.filter((l) => filtros.every(([c, v]) => ((l as Record<string, unknown>)[c] ?? null) === v));
+        return { data: doFiltro.slice(de, ate + 1), error: null };
+      },
+    };
+  });
   const from = vi.fn((tabela: string) => {
     expect(tabela).toBe("contas_manuais");
     return {
@@ -104,7 +112,7 @@ function bancoFake(
     }
     return { data: criadas, error: null };
   });
-  return { cliente: { from, rpc }, from, rpc, select, order, filtros };
+  return { cliente: { from, rpc }, from, rpc, select, order, filtros, faixas };
 }
 
 function chamar(cabecalho?: string) {
@@ -285,6 +293,57 @@ describe("GET /api/cron/diario: materialização", () => {
     expect(banco.rpc).not.toHaveBeenCalled();
   });
 
+  describe("a leitura de contas_manuais é paginada (o PostgREST corta em 1000 linhas; Defeito 6)", () => {
+    const uuid = (n: number) => `bbbbbbbb-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const contas = (quantas: number) => Array.from({ length: quantas }, (_, i) => ({ ...silvia, id: uuid(i + 1) }));
+
+    it("1001 Contas: lê duas páginas (0 a 999 e 1000 a 1999) e materializa TODAS, inclusive a milésima primeira", async () => {
+      const banco = bancoFake(contas(1001));
+      mocks.criarClienteAdmin.mockReturnValue(banco.cliente);
+      const r = await chamar(`Bearer ${SEGREDO}`);
+      expect(r.status).toBe(200);
+      expect(banco.faixas).toEqual([
+        [0, 999],
+        [1000, 1999],
+      ]);
+      expect(banco.rpc).toHaveBeenCalledTimes(1001);
+      const pedidas = new Set(banco.rpc.mock.calls.map((c) => (c[1] as Pedido).p_parcelas[0].conta_id));
+      expect(pedidas.size).toBe(1001);
+      expect(pedidas.has(uuid(1001))).toBe(true);
+      expect(await r.json()).toEqual({ ok: true, quantidade: 1001 * 23 });
+    });
+
+    it("exatamente 1000 Contas: a segunda página vem vazia e a leitura termina", async () => {
+      const banco = bancoFake(contas(1000));
+      mocks.criarClienteAdmin.mockReturnValue(banco.cliente);
+      const r = await chamar(`Bearer ${SEGREDO}`);
+      expect(r.status).toBe(200);
+      expect(banco.faixas).toEqual([
+        [0, 999],
+        [1000, 1999],
+      ]);
+      expect(banco.rpc).toHaveBeenCalledTimes(1000);
+    });
+
+    it("a segunda página falha: 500 `cron.leitura_falhou`, nada é materializado pela metade e o log não vaza texto", async () => {
+      const banco = bancoFake(contas(1500), { falhaNaPagina: 2 });
+      mocks.criarClienteAdmin.mockReturnValue(banco.cliente);
+      const r = await chamar(`Bearer ${SEGREDO}`);
+      expect(r.status).toBe(500);
+      expect(await r.json()).toEqual({ ok: false, erro: "cron.falhou", quantidade: 0 });
+      expect(banco.rpc).not.toHaveBeenCalled();
+      expect(tudoNoLog()).not.toMatch(/contas_manuais|Bombinhas|318/);
+      expect(linhasDeLog().at(-1)).toMatchObject({ nivel: "error", codigo: "cron.leitura_falhou", status_http: 500 });
+    });
+
+    it("uma página só (poucas Contas): uma leitura, como antes", async () => {
+      const banco = bancoFake([silvia]);
+      mocks.criarClienteAdmin.mockReturnValue(banco.cliente);
+      await chamar(`Bearer ${SEGREDO}`);
+      expect(banco.faixas).toEqual([[0, 999]]);
+    });
+  });
+
   it("uma Conta ilegível é pulada e contada; as outras seguem e a resposta é 200", async () => {
     const banco = bancoFake([bombinhas, ruim, silvia]);
     mocks.criarClienteAdmin.mockReturnValue(banco.cliente);
@@ -330,8 +389,26 @@ describe("GET /api/cron/diario: falhas do banco", () => {
     expect(JSON.stringify(corpo)).not.toMatch(/Silvia|40000|sb_secret/);
     expect(banco.rpc).toHaveBeenCalledTimes(2);
     expect(tudoNoLog()).not.toMatch(/Silvia|40000|sb_secret/);
-    const falha = linhasDeLog().find((l) => l.codigo === "cron.materializacao_falhou");
-    expect(falha).toMatchObject({ nivel: "error", evento: "cron.diario.materializacao_falhou", quantidade: 1 });
+    const falha = linhasDeLog().find((l) => l.codigo === "cron.materializacao_falhou" && l.evento === "cron.diario.materializacao_falhou");
+    expect(falha).toMatchObject({ nivel: "error", evento: "cron.diario.materializacao_falhou", falhas: 1 });
+  });
+
+  it("a falha deixa um rastro visível nos logs da Vercel: a linha do 500 leva nível error, o código, o status e quantas Contas falharam (Defeito 6)", async () => {
+    const banco = bancoFake([bombinhas, silvia], { falhaNaConta: [ID_SILVIA] });
+    mocks.criarClienteAdmin.mockReturnValue(banco.cliente);
+    await chamar(`Bearer ${SEGREDO}`);
+    const cabecalho = linhasDeLog().find((l) => l.evento === "cron.diario");
+    expect(cabecalho).toEqual({
+      nivel: "error",
+      evento: "cron.diario",
+      codigo: "cron.materializacao_falhou",
+      rota: "/api/cron/diario",
+      metodo: "GET",
+      status_http: 500,
+      duracao_ms: expect.any(Number),
+      quantidade: 24,
+      falhas: 1,
+    });
   });
 
   it("o banco falha no meio e na próxima execução só o que faltou é criado (o que já existia não duplica)", async () => {

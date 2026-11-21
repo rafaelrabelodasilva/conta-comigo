@@ -77,8 +77,10 @@ function montar(opcoes: OpcoesDoBancoFalso & { contasFalha?: boolean } = {}) {
         return {
           select: () => ({
             is: () => ({
-              order: async () =>
-                opcoes.contasFalha ? { data: null, error: { message: "relation contas_manuais" } } : { data: [], error: null },
+              order: () => ({
+                range: async () =>
+                  opcoes.contasFalha ? { data: null, error: { message: "relation contas_manuais" } } : { data: [], error: null },
+              }),
             }),
           }),
         };

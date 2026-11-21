@@ -20,6 +20,12 @@ import { criarClienteAdmin } from "@/server/supabase-admin";
 //
 // O log leva só rota, status, duração e quantidades (AD-17), nunca Nomes, Valores, endpoints nem chaves. A resposta
 // é mínima: `{ ok, quantidade }`.
+//
+// Falha (Defeito 6): o Cron da Vercel não tenta de novo e ninguém é avisado dentro do app. O rastro é a linha de log
+// `cron.diario` de nível `error` (status 500, o código `cron.leitura_falhou` ou `cron.materializacao_falhou`, a
+// `quantidade` criada e quantas Contas falharam em `falhas`), que aparece nos logs da Vercel e deixa a execução
+// marcada como falha em Settings → Cron Jobs. Decisão: basta isso (sem tabela, sem rota nova e sem aviso no app);
+// o dia seguinte refaz (o horizonte é de 12 Meses e a RPC é idempotente).
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -28,7 +34,7 @@ const ROTA = "/api/cron/diario";
 
 type Corpo = { ok: boolean; quantidade?: number; erro?: string };
 
-function responder(status: number, corpo: Corpo, inicio: number, codigo: string, quantidade?: number) {
+function responder(status: number, corpo: Corpo, inicio: number, codigo: string, quantidade?: number, falhas?: number) {
   log("cron.diario", {
     nivel: status >= 500 ? "error" : status >= 400 ? "warn" : "info",
     codigo,
@@ -38,6 +44,8 @@ function responder(status: number, corpo: Corpo, inicio: number, codigo: string,
       status_http: status,
       duracao_ms: Date.now() - inicio,
       ...(quantidade === undefined ? {} : { quantidade }),
+      // Quantas Contas a RPC recusou: a linha de erro basta para o Rafael ver o tamanho da falha (Defeito 6).
+      ...(falhas === undefined ? {} : { falhas }),
     },
   });
   return Response.json(corpo, { status, headers: { "cache-control": "no-store" } });
@@ -109,7 +117,7 @@ export async function GET(request: Request) {
       log("cron.diario.materializacao_falhou", {
         nivel: "error",
         codigo: resultado.codigo,
-        campos: { rota: ROTA, quantidade: resultado.falhas },
+        campos: { rota: ROTA, falhas: resultado.falhas },
       });
     }
     return responder(
@@ -118,6 +126,7 @@ export async function GET(request: Request) {
       inicio,
       resultado.codigo,
       resultado.quantidade,
+      resultado.falhas,
     );
   }
 
