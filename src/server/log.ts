@@ -24,6 +24,8 @@ export const CAMPOS_PERMITIDOS = [
   "ignoradas",
   "inscricoes_apagadas",
   "falhas",
+  // Lembretes cuja chave foi apagada para o Cron do dia seguinte tentar de novo (Defeito 7): só a contagem.
+  "reagendadas",
 ] as const;
 
 export type CampoPermitido = (typeof CAMPOS_PERMITIDOS)[number];

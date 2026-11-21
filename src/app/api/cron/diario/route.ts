@@ -76,6 +76,8 @@ async function avisarLembretes(admin: ClienteDeNotificacoes, agora: Date): Promi
         ignoradas: r.ignoradas,
         inscricoes_apagadas: r.inscricoesApagadas,
         falhas: r.falhas,
+        // Só aparece quando houve (o aviso sai no próximo dia).
+        ...(r.reagendadas > 0 ? { reagendadas: r.reagendadas } : {}),
       },
     });
   } catch {

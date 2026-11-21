@@ -105,7 +105,7 @@ describe("notificarLembretesDoDia: o que roda e o que pula", () => {
   it("sem as chaves VAPID (sem envio): pula e não toca no banco", async () => {
     const banco = bancoFalso(cenario());
     const r = await notificarLembretesDoDia(banco.cliente as unknown as ClienteDeNotificacoes, AGORA, null);
-    expect(r).toEqual({ pulou: "sem_chaves", enviadas: 0, ignoradas: 0, inscricoesApagadas: 0, falhas: 0 });
+    expect(r).toEqual({ pulou: "sem_chaves", enviadas: 0, ignoradas: 0, inscricoesApagadas: 0, falhas: 0, reagendadas: 0 });
     expect(banco.eventos).toEqual([]);
   });
 
@@ -148,7 +148,7 @@ describe("notificarLembretesDoDia: o que roda e o que pula", () => {
 
   it("nada a avisar (ninguém atrasado, nenhuma fatura fechando): lê, não grava e não envia", async () => {
     const { resultado, enviados, banco } = await rodar(cenario({ lancamentos: [] }));
-    expect(resultado).toEqual({ pulou: null, enviadas: 0, ignoradas: 0, inscricoesApagadas: 0, falhas: 0 });
+    expect(resultado).toEqual({ pulou: null, enviadas: 0, ignoradas: 0, inscricoesApagadas: 0, falhas: 0, reagendadas: 0 });
     expect(enviados).toEqual([]);
     expect(insercoes(banco.eventos)).toEqual([]);
   });
@@ -157,7 +157,7 @@ describe("notificarLembretesDoDia: o que roda e o que pula", () => {
 describe("notificarLembretesDoDia: inserir antes de enviar", () => {
   it("o atraso do Lucas: insere (atraso, Bloco, desde) ANTES do primeiro envio e envia o texto do aviso a cada aparelho", async () => {
     const { resultado, banco, enviados } = await rodar(cenario());
-    expect(resultado).toEqual({ pulou: null, enviadas: 1, ignoradas: 0, inscricoesApagadas: 0, falhas: 0 });
+    expect(resultado).toEqual({ pulou: null, enviadas: 1, ignoradas: 0, inscricoesApagadas: 0, falhas: 0, reagendadas: 0 });
 
     const sequencia = banco.eventos.filter((e) => e.tipo === "insercao" || e.tipo === "envio").map((e) => e.tipo);
     expect(sequencia).toEqual(["insercao", "envio", "envio"]);
@@ -230,7 +230,7 @@ describe("notificarLembretesDoDia: inserir antes de enviar", () => {
     const envio = envioFalso(banco.eventos);
     expect((await notificarLembretesDoDia(cliente, AGORA, envio.enviar)).enviadas).toBe(1);
     const segunda = await notificarLembretesDoDia(cliente, AGORA, envio.enviar);
-    expect(segunda).toEqual({ pulou: null, enviadas: 0, ignoradas: 0, inscricoesApagadas: 0, falhas: 0 });
+    expect(segunda).toEqual({ pulou: null, enviadas: 0, ignoradas: 0, inscricoesApagadas: 0, falhas: 0, reagendadas: 0 });
     expect(envio.enviados).toHaveLength(2);
     expect(insercoes(banco.eventos)).toHaveLength(1);
   });
@@ -334,7 +334,7 @@ describe("notificarLembretesDoDia: o que o serviço de push responde", () => {
     const { resultado, banco, enviados } = await rodar(cenario(), (endpoint) =>
       endpoint === ENDPOINT_IPAD ? { ok: false, status } : { ok: true },
     );
-    expect(resultado).toEqual({ pulou: null, enviadas: 1, ignoradas: 0, inscricoesApagadas: 1, falhas: 0 });
+    expect(resultado).toEqual({ pulou: null, enviadas: 1, ignoradas: 0, inscricoesApagadas: 1, falhas: 0, reagendadas: 0 });
     expect(enviados.map((e) => e.endpoint)).toEqual([ENDPOINT_IPAD, ENDPOINT_PC]);
     expect(banco.dados.push_inscricoes.map((i) => i.id)).toEqual(["i-pc"]);
     expect(banco.eventos.filter((e) => e.tipo === "delete")).toEqual([
@@ -342,13 +342,71 @@ describe("notificarLembretesDoDia: o que o serviço de push responde", () => {
     ]);
   });
 
-  it("outros erros (500, 401, rede): NÃO apaga, conta a falha e a linha de lembretes_enviados continua (nunca duas vezes)", async () => {
-    for (const status of [500, 401, 403, null]) {
+  it("erro transitório em TODOS os aparelhos (5xx, 429, rede): a chave é apagada para o Cron do dia seguinte tentar de novo; a inscrição fica (Defeito 7)", async () => {
+    for (const status of [500, 503, 429, null]) {
       const { resultado, banco } = await rodar(cenario(), () => ({ ok: false, status }));
-      expect(resultado).toEqual({ pulou: null, enviadas: 0, ignoradas: 0, inscricoesApagadas: 0, falhas: 2 });
+      expect(resultado).toEqual({ pulou: null, enviadas: 0, ignoradas: 0, inscricoesApagadas: 0, falhas: 2, reagendadas: 1 });
+      expect(banco.dados.push_inscricoes).toHaveLength(2);
+      expect(banco.dados.lembretes_enviados).toEqual([]);
+      // A chave certa (dono, tipo, referência, dia) foi apagada, e nada além dela.
+      expect(banco.eventos.filter((e) => e.tipo === "delete" && e.tabela === "lembretes_enviados")).toEqual([
+        {
+          tipo: "delete",
+          tabela: "lembretes_enviados",
+          filtros: [
+            ["owner_id", DONO],
+            ["tipo", "atraso"],
+            ["referencia", "b-lucas"],
+            ["dia", "2026-11-17"],
+          ],
+        },
+      ]);
+    }
+  });
+
+  it("401 e 403 (chave VAPID trocada) NÃO apagam a chave: repetir todo dia só repetiria a recusa (a troca de chave pede 'Desativar' e 'Ativar')", async () => {
+    for (const status of [401, 403]) {
+      const { resultado, banco } = await rodar(cenario(), () => ({ ok: false, status }));
+      expect(resultado).toEqual({ pulou: null, enviadas: 0, ignoradas: 0, inscricoesApagadas: 0, falhas: 2, reagendadas: 0 });
       expect(banco.dados.push_inscricoes).toHaveLength(2);
       expect(banco.dados.lembretes_enviados).toHaveLength(1);
     }
+  });
+
+  it("no dia seguinte, depois de um erro transitório, o mesmo lembrete é avisado (e então fica gasto; nunca duas vezes)", async () => {
+    const primeira = await rodar(cenario(), () => ({ ok: false, status: 503 }));
+    expect(primeira.banco.dados.lembretes_enviados).toEqual([]);
+    const amanha = new Date("2026-11-18T12:00:00Z");
+    const banco = bancoFalso(cenario({ lembretes_enviados: primeira.banco.dados.lembretes_enviados }));
+    const envio = envioFalso(banco.eventos);
+    const segunda = await notificarLembretesDoDia(banco.cliente as unknown as ClienteDeNotificacoes, amanha, envio.enviar);
+    expect(segunda).toMatchObject({ enviadas: 1, reagendadas: 0 });
+    expect(banco.dados.lembretes_enviados).toHaveLength(1);
+    const terceira = await notificarLembretesDoDia(banco.cliente as unknown as ClienteDeNotificacoes, new Date("2026-11-19T12:00:00Z"), envio.enviar);
+    // A chave está em lembretes_enviados: o lembrete nem é tentado de novo.
+    expect(terceira).toMatchObject({ enviadas: 0, reagendadas: 0 });
+    expect(envio.enviados).toHaveLength(2);
+  });
+
+  it("um aparelho aceitou e o outro falhou por 503: a chave FICA (repetir mandaria o aviso de novo a quem já o recebeu)", async () => {
+    const { resultado, banco } = await rodar(cenario(), (endpoint) => (endpoint === ENDPOINT_PC ? { ok: false, status: 503 } : { ok: true }));
+    expect(resultado).toMatchObject({ enviadas: 1, falhas: 1, reagendadas: 0 });
+    expect(banco.dados.lembretes_enviados).toHaveLength(1);
+  });
+
+  it("o iPad acabou (410, apagado) e o PC falhou por 503: nenhum aceitou e há falha transitória, então a chave é apagada para tentar de novo", async () => {
+    const { resultado, banco } = await rodar(cenario(), (endpoint) =>
+      endpoint === ENDPOINT_IPAD ? { ok: false, status: 410 } : { ok: false, status: 503 },
+    );
+    expect(resultado).toMatchObject({ enviadas: 0, inscricoesApagadas: 1, falhas: 1, reagendadas: 1 });
+    expect(banco.dados.lembretes_enviados).toEqual([]);
+  });
+
+  it("o delete da chave falha: conta a falha, a chave fica e nada lança", async () => {
+    const { resultado, banco } = await rodar(cenario(), () => ({ ok: false, status: 503 }), { erroDoDelete: true });
+    expect(resultado).toMatchObject({ enviadas: 0, reagendadas: 0 });
+    expect(resultado.falhas).toBe(3);
+    expect(banco.dados.lembretes_enviados).toHaveLength(1);
   });
 
   it("um aparelho aceita e o outro falha por erro qualquer: conta como enviado e como falha", async () => {
@@ -375,7 +433,7 @@ describe("notificarLembretesDoDia: o que o serviço de push responde", () => {
       }),
       () => ({ ok: false, status: 410 }),
     );
-    expect(resultado).toEqual({ pulou: null, enviadas: 0, ignoradas: 0, inscricoesApagadas: 2, falhas: 0 });
+    expect(resultado).toEqual({ pulou: null, enviadas: 0, ignoradas: 0, inscricoesApagadas: 2, falhas: 0, reagendadas: 0 });
     expect(banco.dados.push_inscricoes).toEqual([]);
     // O primeiro lembrete foi inserido (e perdeu os aparelhos); o segundo, sem aparelho, não grava nada.
     expect(insercoes(banco.eventos)).toHaveLength(1);
@@ -464,6 +522,6 @@ describe("notificarLembretesDoDia: nada sensível no resultado", () => {
     for (const proibido of [ENDPOINT_IPAD, ENDPOINT_PC, "Lucas", "115", "auth-i-", "p256dh", DONO, "segredo"]) {
       expect(texto).not.toContain(proibido);
     }
-    expect(Object.keys(resultado).sort()).toEqual(["enviadas", "falhas", "ignoradas", "inscricoesApagadas", "pulou"]);
+    expect(Object.keys(resultado).sort()).toEqual(["enviadas", "falhas", "ignoradas", "inscricoesApagadas", "pulou", "reagendadas"]);
   });
 });

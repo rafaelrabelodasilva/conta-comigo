@@ -317,6 +317,35 @@ export function textoDaChaveDeNotificacao(c: { tipo: string; referencia: string;
 }
 
 /**
+ * Um envio recusado pelo serviço de push é transitório (Defeito 7)? É quando tentar de novo no dia seguinte pode dar
+ * certo: sem resposta (`null`: rede fora, tempo esgotado), 408, 429 (limite do serviço) e qualquer 5xx. Não é
+ * transitório: 404 e 410 (a inscrição acabou e o Cron a apaga), 401 e 403 (a chave VAPID foi trocada: repetir só
+ * repete a recusa) e os demais 4xx.
+ */
+export function envioFoiTransitorio(status: number | null): boolean {
+  if (status === null) return true;
+  return status === 408 || status === 429 || (status >= 500 && status <= 599);
+}
+
+/**
+ * O que o servidor sabe de cada envio de um lembrete (o resultado do Web Push, sem texto, endpoint nem chave).
+ */
+export type EnvioParaDecidir = { ok: true } | { ok: false; status: number | null };
+
+/**
+ * A chave de `lembretes_enviados` é gravada ANTES do envio (nunca duas vezes) e, desde a 7.5, ficava mesmo quando todos
+ * os aparelhos falhavam por rede ou 5xx: o aviso daquele dia nunca mais saía. Decisão (Defeito 7, a recomendação da
+ * 7.5): apagar a chave para o Cron do dia seguinte tentar de novo SÓ quando NENHUM aparelho aceitou e ao menos uma
+ * falha foi transitória. Custo: o mesmo aviso pode ser tentado mais de uma vez, mas sem nenhum aparelho o ter
+ * recebido; se um aceitou, a chave fica (repetir o mandaria de novo a quem já o recebeu). 401, 403, 404 e 410 sozinhos
+ * não repetem.
+ */
+export function deveTentarDeNovoAmanha(envios: readonly EnvioParaDecidir[]): boolean {
+  if (envios.some((e) => e.ok)) return false;
+  return envios.some((e) => !e.ok && envioFoiTransitorio(e.status));
+}
+
+/**
  * Quais dos lembretes do dia saem como aviso do sistema (História 7.5) e ainda não foram enviados (`jaEnviados` é o
  * que está em `lembretes_enviados`). Desde a 8.1, TODOS os lembretes novos saem, de fechamento e de atraso, sem limite:
  * a Central de Avisos mostra todos, então o aviso do sistema também os traz (antes só saíam os 3 primeiros Blocos).

@@ -3,6 +3,8 @@ import { avisosDaCentral } from "./avisos";
 import { lerBlocos } from "./blocos";
 import {
   chaveDeNotificacao,
+  deveTentarDeNovoAmanha,
+  envioFoiTransitorio,
   lembretesDasLinhas,
   lembretesDoDia,
   lembretesParaNotificar,
@@ -13,6 +15,37 @@ import {
 import { formatarDinheiro } from "./dinheiro";
 import { TEXTOS_NOTIFICACOES, avisoDoLembrete, textoDoAviso } from "./mensagens";
 import { somaDosItens } from "./pagamento";
+
+describe("o que é uma falha transitória do serviço de push (Defeito 7)", () => {
+  it.each([null, 408, 429, 500, 502, 503, 504, 599])("%s: transitória (rede, tempo esgotado, limite, 5xx): tentar de novo amanhã pode dar certo", (status) => {
+    expect(envioFoiTransitorio(status)).toBe(true);
+  });
+
+  it.each([400, 401, 403, 404, 410, 413, 422])("%i: não é transitória (inscrição acabou, chave VAPID trocada, pedido recusado)", (status) => {
+    expect(envioFoiTransitorio(status)).toBe(false);
+  });
+
+  it("só tenta de novo amanhã quando NENHUM aparelho aceitou e houve falha transitória", () => {
+    expect(deveTentarDeNovoAmanha([{ ok: false, status: 503 }])).toBe(true);
+    expect(deveTentarDeNovoAmanha([{ ok: false, status: null }, { ok: false, status: 500 }])).toBe(true);
+    // Um aparelho aceitou: o aviso saiu, repetir o mandaria de novo a quem já o recebeu.
+    expect(deveTentarDeNovoAmanha([{ ok: true }, { ok: false, status: 503 }])).toBe(false);
+    expect(deveTentarDeNovoAmanha([{ ok: true }])).toBe(false);
+  });
+
+  it("falha que não é transitória não repete: 401 e 403 (chave trocada) e 404 e 410 (a inscrição acabou)", () => {
+    expect(deveTentarDeNovoAmanha([{ ok: false, status: 401 }, { ok: false, status: 403 }])).toBe(false);
+    expect(deveTentarDeNovoAmanha([{ ok: false, status: 404 }, { ok: false, status: 410 }])).toBe(false);
+  });
+
+  it("misturado: nenhum aceitou e um aparelho falhou por rede, o outro por 410: tenta de novo (o da rede ainda não recebeu)", () => {
+    expect(deveTentarDeNovoAmanha([{ ok: false, status: 410 }, { ok: false, status: 503 }])).toBe(true);
+  });
+
+  it("sem nenhum envio tentado, não há o que repetir", () => {
+    expect(deveTentarDeNovoAmanha([])).toBe(false);
+  });
+});
 
 // O aviso do sistema dos lembretes (História 7.5, FR-55, AD-13): quais lembretes do dia saem como notificação e com
 // que chave, a mesma montagem de contexto da Central de Avisos e do Cron (8.1: sem o limite de 3 Blocos), e o texto do aviso. O Ciclo fecha dia 28 e vence dia 06,

@@ -201,6 +201,28 @@ describe("GET /api/cron/diario: o aviso do sistema (7.5)", () => {
     expect(banco.dados.push_inscricoes).toHaveLength(1);
   });
 
+  it("falha transitória em todos os aparelhos (Defeito 7): a chave é solta, o 200 não muda e o log só diz quantos lembretes ficaram para o dia seguinte", async () => {
+    const { cliente, banco } = montar();
+    mocks.criarClienteAdmin.mockReturnValue(cliente);
+    enviadorQue(() => ({ ok: false, status: 503 }));
+    const r = await chamar();
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ ok: true, quantidade: 0 });
+    expect(banco.dados.lembretes_enviados).toEqual([]);
+    expect(doAviso()[0]).toMatchObject({ nivel: "warn", codigo: "cron.notificou", enviadas: 0, falhas: 1, reagendadas: 1 });
+    // Nada do texto do aviso, do endpoint ou da chave no log.
+    expect(JSON.stringify(doAviso())).not.toContain(ENDPOINT);
+  });
+
+  it("401 (chave VAPID trocada): a chave fica e o log não tem 'reagendadas'", async () => {
+    const { cliente, banco } = montar();
+    mocks.criarClienteAdmin.mockReturnValue(cliente);
+    enviadorQue(() => ({ ok: false, status: 401 }));
+    await chamar();
+    expect(banco.dados.lembretes_enviados).toHaveLength(1);
+    expect(doAviso()[0]).not.toHaveProperty("reagendadas");
+  });
+
   it("410: a inscrição é apagada e isso aparece na contagem do log", async () => {
     const { cliente, banco } = montar();
     mocks.criarClienteAdmin.mockReturnValue(cliente);
