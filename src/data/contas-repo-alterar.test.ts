@@ -335,6 +335,52 @@ describe("alterar, encerrar e excluir com Pagamento (AD-15)", () => {
   });
 });
 
+describe("mesesComHistorico: avisa o Mês que já tem histórico da planilha (Defeito 2)", () => {
+  const hist = (mes: string, id: string, extra: Linha = {}): Linha => ({
+    id,
+    mes,
+    lancado_por: "historico",
+    excluido_em: null,
+    dividido_de_id: null,
+    ...extra,
+  });
+
+  it("lista os Meses de `desde` em diante com a quantidade de linhas vivas do histórico (as excluídas, as filhas e as de outra origem não contam)", async () => {
+    const { repo, chamadas } = montar({
+      lancamentos: [
+        hist("2026-01", "a"),
+        hist("2026-01", "b"),
+        hist("2026-02", "c"),
+        hist("2026-02", "morta", { excluido_em: T }),
+        hist("2026-02", "filha", { dividido_de_id: "c" }),
+        hist("2026-03", "fatura", { lancado_por: "fatura" }),
+        hist("2025-12", "antes"),
+      ],
+    });
+    expect(await repo.mesesComHistorico("2026-01")).toEqual([
+      { mes: "2026-01", quantidade: 2 },
+      { mes: "2026-02", quantidade: 1 },
+    ]);
+    // Uma Conta que começa em fev/26 só cai de fev/26 em diante.
+    expect(await repo.mesesComHistorico("2026-02")).toEqual([{ mes: "2026-02", quantidade: 1 }]);
+    expect(await repo.mesesComHistorico("2026-04")).toEqual([]);
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("pagina a leitura: 1500 linhas de histórico vêm em duas páginas", async () => {
+    const muitas = Array.from({ length: 1500 }, (_, i) => hist("2026-01", `h${String(i).padStart(4, "0")}`));
+    const { repo, contagem } = montar({ lancamentos: muitas });
+    expect(await repo.mesesComHistorico("2026-01")).toEqual([{ mes: "2026-01", quantidade: 1500 }]);
+    expect(contagem.paginas).toBe(2);
+  });
+
+  it("sem internet ou sem sessão não lê e devolve null (o formulário só não avisa; gravar continua valendo)", async () => {
+    const { repo, lidas } = montar({ online: false });
+    expect(await repo.mesesComHistorico("2026-01")).toBeNull();
+    expect(lidas).toEqual([]);
+  });
+});
+
 describe("alterar (Editar)", () => {
   const lancamentos = [...parcelasDeSetAJan.slice(0, 3), parcela("2026-12", { status_id: PAGO }), parcela("2027-01")];
 

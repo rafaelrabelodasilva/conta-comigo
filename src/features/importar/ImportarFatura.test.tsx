@@ -11,6 +11,7 @@ import {
   ROTULOS,
   TEXTOS_IMPORTAR as T,
   TEXTOS_REVISAR,
+  avisoImportarComHistorico,
   avisoReimportar,
   mensagem,
   rotuloDespesasCreditos,
@@ -209,7 +210,7 @@ beforeEach(() => {
   falso.fetch.mockImplementation(async () => resposta());
   falso.importar.mockResolvedValue({ ok: true, quantidade: 49 });
   falso.lerReimportacao.mockResolvedValue({ ok: true, valor: null });
-  falso.lerPrevistosDoMes.mockResolvedValue({ ok: true, previstos: [], atualizadoEm: null });
+  falso.lerPrevistosDoMes.mockResolvedValue({ ok: true, previstos: [], atualizadoEm: null, historico: 0 });
   falso.lerParcelasDoMesAnterior.mockResolvedValue({ ok: true, candidatas: [] });
 });
 
@@ -510,7 +511,7 @@ describe("ImportarFatura: casamento dos previstos (História 3.6)", () => {
   }
 
   it("a parcela real pega o previsto do Mês: manda previsto_id, tira a Série dela e conta 'casou'; o que a Fatura não trouxe vai em previstos_sem_par", async () => {
-    falso.lerPrevistosDoMes.mockResolvedValue({ ok: true, previstos: [prevDaFatura(), semPar], atualizadoEm: T_MES });
+    falso.lerPrevistosDoMes.mockResolvedValue({ ok: true, previstos: [prevDaFatura(), semPar], atualizadoEm: T_MES, historico: 0 });
     const u = await ateOPasso3();
     expect(falso.lerPrevistosDoMes).toHaveBeenCalledExactlyOnceWith("2026-10");
     expect(screen.getByText(rotuloPrevistosCasados(1))).toBeTruthy();
@@ -531,7 +532,7 @@ describe("ImportarFatura: casamento dos previstos (História 3.6)", () => {
   });
 
   it("Valor diferente: a linha entra na fila como 'valor_mudou' com o antes do previsto", async () => {
-    falso.lerPrevistosDoMes.mockResolvedValue({ ok: true, previstos: [prevDaFatura(real.valorCentavos - 321)], atualizadoEm: null });
+    falso.lerPrevistosDoMes.mockResolvedValue({ ok: true, previstos: [prevDaFatura(real.valorCentavos - 321)], atualizadoEm: null, historico: 0 });
     const u = await ateOPasso3();
     await u.click(screen.getByRole("button", { name: T.importar }));
     await screen.findByText(rotuloPrevistosCasados(1));
@@ -562,6 +563,26 @@ describe("ImportarFatura: casamento dos previstos (História 3.6)", () => {
   it("sem previstos no Mês, nada de casamento no passo 3", async () => {
     await ateOPasso3();
     expect(screen.queryByText(/previsto.* (casou|casaram|não veio|não vieram)/)).toBeNull();
+  });
+
+  describe("Mês que já tem histórico da planilha (Defeito 2)", () => {
+    it("a primeira importação avisa com o número e o Mês, diz o caminho e pede a confirmação ('Importar mesmo assim')", async () => {
+      falso.lerPrevistosDoMes.mockResolvedValue({ ok: true, previstos: [], atualizadoEm: null, historico: 12 });
+      const u = await ateOPasso3();
+      expect((await screen.findByRole("alert")).textContent).toBe(avisoImportarComHistorico("2026-10", 12));
+      expect(screen.queryByRole("button", { name: T.importar })).toBeNull();
+      // Nada é gravado até o toque de confirmação.
+      expect(falso.importar).not.toHaveBeenCalled();
+      await u.click(screen.getByRole("button", { name: T.importar_mesmo_assim }));
+      await verNoPainel();
+      expect(falso.importar).toHaveBeenCalledOnce();
+    });
+
+    it("sem histórico, o passo 3 não muda: nenhum aviso e o botão é 'Importar'", async () => {
+      await ateOPasso3();
+      expect(screen.queryByText(/histórico da planilha/)).toBeNull();
+      expect(screen.getByRole("button", { name: T.importar })).toBeTruthy();
+    });
   });
 
   it("fatura.mes_mudou: relê os previstos, refaz o casamento e o 'Tentar de novo' grava com o plano e a trava novos", async () => {

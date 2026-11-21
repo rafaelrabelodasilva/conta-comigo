@@ -789,6 +789,7 @@ describe("casamento dos previstos (História 3.6)", () => {
     expect(r).toEqual({
       ok: true,
       atualizadoEm: T2,
+      historico: 0,
       previstos: [
         { id: "p1", nome_normalizado: "MAGALU", parcela_n: 7, parcela_total: 10, valor_centavos: 44589, ocorrencia: 1, responsavel_id: null, tipo_id: null, divisao: null, serie: chave(1) },
         { id: "p2", nome_normalizado: "MAGALU", parcela_n: 7, parcela_total: 10, valor_centavos: 44589, ocorrencia: 2, responsavel_id: null, tipo_id: null, divisao: null, serie: chave(2) },
@@ -798,8 +799,27 @@ describe("casamento dos previstos (História 3.6)", () => {
 
   it("lerPrevistosDoMes: Mês sem previstos devolve lista vazia, sem ler as Séries", async () => {
     const m = montar({ lancamentos: [previsto("real", { lancado_por: "fatura", fatura_id: "f1" })], series }, () => ({ data: null, error: null }));
-    expect(await m.repo.lerPrevistosDoMes("2026-11")).toEqual({ ok: true, previstos: [], atualizadoEm: T1 });
+    expect(await m.repo.lerPrevistosDoMes("2026-11")).toEqual({ ok: true, previstos: [], atualizadoEm: T1, historico: 0 });
     expect(m.leituras.some((l) => l.tabela === "series")).toBe(false);
+  });
+
+  it("lerPrevistosDoMes: conta as linhas vivas do histórico da planilha do Mês (a primeira importação num Mês com histórico dobra o total)", async () => {
+    const hist = (id: string, extra: Record<string, unknown> = {}) => previsto(id, { lancado_por: "historico", serie_id: null, parcela_n: null, parcela_total: null, ...extra });
+    const m = montar(
+      {
+        lancamentos: [
+          hist("h1"),
+          hist("h2"),
+          hist("h-excluida", { excluido_em: "2026-11-01T00:00:00Z" }),
+          hist("h-outro-mes", { mes: "2026-10" }),
+          previsto("real", { lancado_por: "fatura", fatura_id: "f1" }),
+        ],
+        series,
+      },
+      () => ({ data: null, error: null }),
+    );
+    const r = await m.repo.lerPrevistosDoMes("2026-11");
+    expect(r.ok && r.historico).toBe(2);
   });
 
   it("lerPrevistosDoMes: sem conexão e erro de leitura viram falha", async () => {

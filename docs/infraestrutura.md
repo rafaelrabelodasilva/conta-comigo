@@ -167,3 +167,6 @@ Uma PR, um commit por defeito (`Defeito N: ...`). Cada seção diz se o defeito 
 - **Depois do `db push`:** a parcela excluída à mão fica excluída; o Editar, o Encerrar e o Cron a respeitam; o "Desfazer" a devolve. As parcelas que o Cron já recriou antes não são consertadas.
 - Aplicar **antes** do merge também é seguro: o código antigo não conhece a coluna, mas o Cron e o Editar já passam a respeitar a exclusão à mão (o Editar antigo manda as mesmas parcelas e o banco novo pula as puladas).
 - Dados novos no backup: nenhum (a coluna tem `default false` e o dump a leva como as outras; `scripts/backup/*` não listam colunas).
+
+### Defeito 2: Fatura ou Conta num Mês que já tem histórico da planilha (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron não mudam. O aviso é calculado no navegador (núcleo `src/domain/historico-do-mes.ts`) sobre linhas que já existem: o passo 3 da importação reaproveita a leitura do Mês que já fazia (`lerPrevistosDoMes`), e o formulário de Conta nova lê só as linhas `historico` vivas de `lancamentos` do "Começa em" em diante (paginado, RLS por dono). Nada é gravado nem apagado pelo aviso.

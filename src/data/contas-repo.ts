@@ -41,6 +41,7 @@ import {
   type ResumoDoPlano,
   type SerieParaAlterar,
 } from "@/domain/alterar-conta";
+import { mesesComHistorico, type MesComHistorico } from "@/domain/historico-do-mes";
 import {
   horizonteDasContas,
   pedidoSalvarConta,
@@ -238,6 +239,31 @@ export function criarRepoContas(deps: {
     return parcelasPuladas(excluidas, vivas);
   }
 
+  /**
+   * Os Meses de `desde` em diante que já têm histórico da planilha (Defeito 2): uma Conta nova com
+   * "Começa em" neles entra por cima e dobra o total do Mês. Lê só as linhas `historico` vivas, página
+   * por página; a conta é do núcleo (`mesesComHistorico`). `null` se a leitura falhou: o aviso só
+   * não aparece (o formulário nunca é bloqueado por ela).
+   */
+  async function lerMesesComHistorico(cliente: SupabaseClient<Database>, desde: string): Promise<MesComHistorico[] | null> {
+    const linhas: { mes: string; lancado_por: string; excluido_em: string | null; dividido_de_id: string | null }[] = [];
+    for (let de = 0; ; de += POR_PAGINA) {
+      const { data, error } = await cliente
+        .from("lancamentos")
+        .select("mes, lancado_por, excluido_em, dividido_de_id")
+        .eq("lancado_por", "historico")
+        .is("excluido_em", null)
+        .is("dividido_de_id", null)
+        .gte("mes", desde)
+        .order("mes")
+        .order("id")
+        .range(de, de + POR_PAGINA - 1);
+      if (error || !data) return null;
+      linhas.push(...data);
+      if (data.length < POR_PAGINA) return mesesComHistorico(linhas, desde);
+    }
+  }
+
   /** Dos ids dados, os que têm item de Pagamento não excluído (em blocos: o endereço da requisição tem limite). */
   async function lerIdsComPagamento(cliente: SupabaseClient<Database>, ids: readonly string[]): Promise<Set<string> | null> {
     const com = new Set<string>();
@@ -376,6 +402,21 @@ export function criarRepoContas(deps: {
         return await ler(cliente, conta, mesAtual, null);
       } catch {
         return FALHOU;
+      }
+    },
+
+    /**
+     * Os Meses de `desde` em diante que já têm histórico da planilha, com a quantidade (Defeito 2).
+     * Sem conexão ou com erro: `null` (nada a avisar; gravar continua valendo).
+     */
+    async mesesComHistorico(desde: string): Promise<MesComHistorico[] | null> {
+      if (semConexao(online)) return null;
+      const cliente = obterCliente();
+      if (!cliente) return null;
+      try {
+        return await lerMesesComHistorico(cliente, desde);
+      } catch {
+        return null;
       }
     },
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import type { ContaSalva, ParcelaMantida } from "@/domain/alterar-conta";
 import {
   adicionarParte,
@@ -15,13 +15,16 @@ import {
   type RascunhoDaConta,
   type RepeticaoConta,
 } from "@/domain/contas-manuais";
+import { ehMes } from "@/domain/ciclo";
 import { formatarMes } from "@/domain/datas";
+import type { MesComHistorico } from "@/domain/historico-do-mes";
 import { lerDataCombinada } from "@/domain/divida";
 import { opcoesDoCadastro } from "@/domain/lancamento";
 import {
   TEXTOS_CONTAS as T,
   mensagem,
   TEXTOS_DIVIDA as TD,
+  avisoContaComHistorico,
   rotuloCobrancaDaParte,
   rotuloDataDaParte,
   rotuloFicamComoEstao,
@@ -83,6 +86,11 @@ export type PropsFormularioConta = {
    * Conta); `null` enquanto a leitura não chegou, e ausente se ela falhou.
    */
   ficam?: readonly ParcelaMantida[] | null;
+  /**
+   * Conta nova: os Meses de `desde` em diante que já têm histórico da planilha (Defeito 2). Devolve
+   * `null` se não deu para ler (nada a avisar). Sem isto, o formulário não avisa.
+   */
+  lerHistorico?: (desde: string) => Promise<readonly MesComHistorico[] | null>;
 };
 
 // "Mensal" ou "Dívida programada" por parte da Divisão (6.6, mockup `contas-manuais.html`).
@@ -107,6 +115,7 @@ export function FormularioConta({
   gerarId = () => crypto.randomUUID(),
   conta,
   ficam,
+  lerHistorico,
 }: PropsFormularioConta) {
   const editando = conta !== undefined;
   const [id] = useState(() => conta?.id ?? gerarId());
@@ -148,6 +157,27 @@ export function FormularioConta({
 
   const parcelada = rascunho.repeticao === "parcelas";
   const varias = rascunho.partes.length > 1;
+
+  // Defeito 2: os Meses a partir do "Começa em" que já têm histórico da planilha (a Conta entra por cima).
+  const comecaEmValido = !editando && ehMes(rascunho.comecaEm) ? rascunho.comecaEm : null;
+  const [historico, setHistorico] = useState<{ desde: string; meses: readonly MesComHistorico[] } | null>(null);
+  useEffect(() => {
+    if (comecaEmValido === null || !lerHistorico) return;
+    let vivo = true;
+    void lerHistorico(comecaEmValido)
+      .then((meses) => {
+        if (vivo) setHistorico(meses ? { desde: comecaEmValido, meses } : null);
+      })
+      .catch(() => {
+        if (vivo) setHistorico(null);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [comecaEmValido, lerHistorico]);
+  // A leitura de outro "Começa em" já não vale: só mostra a que é do Mês de agora.
+  const mesesComHistoricoAgora = historico !== null && historico.desde === comecaEmValido ? historico.meses : [];
+  const comHistorico = mesesComHistoricoAgora.length > 0;
   const opcoesResponsavel = (atual: string | null) => opcoesDoCadastro(responsaveisParaOpcoes, atual, T.escolha_responsavel);
   const valor = avaliacao.valorCentavos;
   const total = totalDaConta(valor, parcelada ? lerNumeroDeParcelas(rascunho.parcelas) : null);
@@ -193,7 +223,7 @@ export function FormularioConta({
             {T.cancelar}
           </Botao>
           <Botao type="submit" form={idFormulario} variante="primario" disabled={salvando || !online}>
-            {salvando ? T.salvando : T.salvar}
+            {salvando ? T.salvando : comHistorico ? T.salvar_mesmo_assim : T.salvar}
           </Botao>
         </>
       }
@@ -249,6 +279,11 @@ export function FormularioConta({
           </p>
         ) : null}
         {noPassado ? <p className="texto-label font-normal text-text-muted">{T.nota_passado}</p> : null}
+        {comHistorico ? (
+          <p role="alert" className="rounded-lg border border-alert-warning-border bg-alert-warning-bg p-3 texto-body">
+            {avisoContaComHistorico(mesesComHistoricoAgora)}
+          </p>
+        ) : null}
         <div className="flex flex-col gap-1">
           <Seletor
             rotulo={T.tipo}

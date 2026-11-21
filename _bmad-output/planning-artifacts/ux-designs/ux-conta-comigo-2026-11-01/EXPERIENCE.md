@@ -174,7 +174,7 @@ Total: R$ 2.819,68
 | Componente | Comportamento |
 |---|---|
 | **Lista** | Colunas: Conta (com a descrição da repetição), Valor por mês, Responsável ou Divisão (etiquetas), Tipo e situação (Ativa ou Encerrada). Os filtros são "Ativas / Encerradas / Todas". O ⋯ de cada linha tem Editar, Encerrar e Excluir. |
-| **Formulário** | Campos: Nome, Valor (por parcela ou mês), Repetição (Mensal até encerrar · N parcelas), Parcelas, "Começa em" (Mês), Tipo, Observação e Divisão (linhas Responsável + valor, com "＋ Parte"). Cada parte pode ser "Mensal" ou "Dívida programada" com data. Ao editar, aparece o aviso "Vale a partir de Nov/26. Os meses anteriores não mudam" (FR-18). "Encerrar" pergunta "A partir de qual mês?". |
+| **Formulário** | Campos: Nome, Valor (por parcela ou mês), Repetição (Mensal até encerrar · N parcelas), Parcelas, "Começa em" (Mês), Tipo, Observação e Divisão (linhas Responsável + valor, com "＋ Parte"). Cada parte pode ser "Mensal" ou "Dívida programada" com data. Ao editar, aparece o aviso "Vale a partir de Nov/26. Os meses anteriores não mudam" (FR-18). Numa Conta nova, se algum Mês a partir do "Começa em" já tem histórico da planilha, o formulário diz em quais ("Estes meses já têm histórico da planilha: Jan/26 (12 lançamentos), Fev/26 (14 lançamentos). A conta entra por cima e o total desses meses conta em dobro…") e o botão passa a "Salvar mesmo assim"; nada é apagado sozinho. "Encerrar" pergunta "A partir de qual mês?". |
 
 ### Configurações
 
@@ -218,6 +218,7 @@ Total: R$ 2.819,68
 | **Não é fatura Santander / layout desconhecido** | Janela Importar | "Este PDF não parece ser uma fatura do Santander. Confira o arquivo", com "Escolher outro PDF". Nada é gravado. |
 | **Extração falhou ou ficou incompleta** | Janela Importar | "Não conseguimos ler todos os lançamentos (lemos 41). Você pode importar mesmo assim e corrigir à mão, ou cancelar". Se importar, a Conferência mostra a diferença, e as linhas suspeitas ficam com "verificar". |
 | **Conexão perdida na importação** | Janela Importar | "A conexão caiu. Nada foi gravado. Tentar de novo". |
+| **Mês com histórico da planilha** (Defeito 2) | Janela Importar, passo 3 | Quando o Mês ainda não tem Fatura mas já tem linhas vindas da planilha: "Este mês já tem 12 lançamentos do histórico da planilha. Se você importar a fatura agora, as linhas dela entram por cima e o total de março conta em dobro. Para evitar, cancele e apague o histórico desse mês em Configurações → Importar planilha → Apagar histórico importado. Nada é apagado sozinho." O botão passa a "Importar mesmo assim" (a confirmação). |
 | **Mês já importado** | Janela Importar | Aviso de reimportação (FR-51) com o número de Lançamentos e quantos já estão pagos ou foram classificados à mão. Botões "Importar de novo" (destrutivo) e "Cancelar". |
 | **Conferido / Diferença** | Cartão da fatura, passo 3 da importação, topo da grade | "✓ Conferido" em verde, ou faixa âmbar com a diferença e o cartão, com "Ver lançamentos" (aplica o filtro Verificar) e "Dispensar". Não bloqueia nada (FR-6). |
 | **Verificar** | Grade | Bolinha `{colors.verify}` antes do Nome. Some sozinha quando a Conferência bate. |
