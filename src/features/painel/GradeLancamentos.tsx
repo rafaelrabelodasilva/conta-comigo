@@ -2,7 +2,7 @@
 
 import { agruparComAjustes, liquidoCentavos, textoLiquido } from "@/domain/ajustes";
 import { precisaVerificar, type Conferencia } from "@/domain/conferencia";
-import { agruparPartes, type PapelNaGrade } from "@/domain/divisao";
+import { agruparPartes, resumoDaDivisao, type PapelNaGrade } from "@/domain/divisao";
 import type { ValorFiltro } from "@/domain/filtros-grade";
 import { formatarDinheiro } from "@/domain/dinheiro";
 import { formatarParcela } from "@/domain/importacao-fatura";
@@ -24,6 +24,7 @@ import {
   rotuloAjusteDe,
   rotuloAtrasadoDesde,
   rotuloFalta,
+  rotuloPartesPagas,
   rotuloFiltrarPor,
   rotuloProgramada,
   rotuloSelecionar,
@@ -102,6 +103,8 @@ export type PropsGradeLancamentos = {
   ajustesPorMae?: ReadonlyMap<string, readonly LancamentoGrade[]>;
   /** As mães divididas do Mês (pelo id): viram o cabeçalho das filhas que passaram pelos filtros. */
   maesDivididas?: ReadonlyMap<string, LancamentoGrade>;
+  /** Todas as partes de cada mãe (pelo id dela, sem filtro): o cabeçalho diz quantas já foram pagas. */
+  partesPorMae?: ReadonlyMap<string, readonly { status_id: string | null }[]>;
   /** "Dividir" / "Editar divisão" do menu ⋯ (a janela mostra por que não dá, se for o caso). */
   aoDividir?: (id: string) => void;
   /** "Programar dívida" do menu ⋯ (6.6): a janela da data combinada. A mãe dividida programa as partes. */
@@ -288,6 +291,8 @@ type PropsLinha = {
   falta?: number;
   /** Atrasado (6.4): o primeiro dia de atraso desta linha (a do Ajuste vem da mãe); ausente nas outras. */
   atrasadoDesde?: string;
+  /** Cabeçalho de despesa dividida: as partes (todas, sem filtro) para o resumo "1 de 2 pagas". */
+  partes?: readonly { status_id: string | null }[];
 };
 
 /** Toque no corpo: abre o painel, menos na caixa, na `person-tag` e no ⋯ (e no menu, que fica num portal). */
@@ -317,6 +322,7 @@ function LinhaGrade({
   mesTemFatura,
   falta,
   atrasadoDesde,
+  partes,
 }: PropsLinha) {
   const [menuAberto, setMenuAberto] = useState(false);
   const abrirMenu = useCallback(() => setMenuAberto(true), []);
@@ -324,6 +330,13 @@ function LinhaGrade({
   const tipo = l.tipo_id === null ? undefined : cadastros.tipos.get(l.tipo_id);
   const responsavel = l.responsavel_id === null ? undefined : cadastros.responsaveis.get(l.responsavel_id);
   const status = l.status_id === null ? undefined : cadastros.status.get(l.status_id);
+  // Despesa dividida: o cabeçalho não tem Status; mostra o andamento das partes (só quando alguma já foi paga).
+  const resumoDoCabecalho = (() => {
+    if (papel !== "cabecalho" || partes === undefined) return null;
+    const pagos = new Set([...cadastros.status].filter(([, s]) => s.conta_como_pago).map(([id]) => id));
+    const r = resumoDaDivisao(partes, pagos);
+    return r.pagas > 0 ? r : null;
+  })();
   const nome = nomeExibido(l);
   const previsto = ehPrevistoNoMes(l, mesTemFatura);
   const textoAtraso = atrasadoDesde === undefined ? null : rotuloAtrasadoDesde(atrasadoDesde);
@@ -450,7 +463,13 @@ function LinhaGrade({
         </span>
       </td>
       <td className={CELULA}>
-        {papel === "cabecalho" ? null : (
+        {papel === "cabecalho" ? (
+          resumoDoCabecalho === null ? null : (
+            <SeloStatus variante={resumoDoCabecalho.pagas === resumoDoCabecalho.total ? "pago" : "parcial"}>
+              {rotuloPartesPagas(resumoDoCabecalho.pagas, resumoDoCabecalho.total)}
+            </SeloStatus>
+          )
+        ) : (
           <span className="inline-flex flex-wrap items-center gap-1">
             {falta !== undefined || atrasadoDesde !== undefined ? (
               <>
@@ -512,6 +531,7 @@ export function GradeLancamentos({
   linhas,
   ajustesPorMae = SEM_AJUSTES,
   maesDivididas = SEM_MAES,
+  partesPorMae,
   aoDividir,
   aoProgramar,
   cadastros,
@@ -587,6 +607,7 @@ export function GradeLancamentos({
               mesTemFatura={mesTemFatura}
               falta={faltaPorLinha.get(l.id)}
               atrasadoDesde={atrasoPorLinha.get(mae ? mae.id : l.id)}
+              partes={papel === "cabecalho" ? partesPorMae?.get(l.id) : undefined}
             />
           ))}
         </tbody>

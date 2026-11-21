@@ -7,6 +7,7 @@ import {
   idsSelecionaveis,
   listaEmAberto,
   montarCartoesDeCobranca,
+  partesDoBloco,
   recebidoNoMes,
 } from "./recebimentos";
 import { atrasosDasLinhas } from "./atraso";
@@ -299,6 +300,47 @@ describe("faltaReceberDoMes (o 'Falta receber' do hero)", () => {
 
   it("tudo pago: zero", () => {
     expect(faltaReceberDoMes([mae, lucas], pendentes(linhas.map((l) => ({ ...l, status_id: PAGO }))))).toMatchObject({ totalCentavos: 0 });
+  });
+});
+
+describe("partesDoBloco: quanto de cada linha é do Bloco (o Rangel paga o Casal ÷ 2)", () => {
+  const casalLinha = (id: string, valor: number) => lancamento(id, { responsavel_id: "casal", valor_centavos: valor });
+  const rangelLinha = (id: string, valor: number) => lancamento(id, { responsavel_id: "rangel", valor_centavos: valor });
+  const rangel = bloco("b-rangel", "Rangel", metadeDoCasal);
+  const partes = (b: Bloco, linhas: LancamentoParaPendente[]) => partesDoBloco(b.formula, pendentes(linhas));
+
+  it("a linha do Casal vale a METADE para o Rangel e a dele vale inteira; a soma das partes é o Saldo do cartão", () => {
+    const linhas = [casalLinha("c1", 10_000), rangelLinha("r1", 4_000)];
+    const p = partes(rangel, linhas);
+    expect(p.get("c1")).toBe(5_000);
+    expect(p.get("r1")).toBe(4_000);
+    const [cartao] = montarCartoesDeCobranca([rangel], pendentes(linhas), SEM_ATRASO);
+    expect([...p.values()].reduce((a, b) => a + b, 0)).toBe(cartao.saldoCentavos);
+  });
+
+  it("valores ímpares: as partes arredondam sem perder nem inventar centavo (somam o Saldo)", () => {
+    const linhas = [casalLinha("c1", 10_001), casalLinha("c2", 10_001), casalLinha("c3", 10_001)];
+    const p = partes(rangel, linhas);
+    const [cartao] = montarCartoesDeCobranca([rangel], pendentes(linhas), SEM_ATRASO);
+    expect([...p.values()].reduce((a, b) => a + b, 0)).toBe(cartao.saldoCentavos);
+    for (const v of p.values()) expect([5_000, 5_001]).toContain(v);
+  });
+
+  it("Fórmula de soma simples: cada parte é o valor inteiro da linha (nada a explicar)", () => {
+    const linhas = [rangelLinha("r1", 4_000), rangelLinha("r2", 1_500)];
+    const p = partes(bloco("b", "Rangel", resp("rangel")), linhas);
+    expect(p.get("r1")).toBe(4_000);
+    expect(p.get("r2")).toBe(1_500);
+  });
+
+  it("um Pago parcialmente: a parte é metade do que falta, não do valor cheio", () => {
+    const linhas = [casalLinha("c1", 10_000)];
+    const p = partesDoBloco(rangel.formula, pendentes(linhas, [{ lancamento_id: "c1", valor_centavos: 4_000 }]));
+    expect(p.get("c1")).toBe(3_000);
+  });
+
+  it("Fórmula que não calcula: sem partes", () => {
+    expect(partes(bloco("q", "Q", divisaoPorZero), [rangelLinha("r1", 100)]).size).toBe(0);
   });
 });
 

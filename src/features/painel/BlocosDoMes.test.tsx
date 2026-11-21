@@ -668,3 +668,45 @@ describe("filtrar a grade pelo Bloco (História 4.3, FR-20)", () => {
     expect(repo.excluir).toHaveBeenCalledWith("b1");
   });
 });
+
+describe("o cartão do Bloco de cobrança e o que falta receber (o Painel e Recebimentos conversam)", () => {
+  // O valor do cartão é o do Mês inteiro (pago ou não); o que falta é o que Recebimentos mostra, do mesmo Mês.
+  const pendente = (id: string, responsavel: string, restante: number) => ({
+    id,
+    mes: MES,
+    responsavel_id: responsavel,
+    tipo_id: "t-casa",
+    restanteCentavos: restante,
+    valorCentavos: restante,
+    recebidoCentavos: 0,
+    credito: false,
+  });
+  const renderizarComPendentes = (pendentes: unknown[] | null, linhas: unknown[] = [lanc()]) =>
+    render(<BlocosDoMes linhas={linhas as never} mes={MES} pendentes={pendentes as never} />, { wrapper: ToastProvider });
+
+  it("o Bloco de cobrança mostra 'Falta R$ X' com a Fórmula aplicada ao que está em aberto (Rangel = Rafael + Casal ÷ 2)", () => {
+    definir([bloco("b1", "Rangel", 1, formulaRangel, { de_cobranca: true })]);
+    renderizarComPendentes([pendente("p1", "r-rafael", 7_000), pendente("p2", "r-casal", 10_000)]);
+    expect(sem(within(cartaoDoBloco("Rangel")).getByText(/^Falta /).textContent)).toBe("Falta R$ 120,00");
+  });
+
+  it("tudo pago em Recebimentos: o cartão diz 'Nada a receber', e o valor do Mês continua o mesmo", () => {
+    definir([bloco("b1", "Casal", 1, formulaCasal, { de_cobranca: true })]);
+    renderizarComPendentes([], [lanc({ valor_centavos: 10_000 })]);
+    const card = cartaoDoBloco("Casal");
+    expect(within(card).getByText("Nada a receber")).toBeTruthy();
+    expect(sem(card.textContent)).toContain("R$ 100,00");
+  });
+
+  it("Bloco que não é de cobrança (o 'meu') não mostra nada de recebimento", () => {
+    definir([bloco("b1", "Meu", 1, formulaCasal, { meu_bloco: true })]);
+    renderizarComPendentes([pendente("p1", "r-casal", 10_000)]);
+    expect(within(cartaoDoBloco("Meu")).queryByText(/^Falta |Nada a receber/)).toBeNull();
+  });
+
+  it("enquanto os pagamentos ainda carregam (pendentes nulos), nada é dito: nunca um número com a regra errada", () => {
+    definir([bloco("b1", "Casal", 1, formulaCasal, { de_cobranca: true })]);
+    renderizarComPendentes(null);
+    expect(within(cartaoDoBloco("Casal")).queryByText(/^Falta |Nada a receber/)).toBeNull();
+  });
+});

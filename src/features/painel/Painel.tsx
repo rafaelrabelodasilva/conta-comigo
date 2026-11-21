@@ -771,6 +771,8 @@ export function Painel({
     // Mês sem Fatura mas com histórico da planilha (3.10): o hero mostra o total dessas linhas.
     const historico = fatura ? null : resumoDoHistorico(doMes);
     const maesDivididas = new Map(doMes.filter(ehMaeDividida).map((l) => [l.id, l]));
+    // As partes de cada despesa dividida (sem filtro): o cabeçalho diz quantas já foram pagas.
+    const partesPorMae = filhasPorMae(doMes);
     // O Mês todo (painel do Lançamento, Seleção) e o que a grade julga: com um Bloco
     // filtrando, só as unidades que `avaliar` diz que entram, separadas dos Ajustes
     // depois (assim a grade, os Ajustes sob cada mãe e o total do rodapé são
@@ -883,6 +885,7 @@ export function Painel({
               linhas={lancamentos.linhas}
               mes={mesAberto}
               temFatura={fatura !== null}
+              pendentes={pendentesDoMes}
               ativoId={doBloco.estado === "ativo" ? doBloco.id : null}
               aoFiltrar={(id) => mudarFiltros((f) => alternarBloco(f, id))}
               aoExcluindo={(id) => mudarFiltros((f) => (f.bloco === id ? limparBloco(f) : f))}
@@ -917,6 +920,7 @@ export function Painel({
           linhas={naGrade}
           ajustesPorMae={ajustesPorMae}
           maesDivididas={maesDivididas}
+          partesPorMae={partesPorMae}
           aoDividir={setDividindo}
           aoProgramar={(id) => setProgramando([id])}
           cadastros={cadastros}

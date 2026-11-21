@@ -15,6 +15,7 @@
 //   Saldo do cartão (`avaliar` sobre as linhas de `projetarPendente`, uma conta e um arredondamento,
 //   FR-54) e os detalhes são a mesma lista do "Ver", por Mês, do mais antigo ao mais novo.
 
+import { arredondarRacional } from "./dinheiro";
 import { avaliar, type Formula, type LinhaDaFormula, type NomesDaFormula } from "./formula";
 import { responsavelUnico, type Bloco } from "./blocos";
 import { compararPelaFatura } from "./painel";
@@ -173,6 +174,59 @@ export type LancamentoDaLista = {
   ordem_fatura: number | null;
   created_at?: string | null;
 };
+
+/**
+ * Quanto de cada linha em aberto é DO BLOCO (a parte que ele cobra): com "Rangel + Casal ÷ 2", a linha do Casal de
+ * R$ 100,00 vale R$ 50,00 para o Rangel e a linha do Rangel vale inteira. É a mesma Fórmula do Saldo, só repartida
+ * por linha (a lista "Ver" mostra a parte ao lado do valor cheio, para o Saldo não parecer contar o Casal inteiro).
+ *
+ * A conta é exata: a parte de uma linha é o que o valor da Fórmula perde quando ela sai (racional, sem arredondar) e
+ * o arredondamento só vem no fim, pelo maior resto, de modo que as partes SOMAM o Saldo do cartão (um centavo nunca
+ * some nem aparece). Só vale para Fórmulas lineares nas linhas (a validação já recusa R$ × R$). Fórmula que não
+ * calcula: sem partes. Valor fixo na Fórmula ("+ 250") não é de nenhuma linha e fica de fora das partes.
+ */
+export function partesDoBloco(formula: Formula, pendentes: readonly LinhaPendente[]): Map<string, number> {
+  const partes = new Map<string, number>();
+  const linhas = pendentes.map(linhaDaFormulaPendente);
+  const todas = avaliar(formula, linhas);
+  if (!todas.ok || !todas.valor.calculo.valor.dinheiro) return partes;
+  const cheio = todas.valor.calculo.valor;
+
+  type Racional = { n: bigint; d: bigint };
+  const exatas: { id: string; r: Racional }[] = [];
+  for (const id of todas.valor.entram) {
+    const sem = avaliar(
+      formula,
+      linhas.filter((l) => l.id !== id),
+    );
+    if (!sem.ok) return new Map();
+    const v = sem.valor.calculo.valor;
+    exatas.push({ id, r: { n: cheio.numerador * v.denominador - v.numerador * cheio.denominador, d: cheio.denominador * v.denominador } });
+  }
+  if (exatas.length === 0) return partes;
+
+  // O alvo é a soma exata das partes, arredondada uma vez (o mesmo arredondamento do Saldo).
+  const comum = exatas.reduce((d, e) => d * e.r.d, BigInt(1));
+  const somaN = exatas.reduce((s, e) => s + e.r.n * (comum / e.r.d), BigInt(0));
+  const alvo = arredondarRacional(somaN, comum);
+
+  // Piso de cada parte e a fração que sobra; o resto vai para as maiores frações (empate: a ordem da lista).
+  const pisos = exatas.map((e) => {
+    let q = e.r.n / e.r.d;
+    if (e.r.n % e.r.d < BigInt(0)) q -= BigInt(1);
+    return { id: e.id, piso: Number(q), fracao: Number(e.r.n - q * e.r.d) / Number(e.r.d) };
+  });
+  let sobra = alvo - pisos.reduce((s, p) => s + p.piso, 0);
+  const ordem = [...pisos.keys()].sort((a, b) => pisos[b].fracao - pisos[a].fracao || a - b);
+  const extra = new Set<number>();
+  for (const i of ordem) {
+    if (sobra <= 0) break;
+    extra.add(i);
+    sobra -= 1;
+  }
+  pisos.forEach((p, i) => partes.set(p.id, p.piso + (extra.has(i) ? 1 : 0)));
+  return partes;
+}
 
 /** Uma linha da lista "Ver": o Lançamento, o que falta dele e os Ajustes que acompanham a parcela. */
 export type ItemDaLista<L> = {

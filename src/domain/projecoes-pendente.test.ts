@@ -257,3 +257,30 @@ describe("projetarPendente com avaliar (AD-11)", () => {
     expect(doPendente.ok && doPainel.ok && doPendente.valor.valorCentavos).toBe(doPainel.ok && doPainel.valor.valorCentavos);
   });
 });
+
+describe("uma despesa dividida (Bombinhas): o que o Pagamento quita nas partes aparece igual no Painel e em Recebimentos", () => {
+  // A mãe dividida nunca soma (AD-8): o que se cobra e se paga são as partes. Mãe R$ 318,00 em duas partes de R$ 159,00.
+  const mae = linha("mae", { valor_centavos: 31_800, responsavel_id: null, divisao: { modo: "valor", partes: [] } } as Partial<LancamentoParaPendente>);
+  const parteCasal = (extra: Partial<LancamentoParaPendente> = {}) =>
+    linha("f-casal", { valor_centavos: 15_900, responsavel_id: "casal", dividido_de_id: "mae", ...extra } as Partial<LancamentoParaPendente>);
+  const parteLucas = (extra: Partial<LancamentoParaPendente> = {}) =>
+    linha("f-lucas", { valor_centavos: 15_900, responsavel_id: "lucas", dividido_de_id: "mae", ...extra } as Partial<LancamentoParaPendente>);
+
+  it("só as partes estão em aberto; a mãe nunca entra", () => {
+    expect(ids(projetarPendente([mae, parteCasal(), parteLucas()], opcoes()))).toEqual(["f-casal", "f-lucas"]);
+  });
+
+  it("pagar uma parte (o Status vai para ela) tira só ela do que falta, no Mês e em todos os Meses", () => {
+    const linhas = [mae, parteCasal({ status_id: PAGO }), parteLucas()];
+    expect(ids(projetarPendente(linhas, opcoes()))).toEqual(["f-lucas"]);
+    expect(ids(projetarPendente(linhas, opcoes({ mes: "2026-10" })))).toEqual(["f-lucas"]);
+  });
+
+  it("um pagamento parcial de uma parte: sobra o restante dela, e a outra parte segue inteira", () => {
+    const r = projetarPendente([mae, parteCasal(), parteLucas()], opcoes({ itens: [item("f-casal", 5_000)] }));
+    expect(r.map((l) => [l.id, l.valor_centavos])).toEqual([
+      ["f-casal", 10_900],
+      ["f-lucas", 15_900],
+    ]);
+  });
+});
