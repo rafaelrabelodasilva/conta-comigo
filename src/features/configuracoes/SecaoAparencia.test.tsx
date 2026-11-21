@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ROTULOS, TEXTOS_LEMBRETES as L, TEXTOS_NOTIFICACOES as N, mensagem } from "@/domain/mensagens";
+import { ROTULOS, TEXTOS_AVISOS as A, TEXTOS_LEMBRETES as L, TEXTOS_NOTIFICACOES as N, mensagem } from "@/domain/mensagens";
 import { ToastProvider } from "@/ui/Toast";
 import { SecaoAparencia } from "./SecaoAparencia";
 
@@ -10,6 +10,7 @@ const falso = vi.hoisted(() => ({
   linhas: [] as unknown[],
   definirAparencia: vi.fn(),
   definirLembrete: vi.fn(),
+  definirAviso: vi.fn(),
 }));
 
 vi.mock("@/data/realtime", () => ({
@@ -18,7 +19,11 @@ vi.mock("@/data/realtime", () => ({
 }));
 vi.mock("@/data/configuracoes-repo", async (original) => ({
   ...(await original<typeof import("@/data/configuracoes-repo")>()),
-  repoConfiguracoes: () => ({ definirAparencia: falso.definirAparencia, definirLembrete: falso.definirLembrete }),
+  repoConfiguracoes: () => ({
+    definirAparencia: falso.definirAparencia,
+    definirLembrete: falso.definirLembrete,
+    definirAviso: falso.definirAviso,
+  }),
 }));
 
 function montar() {
@@ -36,6 +41,7 @@ describe("SecaoAparencia", () => {
     falso.linhas = [];
     falso.definirAparencia.mockReset();
     falso.definirLembrete.mockReset();
+    falso.definirAviso.mockReset();
   });
 
   it("mostra a Aparência guardada; sem linha, Sistema", () => {
@@ -66,9 +72,10 @@ describe("SecaoAparencia", () => {
   });
 
   describe("Lembretes (História 7.4)", () => {
+    // Desde a 8.3 o grupo se chama "Avisos" e tem mais dois interruptores (a Conferência e o Revisar).
     const interruptor = (nome: string) => screen.getByRole("switch", { name: nome });
 
-    it("um interruptor por tipo, dentro do grupo \"Lembretes\", ligados quando não há linha", () => {
+    it("um interruptor por lembrete, dentro do grupo \"Avisos\", ligados quando não há linha", () => {
       montar();
       const grupo = screen.getByRole("group", { name: L.titulo_preferencias });
       expect(grupo.contains(interruptor(L.fechamento))).toBe(true);
@@ -125,6 +132,78 @@ describe("SecaoAparencia", () => {
     });
   });
 
+  describe("Avisos da Conferência e do Revisar (História 8.3)", () => {
+    const interruptor = (nome: string) => screen.getByRole("switch", { name: nome });
+
+    it("o grupo tem os quatro interruptores, os dois novos depois dos lembretes, todos ligados sem linha", () => {
+      montar();
+      const grupo = screen.getByRole("group", { name: L.titulo_preferencias });
+      expect(grupo.contains(interruptor(A.preferencia_conferencia))).toBe(true);
+      expect(grupo.contains(interruptor(A.preferencia_revisar))).toBe(true);
+      expect(within(grupo).getAllByRole("switch")).toHaveLength(4);
+      for (const nome of [L.fechamento, L.atraso, A.preferencia_conferencia, A.preferencia_revisar]) {
+        expect(interruptor(nome).getAttribute("aria-checked"), nome).toBe("true");
+      }
+    });
+
+    it("mostra o que está guardado; os lembretes e os avisos são colunas independentes", () => {
+      falso.linhas = [
+        { aparencia: "sistema", lembrete_fechamento: false, lembrete_atraso: true, aviso_conferencia: true, aviso_revisar: false },
+      ];
+      montar();
+      expect(interruptor(L.fechamento).getAttribute("aria-checked")).toBe("false");
+      expect(interruptor(L.atraso).getAttribute("aria-checked")).toBe("true");
+      expect(interruptor(A.preferencia_conferencia).getAttribute("aria-checked")).toBe("true");
+      expect(interruptor(A.preferencia_revisar).getAttribute("aria-checked")).toBe("false");
+    });
+
+    it("linha sem as colunas novas (banco antes do db push): os dois ligados", () => {
+      falso.linhas = [{ aparencia: "escuro", lembrete_fechamento: true, lembrete_atraso: true }];
+      montar();
+      expect(interruptor(A.preferencia_conferencia).getAttribute("aria-checked")).toBe("true");
+      expect(interruptor(A.preferencia_revisar).getAttribute("aria-checked")).toBe("true");
+    });
+
+    it("desligar grava só o aviso do tipo, por definirAviso (nunca por definirLembrete)", async () => {
+      falso.definirAviso.mockResolvedValue({ ok: true });
+      montar();
+      const usuario = userEvent.setup();
+      await usuario.click(interruptor(A.preferencia_conferencia));
+      expect(falso.definirAviso).toHaveBeenLastCalledWith("conferencia", false);
+      await usuario.click(interruptor(A.preferencia_revisar));
+      expect(falso.definirAviso).toHaveBeenLastCalledWith("revisar", false);
+      expect(falso.definirAviso).toHaveBeenCalledTimes(2);
+      expect(falso.definirLembrete).not.toHaveBeenCalled();
+      expect(falso.definirAparencia).not.toHaveBeenCalled();
+    });
+
+    it("ligar de novo grava true", async () => {
+      falso.definirAviso.mockResolvedValue({ ok: true });
+      falso.linhas = [{ aparencia: "sistema", aviso_conferencia: true, aviso_revisar: false }];
+      montar();
+      await userEvent.setup().click(interruptor(A.preferencia_revisar));
+      expect(falso.definirAviso).toHaveBeenCalledWith("revisar", true);
+    });
+
+    it("recusa do banco (ou do banco sem a coluna) mostra o toast; sem conexão, o aviso próprio", async () => {
+      falso.definirAviso.mockResolvedValueOnce({ ok: false, codigo: "salvar.falhou" });
+      montar();
+      const usuario = userEvent.setup();
+      await usuario.click(interruptor(A.preferencia_conferencia));
+      expect(await screen.findByText(mensagem("salvar.falhou"))).toBeTruthy();
+      falso.definirAviso.mockResolvedValueOnce({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+      await usuario.click(interruptor(A.preferencia_revisar));
+      expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
+    });
+
+    it("o texto da ajuda e o de Notificações neste aparelho não prometem notificação da Conferência nem do Revisar", () => {
+      montar();
+      expect(L.ajuda_preferencias).not.toMatch(/Conferência|Revisar/);
+      expect(L.ajuda_preferencias).toContain("Só o fechamento da fatura e o atraso também chegam como notificação");
+      expect(N.ajuda).toContain("A Conferência e o Revisar só aparecem dentro do app");
+    });
+  });
+
   describe("Notificações neste aparelho (História 7.5)", () => {
     it("o grupo fica dentro da seção Aparência, abaixo dos interruptores de Lembretes", async () => {
       montar();
@@ -144,13 +223,15 @@ describe("SecaoAparencia", () => {
   });
 });
 
-describe("SecaoAparencia: texto de ajuda dos Lembretes (História 8.1)", () => {
-  it("diz que o aviso mora na Central de Avisos e que, desligado, não aparece, não conta e não chega", () => {
+describe("SecaoAparencia: texto de ajuda dos avisos (História 8.1 e 8.3)", () => {
+  it("diz que o aviso mora na Central de Avisos e que, desligado, não aparece, não conta e não entra em Marcar tudo", () => {
     falso.linhas = [];
     montar();
     const ajuda = screen.getByText(L.ajuda_preferencias);
     expect(ajuda.textContent).toContain("Central de Avisos");
-    expect(ajuda.textContent).toContain("não aparece, não conta e não chega");
+    expect(ajuda.textContent).toContain("não aparece, não conta no menu e não entra em");
+    // Só o fechamento e o atraso chegam como notificação: o texto não promete notificação da Conferência nem do Revisar.
+    expect(ajuda.textContent).toContain("Só o fechamento da fatura e o atraso também chegam como notificação");
     // A faixa no topo das telas acabou.
     expect(ajuda.textContent).not.toContain("faixa");
   });

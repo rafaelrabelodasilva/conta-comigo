@@ -56,13 +56,16 @@ insert into public.status (id, owner_id, nome, conta_como_pago, arquivado) value
   ('b0000000-0000-4000-8000-000000000303', 'b0000000-0000-4000-8000-000000000001', 'Pix ✅', true, true);
 
 -- Configurações (uma por dono). Primeiro uso ainda não concluído (nulo). Lembretes (7.4): o de fechamento
--- desligado e o de atraso ligado, para o backup provar que as duas colunas voltam como estavam.
+-- desligado e o de atraso ligado, para o backup provar que as duas colunas voltam como estavam. Avisos da Central
+-- (8.3): o da Conferência ligado e o do Revisar desligado, pelo mesmo motivo.
 insert into public.configuracoes (
   id, owner_id, status_padrao_id, aparencia, limite_ajuste_centavos,
-  tolerancia_atraso_dias, primeiro_uso_em, lembrete_fechamento, lembrete_atraso
+  tolerancia_atraso_dias, primeiro_uso_em, lembrete_fechamento, lembrete_atraso,
+  aviso_conferencia, aviso_revisar
 ) values (
   'b0000000-0000-4000-8000-000000000401', 'b0000000-0000-4000-8000-000000000001',
-  'b0000000-0000-4000-8000-000000000302', 'escuro', 250, 12, null, false, true
+  'b0000000-0000-4000-8000-000000000302', 'escuro', 250, 12, null, false, true,
+  true, false
 );
 
 -- Ciclo: o gatilho recusa Mês no passado, então usa o mês corrente.

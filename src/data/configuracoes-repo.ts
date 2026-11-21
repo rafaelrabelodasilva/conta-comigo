@@ -5,6 +5,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Aparencia } from "@/domain/configuracoes";
+import type { TipoDeAvisoComInterruptor } from "@/domain/avisos-preferencias";
 import type { TipoDeLembrete } from "@/domain/lembretes";
 import { lerModelo, modelosIguais, validarModelo, type ModeloMensagem } from "@/domain/modelo-mensagem";
 import type { Database } from "./database.types";
@@ -44,6 +45,8 @@ export type MudancaConfiguracoes = Partial<
     | "primeiro_uso_em"
     | "lembrete_fechamento"
     | "lembrete_atraso"
+    | "aviso_conferencia"
+    | "aviso_revisar"
   >
 >;
 
@@ -120,6 +123,15 @@ export function criarRepoConfiguracoes(deps: {
      */
     definirLembrete(tipo: TipoDeLembrete, ligado: boolean): Promise<ResultadoGravacao> {
       return definir(tipo === "fechamento" ? { lembrete_fechamento: ligado } : { lembrete_atraso: ligado });
+    },
+
+    /**
+     * Liga ou desliga o aviso da Conferência ou o do Revisar na Central de Avisos (FR-55, 8.3): uma coluna só, otimista como
+     * `definirLembrete`. Não são lembretes (não viram notificação do sistema), então têm o método e as colunas deles. Antes de a
+     * migração da 8.3 entrar no banco, o upsert responde erro (a coluna não existe) e a tela avisa "Não foi possível salvar".
+     */
+    definirAviso(tipo: TipoDeAvisoComInterruptor, ligado: boolean): Promise<ResultadoGravacao> {
+      return definir(tipo === "conferencia" ? { aviso_conferencia: ligado } : { aviso_revisar: ligado });
     },
 
     /**

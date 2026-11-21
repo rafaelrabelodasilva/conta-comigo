@@ -20,6 +20,8 @@ const linha = (extra: Partial<LinhaConfiguracoes> = {}): LinhaConfiguracoes => (
   modelo_mensagem: {},
   lembrete_fechamento: true,
   lembrete_atraso: true,
+  aviso_conferencia: true,
+  aviso_revisar: true,
   primeiro_uso_em: null,
   created_at: T1,
   updated_at: T1,
@@ -201,6 +203,41 @@ describe("repositório de Configurações", () => {
     await pronto(m);
     expect(await m.repo.definirLembrete("atraso", false)).toMatchObject({ ok: false });
     expect(configuracoesDoDono(m.memoria.linhas())?.lembrete_atraso).toBe(true);
+  });
+
+it("definirAviso grava só a coluna do tipo e não chama o banco se nada mudou (História 8.3)", async () => {
+    const m = montar([linha()], (c) => ({
+      data: linha({ ...(c.corpo as object), updated_at: T2 }),
+      error: null,
+    }));
+    await pronto(m);
+    expect(await m.repo.definirAviso("conferencia", false)).toEqual({ ok: true });
+    expect(await m.repo.definirAviso("revisar", false)).toEqual({ ok: true });
+    // Já está desligado: nada a gravar.
+    expect(await m.repo.definirAviso("revisar", false)).toEqual({ ok: true });
+    expect(await m.repo.definirAviso("conferencia", true)).toEqual({ ok: true });
+    expect(m.chamadas.map((c) => c.corpo)).toEqual([
+      { aviso_conferencia: false },
+      { aviso_revisar: false },
+      { aviso_conferencia: true },
+    ]);
+    // Os lembretes ficam como estavam: são outras colunas.
+    expect(configuracoesDoDono(m.memoria.linhas())).toMatchObject({ lembrete_fechamento: true, lembrete_atraso: true });
+  });
+
+  it("definirAviso desfaz o otimismo se o banco recusa (a coluna ainda não existe: merge antes do db push)", async () => {
+    const m = montar([linha()], () => ({ data: null, error: { message: "column does not exist" } }));
+    await pronto(m);
+    expect(await m.repo.definirAviso("revisar", false)).toMatchObject({ ok: false });
+    expect(configuracoesDoDono(m.memoria.linhas())?.aviso_revisar).toBe(true);
+  });
+
+  it("sem linha, definirAviso cria a linha num upsert só com a coluna do tipo (os padrões do banco fazem o resto)", async () => {
+    const m = montar([], (c) => ({ data: linha(c.corpo as object), error: null }));
+    await pronto(m);
+    expect(await m.repo.definirAviso("revisar", false)).toEqual({ ok: true });
+    expect(m.chamadas.map((c) => c.corpo)).toEqual([{ aviso_revisar: false }]);
+    expect(m.memoria.linha("cfg")).toMatchObject({ aviso_revisar: false });
   });
 
   it("sem linha, a Conferência cria a linha num só upsert com as duas colunas", async () => {

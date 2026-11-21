@@ -2,8 +2,7 @@
 
 import { useMemo } from "react";
 import { avisosDaCentral, type CentralDeAvisos, type ChaveLida, type OrigemDoAviso } from "@/domain/avisos";
-import { avisosDeConferencia } from "@/domain/avisos-conferencia";
-import { avisoDoRevisar } from "@/domain/avisos-revisar";
+import { avisosDeTrabalho, preferenciasDeAvisos } from "@/domain/avisos-preferencias";
 import { lembretesDasLinhas } from "@/domain/lembretes";
 import { configuracoesDoDono } from "@/data/configuracoes-repo";
 import {
@@ -82,10 +81,14 @@ export function useCentralDeAvisos(): EstadoDaCentral {
       faturas: faturas.linhas,
       configuracao: configuracoesDoDono(configuracoes.linhas),
     });
-    // As mesmas contas da faixa do Painel (`conferir`) e do menu (`contarFila`): a Central nunca tem a sua.
-    const origens: OrigemDoAviso[] = [...lembretes, ...avisosDeConferencia(faturas.linhas, cartoes.linhas, todos.linhas)];
-    const doRevisar = avisoDoRevisar(fila.linhas, faturas.linhas);
-    if (doRevisar !== null) origens.push(doRevisar);
+    // As mesmas contas da faixa do Painel (`conferir`) e do menu (`contarFila`): a Central nunca tem a sua. O interruptor
+    // da Conferência e o do Revisar (8.3) valem aqui, antes de `avisosDaCentral`: o tipo desligado nem é calculado, não
+    // conta no menu e não entra em "Marcar tudo". O Cron não lê estas preferências (não são lembretes).
+    const dono = configuracoesDoDono(configuracoes.linhas);
+    const origens: OrigemDoAviso[] = [
+      ...lembretes,
+      ...avisosDeTrabalho(faturas.linhas, cartoes.linhas, todos.linhas, fila.linhas, preferenciasDeAvisos(dono)),
+    ];
     return avisosDaCentral(origens, linhasLidas);
   }, [
     pronto,

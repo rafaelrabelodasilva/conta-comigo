@@ -219,7 +219,7 @@ Da Arquitetura (ARCHITECTURE-SPINE.md, final):
 | FR-52 | 3 | Dar Apelido |
 | FR-53 | 4 | Mensagem a partir de um Bloco |
 | FR-54 | 4 | Cálculo passo a passo do Bloco |
-| FR-55 | 7 e 8 | Lembretes (7.4 e 7.5); Central de Avisos (8.1; 8.2 leva a Conferência e o Revisar para ela) |
+| FR-55 | 7 e 8 | Lembretes (7.4 e 7.5); Central de Avisos (8.1; 8.2 leva a Conferência e o Revisar para ela; 8.3 liga e desliga esses dois e dispensa a Conferência pela Central) |
 
 ## Epic List
 
@@ -252,7 +252,7 @@ Rafael vê quanto está comprometido nos próximos Meses, a evolução dos últi
 **FRs covered:** FR-31, FR-32, FR-33, FR-55
 
 ### Epic 8: Central de avisos
-Rafael tem um lugar só para os avisos do app, um item de menu com o contador de não lidos, com "Marcar tudo como lido" e o "lido" valendo em todos os aparelhos. A Central substitui a faixa de lembretes no topo das telas (a 8.1 traz os lembretes de fechamento e de atraso; a 8.2 traz a diferença da Conferência e a fila do Revisar, só dentro do app).
+Rafael tem um lugar só para os avisos do app, um item de menu com o contador de não lidos, com "Marcar tudo como lido" e o "lido" valendo em todos os aparelhos. A Central substitui a faixa de lembretes no topo das telas (a 8.1 traz os lembretes de fechamento e de atraso; a 8.2 traz a diferença da Conferência e a fila do Revisar, só dentro do app; a 8.3 dá um interruptor a cada um dos dois e o "Dispensar" à Conferência).
 **FRs covered:** FR-55 (revisado)
 
 ## Epic 1: Entrar e montar a base
@@ -1639,3 +1639,39 @@ So that eu não precise abrir cada tela para saber o que precisa de mim (FR-55 r
 **When** rodam **Then** não mudam: só os lembretes viram notificação; a Conferência e o Revisar existem só dentro do app (`lembretes_enviados.tipo` continua aceitando só `fechamento` e `atraso`)
 
 **Given** o merge **Then** não há migração: nada a aplicar com `supabase db push`; a `avisos_lidos` da 8.1 já aceita os dois `tipo` novos
+
+_(Os pontos "não há interruptor novo" e "dispensar pela Central fica de fora" acima são da 8.2 e foram superados pela 8.3, abaixo.)_
+
+### Story 8.3: Desligar e dispensar os avisos da Conferência e do Revisar
+
+As a Rafael,
+I want desligar o aviso da Conferência e o do Revisar e dispensar a Conferência de uma Fatura pela própria Central,
+So that os avisos que ficam o tempo todo na lista (a fila do Revisar, a diferença de um Mês antigo que nunca vai bater) não me atrapalhem a ver o que é novo (FR-55 revisado).
+
+**Status:** review (spec: `spec-8-3-desligar-e-dispensar-avisos.md`). **Há migração** (duas colunas aditivas em `configuracoes`, `supabase/migrations/20261204120000_avisos_preferencias.sql`, a aplicar com `supabase db push` a pedido do Rafael). A necessidade veio das entradas abertas do `deferred-work.md` da 8.2 ("é a história seguinte") e ainda **não foi confirmada olhando a Central do Rafael com os dados reais**; ele pediu para seguir assim mesmo.
+
+**Acceptance Criteria:**
+
+**Given** Configurações → Aparência → grupo "Avisos"
+**When** Rafael a abre **Then** há quatro interruptores, todos ligados por padrão: os dois lembretes (fechamento e atraso, 7.4) e, novos, "Quando a Conferência de uma fatura tem diferença" e "Quando há lançamentos para revisar"
+**And** cada um grava só a coluna dele (`aviso_conferencia` e `aviso_revisar`, `boolean not null default true`), de forma otimista como os lembretes; sem conexão ou com o banco recusando, o interruptor volta e aparece "Não foi possível salvar"
+
+**Given** um dos dois interruptores desligado
+**When** Rafael abre a Central ou o menu **Then** o aviso daquele tipo não aparece na lista, não conta no contador do menu nem no resumo do topo e não entra em "Marcar tudo como lido" (o filtro vale no núcleo, antes de `avisosDaCentral`: o tipo desligado nem é calculado)
+**And** o contador "para revisar" do item Revisar do menu não muda (é a fila de trabalho, não o aviso)
+**And** religar traz o aviso de volta com o estado que a chave dá: o que estava lido continua lido (a linha de `avisos_lidos` nunca é apagada)
+
+**Given** o aviso da Conferência de uma Fatura, lido ou não
+**When** Rafael toca em "Dispensar" na linha **Then** o app chama a mesma gravação da faixa do Painel (`dispensarAlerta`, que grava `alerta_dispensado_em` na Fatura), mostra o toast "Alerta dispensado" com "Desfazer" (`desfazerDispensa`) e a linha some
+**And** dispensar pela Central e pelo Painel é a mesma coisa (a faixa e o aviso somem juntos, e o "Desfazer" ou a reimportação os trazem de volta); dispensar não marca como lido
+**And** o foco vai para o primeiro controle da linha seguinte (ou da anterior, se era a última); recusa do banco mostra o erro e o foco fica onde estava
+**And** a linha da Conferência tem "Marcar como lido" e "Dispensar" lado a lado, com alvos de 44 pt, o nome acessível de cada botão com o texto do aviso e a ordem de tabulação toque, "Marcar como lido", "Dispensar"; no iPad em pé os botões descem para a linha de baixo em vez de espremer o texto; o Revisar e os lembretes não têm "Dispensar"
+
+**Given** o texto de ajuda do grupo e o de "Notificações neste aparelho"
+**When** Rafael os lê **Then** dizem que, desligado, o aviso não aparece, não conta no menu e não entra em "Marcar tudo", e que só o fechamento e o atraso também chegam como notificação do aparelho (a Conferência e o Revisar existem só dentro do app)
+
+**Given** o Cron e a notificação do sistema (7.5)
+**When** rodam **Then** não mudam e não leem as colunas novas (`PreferenciasDeLembretes` continua com os dois lembretes; `lembretes_enviados.tipo` continua aceitando só `fechamento` e `atraso`)
+
+**Given** o merge antes do `supabase db push`
+**When** Rafael usa o app **Then** a Central funciona como na 8.2 (a linha de `configuracoes` ainda não traz as colunas e coluna ausente vale ligado) e "Dispensar" funciona (não depende do banco novo); só ligar ou desligar um dos dois interruptores novos responde "Não foi possível salvar" até o `db push`

@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 11-01-2026 19:39
-last_updated: 21-11-2026 09:00
+last_updated: 21-11-2026 12:00
 project: conta-comigo
 project_key: NOKEY
 tracking_system: file-system
@@ -111,7 +111,8 @@ development_status:
   7-5-notificações-no-ipad-e-no-pc: done
   epic-7-retrospective: optional
 
-  epic-8: done
+  epic-8: in-progress
   8-1-central-de-avisos: done
   8-2-conferência-e-revisar-na-central-de-avisos: done
+  8-3-desligar-e-dispensar-os-avisos-da-conferência-e-do-revisar: review
   epic-8-retrospective: optional

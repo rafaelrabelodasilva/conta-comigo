@@ -359,7 +359,7 @@ O app avisa Rafael, por notificação (com o app instalado e a permissão dada) 
 
 A Central de Avisos também mostra, só dentro do app (sem notificação do sistema), a diferença da Conferência de uma Fatura que não bate e não foi dispensada (FR-6) e a fila do Revisar quando há itens (FR-13).
 
-Cada aviso pode ser marcado como lido, um a um ou todos de uma vez, e o "lido" vale em todos os aparelhos. Cada tipo de lembrete pode ser desligado em Configurações: desligado, não aparece na Central, não conta e não chega como notificação.
+Cada aviso pode ser marcado como lido, um a um ou todos de uma vez, e o "lido" vale em todos os aparelhos. Cada um dos quatro tipos pode ser desligado em Configurações: desligado, não aparece na Central, não conta no menu e não entra em "Marcar tudo como lido" (os dois lembretes também deixam de chegar como notificação). Na Central, a diferença da Conferência também pode ser dispensada pela própria linha, o mesmo "Dispensar" da faixa do Painel.
 
 #### FR-35: Instalar como app
 O web app pode ser instalado na tela inicial do iPad, sem App Store.

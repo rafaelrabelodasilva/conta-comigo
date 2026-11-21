@@ -138,6 +138,8 @@ export type Database = {
       configuracoes: {
         Row: {
           aparencia: string
+          aviso_conferencia: boolean
+          aviso_revisar: boolean
           created_at: string
           id: string
           lembrete_atraso: boolean
@@ -152,6 +154,8 @@ export type Database = {
         }
         Insert: {
           aparencia?: string
+          aviso_conferencia?: boolean
+          aviso_revisar?: boolean
           created_at?: string
           id?: string
           lembrete_atraso?: boolean
@@ -166,6 +170,8 @@ export type Database = {
         }
         Update: {
           aparencia?: string
+          aviso_conferencia?: boolean
+          aviso_revisar?: boolean
           created_at?: string
           id?: string
           lembrete_atraso?: boolean

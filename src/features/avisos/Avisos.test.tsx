@@ -2,7 +2,7 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TEXTOS_AVISOS as T, TEXTOS_LEMBRETES as L, mensagem } from "@/domain/mensagens";
+import { TEXTOS_AVISOS as T, TEXTOS_CONFERENCIA, TEXTOS_LEMBRETES as L, mensagem } from "@/domain/mensagens";
 import { ToastProvider } from "@/ui/Toast";
 import { Avisos } from "./Avisos";
 
@@ -19,6 +19,8 @@ const falso = vi.hoisted(() => ({
   recarregar: vi.fn(),
   marcar: vi.fn(),
   marcarUm: vi.fn(),
+  dispensarAlerta: vi.fn(),
+  desfazerDispensa: vi.fn(),
 }));
 
 vi.mock("@/data/realtime", async () => {
@@ -48,6 +50,9 @@ vi.mock("@/data/realtime", async () => {
   };
 });
 vi.mock("@/data/avisos-repo", () => ({ repoAvisos: () => ({ marcar: falso.marcar, marcarUm: falso.marcarUm }) }));
+vi.mock("@/data/faturas-repo", () => ({
+  repoFaturas: () => ({ dispensarAlerta: falso.dispensarAlerta, desfazerDispensa: falso.desfazerDispensa }),
+}));
 vi.mock("next/link", async () => {
   const React = await import("react");
   return {
@@ -186,6 +191,17 @@ beforeEach(() => {
     mudou();
     return { ok: true };
   });
+  // O repositório de Faturas falso grava `alerta_dispensado_em` na "tabela" e avisa, como o do banco (otimista).
+  const dispensa = (faturaId: string, valor: string | null) => {
+    guardar(
+      "faturas",
+      (falso.banco.faturas ?? []).map((f) => ((f as { id: string }).id === faturaId ? { ...(f as object), alerta_dispensado_em: valor } : f)),
+    );
+    mudou();
+    return { ok: true };
+  };
+  falso.dispensarAlerta.mockReset().mockImplementation(async (id: string) => dispensa(id, "2026-11-19T15:00:00Z"));
+  falso.desfazerDispensa.mockReset().mockImplementation(async (id: string) => dispensa(id, null));
   guardar("config_ciclo", CICLO);
   guardar("status", STATUS);
   guardar("faturas", [fatura("2026-10", "2026-10-06"), fatura("2026-11", "2026-11-06")]);
@@ -722,5 +738,332 @@ describe("Central de Avisos: a diferença da Conferência e a fila do Revisar", 
     guardar("fila", []);
     montar();
     expect(screen.getByText(T.vazio)).toBeTruthy();
+  });
+});
+
+// ------------------------------- Dispensar a Conferência e desligar os avisos (História 8.3)
+
+describe("Central de Avisos: Dispensar a Conferência e os interruptores (História 8.3)", () => {
+  /** Novembro com R$ 720,00 a menos do que a Fatura diz, no cartão 8673 (a faixa âmbar do Painel). */
+  function comDiferenca(extra: Record<string, unknown> = {}) {
+    guardar("faturas", [
+      fatura("2026-10", "2026-10-06"),
+      fatura("2026-11", "2026-11-06", { total_despesas_centavos: 100_000, ...extra }),
+    ]);
+    guardar("fatura_cartoes", [{ fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000 }]);
+    guardar("lancamentos", [
+      ...LANCAMENTOS_DOS_QUATRO,
+      lancamento("lf", "ninguem", 28_000, { mes: "2026-11", status_id: PAGO, fatura_id: "f-2026-11", final_cartao: "8673" }),
+    ]);
+  }
+  /** Só a Conferência de novembro (sem Blocos atrasados). */
+  function soAConferencia() {
+    comDiferenca();
+    guardar("blocos", []);
+    guardar("lancamentos", [
+      lancamento("lf", "ninguem", 28_000, { mes: "2026-11", status_id: PAGO, fatura_id: "f-2026-11", final_cartao: "8673" }),
+    ]);
+  }
+  const naFila = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: `q${i}`, excluido_em: null, ajuste_de_id: null, revisao_motivo: "sem_classificacao" }));
+  const botoesDeDispensar = () => screen.queryAllByRole("button", { name: /^Dispensar: / });
+  const linhaDoTipo = (trecho: string) => linhas().find((li) => sem(li.textContent).includes(trecho))!;
+  const faturaNoBanco = (id: string) => (falso.banco.faturas as { id: string; alerta_dispensado_em: string | null }[]).find((f) => f.id === id)!;
+
+  describe("a linha da Conferência", () => {
+    it("tem 'Marcar como lido' e 'Dispensar' lado a lado, depois do toque para abrir (ordem de tabulação)", () => {
+      comDiferenca();
+      montar();
+      const controles = Array.from(linhas()[0].querySelectorAll<HTMLElement>("a, button"));
+      expect(controles.map((c) => c.tagName)).toEqual(["A", "BUTTON", "BUTTON"]);
+      expect(controles[1].textContent).toBe(T.marcar_um);
+      expect(controles[2].textContent).toBe(T.dispensar);
+    });
+
+    it("os três alvos têm 44 pt e o nome acessível de cada botão traz o texto do aviso (rótulo visível dentro do nome)", () => {
+      comDiferenca();
+      montar();
+      const conferencia = linhas()[0];
+      const [marcar, dispensar] = within(conferencia).getAllByRole("button");
+      for (const alvo of [within(conferencia).getByRole("link"), marcar, dispensar]) {
+        expect(alvo.className).toContain("min-h-toque");
+      }
+      expect(sem(marcar.getAttribute("aria-label"))).toMatch(/^Marcar como lido: Fatura de novembro\/26 com diferença\. /);
+      expect(sem(dispensar.getAttribute("aria-label"))).toMatch(/^Dispensar: Fatura de novembro\/26 com diferença\. /);
+      expect(dispensar.textContent).toBe(T.dispensar);
+      expect(dispensar.getAttribute("aria-label")).toContain(T.dispensar);
+      expect(textoDeLinha(0)).toContain("R$ 720,00 abaixo");
+    });
+
+    it("no iPad em pé a linha cabe: o texto tem espaço próprio e os botões descem em vez de espremê-lo", () => {
+      comDiferenca();
+      montar();
+      const conferencia = linhas()[0];
+      expect(conferencia.className).toContain("flex-wrap");
+      expect(within(conferencia).getByRole("link").className).toContain("basis-72");
+      expect(within(conferencia).getAllByRole("button")[0].parentElement!.className).toContain("flex-wrap");
+    });
+
+    it("só a Conferência pode ser dispensada: o Revisar e os lembretes não têm o botão", () => {
+      comDiferenca();
+      guardar("fila", naFila(3));
+      montar();
+      expect(linhas()).toHaveLength(6);
+      expect(botoesDeDispensar()).toHaveLength(1);
+      for (const trecho of ["para revisar", "em atraso desde"]) {
+        const li = linhaDoTipo(trecho);
+        expect(within(li).queryByRole("button", { name: /^Dispensar/ }), trecho).toBeNull();
+      }
+    });
+
+    it("a linha já lida também pode ser dispensada ('lido' e 'dispensado' são coisas diferentes)", () => {
+      comDiferenca();
+      guardar("avisos_lidos", [lidaDe("conferencia", "2026-11:-72000:0:8673", "2026-10-28")]);
+      montar();
+      const conferencia = linhaDoTipo("com diferença");
+      expect(within(conferencia).getByText(T.estado_lido)).toBeTruthy();
+      expect(within(conferencia).queryByRole("button", { name: /^Marcar como lido/ })).toBeNull();
+      expect(within(conferencia).getByRole("button", { name: /^Dispensar: / })).toBeTruthy();
+    });
+  });
+
+  describe("Dispensar", () => {
+    it("chama a mesma gravação da faixa do Painel (dispensarAlerta, com o id da Fatura) e a linha some", async () => {
+      comDiferenca();
+      const usuario = montar();
+      expect(linhas()).toHaveLength(5);
+      await usuario.click(botoesDeDispensar()[0]);
+      expect(falso.dispensarAlerta).toHaveBeenCalledTimes(1);
+      expect(falso.dispensarAlerta).toHaveBeenCalledWith("f-2026-11");
+      expect(linhas()).toHaveLength(4);
+      expect(botoesDeDispensar()).toHaveLength(0);
+      expect(screen.getByText("4 avisos novos")).toBeTruthy();
+    });
+
+    it("mostra o toast 'Alerta dispensado' com 'Desfazer', e o Desfazer traz a linha de volta (desfazerDispensa)", async () => {
+      comDiferenca();
+      const usuario = montar();
+      await usuario.click(botoesDeDispensar()[0]);
+      expect(await screen.findByText(T.alerta_dispensado)).toBeTruthy();
+      await usuario.click(screen.getByRole("button", { name: "Desfazer" }));
+      expect(falso.desfazerDispensa).toHaveBeenCalledWith("f-2026-11");
+      expect(linhas()).toHaveLength(5);
+      expect(sem(linhas()[0].textContent)).toContain("Fatura de novembro/26 com diferença");
+    });
+
+    it("dispensar NÃO marca como lido (não grava em avisos_lidos) e o texto do toast é o da faixa do Painel", async () => {
+      comDiferenca();
+      const usuario = montar();
+      await usuario.click(botoesDeDispensar()[0]);
+      expect(falso.marcarUm).not.toHaveBeenCalled();
+      expect(falso.marcar).not.toHaveBeenCalled();
+      expect(falso.banco.avisos_lidos).toEqual([]);
+      expect(T.alerta_dispensado).toBe(TEXTOS_CONFERENCIA.alerta_dispensado);
+      expect(T.dispensar).toBe(TEXTOS_CONFERENCIA.dispensar);
+    });
+
+    it("dispensar uma linha já lida também a tira; a linha de avisos_lidos continua no banco", async () => {
+      comDiferenca();
+      guardar("avisos_lidos", [lidaDe("conferencia", "2026-11:-72000:0:8673", "2026-10-28")]);
+      const usuario = montar();
+      await usuario.click(botoesDeDispensar()[0]);
+      expect(linhas().some((l) => sem(l.textContent).includes("com diferença"))).toBe(false);
+      expect(falso.banco.avisos_lidos).toHaveLength(1);
+    });
+
+    it("pela Central é a mesma coisa que pelo Painel: a mesma coluna da Fatura, e o aviso volta se ela zerar (Desfazer, reimportação)", async () => {
+      comDiferenca();
+      const usuario = montar();
+      await usuario.click(botoesDeDispensar()[0]);
+      // É o que o Painel lê para a faixa âmbar (`alerta_dispensado_em === null`): foi gravado na Fatura.
+      expect(faturaNoBanco("f-2026-11").alerta_dispensado_em).not.toBeNull();
+      // O "Desfazer" da faixa no Painel ou a reimportação zeram a coluna: o aviso volta.
+      comDiferenca({ alerta_dispensado_em: null });
+      mudou();
+      expect(sem(linhas()[0].textContent)).toContain("com diferença");
+    });
+
+    it("se o banco recusar: o toast 'Não foi possível salvar', a linha continua e não há 'Desfazer'", async () => {
+      comDiferenca();
+      falso.dispensarAlerta.mockResolvedValue({ ok: false, codigo: "salvar.falhou" });
+      const usuario = montar();
+      await usuario.click(botoesDeDispensar()[0]);
+      expect(await screen.findByText(mensagem("salvar.falhou"))).toBeTruthy();
+      expect(screen.queryByText(T.alerta_dispensado)).toBeNull();
+      expect(screen.queryByRole("button", { name: "Desfazer" })).toBeNull();
+      expect(linhas()).toHaveLength(5);
+    });
+
+    it("sem conexão: o aviso próprio", async () => {
+      comDiferenca();
+      falso.dispensarAlerta.mockResolvedValue({ ok: false, codigo: "conexao.gravar_sem_conexao" });
+      const usuario = montar();
+      await usuario.click(botoesDeDispensar()[0]);
+      expect(await screen.findByText(mensagem("conexao.gravar_sem_conexao"))).toBeTruthy();
+      expect(linhas()).toHaveLength(5);
+    });
+
+    it("o Desfazer que falha mostra o erro", async () => {
+      comDiferenca();
+      falso.desfazerDispensa.mockResolvedValue({ ok: false, codigo: "salvar.falhou" });
+      const usuario = montar();
+      await usuario.click(botoesDeDispensar()[0]);
+      await usuario.click(await screen.findByRole("button", { name: "Desfazer" }));
+      expect(await screen.findByText(mensagem("salvar.falhou"))).toBeTruthy();
+    });
+
+    it("duas Faturas com diferença: dispensar uma deixa a outra", async () => {
+      comDiferenca();
+      guardar("faturas", [
+        fatura("2026-10", "2026-10-06", { total_despesas_centavos: 50_000 }),
+        fatura("2026-11", "2026-11-06", { total_despesas_centavos: 100_000 }),
+      ]);
+      guardar("fatura_cartoes", [
+        { fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000 },
+        { fatura_id: "f-2026-10", final: "8673", total_centavos: 50_000 },
+      ]);
+      const usuario = montar();
+      expect(botoesDeDispensar()).toHaveLength(2);
+      await usuario.click(botoesDeDispensar()[0]);
+      expect(falso.dispensarAlerta).toHaveBeenCalledWith("f-2026-11");
+      expect(botoesDeDispensar()).toHaveLength(1);
+      expect(sem(linhas()[0].textContent)).toContain("Fatura de outubro/26 com diferença");
+    });
+  });
+
+  describe("o foco depois de dispensar", () => {
+    it("vai para o primeiro controle da linha seguinte (nunca se perde)", async () => {
+      comDiferenca();
+      guardar("fila", naFila(3));
+      const usuario = montar();
+      botoesDeDispensar()[0].focus();
+      await usuario.click(botoesDeDispensar()[0]);
+      // A linha seguinte era a do Revisar: o primeiro controle dela é o toque para abrir.
+      expect(sem(linhas()[0].textContent)).toContain("para revisar");
+      expect(document.activeElement).toBe(within(linhas()[0]).getByRole("link"));
+    });
+
+    it("se era a última linha, vai para a anterior", async () => {
+      soAConferencia();
+      guardar("fila", naFila(2));
+      guardar("avisos_lidos", [lidaDe("conferencia", "2026-11:-72000:0:8673", "2026-10-28")]);
+      const usuario = montar();
+      // O Revisar (não lido) vem primeiro e a Conferência lida é a última da lista.
+      expect(sem(linhas()[1].textContent)).toContain("com diferença");
+      await usuario.click(botoesDeDispensar()[0]);
+      expect(linhas()).toHaveLength(1);
+      expect(document.activeElement).toBe(within(linhas()[0]).getByRole("link"));
+    });
+
+    it("sem nenhuma outra linha, o vazio aparece e o foco não se perde numa tela quebrada", async () => {
+      soAConferencia();
+      const usuario = montar();
+      expect(linhas()).toHaveLength(1);
+      await usuario.click(botoesDeDispensar()[0]);
+      expect(screen.getByText(T.vazio)).toBeTruthy();
+      // A lista sumiu (o estado vazio ocupa o lugar): não há onde o foco cair.
+      expect(screen.queryByRole("list", { name: T.lista })).toBeNull();
+    });
+
+    it("se a gravação for recusada, o foco fica onde estava", async () => {
+      comDiferenca();
+      falso.dispensarAlerta.mockResolvedValue({ ok: false, codigo: "salvar.falhou" });
+      const usuario = montar();
+      botoesDeDispensar()[0].focus();
+      await usuario.click(botoesDeDispensar()[0]);
+      expect(document.activeElement).toBe(botoesDeDispensar()[0]);
+    });
+  });
+
+  describe("os interruptores de Configurações", () => {
+    it("a Conferência desligada: não aparece, não conta no resumo e não entra em 'Marcar tudo'", async () => {
+      comDiferenca();
+      guardar("fila", naFila(3));
+      guardar("configuracoes", [{ id: "c", aviso_conferencia: false }]);
+      const usuario = montar();
+      expect(linhas().some((l) => sem(l.textContent).includes("com diferença"))).toBe(false);
+      expect(botoesDeDispensar()).toHaveLength(0);
+      expect(screen.getByText("5 avisos novos")).toBeTruthy();
+      await usuario.click(marcarTudo());
+      expect(falso.marcar.mock.calls[0][0].map((c: { tipo: string }) => c.tipo)).toEqual([
+        "revisar",
+        "atraso",
+        "atraso",
+        "atraso",
+        "atraso",
+      ]);
+    });
+
+    it("o Revisar desligado: não aparece, não conta e não entra em 'Marcar tudo'", async () => {
+      comDiferenca();
+      guardar("fila", naFila(3));
+      guardar("configuracoes", [{ id: "c", aviso_revisar: false }]);
+      const usuario = montar();
+      expect(linhas().some((l) => sem(l.textContent).includes("para revisar"))).toBe(false);
+      expect(screen.getByText("5 avisos novos")).toBeTruthy();
+      await usuario.click(marcarTudo());
+      expect(falso.marcar.mock.calls[0][0].map((c: { tipo: string }) => c.tipo)).toEqual([
+        "conferencia",
+        "atraso",
+        "atraso",
+        "atraso",
+        "atraso",
+      ]);
+    });
+
+    it("os dois desligados: sobram os lembretes; sem lembretes, 'Nenhum aviso'", () => {
+      comDiferenca();
+      guardar("fila", naFila(3));
+      guardar("configuracoes", [{ id: "c", aviso_conferencia: false, aviso_revisar: false }]);
+      montar();
+      expect(linhas()).toHaveLength(4);
+      expect(screen.getByText("4 avisos novos")).toBeTruthy();
+      guardar("lancamentos", []);
+      mudou();
+      expect(screen.getByText(T.vazio)).toBeTruthy();
+    });
+
+    it("desligar e ligar de novo: o aviso volta na hora e o lido continua lido", () => {
+      comDiferenca();
+      guardar("fila", naFila(3));
+      guardar("avisos_lidos", [lidaDe("conferencia", "2026-11:-72000:0:8673", "2026-10-28")]);
+      montar();
+      expect(within(linhaDoTipo("com diferença")).getByText(T.estado_lido)).toBeTruthy();
+      guardar("configuracoes", [{ id: "c", aviso_conferencia: false }]);
+      mudou();
+      expect(linhas().some((l) => sem(l.textContent).includes("com diferença"))).toBe(false);
+      guardar("configuracoes", [{ id: "c", aviso_conferencia: true }]);
+      mudou();
+      expect(within(linhaDoTipo("com diferença")).getByText(T.estado_lido)).toBeTruthy();
+      expect(screen.getByText("5 avisos novos")).toBeTruthy();
+    });
+
+    it("banco antes do db push (a linha de configuracoes sem as colunas novas): tudo ligado, como na 8.2", () => {
+      comDiferenca();
+      guardar("fila", naFila(3));
+      guardar("configuracoes", [{ id: "c", lembrete_atraso: true, lembrete_fechamento: true }]);
+      montar();
+      expect(linhas()).toHaveLength(6);
+    });
+
+    it("o desligado de um grupo não mexe no outro (os lembretes são colunas à parte dos avisos)", () => {
+      comDiferenca();
+      guardar("fila", naFila(3));
+      guardar("configuracoes", [{ id: "c", lembrete_atraso: false, aviso_revisar: false }]);
+      montar();
+      // Sem o atraso (lembrete) e sem o Revisar: fica a Conferência.
+      expect(linhas().map((l) => sem(l.textContent).includes("com diferença"))).toEqual([true]);
+    });
+  });
+
+  describe("acessibilidade", () => {
+    it("o resumo e o anúncio seguem em região 'status' e Dispensar é um botão de verdade, sem cor literal", () => {
+      comDiferenca();
+      montar();
+      expect(screen.getAllByRole("status").length).toBeGreaterThanOrEqual(2);
+      const b = botoesDeDispensar()[0];
+      expect(b.tagName).toBe("BUTTON");
+      expect(b.className).not.toMatch(/#[0-9a-f]{3,6}|rgb\(|hsl\(/i);
+    });
   });
 });
