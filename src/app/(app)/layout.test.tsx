@@ -9,6 +9,8 @@ import { mensagem } from "@/domain/mensagens";
 vi.mock("@/features/revisar/MenuLateral", () => ({ MenuLateral: () => <nav data-teste="menu" /> }));
 // O tema usa o gerenciador de Realtime; aqui só importa que é montado.
 vi.mock("@/features/configuracoes/AplicarTema", () => ({ AplicarTema: () => <i data-teste="tema" /> }));
+// A reativação das notificações lê o navegador e o banco; aqui só importa que é montada (não desenha nada).
+vi.mock("@/features/configuracoes/ReativarNotificacoes", () => ({ ReativarNotificacoes: () => null }));
 // A faixa lê o detector de conexão; aqui só importa onde ela fica.
 vi.mock("@/features/conexao/FaixaSemConexao", () => ({ FaixaSemConexao: () => <b data-teste="faixa" /> }));
 

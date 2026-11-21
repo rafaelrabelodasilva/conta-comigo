@@ -45,6 +45,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { somarMeses } from "@/domain/ciclo";
 import { lerDivisao } from "@/domain/divisao";
 import type { CandidataParaHerdar } from "@/domain/heranca";
+import { historicoDoMes } from "@/domain/historico-do-mes";
 import type { Importacao } from "@/domain/importacao-fatura";
 import type { ChaveDaSerie, PrevistoParaCasar } from "@/domain/previstos";
 import type { AntigaParaReimportar } from "@/domain/reimportacao";
@@ -105,8 +106,12 @@ export type ResultadoLeituraReimportacao =
   | { ok: true; valor: LeituraReimportacao | null }
   | { ok: false; codigo: string };
 
-/** Os previstos do Mês importado e o `updated_at` mais novo do Mês, lidos juntos. */
-export type LeituraDePrevistos = { previstos: PrevistoParaCasar[]; atualizadoEm: string | null };
+/**
+ * Os previstos do Mês importado e o `updated_at` mais novo do Mês, lidos juntos, mais quantas
+ * linhas vivas do histórico da planilha o Mês já tem (`historico`, Defeito 2: a primeira
+ * importação num Mês com histórico dobra o total, e o passo 3 avisa antes de gravar).
+ */
+export type LeituraDePrevistos = { previstos: PrevistoParaCasar[]; atualizadoEm: string | null; historico: number };
 
 export type ResultadoLeituraDePrevistos =
   | ({ ok: true } & LeituraDePrevistos)
@@ -362,7 +367,7 @@ export function criarRepoFaturas(deps: {
                 },
               ];
         });
-        const historico = lidasLinhas.data.filter((l) => l.lancado_por === "historico" && l.excluido_em === null).length;
+        const historico = historicoDoMes(lidasLinhas.data.map((l) => ({ ...l, mes })), mes);
         return {
           ok: true,
           valor: { faturaId, atualizadoEm, antigas, statusPadraoId, referenciadas, outrasDaSerie, historico },
@@ -399,7 +404,8 @@ export function criarRepoFaturas(deps: {
             l.parcela_n !== null &&
             l.parcela_total !== null,
         );
-        if (candidatos.length === 0) return { ok: true, previstos: [], atualizadoEm };
+        const historico = historicoDoMes(lidas.data.map((l) => ({ ...l, mes })), mes);
+        if (candidatos.length === 0) return { ok: true, previstos: [], atualizadoEm, historico };
         const idsDasSeries = [...new Set(candidatos.map((l) => l.serie_id as string))];
         const series = await cliente
           .from("series")
@@ -432,7 +438,7 @@ export function criarRepoFaturas(deps: {
             },
           ];
         });
-        return { ok: true, previstos, atualizadoEm };
+        return { ok: true, previstos, atualizadoEm, historico };
       } catch {
         return { ok: false, codigo: "carregar.falhou" };
       }

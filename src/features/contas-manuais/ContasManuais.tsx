@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { lerContaSalva, parcelasRecriaveis, type ContaSalva } from "@/domain/alterar-conta";
 import type { NovaConta } from "@/domain/contas-manuais";
 import { hojeEmSaoPaulo } from "@/domain/datas";
@@ -86,7 +86,8 @@ export function ContasManuais({
 }: {
   titulo: string;
   /** O repositório (os testes passam um falso). */
-  repo?: Pick<ReturnType<typeof repoContas>, "salvar" | "ler" | "alterar" | "encerrar" | "excluir" | "restaurar">;
+  repo?: Pick<ReturnType<typeof repoContas>, "salvar" | "ler" | "alterar" | "encerrar" | "excluir" | "restaurar"> &
+    Partial<Pick<ReturnType<typeof repoContas>, "mesesComHistorico">>;
 }) {
   // O relógio fica fora do núcleo: "hoje" é lido aqui, uma vez.
   const [mesAtual] = useState(() => mesDeHoje(hojeEmSaoPaulo(new Date())));
@@ -126,6 +127,8 @@ export function ContasManuais({
       vale = false;
     };
   }, [acao, mesAtual, repo]);
+  // Defeito 2: o formulário de Conta nova avisa dos Meses que já têm histórico da planilha. Estável entre desenhos.
+  const lerHistorico = useCallback((desde: string) => (repo.mesesComHistorico ? repo.mesesComHistorico(desde) : Promise.resolve(null)), [repo]);
   const lido = leitura !== null && leitura.ok ? leitura : null;
   const erroDaLeitura = leitura !== null && !leitura.ok ? mensagem(leitura.codigo) : null;
   const ficam = useMemo(
@@ -300,6 +303,7 @@ export function ContasManuais({
           tipos={tipos.linhas}
           online={online}
           aoSalvar={salvar}
+          lerHistorico={lerHistorico}
         />
       ) : null}
       {acao?.tipo === "editar" ? (

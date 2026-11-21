@@ -355,6 +355,29 @@ export function avisoReimportar(mes: string, r: ResumoDoPlano, historico = 0): s
   return `Esta fatura já foi importada. ${principal}${resto}${excluidos}${doHistorico}`;
 }
 
+/**
+ * Passo 3 da importação de uma Fatura num Mês que já tem histórico da planilha (Defeito 2, só a
+ * PRIMEIRA importação: a reimportação já diz quantas há, em `avisoReimportar`). Avisa com o número;
+ * "Importar mesmo assim" é a confirmação. Nada é apagado sozinho.
+ */
+export function avisoImportarComHistorico(mes: string, quantidade: number): string {
+  const n = quantidade === 1 ? "1 lançamento do histórico da planilha" : `${quantidade} lançamentos do histórico da planilha`;
+  return `Este mês já tem ${n}. Se você importar a fatura agora, as linhas dela entram por cima e o total de ${formatarNomeDoMes(mes)} conta em dobro. Para evitar, cancele e apague o histórico desse mês em Configurações → Importar planilha → Apagar histórico importado. Nada é apagado sozinho.`;
+}
+
+/**
+ * Formulário de Conta nova com "Começa em" num Mês que já tem histórico da planilha (Defeito 2):
+ * "Jan/26 (12 lançamentos), Fev/26 (14 lançamentos)". Só avisa; "Salvar mesmo assim" confirma.
+ */
+export function avisoContaComHistorico(meses: readonly { mes: string; quantidade: number }[]): string {
+  const lista = meses
+    .map((m) => `${formatarMes(m.mes)} (${m.quantidade === 1 ? "1 lançamento" : `${m.quantidade} lançamentos`})`)
+    .join(", ");
+  const quais = meses.length === 1 ? "Este mês já tem histórico da planilha" : "Estes meses já têm histórico da planilha";
+  const dobra = meses.length === 1 ? "o total desse mês conta em dobro" : "o total desses meses conta em dobro";
+  return `${quais}: ${lista}. A conta entra por cima e ${dobra}. Para evitar, escolha um “Começa em” depois do histórico, ou apague o histórico em Configurações → Importar planilha → Apagar histórico importado. Nada é apagado sozinho.`;
+}
+
 /** Passo 3 e resumo final: "2 lançamentos saíram da fatura e estão no Revisar". */
 export function rotuloSumiramNaReimportacao(n: number): string {
   return n === 1 ? "1 lançamento saiu da fatura e está no Revisar" : `${n} lançamentos saíram da fatura e estão no Revisar`;
@@ -715,6 +738,9 @@ export const TEXTOS_REVISAR = {
   /** Toast do ✓ e do "Mudar": o "Desfazer" vem do próprio toast. */
   classificado: "Classificado",
   titulo_mudar: "Mudar classificação",
+  /** Na mãe dividida que voltou à fila (Defeito 9): o Responsável está nas partes, então não há seletor dele. */
+  divisao_nas_partes:
+    "Esta linha está dividida: o Responsável está nas partes. Para mudar quem paga cada parte, abra o Mês no Painel e use “Editar divisão”.",
   responsavel: "Responsável",
   tipo: "Tipo",
   escolha: "Escolha…",
@@ -1369,6 +1395,7 @@ export const TEXTOS_CONTAS = {
   cancelar: "Cancelar",
   salvar: "Salvar",
   salvando: "Salvando…",
+  salvar_mesmo_assim: "Salvar mesmo assim",
   sem_internet: "Sem conexão. Você pode consultar, mas não alterar.",
   nota_passado: "Os meses anteriores também recebem a conta.",
   explicacao_vazio: "As contas que você cadastrar aparecem nos meses certos do Painel.",
@@ -2273,6 +2300,14 @@ export const TEXTOS_HERO = {
   abrir_recebimentos: "abrir Recebimentos",
 } as const;
 
+/**
+ * Quando um Bloco de cobrança não calcula (Fórmula inválida), o "Falta receber" do hero não o soma e
+ * diz isso em texto (Defeito 4), em vez de calar: "1 Bloco não entrou na soma".
+ */
+export function rotuloBlocosForaDaSoma(n: number): string {
+  return n === 1 ? "1 Bloco não entrou na soma" : `${n} Blocos não entraram na soma`;
+}
+
 /** "Falta receber R$ 636,00, abrir Recebimentos". */
 export function rotuloFaltaReceber(valor: string): string {
   return `${TEXTOS_HERO.falta_receber} ${valor}, ${TEXTOS_HERO.abrir_recebimentos}`;
@@ -2601,6 +2636,8 @@ export const TEXTOS_NOTIFICACOES = {
   desativando: "Desativando…",
   estado_ativo: "Notificações ativadas neste aparelho.",
   estado_pode_ativar: "Notificações desativadas neste aparelho.",
+  /** O navegador tinha perdido a inscrição deste aparelho e o app a refez sozinho (Defeito 8). */
+  reativadas: "Notificações reativadas neste aparelho.",
   estado_negada:
     "As notificações estão bloqueadas neste aparelho. Para liberar: no iPad, Ajustes → Notificações → Conta Comigo; no computador, o cadeado ao lado do endereço. Depois volte aqui.",
   estado_instalar_primeiro:

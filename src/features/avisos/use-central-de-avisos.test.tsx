@@ -63,6 +63,7 @@ const fatura = (mes: string, vencimento: string, extra: Record<string, unknown> 
   total_despesas_centavos: 0,
   total_creditos_centavos: 0,
   alerta_dispensado_em: null,
+  created_at: "2026-11-18T12:00:00Z",
   updated_at: "2026-11-18T12:00:00Z",
   ...extra,
 });
@@ -177,7 +178,7 @@ describe("useCentralDeAvisos", () => {
 
   it("a Conferência e o Revisar entram na conta: o contador soma os três tipos, na ordem dos tipos", () => {
     falso.banco.faturas = [fatura("2026-10", "2026-10-06"), fatura("2026-11", "2026-11-06", { total_despesas_centavos: 100_000 })];
-    falso.banco.fatura_cartoes = [{ fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000 }];
+    falso.banco.fatura_cartoes = [{ fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000, created_at: "2026-11-18T12:00:00Z" }];
     falso.banco.lancamentos = [
       lancamento,
       { ...lancamento, id: "lf", mes: "2026-11", status_id: "s-pago", responsavel_id: "ninguem", valor_centavos: 28_000, fatura_id: "f-2026-11", final_cartao: "8673" },

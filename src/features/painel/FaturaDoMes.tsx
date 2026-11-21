@@ -9,6 +9,7 @@ import {
   TEXTOS_PAINEL as T,
   rotuloComposicaoTotal,
   rotuloConferenciaTotal,
+  rotuloBlocosForaDaSoma,
   rotuloFaltaReceber,
   rotuloFiltrarPor,
   rotuloLancamentos,
@@ -44,7 +45,12 @@ export type FaturaHero = TotaisLidosDaFatura & { mes: string; vencimento: string
 export type ResponsavelHero = { nome: string; cor: number };
 
 /** Os dois mini-cartões do hero; `null` em um valor é "—". */
-export type RecebimentosDoHero = { recebidoCentavos: number | null; faltaCentavos: number | null };
+export type RecebimentosDoHero = {
+  recebidoCentavos: number | null;
+  faltaCentavos: number | null;
+  /** Blocos de cobrança que não calculam e ficaram fora do "Falta receber" (Defeito 4); ausente ou 0, nenhum. */
+  blocosForaDaSoma?: number;
+};
 
 export type PropsFaturaDoMes = {
   mes: string;
@@ -130,25 +136,34 @@ function BarraPorResponsavel({
 function MiniCartoes({ recebimentos, aoAbrir }: { recebimentos: RecebimentosDoHero; aoAbrir?: () => void }) {
   const recebido = recebimentos.recebidoCentavos === null ? TEXTOS_HERO.sem_valor : formatarDinheiro(recebimentos.recebidoCentavos);
   const falta = recebimentos.faltaCentavos === null ? TEXTOS_HERO.sem_valor : formatarDinheiro(recebimentos.faltaCentavos);
+  const fora = recebimentos.blocosForaDaSoma ?? 0;
   return (
-    <div className="grid grid-cols-2 gap-2">
-      <div className="flex min-h-toque flex-col justify-center rounded-md bg-background px-3 py-1.5">
-        <p className="texto-caption text-text-muted">{TEXTOS_HERO.recebido_no_mes}</p>
-        <p className="texto-body-strong tabular-nums text-accent">{recebido}</p>
+    <div className="flex flex-col gap-1">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="flex min-h-toque flex-col justify-center rounded-md bg-background px-3 py-1.5">
+          <p className="texto-caption text-text-muted">{TEXTOS_HERO.recebido_no_mes}</p>
+          <p className="texto-body-strong tabular-nums text-accent">{recebido}</p>
+        </div>
+        <button
+          type="button"
+          aria-label={rotuloFaltaReceber(falta)}
+          onClick={aoAbrir}
+          className="flex min-h-toque cursor-pointer flex-col justify-center rounded-md bg-background px-3 py-1.5 text-left"
+        >
+          <span aria-hidden className="texto-caption text-text-muted">
+            {TEXTOS_HERO.falta_receber}
+          </span>
+          <span aria-hidden className="texto-body-strong tabular-nums">
+            {falta}
+          </span>
+        </button>
       </div>
-      <button
-        type="button"
-        aria-label={rotuloFaltaReceber(falta)}
-        onClick={aoAbrir}
-        className="flex min-h-toque cursor-pointer flex-col justify-center rounded-md bg-background px-3 py-1.5 text-left"
-      >
-        <span aria-hidden className="texto-caption text-text-muted">
-          {TEXTOS_HERO.falta_receber}
-        </span>
-        <span aria-hidden className="texto-body-strong tabular-nums">
-          {falta}
-        </span>
-      </button>
+      {/* Um Bloco que não calcula fica fora da soma, e o hero diz isso em texto (Defeito 4). */}
+      {fora > 0 ? (
+        <p role="status" className="texto-caption text-text-muted">
+          {rotuloBlocosForaDaSoma(fora)}
+        </p>
+      ) : null}
     </div>
   );
 }

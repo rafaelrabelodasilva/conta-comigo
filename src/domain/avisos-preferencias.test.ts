@@ -27,7 +27,7 @@ const SO_CONFERENCIA: PreferenciasDeAvisos = { conferencia: true, revisar: false
 const DESLIGADOS: PreferenciasDeAvisos = { conferencia: false, revisar: false };
 
 /** Novembro com R$ 720,00 a menos do que a Fatura diz (R$ 1.000,00 lidos, R$ 280,00 gravados), no cartão 8673. */
-const NOV: FaturaParaAviso & { updated_at: string } = {
+const NOV: FaturaParaAviso & { created_at: string } = {
   id: "f-2026-11",
   mes: "2026-11",
   total_despesas_centavos: 100_000,
@@ -35,9 +35,11 @@ const NOV: FaturaParaAviso & { updated_at: string } = {
   fechamento: "2026-10-28",
   vencimento: "2026-11-06",
   alerta_dispensado_em: null,
-  updated_at: "2026-11-18T12:00:00Z",
+  created_at: "2026-11-18T12:00:00Z",
 };
-const CARTOES: CartaoParaConferir[] = [{ fatura_id: NOV.id, final: "8673", total_centavos: 100_000 }];
+const CARTOES: (CartaoParaConferir & { created_at: string })[] = [
+  { fatura_id: NOV.id, final: "8673", total_centavos: 100_000, created_at: "2026-11-18T12:00:00Z" },
+];
 const LANCAMENTOS: LancamentoParaConferir[] = [
   { fatura_id: NOV.id, valor_centavos: 28_000, final_cartao: "8673", excluido_em: null },
 ];

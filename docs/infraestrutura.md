@@ -80,7 +80,7 @@ Web Push (VAPID) para o iPad (iPadOS 18+, **com o app instalado na tela inicial*
 - **Fechamento da fatura:** uma vez por fechamento, chave `(fechamento, Mês da Fatura, dia do fechamento)`. Se o Cron falhar no dia, ainda avisa nos 5 dias seguintes (a janela do lembrete), sem duplicar, porque a chave é o dia do fechamento. Some assim que o Mês tem Fatura importada.
 - **Atraso:** chave `(atraso, id do Bloco, desde)`. Avisa quando o Bloco passa a ter item atrasado e **de novo só quando o "desde" muda** (o atraso novo depois de o Bloco quitar tudo; o item mais antigo pago com outro ainda em atraso). Não repete todo dia, nem quando só o valor muda; um Pagamento desfeito que traz o mesmo atraso de volta não avisa outra vez.
 - **Todos os lembretes novos, sem limite (muda na 8.1):** antes só saíam os 3 primeiros Blocos atrasados (os outros só apareciam como "E mais N" na faixa). Com a Central de Avisos mostrando todos, o aviso do sistema também traz todos. **Custo:** na primeira execução depois do deploy da 8.1, os Blocos atrasados que ainda não tinham aviso (do 4º em diante) saem de uma vez, uma notificação por Bloco, e a partir daí só o que for novo; o iPad agrupa os avisos do app. O texto é o da Central (`textoDoLembrete`, "Mãe: R$ 1.783,73 em atraso desde 17/10/26"); o título é "Conta Comigo". **Na tela bloqueada do iPad aparece esse mesmo texto**; quem não quer isso ali pode, no iPad, em Ajustes → Notificações → Conta Comigo, escolher "Mostrar pré-visualizações: Quando desbloqueado". Tocar na notificação abre o Painel ou Recebimentos e **não** marca como lido (quem marca é a Central).
-- **Nunca duas vezes vale mais que a reentrega:** a chave é inserida antes do envio; se o envio falhar para todos os aparelhos por um erro que não seja 404 ou 410 (rede, 5xx), a linha continua e o aviso não é reenviado (a Central de Avisos segue sendo o canal). 404 e 410 apagam a inscrição.
+- **Nunca duas vezes para quem recebeu (revisto no defeito 7):** a chave é inserida antes do envio. Se NENHUM aparelho aceitou e ao menos um erro foi transitório (sem resposta, 408, 429 ou 5xx), a linha é apagada e o Cron do dia seguinte tenta de novo; se algum aparelho aceitou, ou os erros foram 401, 403, 404 ou 410, a linha continua e o aviso não é reenviado (a Central de Avisos segue sendo o canal). 404 e 410 apagam a inscrição.
 - **Tempo:** a rota tem `maxDuration = 60`; cada envio tem limite de 10 s e nenhum aviso novo começa depois de 40 s (o que sobrar, por não ter sido inserido, sai no próximo dia).
 
 ### Trocar as chaves VAPID
@@ -155,3 +155,45 @@ Dois interruptores novos em Configurações → Aparência → grupo "Avisos" (o
 4. Avisar o agente, que confere por SQL que existe 1 usuário confirmado (`select count(*) from auth.users where email_confirmed_at is not null`) e testa que o cadastro é recusado (`signup_disabled`).
 5. Depois do deploy: `/` leva para `/entrar`; entrar, "Sair" e o e-mail de "Esqueci a senha" funcionam.
 - O e-mail de redefinição usa o SMTP padrão do Supabase (limite baixo de envios por hora), suficiente para um usuário só.
+
+## PR de correção dos 10 defeitos do `deferred-work.md`
+
+Uma PR, um commit por defeito (`Defeito N: ...`). Cada seção diz se o defeito tem migração e o que funciona entre o merge e o `db push`.
+
+### Defeito 1: a parcela de Conta excluída à mão não volta (HÁ migração)
+- Arquivo: `supabase/migrations/20261205120000_parcela_pulada_da_conta.sql` (a coluna `lancamentos.excluido_pela_conta boolean not null default false`, a marcação das linhas que a Conta já tinha excluído e três funções refeitas por `create or replace`, com a mesma assinatura e os mesmos `grant`: `materializar_contas_manuais`, `excluir_linhas_da_conta`, `restaurar_conta_manual`). `src/data/database.types.ts` muda. **Ainda não está em produção** (`supabase db push` só quando o Rafael pedir).
+- **O Cron das 09:00 não responde 500 em nenhuma ordem**: ele não lê a coluna nova (lê `contas_manuais` e chama `materializar_contas_manuais_do_dono`, que chama `materializar_contas_manuais`).
+- **Entre o merge e o `db push`:** tudo funciona como antes, inclusive o defeito (o Cron ainda recria a parcela excluída à mão). O Editar e o Encerrar leem as parcelas puladas com uma leitura tolerante: a coluna ainda não existe, a leitura dá erro e a prévia só não desconta as puladas (o banco antigo as recria, como sempre). Nada responde erro.
+- **Depois do `db push`:** a parcela excluída à mão fica excluída; o Editar, o Encerrar e o Cron a respeitam; o "Desfazer" a devolve. As parcelas que o Cron já recriou antes não são consertadas.
+- Aplicar **antes** do merge também é seguro: o código antigo não conhece a coluna, mas o Cron e o Editar já passam a respeitar a exclusão à mão (o Editar antigo manda as mesmas parcelas e o banco novo pula as puladas).
+- Dados novos no backup: nenhum (a coluna tem `default false` e o dump a leva como as outras; `scripts/backup/*` não listam colunas).
+
+### Defeito 2: Fatura ou Conta num Mês que já tem histórico da planilha (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron não mudam. O aviso é calculado no navegador (núcleo `src/domain/historico-do-mes.ts`) sobre linhas que já existem: o passo 3 da importação reaproveita a leitura do Mês que já fazia (`lerPrevistosDoMes`), e o formulário de Conta nova lê só as linhas `historico` vivas de `lancamentos` do "Começa em" em diante (paginado, RLS por dono). Nada é gravado nem apagado pelo aviso.
+
+### Defeito 3: o histórico da planilha não é atraso nem dívida (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron (a rota, a tabela e a chave) não mudam. É só uma regra do núcleo (`ehLinhaDeHistorico`) usada por `podeAtrasar` e `separarPendentes`. O **Cron das 09:00** usa as mesmas funções do navegador (`lembretesDasLinhas`): depois do deploy ele deixa de avisar atraso de linha do histórico. Nenhum aviso já enviado muda e nada é gravado.
+
+### Defeito 4: o "Falta receber" do hero não soma a mesma linha duas vezes (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron não mudam. É uma conta do núcleo (`faltaReceberDoMes`) sobre o que o Painel já lê; nada é gravado.
+
+### Defeito 5: dispensar a Conferência não traz o aviso do Revisar de volta (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron não mudam. A chave do aviso do Revisar (`avisos_lidos`: `revisar`, `fila`, dia) passa a usar o `created_at` das Faturas e de `fatura_cartoes`, que o gerenciador de Realtime da Central já lê. **Uma vez depois do deploy**, quem já tinha lido o aviso do Revisar pode vê-lo voltar como "Novo" (a chave muda de dia); nada é apagado e as linhas antigas de `avisos_lidos` ficam.
+
+### Defeito 6: o Cron lê todas as Contas e a falha deixa rastro (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts` e as RPC não mudam, e a rota, o horário e o `CRON_SECRET` seguem iguais. A leitura de `contas_manuais` passa a ser de 1000 em 1000 (acima de 1000 Contas, as demais deixavam de ser materializadas).
+- **Como o Rafael vê uma falha do Cron:** Vercel → o projeto → Logs, filtrando por `/api/cron/diario` e nível Error: a linha `cron.diario` com `status_http: 500`, o `codigo` (`cron.leitura_falhou` = não leu as Contas; `cron.materializacao_falhou` = a RPC recusou `falhas` Contas) e a `quantidade` criada antes da falha. Em Settings → Cron Jobs a execução aparece como falha. O app não mostra nada por conta própria e o Cron não tenta de novo: o dia seguinte refaz (o horizonte é de 12 Meses e a RPC é idempotente). Um aviso dentro do app seria uma tabela ou uma gravação nova do Cron: não foi criado.
+
+### Defeito 7: o lembrete não se perde por um erro transitório do push (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts` e as RPC não mudam, e `lembretes_enviados` fica como está (o `check` de `tipo`, a chave, o texto). O Cron das 09:00 passa a apagar a linha de `lembretes_enviados` de um lembrete quando nenhum aparelho o aceitou por erro transitório (rede, 5xx, 429); a chave de serviço já tem esse privilégio. O Cron nunca vira 500 por isso, e o log `cron.diario.notificacoes` ganha a contagem `reagendadas` (só quando há).
+- **Entre o merge e o deploy:** nada a fazer; a regra vive no código do Cron.
+
+### Defeito 8: o app refaz a inscrição de notificações que o navegador perdeu (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC, o Cron e o service worker (`/sw.js`) não mudam. Ao abrir o app com a permissão de notificações já dada e sem inscrição neste aparelho, o app grava a inscrição nova em `push_inscricoes` (a mesma gravação do botão "Ativar notificações", com a sessão do Rafael): **uma gravação a mais ao abrir o app, só nesse caso**. Sem a tabela (antes do `db push` da 7.5) a gravação recusa, a inscrição solta é cancelada e nada aparece.
+- O app só reativa um aparelho que já esteve ativado (marca em `localStorage`) e nunca depois de "Desativar neste aparelho". Nenhum dado novo no banco.
+
+### Defeito 9: a mãe dividida na fila do Revisar não mostra controle que não grava (NÃO há migração)
+- Nada a aplicar com `supabase db push`; `src/data/database.types.ts`, as RPC e o Cron não mudam. É só a decisão de quais controles a linha mostra (núcleo `src/domain/revisar.ts`) e a janela "Mudar".
+
+### Defeito 10: sair e entrar sem recarregar não deixa dado da sessão anterior (NÃO há migração)
+- Nada a aplicar com `supabase db push`; só código do navegador (`src/data/realtime.ts`, `ZerarAoEntrar` na página de entrar). Nenhuma gravação nem leitura nova. Em produção, depois do deploy, vale uma conferência no navegador: entrar, sair, entrar de novo na mesma aba e ver que a tela carrega do zero.

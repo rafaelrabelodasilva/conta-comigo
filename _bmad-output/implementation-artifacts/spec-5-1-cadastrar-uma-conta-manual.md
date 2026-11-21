@@ -130,7 +130,7 @@ Revisão inline do agente de implementação; nenhum revisor independente rodou.
 | `lancamentos_parcela_par_check` impedia `parcela_n` sem `parcela_total` (recorrente) | corrigido | relaxado para "total → n" |
 | Série de cartão e Série de Conta com a mesma chave | aceito (low) | `deferred-work.md` |
 | O cron (5.3) não tem `auth.uid()` | adiado | `deferred-work.md` |
-| Contas em Meses já importados da planilha duplicariam linhas | adiado | `deferred-work.md`; o formulário avisa que Meses anteriores também recebem a conta |
+| Contas em Meses já importados da planilha duplicariam linhas | adiado; **revista na PR de correção dos 10 defeitos (defeito 2): o formulário avisa em quais Meses há histórico e pede "Salvar mesmo assim"** | `deferred-work.md`; `spec-correcao-10-defeitos.md` |
 
 ## Design Notes
 

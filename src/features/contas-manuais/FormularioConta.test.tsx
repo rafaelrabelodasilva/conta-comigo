@@ -226,6 +226,50 @@ describe("FormularioConta", () => {
     expect(screen.getByText(T.nota_passado)).toBeTruthy();
   });
 
+  describe("Meses que já têm histórico da planilha (Defeito 2)", () => {
+    const HISTORICO = [
+      { mes: "2026-01", quantidade: 12 },
+      { mes: "2026-02", quantidade: 1 },
+    ];
+
+    it("Conta nova com 'Começa em' num Mês com histórico avisa em quais Meses (e quantas linhas), diz o caminho e pede a confirmação ('Salvar mesmo assim')", async () => {
+      const lerHistorico = vi.fn(async (desde: string) => HISTORICO.filter((m) => m.mes >= desde));
+      const { aoSalvar } = montar({ lerHistorico });
+      fireEvent.change(screen.getByLabelText(T.comeca_em), { target: { value: "2026-01" } });
+      const aviso = await screen.findByText(/histórico da planilha/);
+      expect(aviso.textContent).toContain("Jan/26 (12 lançamentos), Fev/26 (1 lançamento)");
+      expect(aviso.textContent).toContain("Apagar histórico importado");
+      expect(lerHistorico).toHaveBeenLastCalledWith("2026-01");
+      expect(screen.queryByRole("button", { name: T.salvar })).toBeNull();
+      // Nada é gravado só por avisar: preencher e tocar em "Salvar mesmo assim" grava.
+      expect(aoSalvar).not.toHaveBeenCalled();
+      preencherBombinhas();
+      fireEvent.change(screen.getByLabelText(T.comeca_em), { target: { value: "2026-01" } });
+      await screen.findByText(/histórico da planilha/);
+      fireEvent.click(screen.getByRole("button", { name: T.salvar_mesmo_assim }));
+      await waitFor(() => expect(aoSalvar).toHaveBeenCalledOnce());
+    });
+
+    it("trocar o 'Começa em' para depois do histórico tira o aviso e volta o botão 'Salvar'", async () => {
+      const lerHistorico = vi.fn(async (desde: string) => HISTORICO.filter((m) => m.mes >= desde));
+      montar({ lerHistorico });
+      fireEvent.change(screen.getByLabelText(T.comeca_em), { target: { value: "2026-01" } });
+      await screen.findByText(/histórico da planilha/);
+      fireEvent.change(screen.getByLabelText(T.comeca_em), { target: { value: "2026-03" } });
+      await waitFor(() => expect(screen.queryByText(/histórico da planilha/)).toBeNull());
+      expect(screen.getByRole("button", { name: T.salvar })).toBeTruthy();
+    });
+
+    it("a leitura falhou (null): nenhum aviso e o formulário não é bloqueado", async () => {
+      const lerHistorico = vi.fn(async () => null);
+      montar({ lerHistorico });
+      fireEvent.change(screen.getByLabelText(T.comeca_em), { target: { value: "2026-01" } });
+      await waitFor(() => expect(lerHistorico).toHaveBeenCalled());
+      expect(screen.queryByText(/histórico da planilha/)).toBeNull();
+      expect(salvar().disabled).toBe(false);
+    });
+  });
+
   it("o banco recusa: mostra o erro, não fecha, e tentar de novo manda a mesma Conta (mesmo id)", async () => {
     const aoSalvar = vi
       .fn<(c: NovaConta) => Promise<ResultadoSalvarConta>>()
@@ -294,6 +338,13 @@ describe("Editar (História 5.4)", () => {
     encerrada_em_mes: null,
     updated_at: "2026-11-10T12:00:00+00:00",
   };
+
+  it("editando uma Conta o 'Começa em' é fixo: não lê o histórico da planilha (Defeito 2)", () => {
+    const lerHistorico = vi.fn(async () => [{ mes: "2026-07", quantidade: 3 }]);
+    montar({ lerHistorico, conta: salva });
+    expect(lerHistorico).not.toHaveBeenCalled();
+    expect(screen.queryByText(/histórico da planilha/)).toBeNull();
+  });
 
   it("abre com a Conta, o Tipo e o Responsável arquivados que ela usa nas opções, e o 'Começa em' travado", () => {
     montar({ conta: salva });

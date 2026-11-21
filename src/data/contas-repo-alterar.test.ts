@@ -19,7 +19,7 @@ const PAGO = "s-pago";
 
 type Linha = Record<string, unknown>;
 
-function consulta(linhas: Linha[], contagem: { paginas: number }, pedidosIn: number[]) {
+function consulta(linhas: Linha[], contagem: { paginas: number }, pedidosIn: number[], erro = false) {
   const filtros: ((l: Linha) => boolean)[] = [];
   const ordem: string[] = [];
   let faixa: [number, number] | null = null;
@@ -30,6 +30,11 @@ function consulta(linhas: Linha[], contagem: { paginas: number }, pedidosIn: num
     },
     is(coluna: string, valor: unknown) {
       filtros.push((l) => (l[coluna] ?? null) === valor);
+      return c;
+    },
+    not(coluna: string, operador: string, valor: unknown) {
+      if (operador !== "is") throw new Error("o fake só conhece .not(coluna, 'is', valor)");
+      filtros.push((l) => (l[coluna] ?? null) !== valor);
       return c;
     },
     gte(coluna: string, valor: string) {
@@ -53,6 +58,7 @@ function consulta(linhas: Linha[], contagem: { paginas: number }, pedidosIn: num
       return c;
     },
     then(ok: (r: { data: unknown; error: unknown }) => unknown, falha?: (e: unknown) => unknown) {
+      if (erro) return Promise.resolve({ data: null, error: { message: 'column "excluido_pela_conta" does not exist' } }).then(ok, falha);
       let r = linhas.filter((l) => filtros.every((f) => f(l)));
       r = r.sort((a, b) => {
         for (const col of ordem) {
@@ -83,6 +89,8 @@ function montar(opcoes: {
   rpc?: (n: number, nome: string) => RespostaRpc;
   online?: boolean;
   contas?: LinhaConta[];
+  /** O banco ainda sem a coluna `excluido_pela_conta` (entre o merge e o `db push`): a leitura das puladas dá erro. */
+  semColunaDaMarca?: boolean;
 }) {
   const chamadas: { nome: string; args: Record<string, unknown> }[] = [];
   const lidas: string[] = [];
@@ -96,9 +104,10 @@ function montar(opcoes: {
   };
   const cliente = {
     from: (tabela: string) => ({
-      select: () => {
+      select: (colunas?: string) => {
         lidas.push(tabela);
-        return consulta(tabelas[tabela] ?? [], contagem, pedidosIn);
+        const semColuna = opcoes.semColunaDaMarca === true && (colunas ?? "").includes("excluido_pela_conta");
+        return consulta(tabelas[tabela] ?? [], contagem, pedidosIn, semColuna);
       },
     }),
     rpc: async (nome: string, args: Record<string, unknown>) => {
@@ -223,6 +232,32 @@ describe("ler a Conta para o aviso", () => {
     expect(chamadas).toHaveLength(0);
   });
 
+  it("lê as parcelas puladas: a mãe excluída à mão (sem a marca) conta; a que a Conta excluiu e a que já tem linha viva não", async () => {
+    const { repo } = montar({
+      lancamentos: [
+        parcela("2026-11"),
+        parcela("2026-12", { id: "a-mao", excluido_em: T, excluido_pela_conta: false }),
+        parcela("2027-01", { id: "pela-conta", excluido_em: T, excluido_pela_conta: true }),
+        // Excluída à mão, mas já recriada por uma linha viva (Editar): a viva ocupa o n.
+        parcela("2027-02", { id: "velha", excluido_em: T, excluido_pela_conta: false }),
+        parcela("2027-02", { id: "viva-do-2027-02" }),
+        // Antes do Mês atual: nem é lida.
+        parcela("2026-10", { id: "do-passado", excluido_em: T, excluido_pela_conta: false }),
+      ],
+    });
+    const r = await repo.ler(salva(), MES_ATUAL);
+    expect(r.ok && [...r.puladas]).toEqual([4]);
+  });
+
+  it("sem a coluna da marca (banco ainda sem o db push) a leitura das puladas não derruba o Editar: a prévia só não as desconta", async () => {
+    const { repo } = montar({
+      lancamentos: [parcela("2026-11"), parcela("2026-12", { id: "a-mao", excluido_em: T, excluido_pela_conta: false })],
+      semColunaDaMarca: true,
+    });
+    const r = await repo.ler(salva(), MES_ATUAL);
+    expect(r.ok && [...r.puladas]).toEqual([]);
+  });
+
   it("pagina a leitura (o PostgREST corta em 1000 linhas): 1500 Lançamentos vêm em duas páginas", async () => {
     const muitas: Linha[] = Array.from({ length: 1500 }, (_, i) =>
       parcela("2026-12", { id: `f${String(i).padStart(4, "0")}`, dividido_de_id: "m-2026-12", parcela_n: 4 }),
@@ -230,7 +265,8 @@ describe("ler a Conta para o aviso", () => {
     const { repo, contagem } = montar({ lancamentos: muitas });
     const r = await repo.ler(salva(), MES_ATUAL);
     expect(r.ok && r.existentes.length).toBe(1500);
-    expect(contagem.paginas).toBe(2);
+    // Duas páginas dos vivos e uma da leitura das puladas (vazia).
+    expect(contagem.paginas).toBe(3);
   });
 
   it("lê os ids com item de Pagamento não excluído (AD-15): o de um Pagamento desfeito não conta", async () => {
@@ -299,6 +335,52 @@ describe("alterar, encerrar e excluir com Pagamento (AD-15)", () => {
   });
 });
 
+describe("mesesComHistorico: avisa o Mês que já tem histórico da planilha (Defeito 2)", () => {
+  const hist = (mes: string, id: string, extra: Linha = {}): Linha => ({
+    id,
+    mes,
+    lancado_por: "historico",
+    excluido_em: null,
+    dividido_de_id: null,
+    ...extra,
+  });
+
+  it("lista os Meses de `desde` em diante com a quantidade de linhas vivas do histórico (as excluídas, as filhas e as de outra origem não contam)", async () => {
+    const { repo, chamadas } = montar({
+      lancamentos: [
+        hist("2026-01", "a"),
+        hist("2026-01", "b"),
+        hist("2026-02", "c"),
+        hist("2026-02", "morta", { excluido_em: T }),
+        hist("2026-02", "filha", { dividido_de_id: "c" }),
+        hist("2026-03", "fatura", { lancado_por: "fatura" }),
+        hist("2025-12", "antes"),
+      ],
+    });
+    expect(await repo.mesesComHistorico("2026-01")).toEqual([
+      { mes: "2026-01", quantidade: 2 },
+      { mes: "2026-02", quantidade: 1 },
+    ]);
+    // Uma Conta que começa em fev/26 só cai de fev/26 em diante.
+    expect(await repo.mesesComHistorico("2026-02")).toEqual([{ mes: "2026-02", quantidade: 1 }]);
+    expect(await repo.mesesComHistorico("2026-04")).toEqual([]);
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("pagina a leitura: 1500 linhas de histórico vêm em duas páginas", async () => {
+    const muitas = Array.from({ length: 1500 }, (_, i) => hist("2026-01", `h${String(i).padStart(4, "0")}`));
+    const { repo, contagem } = montar({ lancamentos: muitas });
+    expect(await repo.mesesComHistorico("2026-01")).toEqual([{ mes: "2026-01", quantidade: 1500 }]);
+    expect(contagem.paginas).toBe(2);
+  });
+
+  it("sem internet ou sem sessão não lê e devolve null (o formulário só não avisa; gravar continua valendo)", async () => {
+    const { repo, lidas } = montar({ online: false });
+    expect(await repo.mesesComHistorico("2026-01")).toBeNull();
+    expect(lidas).toEqual([]);
+  });
+});
+
 describe("alterar (Editar)", () => {
   const lancamentos = [...parcelasDeSetAJan.slice(0, 3), parcela("2026-12", { status_id: PAGO }), parcela("2027-01")];
 
@@ -325,6 +407,17 @@ describe("alterar (Editar)", () => {
     ]);
     expect(pedido.parcelas.map((p) => p.mes)).toEqual(["2026-11", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06", "2027-07", "2027-08", "2027-09", "2027-10", "2027-11"]);
     expect(r.ok && r.resumo.mantidas).toEqual([{ mes: "2026-12", parcela_n: 4, motivo: "paga" }]);
+  });
+
+  it("a parcela que Rafael pulou (excluída à mão) não entra no pedido de criação nem na contagem da prévia", async () => {
+    const lancs = [parcela("2026-11"), parcela("2026-12", { id: "a-mao", excluido_em: T, excluido_pela_conta: false }), parcela("2027-01")];
+    const { repo, chamadas } = montar({ lancamentos: lancs, rpc: () => respostaAlterar({ valor_centavos: 45_000 }) });
+    const r = await repo.alterar(salva(), nova(), MES_ATUAL);
+    expect(r.ok).toBe(true);
+    const pedido = chamadas[0].args.p_pedido as { parcelas: { mes: string }[] };
+    expect(pedido.parcelas.map((p) => p.mes)).not.toContain("2026-12");
+    expect(pedido.parcelas.map((p) => p.mes)).toContain("2026-11");
+    expect(r.ok && r.resumo.criadas).toBe(pedido.parcelas.length);
   });
 
   it("aplica as linhas devolvidas (as do Mês aberto) e a Conta nova nos gerenciadores", async () => {

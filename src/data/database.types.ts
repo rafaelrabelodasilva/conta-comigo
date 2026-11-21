@@ -362,6 +362,7 @@ export type Database = {
           duvida_extracao: boolean
           editado_em: string | null
           excluido_em: string | null
+          excluido_pela_conta: boolean
           fatura_id: string | null
           final_cartao: string | null
           id: string
@@ -399,6 +400,7 @@ export type Database = {
           duvida_extracao?: boolean
           editado_em?: string | null
           excluido_em?: string | null
+          excluido_pela_conta?: boolean
           fatura_id?: string | null
           final_cartao?: string | null
           id?: string
@@ -436,6 +438,7 @@ export type Database = {
           duvida_extracao?: boolean
           editado_em?: string | null
           excluido_em?: string | null
+          excluido_pela_conta?: boolean
           fatura_id?: string | null
           final_cartao?: string | null
           id?: string

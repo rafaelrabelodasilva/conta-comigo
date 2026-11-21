@@ -22,7 +22,9 @@ const tipos = [
   { id: "saude", nome: "Saúde", arquivado: false },
 ];
 
-function itemDe(extra: { responsavel_id?: string | null; tipo_id?: string | null; dados?: unknown; motivo?: "sugestao" | "sem_classificacao" } = {}): ItemDaFila {
+function itemDe(
+  extra: { responsavel_id?: string | null; tipo_id?: string | null; dados?: unknown; motivo?: "sugestao" | "sem_classificacao"; divisao?: unknown } = {},
+): ItemDaFila {
   return montarFila(
     [
       {
@@ -40,6 +42,7 @@ function itemDe(extra: { responsavel_id?: string | null; tipo_id?: string | null
         revisao_motivo: extra.motivo ?? "sem_classificacao",
         revisao_dados: extra.dados ?? null,
         ordem_fatura: 1,
+        ...(extra.divisao === undefined ? {} : { divisao: extra.divisao }),
       },
     ],
     { responsaveis, tipos },
@@ -136,5 +139,42 @@ describe("JanelaMudar", () => {
     desenhar(itemDe());
     await waitFor(() => expect(falso.contarUsos).toHaveBeenCalled());
     expect(opcoesDe(T.responsavel)).toEqual([T.escolha, "Casal", "Rafael", "Lucas"]);
+  });
+});
+
+describe("JanelaMudar numa mãe dividida que voltou à fila (Defeito 9)", () => {
+  // O Tipo foi limpo e a mãe voltou à fila. O Responsável está nas partes: o seletor dele não gravaria nada.
+  const divisao = { modo: "valor", partes: [{ responsavel_id: "casal", numerador: 1, denominador: 2 }, { responsavel_id: "rafael", numerador: 1, denominador: 2 }] };
+
+  it("não mostra o seletor de Responsável (que não grava) e diz o que fazer: editar a divisão no Painel", () => {
+    desenhar(itemDe({ divisao }));
+    expect(screen.queryByLabelText(T.responsavel)).toBeNull();
+    expect(screen.getByLabelText(T.tipo)).toBeTruthy();
+    const dica = screen.getByRole("note");
+    expect(dica.textContent).toBe(T.divisao_nas_partes);
+    expect(dica.textContent).toContain("Editar divisão");
+  });
+
+  it("Salvar só exige o Tipo e grava só o Tipo (nenhum Responsável que a gravação ignoraria)", async () => {
+    const { aoSalvar, aoMudar } = desenhar(itemDe({ divisao }));
+    const salvar = screen.getByRole("button", { name: ROTULOS.salvar });
+    expect(salvar.hasAttribute("disabled")).toBe(true);
+    await userEvent.setup().selectOptions(screen.getByLabelText(T.tipo), "saude");
+    expect(salvar.hasAttribute("disabled")).toBe(false);
+    await userEvent.setup().click(salvar);
+    await waitFor(() => expect(aoSalvar).toHaveBeenCalledTimes(1));
+    expect((aoSalvar.mock.calls[0] as unknown[])[1]).toEqual({ tipo_id: "saude" });
+    await waitFor(() => expect(aoMudar).toHaveBeenCalledWith(false));
+  });
+
+  it("a linha comum não muda: os dois seletores, sem a dica, e grava Responsável e Tipo", async () => {
+    const { aoSalvar } = desenhar(itemDe());
+    expect(screen.getByLabelText(T.responsavel)).toBeTruthy();
+    expect(screen.queryByRole("note")).toBeNull();
+    const u = userEvent.setup();
+    await u.selectOptions(screen.getByLabelText(T.responsavel), "casal");
+    await u.selectOptions(screen.getByLabelText(T.tipo), "casa");
+    await u.click(screen.getByRole("button", { name: ROTULOS.salvar }));
+    await waitFor(() => expect(aoSalvar).toHaveBeenCalledWith(expect.anything(), { responsavel_id: "casal", tipo_id: "casa" }));
   });
 });

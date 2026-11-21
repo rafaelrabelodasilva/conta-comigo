@@ -84,6 +84,36 @@ export type LancamentoDaConta = {
   updated_at: string;
 };
 
+/** O que a regra das parcelas puladas lê de uma linha EXCLUÍDA da Série da Conta (só mães). */
+export type LinhaExcluidaDaConta = {
+  parcela_n: number | null;
+  dividido_de_id: string | null;
+  /** Verdadeiro quando a exclusão foi da própria Conta (Editar, Encerrar, Excluir a Conta). */
+  excluido_pela_conta: boolean;
+};
+
+/**
+ * As parcelas que Rafael pulou: o `parcela_n` de uma mãe excluída à mão (sem a marca
+ * `excluido_pela_conta`) que nenhuma mãe viva ocupa. Nada recria essas parcelas: nem o
+ * Cron, nem o Editar, nem o Encerrar. É a mesma regra que `materializar_contas_manuais`
+ * aplica no banco (o SQL decide ao gravar; isto serve à prévia do Editar e do Encerrar
+ * mostrar a conta certa). O "Desfazer" traz a parcela de volta (a linha deixa de estar
+ * excluída) e ela volta a ser normal.
+ */
+export function parcelasPuladas(
+  excluidas: readonly LinhaExcluidaDaConta[],
+  vivas: readonly Pick<LancamentoDaConta, "parcela_n" | "dividido_de_id" | "excluido_em">[] = [],
+): Set<number> {
+  const ocupadas = new Set<number>();
+  for (const l of vivas) if (l.excluido_em === null && l.dividido_de_id === null && l.parcela_n !== null) ocupadas.add(l.parcela_n);
+  const puladas = new Set<number>();
+  for (const l of excluidas) {
+    if (l.dividido_de_id !== null || l.excluido_pela_conta || l.parcela_n === null) continue;
+    if (!ocupadas.has(l.parcela_n)) puladas.add(l.parcela_n);
+  }
+  return puladas;
+}
+
 /** Por que uma parcela fica como está (a ordem é a de importância no aviso). */
 export type MotivoDeFicar = "paga" | "com_pagamento" | "editada";
 
@@ -107,6 +137,7 @@ export type DivisaoDasParcelas = {
 
 const PRIORIDADE: readonly MotivoDeFicar[] = ["paga", "com_pagamento", "editada"];
 const SEM_PAGAMENTOS: ReadonlySet<string> = new Set();
+const SEM_PARCELAS: ReadonlySet<number> = new Set();
 
 function motivoDaLinha(
   l: LancamentoDaConta,
@@ -247,6 +278,8 @@ export type EntradaDoPlano = {
   existentes: readonly LancamentoDaConta[];
   /** Os ids de Lançamento com item de Pagamento não excluído (6.1; sem ele, nenhum tem). */
   comPagamento?: ReadonlySet<string>;
+  /** Os `parcela_n` que Rafael pulou (`parcelasPuladas`): o plano não os recria. Sem ele, nenhum foi pulado. */
+  puladas?: ReadonlySet<number>;
 };
 
 /** A Série da Conta como está no banco e as `ocorrencia` de OUTRAS Séries com a chave nova. */
@@ -292,9 +325,14 @@ export function chaveDaSerieAlterada(
  * continuam). É o mesmo `parcelasDaConta` do cron e da 5.1, só filtrado: o banco
  * ainda protege com `on conflict (serie_id, parcela_n) … do nothing`.
  */
-function parcelasACriar(conta: ContaManual, mesAtual: string, ocupadas: ReadonlySet<number>): ParcelaParaRpc[] {
+function parcelasACriar(
+  conta: ContaManual,
+  mesAtual: string,
+  ocupadas: ReadonlySet<number>,
+  puladas: ReadonlySet<number> = SEM_PARCELAS,
+): ParcelaParaRpc[] {
   return parcelasDaConta(conta, horizonteDasContas(mesAtual))
-    .filter((p) => p.mes >= mesAtual && !ocupadas.has(p.parcela_n))
+    .filter((p) => p.mes >= mesAtual && !ocupadas.has(p.parcela_n) && !puladas.has(p.parcela_n))
     .map((p) => parcelaParaRpc(p));
 }
 
@@ -325,6 +363,7 @@ export function planoDeAlterarConta(
     { ...salva, ...nova, encerrada_em_mes: salva.encerrada_em_mes },
     entrada.mesAtual,
     new Set(naoNulos(mantidas.map((m) => m.parcela_n))),
+    entrada.puladas,
   );
   return {
     ok: true,
@@ -400,7 +439,7 @@ export function planoDeEncerrarConta(
   const ocupadas = new Set(
     naoNulos([...recriaveis.filter((p) => !saemIds.has(p.mae.id)).map((p) => p.parcela_n), ...mantidas.map((m) => m.parcela_n)]),
   );
-  const parcelas = parcelasACriar({ ...salva, encerrada_em_mes: mes }, entrada.mesAtual, ocupadas);
+  const parcelas = parcelasACriar({ ...salva, encerrada_em_mes: mes }, entrada.mesAtual, ocupadas, entrada.puladas);
   return {
     ok: true,
     pedido: {

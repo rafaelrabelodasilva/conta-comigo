@@ -50,8 +50,8 @@ export type AvisosDeTrabalho = (AvisoDeConferencia | AvisoDoRevisar)[];
  * a de `avisosDaCentral` (que ordena por tipo); aqui, Conferência e depois Revisar. Mesma entrada, mesma saída.
  */
 export function avisosDeTrabalho(
-  faturas: readonly (FaturaParaAviso & { updated_at: string })[],
-  cartoes: readonly CartaoParaConferir[],
+  faturas: readonly (FaturaParaAviso & { created_at: string })[],
+  cartoes: readonly (CartaoParaConferir & { created_at: string })[],
   lancamentos: readonly LancamentoParaConferir[],
   fila: readonly LinhaParaAvisoDoRevisar[],
   preferencias: PreferenciasDeAvisos,
@@ -59,7 +59,7 @@ export function avisosDeTrabalho(
   const saida: AvisosDeTrabalho = [];
   if (preferencias.conferencia) saida.push(...avisosDeConferencia(faturas, cartoes, lancamentos));
   if (preferencias.revisar) {
-    const doRevisar = avisoDoRevisar(fila, faturas);
+    const doRevisar = avisoDoRevisar(fila, faturas, cartoes);
     if (doRevisar !== null) saida.push(doRevisar);
   }
   return saida;

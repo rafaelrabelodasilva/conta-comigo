@@ -28,6 +28,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  parcelasPuladas,
   planoDeAlterarConta,
   planoDeEncerrarConta,
   planoDeExcluirConta,
@@ -35,10 +36,12 @@ import {
   type CodigoDoPlano,
   type ContaSalva,
   type LancamentoDaConta,
+  type LinhaExcluidaDaConta,
   type PedidoRestaurarConta,
   type ResumoDoPlano,
   type SerieParaAlterar,
 } from "@/domain/alterar-conta";
+import { mesesComHistorico, type MesComHistorico } from "@/domain/historico-do-mes";
 import {
   horizonteDasContas,
   pedidoSalvarConta,
@@ -88,6 +91,8 @@ export type LeituraDaConta = {
   statusQueContam: ReadonlySet<string>;
   /** Os ids dos Lançamentos lidos que têm item de Pagamento não excluído (AD-15, História 6.1): nunca são recriados. */
   comPagamento: ReadonlySet<string>;
+  /** Os `parcela_n` que Rafael pulou (excluiu à mão): o plano não os recria (Defeito 1). */
+  puladas: ReadonlySet<number>;
   serie: SerieParaAlterar;
 };
 
@@ -203,6 +208,62 @@ export function criarRepoContas(deps: {
     }
   }
 
+  /**
+   * Os `parcela_n` pulados da Conta (excluídos à mão do Mês atual em diante, Defeito 1).
+   * Leitura tolerante: se ela falha (por exemplo, o banco ainda sem a coluna
+   * `excluido_pela_conta`, entre o merge e o `db push`), a prévia só não os desconta; quem
+   * decide ao gravar é `materializar_contas_manuais`, que já os pula.
+   */
+  async function lerPuladas(
+    cliente: SupabaseClient<Database>,
+    contaId: string,
+    mesAtual: string,
+    vivas: readonly LancamentoDaConta[],
+  ): Promise<Set<number>> {
+    const excluidas: LinhaExcluidaDaConta[] = [];
+    for (let de = 0; ; de += POR_PAGINA) {
+      const { data, error } = await cliente
+        .from("lancamentos")
+        .select("parcela_n, dividido_de_id, excluido_pela_conta")
+        .eq("conta_manual_id", contaId)
+        .gte("mes", mesAtual)
+        .not("excluido_em", "is", null)
+        .is("dividido_de_id", null)
+        .order("mes")
+        .order("id")
+        .range(de, de + POR_PAGINA - 1);
+      if (error || !data) return new Set();
+      excluidas.push(...data);
+      if (data.length < POR_PAGINA) break;
+    }
+    return parcelasPuladas(excluidas, vivas);
+  }
+
+  /**
+   * Os Meses de `desde` em diante que já têm histórico da planilha (Defeito 2): uma Conta nova com
+   * "Começa em" neles entra por cima e dobra o total do Mês. Lê só as linhas `historico` vivas, página
+   * por página; a conta é do núcleo (`mesesComHistorico`). `null` se a leitura falhou: o aviso só
+   * não aparece (o formulário nunca é bloqueado por ela).
+   */
+  async function lerMesesComHistorico(cliente: SupabaseClient<Database>, desde: string): Promise<MesComHistorico[] | null> {
+    const linhas: { mes: string; lancado_por: string; excluido_em: string | null; dividido_de_id: string | null }[] = [];
+    for (let de = 0; ; de += POR_PAGINA) {
+      const { data, error } = await cliente
+        .from("lancamentos")
+        .select("mes, lancado_por, excluido_em, dividido_de_id")
+        .eq("lancado_por", "historico")
+        .is("excluido_em", null)
+        .is("dividido_de_id", null)
+        .gte("mes", desde)
+        .order("mes")
+        .order("id")
+        .range(de, de + POR_PAGINA - 1);
+      if (error || !data) return null;
+      linhas.push(...data);
+      if (data.length < POR_PAGINA) return mesesComHistorico(linhas, desde);
+    }
+  }
+
   /** Dos ids dados, os que têm item de Pagamento não excluído (em blocos: o endereço da requisição tem limite). */
   async function lerIdsComPagamento(cliente: SupabaseClient<Database>, ids: readonly string[]): Promise<Set<string> | null> {
     const com = new Set<string>();
@@ -259,7 +320,8 @@ export function criarRepoContas(deps: {
     if (!existentes || !statusQueContam || !serie) return FALHOU;
     const comPagamento = await lerIdsComPagamento(cliente, existentes.map((l) => l.id));
     if (!comPagamento) return FALHOU;
-    return { ok: true, existentes, statusQueContam, comPagamento, serie };
+    const puladas = await lerPuladas(cliente, conta.id, mesAtual, existentes);
+    return { ok: true, existentes, statusQueContam, comPagamento, puladas, serie };
   }
 
   /** Chama a RPC de uma alteração e aplica a resposta nos gerenciadores. */
@@ -344,6 +406,21 @@ export function criarRepoContas(deps: {
     },
 
     /**
+     * Os Meses de `desde` em diante que já têm histórico da planilha, com a quantidade (Defeito 2).
+     * Sem conexão ou com erro: `null` (nada a avisar; gravar continua valendo).
+     */
+    async mesesComHistorico(desde: string): Promise<MesComHistorico[] | null> {
+      if (semConexao(online)) return null;
+      const cliente = obterCliente();
+      if (!cliente) return null;
+      try {
+        return await lerMesesComHistorico(cliente, desde);
+      } catch {
+        return null;
+      }
+    },
+
+    /**
      * Editar (FR-18): `nova` é a Conta do formulário (mesmo `id` e mesmo "Começa
      * em"). Recria só os Lançamentos do Mês atual em diante que ainda podem ser
      * recriados; os outros ficam e vêm em `resumo.mantidas`.
@@ -358,6 +435,7 @@ export function criarRepoContas(deps: {
             statusQueContam: l.statusQueContam,
             existentes: l.existentes,
             comPagamento: l.comPagamento,
+            puladas: l.puladas,
           }),
         nova,
       );
@@ -377,6 +455,7 @@ export function criarRepoContas(deps: {
             statusQueContam: l.statusQueContam,
             existentes: l.existentes,
             comPagamento: l.comPagamento,
+            puladas: l.puladas,
           }),
         null,
       );

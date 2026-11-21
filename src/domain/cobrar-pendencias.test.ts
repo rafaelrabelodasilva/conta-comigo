@@ -163,10 +163,17 @@ describe("a forma 3: Em aberto, por Mês, do mais antigo ao mais novo (FR-28)", 
     expect(texto(m)).not.toContain("R$ 50,00");
   });
 
-  it("o histórico da planilha e os Meses antigos entram (é o que o dado diz, 6.5)", () => {
-    const m = cobrar([l({ nome: "ANTIGO", valor_centavos: 4_000, mes: "2025-03", lancado_por: "historico" })]);
-    expect(texto(m)).toContain("Março/25");
-    expect(texto(m)).toContain(e("Total: R$ 40,00"));
+  it("os Meses antigos de uma Fatura entram, mas o histórico da planilha não (Defeito 3; revisto: antes o histórico entrava, 6.5)", () => {
+    const antigo = cobrar([l({ nome: "ANTIGO", valor_centavos: 4_000, mes: "2025-03", lancado_por: "fatura" })]);
+    expect(texto(antigo)).toContain("Março/25");
+    expect(texto(antigo)).toContain(e("Total: R$ 40,00"));
+    const planilha = cobrar([
+      l({ nome: "ANTIGO", valor_centavos: 4_000, mes: "2025-03", lancado_por: "historico" }),
+      l({ id: "real", nome: "REAL", valor_centavos: 1_000, mes: "2025-04", lancado_por: "fatura" }),
+    ]);
+    expect(texto(planilha)).not.toContain("Março/25");
+    expect(texto(planilha)).not.toContain("ANTIGO");
+    expect(texto(planilha)).toContain(e("Total: R$ 10,00"));
   });
 });
 

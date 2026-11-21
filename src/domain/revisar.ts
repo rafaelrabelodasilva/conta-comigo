@@ -17,6 +17,7 @@
 
 import { idsQueAcompanham } from "./ajustes";
 import { lerDadosRevisao, lerValorAntes, type MotivoRevisao } from "./classificacao";
+import { ehMaeDividida } from "./divisao";
 import { normalizarNome } from "./importacao-fatura";
 import { TEXTOS_REVISAR, textoSugestao, textoValorMudou, tituloGrupoRevisar } from "./mensagens";
 import { nomeExibido } from "./painel";
@@ -41,6 +42,10 @@ export type LinhaDaFila = {
   ordem_fatura: number | null;
   /** A Fatura da linha; nulo no previsto (História 3.6). */
   fatura_id?: string | null;
+  /** Mãe dividida (História 3.8): tem `divisao`; o Responsável está nas partes, nunca nela. */
+  divisao?: unknown;
+  /** Filha de uma Divisão: nunca entra na fila (`ehDaFila`). */
+  dividido_de_id?: string | null;
 };
 
 type SoParaPertencer = Pick<LinhaDaFila, "excluido_em" | "ajuste_de_id" | "revisao_motivo"> & {
@@ -88,8 +93,11 @@ export type VarianteDoItem =
   /** Linha da Fatura antiga que a reimportação não trouxe e que saiu da Fatura (História 3.12): "Excluir" / "Manter". */
   | "sumiu";
 
-/** O que a gravação do ✓ deixa na linha (e nos Ajustes). */
-export type ClassificacaoCompleta = { responsavel_id: string; tipo_id: string };
+/**
+ * O que a gravação do ✓ deixa na linha (e nos Ajustes). Na mãe dividida (Defeito 9) só o Tipo: o Responsável está
+ * nas partes e `planejarGravacao` ignoraria o dela.
+ */
+export type ClassificacaoCompleta = { responsavel_id?: string; tipo_id: string };
 
 /** Um Ajuste sob a mãe: "Ajuste - R$ 0,08". */
 export type AjusteDoItem = { id: string; valorCentavos: number };
@@ -123,6 +131,8 @@ export type ItemDaFila = {
   ajustes: AjusteDoItem[];
   /** "2 de 3" quando há itens iguais (Mês, data, parcela e valor) no mesmo grupo; senão null. */
   repeticao: { posicao: number; total: number } | null;
+  /** Mãe dividida que voltou à fila (Defeito 9): o Responsável está nas partes; `controlesDoItem` diz o que mostrar. */
+  maeDividida: boolean;
   /** O item vem da Fatura do Mês (a faixa de resumo conta só estes); false no previsto sem par. */
   daFatura: boolean;
   /** O item entra no lote? Não, se é "Não veio na fatura" (só tem "Remover previsto" e "Manter"). */
@@ -130,6 +140,24 @@ export type ItemDaFila = {
   /** "Valor mudou": o Valor do previsto antes da Fatura (null nas outras variantes). */
   valorAntesCentavos: number | null;
 };
+
+/**
+ * Quais controles uma linha da fila mostra (Defeito 9). A decisão é do núcleo e a tela só desenha: uma linha dividida
+ * NÃO mostra o seletor de Responsável (a gravação o ignora, porque a Responsabilidade está nas partes da Divisão) e,
+ * no lugar, diz o que fazer ("Editar divisão" no Painel). O ✓ e o "Mudar" só pedem o que realmente grava.
+ */
+export type ControlesDoItem = {
+  /** A janela "Mudar" mostra o seletor de Responsável (e o "Salvar" o exige)? Não na mãe dividida. */
+  pedeResponsavel: boolean;
+  /** O texto que diz o que fazer quando o Responsável está nas partes; `null` nas outras linhas. */
+  dica: string | null;
+};
+
+export function controlesDoItem(item: Pick<ItemDaFila, "maeDividida">): ControlesDoItem {
+  return item.maeDividida
+    ? { pedeResponsavel: false, dica: TEXTOS_REVISAR.divisao_nas_partes }
+    : { pedeResponsavel: true, dica: null };
+}
 
 export type GrupoDaFila = {
   /** `normalizarNome(nome)`. */
@@ -151,7 +179,9 @@ function montarItem(l: LinhaDaFila, linhas: readonly LinhaDaFila[], cadastros: C
   const responsaveis = new Map(cadastros.responsaveis.filter((r) => !r.arquivado).map((r) => [r.id, r.nome]));
   const tipos = new Map(cadastros.tipos.filter((t) => !t.arquivado).map((t) => [t.id, t.nome]));
 
+  const maeDividida = ehMaeDividida(l);
   const comum = {
+    maeDividida,
     id: l.id,
     nome: nomeExibido(l),
     nomeOriginal: l.nome,
@@ -203,9 +233,10 @@ function montarItem(l: LinhaDaFila, linhas: readonly LinhaDaFila[], cadastros: C
 
   // Casado com Valor diferente: a classificação é a da linha; o ✓ a mantém.
   if (l.revisao_motivo === "valor_mudou") {
-    const proprioR = l.responsavel_id !== null && responsaveis.has(l.responsavel_id) ? l.responsavel_id : null;
+    // A mãe dividida não tem Responsável (está nas partes): para ela, só o Tipo completa a classificação.
+    const proprioR = !maeDividida && l.responsavel_id !== null && responsaveis.has(l.responsavel_id) ? l.responsavel_id : null;
     const proprioT = l.tipo_id !== null && tipos.has(l.tipo_id) ? l.tipo_id : null;
-    const completa = proprioR !== null && proprioT !== null;
+    const completa = proprioT !== null && (proprioR !== null || maeDividida);
     const nomes = [proprioR, proprioT].flatMap((id, i) => {
       const nome = id === null ? null : (i === 0 ? responsaveis : tipos).get(id);
       return nome ? [nome] : [];
@@ -218,7 +249,7 @@ function montarItem(l: LinhaDaFila, linhas: readonly LinhaDaFila[], cadastros: C
       duvida: null,
       texto: textoValorMudou(antes, l.valor_centavos),
       confirmavel: completa,
-      aoConfirmar: completa ? { responsavel_id: proprioR, tipo_id: proprioT } : null,
+      aoConfirmar: completa ? classificacaoDoConfirmar(proprioR, proprioT) : null,
       preenchido: { responsavel_id: proprioR, tipo_id: proprioT },
       valorAntesCentavos: antes,
     };
@@ -241,14 +272,15 @@ function montarItem(l: LinhaDaFila, linhas: readonly LinhaDaFila[], cadastros: C
       : "sugestao";
 
   // O que a linha já tem vale (se o cadastro está ativo); a sugestão completa o que falta.
-  const proprioR = l.responsavel_id !== null && responsaveis.has(l.responsavel_id) ? l.responsavel_id : null;
+  const proprioR = !maeDividida && l.responsavel_id !== null && responsaveis.has(l.responsavel_id) ? l.responsavel_id : null;
   const proprioT = l.tipo_id !== null && tipos.has(l.tipo_id) ? l.tipo_id : null;
-  const responsavelFinal = proprioR ?? sugeridoR;
+  // Na mãe dividida o Responsável sugerido não vale (o dela é o das partes): só o Tipo entra.
+  const responsavelFinal = maeDividida ? null : (proprioR ?? sugeridoR);
   const tipoFinal = proprioT ?? sugeridoT;
-  const completa = !semSugestao && responsavelFinal !== null && tipoFinal !== null;
+  const completa = !semSugestao && tipoFinal !== null && (responsavelFinal !== null || maeDividida);
 
   // O texto mostra o que o ✓ grava (os valores finais); sem ✓, só a sugestão.
-  const idR = completa ? responsavelFinal : sugeridoR;
+  const idR = completa ? responsavelFinal : maeDividida ? null : sugeridoR;
   const idT = completa ? tipoFinal : sugeridoT;
   const nomeR = idR === null ? null : (responsaveis.get(idR) ?? null);
   const nomeT = idT === null ? null : (tipos.get(idT) ?? null);
@@ -262,9 +294,15 @@ function montarItem(l: LinhaDaFila, linhas: readonly LinhaDaFila[], cadastros: C
     duvida: duvidaOutros.length > 0 ? `às vezes ${duvidaOutros.join(" ou ")}` : null,
     texto: texto ?? TEXTOS_REVISAR.sem_sugestao,
     confirmavel: completa,
-    aoConfirmar: completa ? { responsavel_id: responsavelFinal, tipo_id: tipoFinal } : null,
+    aoConfirmar: completa ? classificacaoDoConfirmar(responsavelFinal, tipoFinal) : null,
     preenchido: { responsavel_id: responsavelFinal, tipo_id: tipoFinal },
   };
+}
+
+/** O que o ✓ grava: Responsável e Tipo, ou só o Tipo quando não há Responsável (a mãe dividida, Defeito 9). */
+function classificacaoDoConfirmar(responsavelId: string | null, tipoId: string | null): ClassificacaoCompleta | null {
+  if (tipoId === null) return null;
+  return responsavelId === null ? { tipo_id: tipoId } : { responsavel_id: responsavelId, tipo_id: tipoId };
 }
 
 /**

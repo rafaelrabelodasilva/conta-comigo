@@ -18,6 +18,7 @@ import {
   ROTULOS,
   TEXTOS_IMPORTAR as T,
   TEXTOS_REVISAR,
+  avisoImportarComHistorico,
   avisoReimportar,
   mensagem,
   rotuloConferencia,
@@ -136,6 +137,8 @@ type Estado =
       gravando: boolean;
       erro: string | null;
       reimportar: AvisoReimportar | null;
+      /** Linhas vivas do histórico da planilha que o Mês já tem (Defeito 2): avisa antes da primeira importação. */
+      historico: number;
     };
 
 const INICIAL: Estado = { tipo: "arquivo", erro: null, naoSantander: false };
@@ -290,7 +293,15 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     const classificada = montarComCasamento(importacao.valor, classificadas, previstosLidos, candidatas, reimportar);
     // As Regras que esta importação usou: ganham `ultimo_uso` quando a Fatura for gravada.
     regrasUsadasNaImportacao.current = chavesDeRegrasUsadas(importacao.valor.lancamentos, lidas, paraClassificar);
-    setEstado({ tipo: "conferir", importacao: classificada, conferencia, gravando: false, erro: null, reimportar });
+    setEstado({
+      tipo: "conferir",
+      importacao: classificada,
+      conferencia,
+      gravando: false,
+      erro: null,
+      reimportar,
+      historico: previstosLidos?.historico ?? 0,
+    });
   }
 
   /**
@@ -374,7 +385,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
   async function lerPrevistos(mes: string): Promise<LeituraDePrevistos | null> {
     try {
       const r = await repoFaturas().lerPrevistosDoMes(mes);
-      return r.ok ? { previstos: r.previstos, atualizadoEm: r.atualizadoEm } : null;
+      return r.ok ? { previstos: r.previstos, atualizadoEm: r.atualizadoEm, historico: r.historico } : null;
     } catch {
       return null;
     }
@@ -415,6 +426,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
             ...e,
             importacao: importacao ?? e.importacao,
             reimportar: aviso,
+            historico: previstos?.historico ?? e.historico,
             erro: e.erro === "fatura.mes_ja_importado" ? null : e.erro,
           }
         : e,
@@ -776,6 +788,8 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
     // Linhas novas que entram divididas (pela Regra ou pela parcela anterior, História 3.8).
     const divididas = importacao.lancamentos.filter((l) => (l.divisao ?? null) !== null && (l.previsto_id ?? null) === null).length;
     const naoVieram = importacao.previstos_sem_par?.length ?? 0;
+    // Sem aviso de reimportação o Mês não tem Fatura; se tem histórico da planilha, a Fatura entra por cima (Defeito 2).
+    const comHistorico = aviso === null && estado.historico > 0;
     corpo = (
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-1 rounded-lg border border-border bg-background p-3">
@@ -826,6 +840,12 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
             {textoExtracaoIncompleta(conferencia.quantidade)}
           </p>
         ) : null}
+        {/* Mês sem Fatura mas com histórico da planilha (Defeito 2): importar dobra o total; avisa e pede a confirmação. */}
+        {comHistorico ? (
+          <p role="alert" className="rounded-lg border border-alert-warning-border bg-alert-warning-bg p-3 texto-body">
+            {avisoImportarComHistorico(f.mes, estado.historico)}
+          </p>
+        ) : null}
         {erro ? (
           <p role="alert" className="texto-body text-danger-fg">
             {mensagem(erro)}
@@ -837,7 +857,7 @@ export function ImportarFatura({ aberta, aoMudar, aoImportar, aoIrParaRevisao }:
       ? T.gravando
       : erro
         ? ROTULOS.tentar_de_novo
-        : conferencia.incompleta
+        : conferencia.incompleta || comHistorico
           ? T.importar_mesmo_assim
           : T.importar;
     const sessaoExpirou = erro === "auth.sessao_expirou" || (aviso?.tipo === "falhou" && aviso.codigo === "auth.sessao_expirou");

@@ -4,6 +4,7 @@ import type { Database } from "@/data/database.types";
 import { hojeEmSaoPaulo } from "@/domain/datas";
 import {
   TIPOS_DE_LEMBRETE,
+  deveTentarDeNovoAmanha,
   lembretesDasLinhas,
   lembretesParaNotificar,
   type ChaveDeNotificacao,
@@ -26,8 +27,10 @@ import type { EnviarPush, InscricaoParaEnviar } from "./push";
 //   2. Sem aparelho inscrito não grava nada (senão o aviso do dia ficaria "gasto" e quem ativa as notificações à
 //      tarde nunca o receberia). Idem se todas as inscrições acabarem no meio.
 //   3. A inscrição que o serviço de push recusa com 404 ou 410 é apagada.
-//   4. Custo assumido: a linha de `lembretes_enviados` fica mesmo que o envio falhe para todos os aparelhos por
-//      outro erro (rede, 5xx): "nunca duas vezes" vale mais que a reentrega. A Central de Avisos segue sendo o canal.
+//   4. Se NENHUM aparelho aceitou e ao menos uma falha foi transitória (rede, 5xx, 429), a linha de
+//      `lembretes_enviados` é APAGADA e o Cron do dia seguinte tenta de novo (`deveTentarDeNovoAmanha`, no núcleo;
+//      Defeito 7, que revê a decisão 3 da 7.5). Se um aparelho aceitou, ou o erro foi 401, 403, 404 ou 410, a linha
+//      fica ("nunca duas vezes" continua valendo para quem recebeu). A Central de Avisos segue sendo o canal.
 //   5. Falhar aqui nunca desfaz a materialização nem vira 500: devolve contagens e a rota só registra.
 //
 // O texto do aviso é o da Central (`avisoDoLembrete`, `mensagens.ts`). Nada daqui vai para log: nem o `endpoint`, nem as
@@ -49,9 +52,11 @@ export type ResultadoDasNotificacoes = {
   inscricoesApagadas: number;
   /** Envios recusados por outro motivo, e leituras ou gravações que falharam (nada vai para o log além disso). */
   falhas: number;
+  /** Lembretes cuja chave foi apagada porque nenhum aparelho aceitou e o erro foi transitório: saem no próximo dia. */
+  reagendadas: number;
 };
 
-const ZERO = { enviadas: 0, ignoradas: 0, inscricoesApagadas: 0, falhas: 0 } as const;
+const ZERO = { enviadas: 0, ignoradas: 0, inscricoesApagadas: 0, falhas: 0, reagendadas: 0 } as const;
 
 const pulou = (motivo: MotivoDeNaoNotificar): ResultadoDasNotificacoes => ({ pulou: motivo, ...ZERO });
 
@@ -205,6 +210,7 @@ export async function notificarLembretesDoDia(
       // 2) Enviar a cada aparelho; apagar o que o serviço de push diz que acabou (404 ou 410).
       const corpo = JSON.stringify(avisoDoLembrete(notificacao.lembrete));
       let aceito = false;
+      const envios: Awaited<ReturnType<EnviarPush>>[] = [];
       for (const inscricao of [...vivas]) {
         let envio: Awaited<ReturnType<EnviarPush>>;
         try {
@@ -212,6 +218,7 @@ export async function notificarLembretesDoDia(
         } catch {
           envio = { ok: false, status: null };
         }
+        envios.push(envio);
         if (envio.ok) {
           aceito = true;
         } else if (envio.status === 404 || envio.status === 410) {
@@ -228,6 +235,23 @@ export async function notificarLembretesDoDia(
         }
       }
       if (aceito) resultado.enviadas += 1;
+
+      // 3) Nenhum aparelho aceitou e o erro foi transitório: solta a chave para o Cron de amanhã tentar de novo.
+      if (deveTentarDeNovoAmanha(envios)) {
+        try {
+          const { error } = await admin
+            .from("lembretes_enviados")
+            .delete()
+            .eq("owner_id", dono)
+            .eq("tipo", notificacao.tipo)
+            .eq("referencia", notificacao.referencia)
+            .eq("dia", notificacao.dia);
+          if (error) resultado.falhas += 1;
+          else resultado.reagendadas += 1;
+        } catch {
+          resultado.falhas += 1;
+        }
+      }
     }
   }
 

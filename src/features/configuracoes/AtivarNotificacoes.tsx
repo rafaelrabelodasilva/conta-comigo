@@ -8,6 +8,7 @@ import { estadoDasNotificacoes, type AmbienteDeNotificacao } from "@/domain/noti
 import { Botao } from "@/ui/Botao";
 import { useToast } from "@/ui/Toast";
 import { criarNavegadorDePush, type NavegadorDePush } from "./navegador-de-push";
+import { EVENTO_NOTIFICACOES_REATIVADAS, marcaDoAparelho, type MarcaDoAparelho } from "./reativar-notificacoes";
 
 // "Ativar notificações" (História 7.5, FR-55, AD-13): no grupo Lembretes de Configurações → Aparência, o toque que
 // pede a permissão do navegador e guarda a inscrição Web Push DESTE aparelho (cada aparelho tem a sua; iPad e PC
@@ -34,12 +35,15 @@ export function AtivarNotificacoes({
   navegador,
   repo,
   online = estaOnline,
+  marca = marcaDoAparelho,
 }: {
   /** O navegador (nos testes, um falso). Padrão: o do aparelho. */
   navegador?: NavegadorDePush;
   /** Onde a inscrição é guardada (nos testes, um falso). Padrão: `push_inscricoes` pelo navegador. */
   repo?: Pick<RepoPush, "salvar" | "remover">;
   online?: () => boolean;
+  /** O que este aparelho guardou (ativa ou desativada pelo Rafael); nos testes, uma falsa. */
+  marca?: MarcaDoAparelho;
 }) {
   const toast = useToast();
   const aparelho = navegador ?? navegadorDoAparelho();
@@ -48,11 +52,17 @@ export function AtivarNotificacoes({
 
   useEffect(() => {
     let vivo = true;
-    void aparelho.ler().then((lido) => {
-      if (vivo) setAmbiente(lido);
-    });
+    const reler = () => {
+      void aparelho.ler().then((lido) => {
+        if (vivo) setAmbiente(lido);
+      });
+    };
+    reler();
+    // O app refez sozinho a inscrição que o navegador perdeu (Defeito 8): relê o estado para dizer "ativadas".
+    window.addEventListener(EVENTO_NOTIFICACOES_REATIVADAS, reler);
     return () => {
       vivo = false;
+      window.removeEventListener(EVENTO_NOTIFICACOES_REATIVADAS, reler);
     };
   }, [aparelho]);
 
@@ -70,6 +80,9 @@ export function AtivarNotificacoes({
             // Sem a linha no banco o Cron não enxerga o aparelho: não deixa uma inscrição solta no navegador.
             await aparelho.cancelar();
             toast.mostrar({ texto: mensagem(resultado.codigo) });
+          } else {
+            // Este aparelho esteve ativado: se o navegador perder a inscrição, o app a refaz ao abrir (Defeito 8).
+            marca.gravar("ativa");
           }
         }
       }
@@ -106,6 +119,9 @@ export function AtivarNotificacoes({
         toast.mostrar({ texto: TEXTOS_NOTIFICACOES.erro_desativar });
       } else if (!(await aparelho.cancelar())) {
         toast.mostrar({ texto: TEXTOS_NOTIFICACOES.erro_desativar });
+      } else {
+        // Desativou de propósito: o app nunca a reativa sozinho (Defeito 8).
+        marca.gravar("desativada");
       }
     } catch {
       toast.mostrar({ texto: TEXTOS_NOTIFICACOES.erro_desativar });

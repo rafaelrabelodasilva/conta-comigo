@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { conferir, type Conferencia } from "@/domain/conferencia";
@@ -207,7 +207,7 @@ describe("FaturaDoMes: 'Recebido no mês' e 'Falta receber' (História 6.5, FR-2
   function hero(opcoes: {
     fatura?: FaturaHero | null;
     historico?: { totalCentavos: number; quantidade: number } | null;
-    recebimentos?: { recebidoCentavos: number | null; faltaCentavos: number | null } | null;
+    recebimentos?: { recebidoCentavos: number | null; faltaCentavos: number | null; blocosForaDaSoma?: number } | null;
   }) {
     const aoAbrirRecebimentos = vi.fn();
     render(
@@ -236,6 +236,19 @@ describe("FaturaDoMes: 'Recebido no mês' e 'Falta receber' (História 6.5, FR-2
     expect(sem(recebido.parentElement?.textContent)).toBe("Recebido no mêsR$ 2.819,68");
     expect(recebido.nextElementSibling?.className).toContain("text-accent");
     expect(sem(falta("R$ 636,00").textContent)).toBe("Falta receberR$ 636,00");
+  });
+
+  it("Blocos que não calculam: o hero diz em texto quantos ficaram fora da soma (Defeito 4), no singular e no plural", () => {
+    hero({ recebimentos: { recebidoCentavos: 281968, faltaCentavos: 63600, blocosForaDaSoma: 1 } });
+    expect(screen.getByRole("status").textContent).toBe("1 Bloco não entrou na soma");
+    cleanup();
+    hero({ recebimentos: { recebidoCentavos: 281968, faltaCentavos: 63600, blocosForaDaSoma: 3 } });
+    expect(screen.getByRole("status").textContent).toBe("3 Blocos não entraram na soma");
+  });
+
+  it("sem Bloco fora da soma, nenhum texto a mais", () => {
+    hero({ recebimentos: { recebidoCentavos: 281968, faltaCentavos: 63600, blocosForaDaSoma: 0 } });
+    expect(screen.queryByText(/não entr/)).toBeNull();
   });
 
   it("tocar em 'Falta receber' abre Recebimentos; 'Recebido no mês' não é botão", async () => {

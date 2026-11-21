@@ -50,6 +50,7 @@ const fatura = (mes: string, extra: Record<string, unknown> = {}) => ({
   total_despesas_centavos: 0,
   total_creditos_centavos: 0,
   alerta_dispensado_em: null,
+  created_at: "2026-11-18T12:00:00Z",
   updated_at: "2026-11-18T12:00:00Z",
   ...extra,
 });
@@ -74,7 +75,7 @@ beforeEach(() => {
     config_ciclo: [{ dia_fechamento: 28, dia_vencimento: 6, vigente_desde: "2026-01", created_at: "2026-01-01T00:00:00Z" }],
     status: [{ id: "s-pago", conta_como_pago: true }],
     faturas: [fatura("2026-10"), fatura("2026-11", { total_despesas_centavos: 100_000 })],
-    fatura_cartoes: [{ fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000 }],
+    fatura_cartoes: [{ fatura_id: "f-2026-11", final: "8673", total_centavos: 100_000, created_at: "2026-11-18T12:00:00Z" }],
     lancamentos: [
       { id: "lf", mes: "2026-11", excluido_em: null, valor_centavos: 28_000, responsavel_id: "x", tipo_id: "casa", status_id: "s-pago", lancado_por: "fatura", fatura_id: "f-2026-11", final_cartao: "8673" },
     ],

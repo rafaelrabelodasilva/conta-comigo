@@ -14,7 +14,8 @@
 //   do Mês do Lançamento, senão o do Ciclo (`vencimentoDoMes`, com a configuração vigente
 //   no Mês, AD-9). Sem nenhum dos três, o vencimento é desconhecido e a linha não atrasa.
 // - Nunca atrasam: excluídas, mãe dividida (valem as partes, AD-8), Ajustes de centavos
-//   (acompanham a parcela), previstos (Série `sistema` e Conta manual de um Mês sem Fatura),
+//   (acompanham a parcela), o histórico da planilha (Defeito 3: é registro, a importação só
+//   marca como pago o Status "Pago" e um Mês antigo ficaria todo em vermelho), previstos (Série `sistema` e Conta manual de um Mês sem Fatura),
 //   linhas de valor zero ou negativo (crédito: não há o que cobrar) e as que um Pagamento
 //   parcial já cobriu por inteiro.
 // - "Pago parcialmente" com o restante vencido ESTÁ atrasado (o que falta é o que se cobra);
@@ -23,6 +24,7 @@
 import { ehData, vencimentoDoMes, type ConfigCiclo } from "./ciclo";
 import { somarDias } from "./datas";
 import { ehMaeDividida } from "./divisao";
+import { ehLinhaDeHistorico } from "./historico-do-mes";
 import { ehPago } from "./pagamento";
 import { ehPrevistoNoMes } from "./previstos";
 
@@ -74,6 +76,8 @@ function ehAjuste(l: Pick<LancamentoParaAtraso, "id" | "ajuste_de_id">): boolean
 export function podeAtrasar(l: LancamentoParaAtraso, ctx: Pick<ContextoDeAtraso, "vencimentosDasFaturas">): boolean {
   if ((l.excluido_em ?? null) !== null) return false;
   if (ehMaeDividida(l) || ehAjuste(l)) return false;
+  // O histórico da planilha (3.10) é registro, não cobrança (Defeito 3, `ehLinhaDeHistorico`).
+  if (ehLinhaDeHistorico(l)) return false;
   const temFatura = ctx.vencimentosDasFaturas === undefined || ctx.vencimentosDasFaturas.has(l.mes);
   if (l.lancado_por !== undefined && ehPrevistoNoMes({ lancado_por: l.lancado_por, conta_manual_id: l.conta_manual_id }, temFatura)) {
     return false;

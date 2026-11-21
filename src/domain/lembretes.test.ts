@@ -258,6 +258,14 @@ describe("o lembrete de atraso", () => {
     ]);
   });
 
+  it("o histórico da planilha não gera lembrete de atraso nem soma no valor do Bloco (Defeito 3)", () => {
+    const historico = lanc("h1", { mes: "2026-03", lancado_por: "historico", valor_centavos: 99_900 });
+    expect(dia("2026-12-20", { linhas: [historico], blocos: [lucas] })).toEqual([]);
+    // Com uma linha real atrasada, o valor é só o dela.
+    const [l] = dia("2026-12-20", { linhas: [historico, lanc("real", { valor_centavos: 11_516 })], blocos: [lucas] });
+    expect(l).toMatchObject({ tipo: "atraso", valorCentavos: 11_516 });
+  });
+
   it("o texto, sem artigo: 'Lucas: R$ 115,16 em atraso desde 17/11/26'", () => {
     const [l] = dia("2026-11-19", { linhas: [lanc("l1", { valor_centavos: 11_516 })], blocos: [lucas] });
     // O "R$ 115,16" leva o espaço sem quebra do formatador de dinheiro.

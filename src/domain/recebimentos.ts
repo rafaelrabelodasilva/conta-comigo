@@ -100,22 +100,43 @@ export function montarCartoesDeCobranca(
 }
 
 /**
- * O "Falta receber" do Mês (`invoice-hero`): a soma do Saldo dos Blocos de cobrança sobre o que está
- * em aberto NESSE Mês (as linhas de `projetarPendente` com `mes`). Um Bloco cuja Fórmula não calcula
- * fica de fora da soma e é contado em `semValor`.
+ * O "Falta receber" do Mês (`invoice-hero`): quanto falta receber das LINHAS DISTINTAS em aberto NESSE
+ * Mês (as linhas de `projetarPendente` com `mes`) que algum Bloco de cobrança cita.
+ *
+ * Decisão (Defeito 4, revista da decisão 8 da 6.5, que somava os Blocos "literalmente"): cada linha
+ * entra UMA vez, na Fórmula do PRIMEIRO Bloco que a cita (na ordem `ordem` dos Blocos). Com "Casal" e
+ * "Casal ÷ 2" marcados, a linha do Casal entra no "Casal" e o "Casal ÷ 2" já não tem o que somar; antes
+ * ela entrava nos dois e o hero mostrava mais do que a soma dos cartões distintos. Cada Bloco é avaliado
+ * pela Fórmula dele (um só arredondamento) sobre as linhas que ainda não foram levadas por um Bloco
+ * anterior. O cartão de cada Bloco em Recebimentos não muda (cada pessoa vê o saldo dela inteiro).
+ *
+ * Um Bloco cuja Fórmula não calcula não leva linha de ninguém, fica de fora da soma e é contado em
+ * `semValor`: o hero diz "N Blocos não entraram na soma" em vez de calar.
  */
 export function faltaReceberDoMes(
-  blocos: readonly Pick<Bloco, "formula" | "de_cobranca">[],
+  blocos: readonly (Pick<Bloco, "formula" | "de_cobranca"> & Partial<Pick<Bloco, "ordem">>)[],
   pendentesDoMes: readonly LinhaPendente[],
 ): { totalCentavos: number; blocos: number; semValor: number } {
-  const linhas = pendentesDoMes.map(linhaDaFormulaPendente);
+  const todas = pendentesDoMes.map(linhaDaFormulaPendente);
+  const deCobranca = [...blocosDeCobranca(blocos)].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+  let restantes = todas;
   let totalCentavos = 0;
   let semValor = 0;
-  const deCobranca = blocosDeCobranca(blocos);
   for (const bloco of deCobranca) {
-    const a = avaliar(bloco.formula, linhas);
-    if (a.ok) totalCentavos += a.valor.valorCentavos;
-    else semValor += 1;
+    // O Bloco "não calcula" pelo mesmo critério do cartão (a Fórmula sobre todas as linhas).
+    const cheio = avaliar(bloco.formula, todas);
+    if (!cheio.ok) {
+      semValor += 1;
+      continue;
+    }
+    const doBloco = avaliar(bloco.formula, restantes);
+    if (!doBloco.ok) {
+      semValor += 1;
+      continue;
+    }
+    totalCentavos += doBloco.valor.valorCentavos;
+    const citadas = new Set(cheio.valor.entram);
+    restantes = restantes.filter((l) => !citadas.has(l.id));
   }
   return { totalCentavos, blocos: deCobranca.length, semValor };
 }

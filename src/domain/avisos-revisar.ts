@@ -7,16 +7,19 @@
 // A chave do aviso (`avisos_lidos`: tipo, referencia, dia) diz quando um aviso lido volta como não lido:
 //
 // - `tipo` = `revisar`, `referencia` = `fila` (fixa: é um aviso só).
-// - `dia` = o dia (em São Paulo) da última importação ou reimportação de uma Fatura (o maior `updated_at` das Faturas).
-//   O número de itens NÃO entra na chave: classificar itens (a fila baixa) não traz o aviso de volta, e o Revisar já
-//   mostra o "Faltam N". Entra uma Fatura nova ou reimportada: outro dia, o aviso volta como não lido (se foi no mesmo
-//   dia do que já foi lido, continua lido: custo registrado). A fila zera e enche de novo sem importação (o "Desfazer"
-//   do Classificado): mesma chave, continua como estava.
-//   Não há coluna "importada em": a data vem de `faturas.updated_at`, que a importação e a reimportação gravam. Custo:
-//   "Dispensar" e o "Desfazer" da faixa da Conferência também mexem em `updated_at`, e uma importação sem itens na
-//   fila também; com a fila ainda cheia, o aviso volta uma vez com o mesmo número. A escolha é a de uma data que só
-//   sobe (monotônica): usar só as Faturas que têm item na fila faria a chave voltar para uma data antiga quando o
-//   Mês mais novo fosse classificado, e o aviso renasceria a cada classificação.
+// - `dia` = o dia (em São Paulo) da última importação ou reimportação de uma Fatura: o maior `created_at` entre as
+//   Faturas e os cartões delas (`fatura_cartoes`). O número de itens NÃO entra na chave: classificar itens (a fila
+//   baixa) não traz o aviso de volta, e o Revisar já mostra o "Faltam N". Entra uma Fatura nova ou reimportada: outro
+//   dia, o aviso volta como não lido (se foi no mesmo dia do que já foi lido, continua lido: custo registrado). A fila
+//   zera e enche de novo sem importação (o "Desfazer" do Classificado): mesma chave, continua como estava.
+//   Por que `created_at` e não `faturas.updated_at` (Defeito 5, que revê a decisão 4 da 8.2): "Dispensar" e o
+//   "Desfazer" da faixa da Conferência gravam `faturas.alerta_dispensado_em` e o gatilho sobe o `updated_at`, então
+//   o aviso lido voltava como novo sem importação nenhuma. A importação cria a Fatura (`created_at` novo) e a
+//   reimportação apaga os cartões e grava de novo (`created_at` novo), e nenhuma dessas colunas muda ao dispensar:
+//   o sinal é o mesmo de antes sem a migração de uma coluna "importada em". A data só sobe (monotônica), como antes.
+//   Custo que fica: uma importação que não traz item para a fila também muda a chave (é uma importação de verdade),
+//   e, uma única vez depois do deploy, a chave de quem já tinha lido o aviso pode mudar de dia (antes era o dia do
+//   `updated_at`).
 // - Sem nenhuma Fatura (só histórico da planilha ou Lançamentos à mão na fila), o dia é `DIA_SEM_IMPORTACAO`: o aviso
 //   existe, e depois de lido só volta com uma Fatura importada.
 
@@ -55,18 +58,19 @@ export type AvisoDoRevisar = {
 
 /**
  * O aviso da fila, ou `null` quando ela está vazia. `linhasDaFila` são as do gerenciador da fila (as que `ehDaFila`
- * aceita, mais os Ajustes: só as primeiras contam); `faturas` dão o dia da última importação. Mesma entrada, mesma
- * saída.
+ * aceita, mais os Ajustes: só as primeiras contam); `faturas` e `cartoes` (os `fatura_cartoes`) dão o dia da última
+ * importação. Mesma entrada, mesma saída.
  */
 export function avisoDoRevisar(
   linhasDaFila: readonly LinhaParaAvisoDoRevisar[],
-  faturas: readonly { updated_at: string }[],
+  faturas: readonly { created_at: string }[],
+  cartoes: readonly { created_at: string }[] = [],
 ): AvisoDoRevisar | null {
   const quantidade = contarFila(linhasDaFila);
   if (quantidade === 0) return null;
   let dia = DIA_SEM_IMPORTACAO;
-  for (const f of faturas) {
-    const d = diaDoInstanteEmSaoPaulo(f.updated_at);
+  for (const f of [...faturas, ...cartoes]) {
+    const d = diaDoInstanteEmSaoPaulo(f.created_at);
     if (d !== null && d > dia) dia = d;
   }
   return {

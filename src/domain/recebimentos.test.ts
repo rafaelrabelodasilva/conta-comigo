@@ -189,6 +189,21 @@ describe("os cartões com o atraso do núcleo (6.4), de todos os Meses", () => {
     expect(c).toMatchObject({ situacao: "atrasado", atrasadoDesde: "2026-09-17" });
   });
 
+  it("um Mês só de histórico da planilha com Status 'Não pago' não vira dívida nem atraso: o cartão fica 'Em dia' e os três concordam (Defeito 3, AD-10)", () => {
+    const historico = [
+      lancamento("h1", { mes: "2026-03", lancado_por: "historico" }),
+      lancamento("h2", { mes: "2026-03", lancado_por: "historico", valor_centavos: 25_000 }),
+    ];
+    const atrasos = atrasosDasLinhas(historico, "2026-12-31", 10, ctx());
+    expect(atrasos.size).toBe(0);
+    const [c] = montarCartoesDeCobranca([lucas], pendentes(historico), atrasos);
+    expect(c).toMatchObject({ saldoCentavos: 0, situacao: "em_dia", mesesEmAberto: [], ids: [], atrasadoDesde: null });
+    // Com uma linha de Fatura de verdade em aberto, só ela conta.
+    const junto = [...historico, lancamento("real", { mes: "2026-10" })];
+    const [d] = montarCartoesDeCobranca([lucas], pendentes(junto), atrasosDasLinhas(junto, "2026-10-10", 10, ctx()));
+    expect(d).toMatchObject({ saldoCentavos: 10_000, situacao: "nao_pago", ids: ["real"] });
+  });
+
   it("em dia na véspera do primeiro dia de atraso: 'Não pago'", () => {
     const linhas = [lancamento("nova")];
     const atrasos = atrasosDasLinhas(linhas, "2026-10-16", 10, ctx());
@@ -229,6 +244,52 @@ describe("faltaReceberDoMes (o 'Falta receber' do hero)", () => {
   it("um Bloco que não calcula fica de fora e é contado", () => {
     const f = faltaReceberDoMes([mae, bloco("q", "Q", divisaoPorZero)], pendentes(linhas));
     expect(f).toEqual({ totalCentavos: 3_000, blocos: 2, semValor: 1 });
+  });
+
+  describe("dois Blocos que citam a mesma linha somam uma vez só (Defeito 4)", () => {
+    const casal: Formula = resp("casal");
+    const metade: Formula = {
+      tipo: "operacao",
+      operacao: "divisao",
+      esquerda: resp("casal"),
+      direita: { tipo: "numero", valor: "2" },
+    };
+    const doCasal = [lancamento("c1", { responsavel_id: "casal", valor_centavos: 10_000 })];
+
+    it("'Casal' e 'Casal ÷ 2' juntos: a linha entra uma vez, na Fórmula do primeiro Bloco", () => {
+      const f = faltaReceberDoMes([bloco("b1", "Casal", casal, { ordem: 1 }), bloco("b2", "Casal ÷ 2", metade, { ordem: 2 })], pendentes(doCasal));
+      // Antes (soma literal dos Blocos): R$ 100,00 + R$ 50,00 = R$ 150,00 para uma linha de R$ 100,00.
+      expect(f).toEqual({ totalCentavos: 10_000, blocos: 2, semValor: 0 });
+    });
+
+    it("a ordem dos Blocos decide qual Fórmula vale (o de menor `ordem` primeiro, mesmo vindo depois na lista)", () => {
+      const f = faltaReceberDoMes([bloco("b2", "Casal ÷ 2", metade, { ordem: 2 }), bloco("b1", "Casal", casal, { ordem: 1 })], pendentes(doCasal));
+      expect(f.totalCentavos).toBe(10_000);
+      const invertida = faltaReceberDoMes([bloco("b1", "Casal", casal, { ordem: 2 }), bloco("b2", "Casal ÷ 2", metade, { ordem: 1 })], pendentes(doCasal));
+      expect(invertida.totalCentavos).toBe(5_000);
+    });
+
+    it("Blocos que citam linhas diferentes somam normalmente; a linha que os dois citam entra uma vez", () => {
+      const rangel = bloco("b-rangel", "Rangel", metadeDoCasal, { ordem: 1 });
+      const linhasMistas = [
+        lancamento("r1", { responsavel_id: "rangel", valor_centavos: 4_000 }),
+        lancamento("c1", { responsavel_id: "casal", valor_centavos: 10_000 }),
+        lancamento("m1", { responsavel_id: "mae", valor_centavos: 3_000 }),
+      ];
+      // Rangel = 4.000 + 10.000 ÷ 2 = 9.000; "Casal" já não tem a linha do Casal (o Rangel a levou); Mãe = 3.000.
+      const f = faltaReceberDoMes([rangel, bloco("b-casal", "Casal", casal, { ordem: 2 }), bloco("b-mae", "Mãe", resp("mae"), { ordem: 3 })], pendentes(linhasMistas));
+      expect(f).toEqual({ totalCentavos: 12_000, blocos: 3, semValor: 0 });
+    });
+
+    it("o total nunca passa da soma das linhas distintas em aberto que algum Bloco cita", () => {
+      const f = faltaReceberDoMes([bloco("b1", "A", casal), bloco("b2", "B", casal), bloco("b3", "C", casal)], pendentes(doCasal));
+      expect(f.totalCentavos).toBe(10_000);
+    });
+
+    it("um Bloco que não calcula continua contado em semValor e não leva linha de ninguém", () => {
+      const f = faltaReceberDoMes([bloco("q", "Q", divisaoPorZero, { ordem: 1 }), bloco("b1", "Casal", casal, { ordem: 2 })], pendentes(doCasal));
+      expect(f).toEqual({ totalCentavos: 10_000, blocos: 2, semValor: 1 });
+    });
   });
 
   it("o restante de um Pago parcialmente, não o valor cheio", () => {

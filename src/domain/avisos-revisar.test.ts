@@ -13,7 +13,10 @@ const linha = (extra: Partial<LinhaParaAvisoDoRevisar> = {}): LinhaParaAvisoDoRe
   ...extra,
 });
 const fila = (n: number) => Array.from({ length: n }, () => linha());
-const importadaEm = (updated_at: string) => ({ updated_at });
+/** Uma Fatura importada em `created_at`; `updated_at` é a última vez que a linha foi mexida (importar, reimportar, dispensar). */
+const importadaEm = (created_at: string, updated_at: string = created_at) => ({ created_at, updated_at });
+/** Os cartões da Fatura são apagados e gravados de novo a cada reimportação: `created_at` é o instante dela. */
+const cartaoEm = (created_at: string) => ({ created_at });
 
 describe("avisoDoRevisar: quando há aviso", () => {
   it("fila vazia: nenhum aviso", () => {
@@ -65,8 +68,41 @@ describe("avisoDoRevisar: quando há aviso", () => {
   });
 });
 
+describe("avisoDoRevisar: dispensar a Conferência não traz o aviso de volta (Defeito 5)", () => {
+  const importada = "2026-11-10T12:00:00Z";
+  const dispensadaDepois = "2026-11-20T12:00:00Z";
+
+  it("'Dispensar' (e o 'Desfazer') só mexem no `updated_at` da Fatura: a chave do aviso lido continua a mesma", () => {
+    const antes = avisoDoRevisar(fila(17), [importadaEm(importada)], [cartaoEm(importada)])!;
+    // Dispensar a faixa da Conferência grava `alerta_dispensado_em` e o gatilho sobe `updated_at`: a Fatura e os cartões são os mesmos.
+    const depois = avisoDoRevisar(fila(17), [importadaEm(importada, dispensadaDepois)], [cartaoEm(importada)])!;
+    expect(depois.dia).toBe(antes.dia);
+    expect([depois.tipo, depois.referencia, depois.dia]).toEqual([antes.tipo, antes.referencia, antes.dia]);
+  });
+
+  it("a reimportação grava os cartões de novo: é outro dia, e o aviso lido volta como novo", () => {
+    const antes = avisoDoRevisar(fila(17), [importadaEm(importada)], [cartaoEm(importada)])!;
+    const reimportada = "2026-11-25T12:00:00Z";
+    const depois = avisoDoRevisar(fila(17), [importadaEm(importada, reimportada)], [cartaoEm(reimportada)])!;
+    expect(depois.dia).toBe("2026-11-25");
+    expect(depois.dia).not.toBe(antes.dia);
+  });
+
+  it("uma Fatura nova importada também muda a chave", () => {
+    const antes = avisoDoRevisar(fila(5), [importadaEm(importada)], [cartaoEm(importada)])!;
+    const nova = "2026-12-05T12:00:00Z";
+    const depois = avisoDoRevisar(fila(5), [importadaEm(importada), importadaEm(nova)], [cartaoEm(importada), cartaoEm(nova)])!;
+    expect(depois.dia).toBe("2026-12-05");
+    expect(depois.dia).not.toBe(antes.dia);
+  });
+
+  it("sem cartões lidos, vale o dia da Fatura (created_at)", () => {
+    expect(avisoDoRevisar(fila(1), [importadaEm(importada, dispensadaDepois)])?.dia).toBe("2026-11-10");
+  });
+});
+
 describe("avisoDoRevisar: a chave", () => {
-  it("o dia é o da última importação (o maior `updated_at` das Faturas), em São Paulo", () => {
+  it("o dia é o da última importação (o maior `created_at` das Faturas e dos cartões), em São Paulo", () => {
     const faturas = [importadaEm("2026-10-20T15:00:00Z"), importadaEm("2026-11-19T02:30:00Z"), importadaEm("2026-11-05T12:00:00Z")];
     // 23:30 de 18/11 em São Paulo (02:30Z de 19/11).
     expect(avisoDoRevisar(fila(2), faturas)?.dia).toBe("2026-11-18");

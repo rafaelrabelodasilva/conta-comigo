@@ -187,17 +187,24 @@ describe.skipIf(!ligado)("Contas manuais no Supabase local", () => {
     expect((await maes(conta.id)).data).toHaveLength(6);
   });
 
-  it("uma parcela excluída em lógico deixa o `n` livre, e a próxima materialização o preenche", async () => {
-    // O índice único é parcial (só linhas não excluídas): a parcela excluída em lógico deixa o `n` livre
-    // e a próxima materialização a recria. A 5.4 não muda isso (só a Conta excluída é ignorada pelo
-    // materializador; ver `contas-alterar.test.ts` e `deferred-work.md`).
+  it("a parcela que Rafael excluiu à mão fica excluída: o materializador não a recria (Defeito 1); o Desfazer a devolve", async () => {
+    // Revisto na PR de correção: antes, a parcela excluída em lógico deixava o `n` livre e a próxima
+    // materialização a recriava (o Cron das 09:00 a trazia de volta no dia seguinte). Agora uma linha
+    // excluída da Série SEM `excluido_pela_conta` (a exclusão à mão grava só `excluido_em`) ocupa o `n`.
     const conta = nova(bombinhas({ nome: "Bombinhas 3" }));
     expect((await salvar(a.cliente, conta)).error).toBeNull();
     const [primeira] = (await maes(conta.id)).data!;
     await local.admin.from("lancamentos").update({ excluido_em: new Date().toISOString() }).eq("id", primeira.id);
     expect((await maes(conta.id)).data).toHaveLength(5);
+    // O Cron (a mesma chamada do dia seguinte) e salvar de novo não a recriam.
     expect((await salvar(a.cliente, conta)).error).toBeNull();
-    expect((await maes(conta.id)).data).toHaveLength(6);
+    expect((await maes(conta.id)).data).toHaveLength(5);
+    // O "Desfazer" da exclusão limpa `excluido_em`: a mesma linha volta, sem duplicar.
+    await local.admin.from("lancamentos").update({ excluido_em: null }).eq("id", primeira.id);
+    expect((await salvar(a.cliente, conta)).error).toBeNull();
+    const voltou = (await maes(conta.id)).data!;
+    expect(voltou).toHaveLength(6);
+    expect(voltou.some((l) => l.id === primeira.id)).toBe(true);
   });
 
   it("recorrente: parcela_n conta desde o Mês inicial, sem parcela_total, e pára no Mês atual + 12", async () => {
